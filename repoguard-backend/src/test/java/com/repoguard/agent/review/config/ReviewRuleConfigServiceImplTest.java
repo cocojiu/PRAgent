@@ -17,6 +17,7 @@ import com.repoguard.agent.mapper.projection.ReviewFindingProjections.RuleHitCou
 import com.repoguard.agent.review.ReviewRuleRegistry;
 import com.repoguard.agent.review.quality.ReviewQualityBaseline;
 import com.repoguard.agent.review.quality.ReviewQualityBaselineService;
+import com.repoguard.agent.service.ReviewCalibrationService;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -31,14 +32,53 @@ class ReviewRuleConfigServiceImplTest {
     private final ReviewQualityBaselineService reviewQualityBaselineService =
         org.mockito.Mockito.mock(ReviewQualityBaselineService.class);
     private final ReviewRuleRegistry reviewRuleRegistry = org.mockito.Mockito.mock(ReviewRuleRegistry.class);
-    private final ReviewRuleConfigServiceImpl service = new ReviewRuleConfigServiceImpl(
+    private final ReviewRulePolicySnapshotStore policySnapshotStore =
+        org.mockito.Mockito.mock(ReviewRulePolicySnapshotStore.class);
+    private final ReviewStrategyPolicyService strategyPolicyService =
+        org.mockito.Mockito.mock(ReviewStrategyPolicyService.class);
+    private final ReviewCalibrationService reviewCalibrationService =
+        org.mockito.Mockito.mock(ReviewCalibrationService.class);
+    private final ReviewPolicyPromotionEvidenceStore promotionEvidenceStore =
+        org.mockito.Mockito.mock(ReviewPolicyPromotionEvidenceStore.class);
+    private final ReviewRuleConfigPolicy reviewRuleConfigPolicy = new ReviewRuleConfigPolicy();
+    private final ReviewRuleMetricAssembler reviewRuleMetricAssembler = new ReviewRuleMetricAssembler();
+    private final ReviewRuleLifecycleGate lifecycleGate = new ReviewRuleLifecycleGate();
+    private final ReviewRuleResponseAssembler responseAssembler = new ReviewRuleResponseAssembler(
+        reviewRuleRegistry,
+        lifecycleGate
+    );
+    private final ReviewRuleQueryService queryService = new ReviewRuleQueryService(
         reviewRuleConfigMapper,
         reviewFindingMapper,
-        cacheEvictionService,
-        new ReviewRuleConfigPolicy(),
-        new ReviewRuleMetricAssembler(),
+        reviewRuleConfigPolicy,
+        reviewRuleMetricAssembler,
         reviewQualityBaselineService,
-        reviewRuleRegistry
+        reviewRuleRegistry,
+        responseAssembler,
+        strategyPolicyService
+    );
+    private final ReviewRuleQualityGateService qualityGateService = new ReviewRuleQualityGateService(
+        reviewCalibrationService,
+        promotionEvidenceStore
+    );
+    private final ReviewRuleCommandService commandService = new ReviewRuleCommandService(
+        reviewRuleConfigMapper,
+        cacheEvictionService,
+        reviewRuleConfigPolicy,
+        policySnapshotStore,
+        qualityGateService,
+        queryService,
+        ReviewPolicyTransactionExecutor.direct()
+    );
+    private final ReviewRulePolicyHistoryService historyService = new ReviewRulePolicyHistoryService(
+        queryService,
+        policySnapshotStore,
+        responseAssembler
+    );
+    private final ReviewRuleConfigServiceImpl service = new ReviewRuleConfigServiceImpl(
+        queryService,
+        commandService,
+        historyService
     );
 
     @Test
@@ -83,20 +123,21 @@ class ReviewRuleConfigServiceImplTest {
         when(reviewRuleRegistry.contains("RG-JAVA-001")).thenReturn(true);
         ReviewRuleConfig rule = rule("RG-JAVA-001", "异常捕获过宽", "MEDIUM", "ENABLED", 88);
         when(reviewRuleConfigMapper.selectById("RG-JAVA-001")).thenReturn(rule);
+        when(reviewRuleConfigMapper.update(any(ReviewRuleConfig.class), any())).thenReturn(1);
         when(reviewFindingMapper.selectReviewRuleHitCounts()).thenReturn(List.of());
 
-        var result = service.updateReviewRuleStatus("rg-java-001", "disabled");
+        var result = service.updateReviewRuleStatus("rg-java-001", "disabled", 1);
 
         assertThat(rule.getStatus()).isEqualTo("DISABLED");
         assertThat(result.status()).isEqualTo("disabled");
-        verify(reviewRuleConfigMapper).updateById(rule);
+        verify(reviewRuleConfigMapper).update(any(ReviewRuleConfig.class), any());
         verify(cacheEvictionService).evictReviewRules();
         verify(cacheEvictionService).evictDashboardRules();
     }
 
     @Test
     void updateReviewRuleStatusRejectsRuleWithoutDetector() {
-        assertThatThrownBy(() -> service.updateReviewRuleStatus("rg-unknown-001", "enabled"))
+        assertThatThrownBy(() -> service.updateReviewRuleStatus("rg-unknown-001", "enabled", 1))
             .isInstanceOf(BusinessException.class)
             .hasMessageContaining("no registered detector");
     }
@@ -104,21 +145,26 @@ class ReviewRuleConfigServiceImplTest {
     @Test
     void updateReviewRuleRejectsMismatchedPathAndBodyId() {
         when(reviewRuleRegistry.contains("RG-JAVA-001")).thenReturn(true);
-        assertThatThrownBy(() -> service.updateReviewRule("rg-java-001", request("rg-java-002", "New Rule", "LOW", "ENABLED")))
+        assertThatThrownBy(() -> service.updateReviewRule(
+            "rg-java-001",
+            request("rg-java-002", "New Rule", "LOW", "ENABLED"),
+            1
+        ))
             .isInstanceOf(BusinessException.class)
             .hasMessageContaining("Review rule id in path and body must match");
     }
 
     @Test
     void constructorRejectsMissingRuleMetricAssembler() {
-        assertThatThrownBy(() -> new ReviewRuleConfigServiceImpl(
+        assertThatThrownBy(() -> new ReviewRuleQueryService(
             reviewRuleConfigMapper,
             reviewFindingMapper,
-            cacheEvictionService,
-            new ReviewRuleConfigPolicy(),
+            reviewRuleConfigPolicy,
             null,
             reviewQualityBaselineService,
-            reviewRuleRegistry
+            reviewRuleRegistry,
+            responseAssembler,
+            strategyPolicyService
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessageContaining("reviewRuleMetricAssembler");
@@ -126,14 +172,14 @@ class ReviewRuleConfigServiceImplTest {
 
     @Test
     void constructorRejectsMissingCacheEvictionService() {
-        assertThatThrownBy(() -> new ReviewRuleConfigServiceImpl(
+        assertThatThrownBy(() -> new ReviewRuleCommandService(
             reviewRuleConfigMapper,
-            reviewFindingMapper,
             null,
-            new ReviewRuleConfigPolicy(),
-            new ReviewRuleMetricAssembler(),
-            reviewQualityBaselineService,
-            reviewRuleRegistry
+            reviewRuleConfigPolicy,
+            policySnapshotStore,
+            qualityGateService,
+            queryService,
+            ReviewPolicyTransactionExecutor.direct()
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("cacheEvictionService");
@@ -141,14 +187,15 @@ class ReviewRuleConfigServiceImplTest {
 
     @Test
     void constructorRejectsMissingReviewQualityBaselineService() {
-        assertThatThrownBy(() -> new ReviewRuleConfigServiceImpl(
+        assertThatThrownBy(() -> new ReviewRuleQueryService(
             reviewRuleConfigMapper,
             reviewFindingMapper,
-            cacheEvictionService,
-            new ReviewRuleConfigPolicy(),
-            new ReviewRuleMetricAssembler(),
+            reviewRuleConfigPolicy,
+            reviewRuleMetricAssembler,
             null,
-            reviewRuleRegistry
+            reviewRuleRegistry,
+            responseAssembler,
+            strategyPolicyService
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessageContaining("reviewQualityBaselineService");

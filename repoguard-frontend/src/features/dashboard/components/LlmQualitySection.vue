@@ -11,6 +11,12 @@
           @update:model-value="onTrendDaysChange"
         />
       </div>
+      <ul v-if="qualityTrend.length" class="chart-inline-legend" aria-label="LLM 质量趋势图例">
+        <li><span class="legend-swatch legend-swatch--task"></span>任务数</li>
+        <li><span class="legend-swatch legend-swatch--parse"></span>解析率</li>
+        <li><span class="legend-swatch legend-swatch--fallback"></span>兜底率</li>
+        <li><span class="legend-swatch legend-swatch--partial"></span>部分补位率</li>
+      </ul>
       <DeferredEChartPanel
         v-if="qualityTrend.length"
         accessible-label="LLM 质量趋势图"

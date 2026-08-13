@@ -1,7 +1,6 @@
 import { createRouter, createWebHistory } from "vue-router";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import RepoGuardLayout from "@/layouts/RepoGuardLayout.vue";
-import OverviewPage from "@/pages/OverviewPage.vue";
 import { clearAuthToken, hasAuthToken } from "@/api/client";
 import { canAccessRouteMeta } from "@/router/accessPolicy";
 import { routeNames } from "@/router/names";
@@ -14,6 +13,7 @@ import {
 } from "@/observability/frontendPerformanceDiagnosticsBridge";
 
 const LoginPage = () => import("@/pages/LoginPage.vue");
+const OverviewPage = () => import("@/pages/OverviewPage.vue");
 const ReviewTasksPage = () => import("@/pages/ReviewTasksPage.vue");
 const ReviewDetailPage = () => import("@/pages/ReviewDetailPage.vue");
 const RuleConfigPage = () => import("@/pages/RuleConfigPage.vue");

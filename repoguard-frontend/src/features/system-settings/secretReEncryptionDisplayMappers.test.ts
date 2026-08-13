@@ -3,7 +3,7 @@ import {
   secretReEncryptionSummaryText,
   toSecretReEncryptionDisplayItems
 } from "./secretReEncryptionDisplayMappers";
-import type { SecretReEncryptionResponse } from "@/types";
+import type { SecretReEncryptionJob } from "@/types";
 
 describe("secretReEncryptionDisplayMappers", () => {
   it("maps field-level preflight statuses into admin repair hints", () => {
@@ -42,6 +42,18 @@ describe("secretReEncryptionDisplayMappers", () => {
         status: "DECRYPT_FAILED",
         failureReason: "source_decrypt_failed",
         message: "low-level crypto detail"
+      },
+      {
+        tableName: "integration_config",
+        recordId: 10,
+        fieldName: "token_value",
+        provider: "GITHUB",
+        sourceFormat: "enc:v3",
+        sourceKeyId: "new-key",
+        targetKeyId: "new-key",
+        status: "DECRYPT_FAILED",
+        failureReason: "target_decrypt_failed",
+        message: "low-level target crypto detail"
       }
     ]);
 
@@ -66,20 +78,34 @@ describe("secretReEncryptionDisplayMappers", () => {
       statusTone: "danger"
     });
     expect(items[2].hint).toBe("源密钥无法解密该字段，请重新填写密钥或修复密文。");
+    expect(items[3]).toMatchObject({
+      fieldText: "连接密钥",
+      statusText: "解密失败",
+      statusTone: "danger"
+    });
+    expect(items[3].hint).toBe("字段标记为目标 key id，但目标密钥无法解密，请修复损坏密文后再切换密钥。");
   });
 
-  it("summarizes dry-run and execution results with stable counts", () => {
-    const response: SecretReEncryptionResponse = {
+  it("summarizes background job status with stable counts", () => {
+    const response: SecretReEncryptionJob = {
+      id: 7,
       executed: false,
+      status: "COMPLETED_WITH_ERRORS",
+      sourceKeyId: "old-key",
+      targetKeyId: "new-key",
+      currentTable: "done",
+      checkpointId: 0,
+      batchSize: 100,
       scannedCount: 6,
       reEncryptedCount: 2,
       skippedCount: 3,
       failedCount: 1,
-      items: []
+      retryCount: 0
     };
 
-    expect(secretReEncryptionSummaryText(response)).toBe("预检完成：扫描 6 项，需处理 2 项，跳过 3 项，失败 1 项");
-    expect(secretReEncryptionSummaryText({ ...response, executed: true }))
-      .toBe("已执行：扫描 6 项，需处理 2 项，跳过 3 项，失败 1 项");
+    expect(secretReEncryptionSummaryText(response))
+      .toBe("预检任务 完成但存在失败项：扫描 6 项，需处理 2 项，跳过 3 项，失败 1 项");
+    expect(secretReEncryptionSummaryText({ ...response, executed: true, status: "RUNNING" }))
+      .toBe("重加密任务 执行中：扫描 6 项，需处理 2 项，跳过 3 项，失败 1 项");
   });
 });

@@ -1,4 +1,8 @@
-import type { SecretReEncryptionItem, SecretReEncryptionResponse } from "@/types";
+import type {
+  SecretReEncryptionItem,
+  SecretReEncryptionJob,
+  SecretReEncryptionJobStatus
+} from "@/types";
 
 export type SecretReEncryptionTone = "success" | "warning" | "danger" | "info";
 
@@ -24,9 +28,29 @@ const FIELD_LABELS: Record<string, string> = {
   secret_value: "签名 Secret"
 };
 
-export const secretReEncryptionSummaryText = (response: SecretReEncryptionResponse) => {
-  const actionText = response.executed ? "已执行" : "预检完成";
-  return `${actionText}：扫描 ${response.scannedCount} 项，需处理 ${response.reEncryptedCount} 项，跳过 ${response.skippedCount} 项，失败 ${response.failedCount} 项`;
+export const secretReEncryptionSummaryText = (job: SecretReEncryptionJob) => {
+  const actionText = job.executed ? "重加密任务" : "预检任务";
+  const failureText = job.lastFailureReason ? `；最近失败：${job.lastFailureReason}` : "";
+  return `${actionText} ${jobStatusText(job.status)}：扫描 ${job.scannedCount} 项，需处理 ${job.reEncryptedCount} 项，跳过 ${job.skippedCount} 项，失败 ${job.failedCount} 项${failureText}`;
+};
+
+export const jobStatusText = (status: SecretReEncryptionJobStatus) => {
+  switch (status) {
+    case "PENDING":
+      return "等待执行";
+    case "RUNNING":
+      return "执行中";
+    case "RETRY_WAIT":
+      return "等待重试";
+    case "PAUSED":
+      return "已暂停";
+    case "COMPLETED":
+      return "已完成";
+    case "COMPLETED_WITH_ERRORS":
+      return "完成但存在失败项";
+    case "FAILED":
+      return "任务失败";
+  }
 };
 
 export const toSecretReEncryptionDisplayItems = (
@@ -106,6 +130,9 @@ const statusHint = (item: SecretReEncryptionItem) => {
     case "DECRYPT_FAILED":
       if (item.failureReason === "source_decrypt_failed") {
         return "源密钥无法解密该字段，请重新填写密钥或修复密文。";
+      }
+      if (item.failureReason === "target_decrypt_failed") {
+        return "字段标记为目标 key id，但目标密钥无法解密，请修复损坏密文后再切换密钥。";
       }
       return item.message ? `解密失败：${item.message}` : "源密钥无法解密该字段，请重新填写密钥或修复密文。";
     case "FAILED":

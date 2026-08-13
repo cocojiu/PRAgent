@@ -3,13 +3,26 @@ package com.repoguard.agent.mapper;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
+import com.repoguard.agent.entity.ReviewTask;
 import java.lang.reflect.Method;
 import java.time.LocalDateTime;
 import java.util.Locale;
+import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Select;
 import org.junit.jupiter.api.Test;
 
 class ReviewTaskMapperSqlContractTest {
+
+    @Test
+    void manualReviewInsertOnlyDelegatesDuplicateHandlingToUniqueConstraint() throws Exception {
+        Method method = ReviewTaskMapper.class.getMethod("insertManualReview", ReviewTask.class);
+        Insert insert = method.getAnnotation(Insert.class);
+
+        assertThat(insert).as("insertManualReview @Insert").isNotNull();
+        assertThat(normalizeSql(String.join("\n", insert.value())))
+            .startsWith("insert into review_task")
+            .doesNotContain("insert ignore");
+    }
 
     @Test
     void listSummaryStatAggregatesNormalizedColumnsBehindSharedFilterSegment() throws Exception {

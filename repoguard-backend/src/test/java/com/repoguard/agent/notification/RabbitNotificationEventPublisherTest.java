@@ -6,7 +6,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.repoguard.agent.config.RabbitNotificationQueueProperties;
@@ -95,7 +94,7 @@ class RabbitNotificationEventPublisherTest {
     }
 
     @Test
-    void publishRetriesAndFailsWhenPublisherConfirmIsNacked() {
+    void publishLeavesNackedRetryToOutboxCompensation() {
         RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
         RabbitNotificationQueueProperties properties = properties();
         NotificationEventMessage message = message();
@@ -110,7 +109,7 @@ class RabbitNotificationEventPublisherTest {
         assertThatThrownBy(() -> publisher.publish(message))
             .isInstanceOf(MessagePublishException.class)
             .hasMessageContaining("nacked");
-        verify(rabbitTemplate, times(3))
+        verify(rabbitTemplate)
             .convertAndSend(eq("test.notification.exchange"), eq("test.notification.created"), eq(message), any(CorrelationData.class));
     }
 
@@ -143,7 +142,7 @@ class RabbitNotificationEventPublisherTest {
     }
 
     @Test
-    void publishRetriesAndFailsWhenMessageIsReturned() {
+    void publishLeavesReturnedMessageRetryToOutboxCompensation() {
         RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
         RabbitNotificationQueueProperties properties = properties();
         NotificationEventMessage message = message();
@@ -165,12 +164,12 @@ class RabbitNotificationEventPublisherTest {
         assertThatThrownBy(() -> publisher.publish(message))
             .isInstanceOf(MessagePublishException.class)
             .hasMessageContaining("unroutable");
-        verify(rabbitTemplate, times(3))
+        verify(rabbitTemplate)
             .convertAndSend(eq("test.notification.exchange"), eq("test.notification.created"), eq(message), any(CorrelationData.class));
     }
 
     @Test
-    void publishRetriesAndFailsWhenSendThrowsAmqpException() {
+    void publishLeavesConnectionFailureRetryToOutboxCompensation() {
         RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
         RabbitNotificationQueueProperties properties = properties();
         NotificationEventMessage message = message();
@@ -183,7 +182,7 @@ class RabbitNotificationEventPublisherTest {
         assertThatThrownBy(() -> publisher.publish(message))
             .isInstanceOf(MessagePublishException.class)
             .hasMessageContaining("publish attempt failed");
-        verify(rabbitTemplate, times(3))
+        verify(rabbitTemplate)
             .convertAndSend(eq("test.notification.exchange"), eq("test.notification.created"), eq(message), any(CorrelationData.class));
     }
 
@@ -210,8 +209,6 @@ class RabbitNotificationEventPublisherTest {
         RabbitNotificationQueueProperties properties = new RabbitNotificationQueueProperties();
         properties.setExchange("test.notification.exchange");
         properties.setRoutingKey("test.notification.created");
-        properties.setPublishMaxAttempts(3);
-        properties.setPublishInitialIntervalMs(0);
         properties.setPublishConfirmTimeoutMs(100);
         return properties;
     }

@@ -586,17 +586,37 @@ validate_split_runtime_mode() {
       return 1
       ;;
   esac
-  if [ "$api_instance_count" -ne 1 ]; then
-    echo "The production API currently requires REPOGUARD_API_INSTANCE_COUNT=1 because API state is process-local." >&2
+
+  rate_limit_store="${REPOGUARD_RATE_LIMIT_STORE:-}"
+  if [ -z "$rate_limit_store" ]; then
+    rate_limit_store="$(read_env_value REPOGUARD_RATE_LIMIT_STORE)"
+  fi
+  rate_limit_store="${rate_limit_store:-local}"
+  case "$rate_limit_store" in
+    local|database)
+      ;;
+    *)
+      echo "REPOGUARD_RATE_LIMIT_STORE must be local or database." >&2
+      return 1
+      ;;
+  esac
+  if [ "$api_instance_count" -eq 0 ]; then
+    echo "The production API requires REPOGUARD_API_INSTANCE_COUNT to be positive." >&2
+    return 1
+  fi
+  if [ "$api_instance_count" -gt 1 ] && [ "$rate_limit_store" != "database" ]; then
+    echo "REPOGUARD_API_INSTANCE_COUNT greater than 1 requires REPOGUARD_RATE_LIMIT_STORE=database." >&2
     return 1
   fi
 
   REPOGUARD_RUNTIME_ROLE="$runtime_role"
   REPOGUARD_DEPLOYMENT_MODE="$deployment_mode"
   REPOGUARD_API_INSTANCE_COUNT="$api_instance_count"
+  REPOGUARD_RATE_LIMIT_STORE="$rate_limit_store"
   export REPOGUARD_RUNTIME_ROLE
   export REPOGUARD_DEPLOYMENT_MODE
   export REPOGUARD_API_INSTANCE_COUNT
+  export REPOGUARD_RATE_LIMIT_STORE
 
   if [ "$split_runtime" = "true" ]; then
     if [ "$runtime_role" = "api" ]; then

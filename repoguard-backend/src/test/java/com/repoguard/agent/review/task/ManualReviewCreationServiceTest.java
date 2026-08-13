@@ -148,7 +148,7 @@ class ManualReviewCreationServiceTest {
             ReviewTask task = invocation.getArgument(0);
             task.setId(7001L);
             return 1;
-        }).when(taskMapper).insertManualReviewOrReuse(any(ReviewTask.class));
+        }).when(taskMapper).insertManualReview(any(ReviewTask.class));
         when(afterCommitPublisher.publishAfterCommit(any(ReviewTask.class), any(), any())).thenReturn(true);
         ManualReviewCreationService service = new ManualReviewCreationService(
             taskMapper,
@@ -194,7 +194,7 @@ class ManualReviewCreationServiceTest {
             ReviewTask task = invocation.getArgument(0);
             task.setId(7002L);
             return 1;
-        }).when(taskMapper).insertManualReviewOrReuse(any(ReviewTask.class));
+        }).when(taskMapper).insertManualReview(any(ReviewTask.class));
         when(afterCommitPublisher.publishAfterCommit(any(ReviewTask.class), any(), any())).thenAnswer(invocation -> {
             publisherEntered.countDown();
             await(releaseFailure);

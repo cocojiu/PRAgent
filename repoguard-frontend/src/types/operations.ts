@@ -1,3 +1,5 @@
+import type { FrontendPerformanceReport as FrontendPerformanceObservationReport } from "../observability/frontendPerformanceBuffer";
+
 export interface CacheStatsItem {
   name: string;
   estimatedSize: number;
@@ -61,3 +63,13 @@ export interface DataRetentionCleanupAudit {
   completedAt?: string;
   updatedAt?: string;
 }
+
+export interface UserRoleUpdateRequest {
+  role: "ADMIN" | "VIEWER";
+}
+
+export interface UserStatusUpdateRequest {
+  status: "ACTIVE" | "DISABLED";
+}
+
+export type FrontendPerformanceReport = FrontendPerformanceObservationReport;

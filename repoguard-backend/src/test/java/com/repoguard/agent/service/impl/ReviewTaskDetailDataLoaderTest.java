@@ -11,6 +11,7 @@ import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.mapper.ChangedFileMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
+import com.repoguard.agent.mapper.projection.ReviewFindingProjections.ReviewTaskDetailSummary;
 import com.repoguard.agent.mapper.projection.ReviewFindingProjections.SeverityCounts;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -82,10 +83,8 @@ class ReviewTaskDetailDataLoaderTest {
 
     @Test
     void loadsSummaryWithoutFetchingInitialDetailRows() {
-        when(changedFileMapper.selectCount(any())).thenReturn(12L);
-        when(reviewFindingMapper.selectCount(any())).thenReturn(30L, 4L);
-        when(reviewFindingMapper.selectFindingSeverityCounts(521L))
-            .thenReturn(new SeverityCounts(1L, 2L, 3L, 24L, 0L));
+        when(reviewFindingMapper.selectReviewTaskDetailSummary(521L))
+            .thenReturn(new ReviewTaskDetailSummary(12L, 30L, 4L, 1L, 2L, 3L, 24L, 0L));
 
         var result = loader.loadSummary(521L);
 
@@ -100,8 +99,23 @@ class ReviewTaskDetailDataLoaderTest {
         assertThat(result.findingSeverityCounts().highOrZero()).isEqualTo(2);
 
         Mockito.verify(changedFileMapper, Mockito.never()).selectPage(any(), any());
+        Mockito.verify(changedFileMapper, Mockito.never()).selectCount(any());
         Mockito.verify(reviewFindingMapper, Mockito.never()).selectPage(any(), any());
+        Mockito.verify(reviewFindingMapper, Mockito.never()).selectCount(any());
+        Mockito.verify(reviewFindingMapper, Mockito.never()).selectFindingSeverityCounts(521L);
+        Mockito.verify(reviewFindingMapper).selectReviewTaskDetailSummary(521L);
         Mockito.verify(timelineQueryService, Mockito.never()).loadLatestItemsByTaskId(any(), Mockito.anyInt());
+    }
+
+    @Test
+    void loadsEmptySummaryWhenAggregateProjectionIsMissing() {
+        var result = loader.loadSummary(521L);
+
+        assertThat(result.changedFileTotal()).isZero();
+        assertThat(result.findingTotal()).isZero();
+        assertThat(result.missingTestTotal()).isZero();
+        assertThat(result.findingSeverityCounts().criticalOrZero()).isZero();
+        assertThat(result.findingSeverityCounts().infoOrZero()).isZero();
     }
 
     @Test

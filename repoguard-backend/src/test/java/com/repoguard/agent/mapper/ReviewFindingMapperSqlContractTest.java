@@ -94,6 +94,22 @@ class ReviewFindingMapperSqlContractTest {
         assertSeverityNormColumn(sql);
     }
 
+    @Test
+    void reviewTaskDetailSummaryCombinesCountsAndEffectiveSeverityAggregation() throws Exception {
+        String sql = sql("selectReviewTaskDetailSummary", Long.class);
+
+        assertThat(sql)
+            .contains("from review_finding finding")
+            .contains("where finding.task_id = #{taskid}")
+            .contains("from changed_file changed")
+            .contains("changed.task_id = #{taskid}")
+            .contains("finding.category = 'finding'")
+            .contains("finding.category = 'missing_test'")
+            .contains("finding.feedback_status_norm <> 'false_positive'")
+            .contains("finding.enforcement_mode <> 'observe'");
+        assertSeverityNormColumn(sql);
+    }
+
     private String sql(String methodName, Class<?>... parameterTypes) throws NoSuchMethodException {
         Method method = ReviewFindingMapper.class.getMethod(methodName, parameterTypes);
         Select select = method.getAnnotation(Select.class);

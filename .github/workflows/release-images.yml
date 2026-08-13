@@ -267,7 +267,13 @@ jobs:
           java-version: "25"
           cache: maven
 
-      - name: Build backend
+      - name: Build backend after PR quality
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/PRAgent-test' }}
+        working-directory: repoguard-backend
+        run: ./mvnw -B -DskipTests package
+
+      - name: Verify and build backend
+        if: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/PRAgent-test') }}
         working-directory: repoguard-backend
         run: ./mvnw -B verify
 
@@ -278,11 +284,21 @@ jobs:
           cache: npm
           cache-dependency-path: repoguard-frontend/package-lock.json
 
-      - name: Build frontend
+      - name: Install and audit frontend dependencies
         working-directory: repoguard-frontend
         run: |
           npm ci
           npm audit --audit-level=high --omit=dev --registry=https://registry.npmjs.org
+
+      - name: Build frontend after PR quality
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/PRAgent-test' }}
+        working-directory: repoguard-frontend
+        run: npm run build
+
+      - name: Verify and build frontend
+        if: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/PRAgent-test') }}
+        working-directory: repoguard-frontend
+        run: |
           npm run quality
           npm run build
 

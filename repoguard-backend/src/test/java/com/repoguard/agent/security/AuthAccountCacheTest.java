@@ -5,6 +5,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.repoguard.agent.config.RuntimeRoleContract;
 import com.repoguard.agent.entity.UserAccount;
 import com.repoguard.agent.mapper.UserAccountMapper;
 import org.junit.jupiter.api.AfterEach;
@@ -56,6 +57,38 @@ class AuthAccountCacheTest {
 
         assertThat(cache.findById(42L)).isSameAs(cached);
         verify(userAccountMapper).selectById(42L);
+    }
+
+    @Test
+    void multiInstanceRuntimeReadsAccountStateDirectlyFromDatabase() {
+        AuthAccountCache directDatabase = new AuthAccountCache(
+            userAccountMapper,
+            new RuntimeRoleContract(
+                RuntimeRoleContract.Mode.API,
+                RuntimeRoleContract.DeploymentMode.SPLIT,
+                2,
+                RuntimeRoleContract.RateLimitStore.DATABASE,
+                false
+            )
+        );
+        UserAccount active = account("ACTIVE", 1);
+        UserAccount disabled = account("DISABLED", 2);
+        when(userAccountMapper.selectById(42L)).thenReturn(active, disabled);
+
+        assertThat(directDatabase.isCachingEnabled()).isFalse();
+        assertThat(directDatabase.findById(42L)).isSameAs(active);
+        assertThat(directDatabase.findById(42L)).isSameAs(disabled);
+        verify(userAccountMapper, times(2)).selectById(42L);
+    }
+
+    @Test
+    void directDatabaseModeDoesNotRegisterLocalInvalidationCallbacks() {
+        AuthAccountCache directDatabase = new AuthAccountCache(userAccountMapper, false);
+        TransactionSynchronizationManager.initSynchronization();
+
+        directDatabase.invalidateAfterCommit(42L);
+
+        assertThat(TransactionSynchronizationManager.getSynchronizations()).isEmpty();
     }
 
     @Test

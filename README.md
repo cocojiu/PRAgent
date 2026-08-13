@@ -135,6 +135,13 @@ cd repoguard-frontend
 npm run build
 ```
 
+后端 Controller 或 DTO 契约变更后，重新生成前端 OpenAPI 客户端元数据：
+
+```bash
+cd repoguard-frontend
+npm run generate:api
+```
+
 前端开发：
 
 ```bash
@@ -157,6 +164,11 @@ npm run dev
 - `REPOGUARD_SECURITY_ENCRYPTION_KEY_ID`
 - `REPOGUARD_SECURITY_ENCRYPTION_SALT_FILE`
 - `REPOGUARD_SECURITY_ALLOW_PLAINTEXT_SECRETS`
+- `REPOGUARD_SECRET_RE_ENCRYPTION_BATCH_SIZE`
+- `REPOGUARD_SECRET_RE_ENCRYPTION_LEASE_SECONDS`
+- `REPOGUARD_SECRET_RE_ENCRYPTION_RETRY_DELAY_SECONDS`
+- `REPOGUARD_SECRET_RE_ENCRYPTION_MAX_ATTEMPTS`
+- `REPOGUARD_SECRET_RE_ENCRYPTION_POLL_INTERVAL_MS`
 - `REPOGUARD_AUTH_TOKEN_SECRET_FILE`
 - `REPOGUARD_AUTH_TOKEN_SECRET_ID`
 - `REPOGUARD_AUTH_TOKEN_SECRET_PREVIOUS`
@@ -170,6 +182,7 @@ npm run dev
 - `REPOGUARD_RUNTIME_ROLE`
 - `REPOGUARD_DEPLOYMENT_MODE`
 - `REPOGUARD_API_INSTANCE_COUNT`
+- `REPOGUARD_RATE_LIMIT_STORE`
 - `REPOGUARD_REVIEW_WORKER_CONCURRENCY`
 
 敏感配置要求：
@@ -182,7 +195,8 @@ npm run dev
 
 - `REPOGUARD_RUNTIME_ROLE` 只接受 `combined`、`api`、`worker`。`combined` 同时提供 HTTP API、RabbitMQ 消费者和受数据库栅栏保护的定时任务；`worker` 同时承载消费者与这些定时任务。
 - `REPOGUARD_DEPLOYMENT_MODE` 只接受 `monolith`、`split`。`monolith` 必须搭配 `combined`；`split` 的 API 容器必须使用 `api`，Worker 容器固定使用 `worker`。配置冲突会在 Spring 启动或生产部署拉取镜像前失败。
-- 当前认证/Webhook 限流和 Dashboard 快照仍是进程本地状态，因此 API/combined 角色要求 `REPOGUARD_API_INSTANCE_COUNT=1`。迁移到共享限流与跨节点缓存失效前，不允许横向扩展 API。认证限流阈值（`REPOGUARD_AUTH_REQUESTS_PER_MINUTE_PER_IP`、`REPOGUARD_AUTH_REQUESTS_PER_MINUTE_PER_ACCOUNT_IP`）为单实例语义，若未来放开横向扩展需按实例数调低；实际生效阈值会在 API 启动日志中打印。
+- `REPOGUARD_RATE_LIMIT_STORE` 默认为 `local`，此时 API/combined 角色仍要求 `REPOGUARD_API_INSTANCE_COUNT=1`。横向扩展 API 前必须改为 `database`：认证、管理 API Key 失败和 Webhook 的固定窗口会由 MySQL 原子计数，并以认证密钥 HMAC 后的桶键存储；限流阈值是跨实例总限额，不需要按实例数调低。Dashboard 聚合使用数据库日快照和持久化脏版本，手工评审最终幂等由数据库唯一键保障。
+- 当 `REPOGUARD_API_INSTANCE_COUNT>1` 时，认证账户状态不使用进程内 `AuthAccountCache`，每次认证从 MySQL 读取账号状态和 `session_version`；密码修改、账号禁用或注销会话后，其他 API 实例会立即拒绝旧 access token。单实例仍使用 5 秒进程内缓存，并依靠事务提交后的失效回调缩短状态生效延迟。
 - Worker 执行链路具备 RabbitMQ、数据库 CAS、领取标识和租约保护，可由编排平台扩展多个实例；当前生产 Compose 仍固定为单个 Worker 服务。所有 `@Scheduled` 入口由 Scheduler 能力契约保护，避免与普通消息消费者的装配边界混淆。
 - 旧 `REPOGUARD_API_ENABLED`、`REPOGUARD_WORKER_ENABLED` 仅保留迁移兼容；新部署应改用单一角色变量。生产部署脚本会根据 Compose 服务集合推导并验证 `monolith/split`。
 
@@ -284,8 +298,8 @@ BACKEND_IMAGE='<目标后端镜像>' FRONTEND_IMAGE='<目标前端镜像>' \
 ### 密钥轮换与明文配置迁移
 
 - Token 密钥轮换：把当前文件值和当前 ID 临时配置为 `REPOGUARD_AUTH_TOKEN_SECRET_PREVIOUS` / `REPOGUARD_AUTH_TOKEN_SECRET_PREVIOUS_ID`，用临时文件加 `mv` 原子替换 `repoguard.auth.token-secret`，更新活动 ID并强制重建 API/Worker；至少等待一个 access-token TTL 后清空 previous 对。previous 值在轮换窗口内仍属于 `.env` 残余风险，窗口结束必须删除。
-- 主加密密钥轮换：先完成数据库备份和恢复验证，在维护窗口调用 `/api/v1/config/secrets/re-encryption` 做 `execute=false` 预演；失败数为 0 后使用 `confirmText=RE-ENCRYPT` 执行，立即原子替换密钥文件、更新 key ID并重建后端。新实例验证所有集成配置可解密前保留旧密钥的离线副本。
-- 历史明文业务密钥迁移：仅在维护窗口临时设置 `REPOGUARD_SECURITY_ALLOW_PLAINTEXT_SECRETS=true`，通过同一重加密接口完成预演与执行；确认扫描结果无明文、无失败后立刻恢复为 `false` 并重建后端。
+- 主加密密钥轮换：先完成数据库备份和恢复验证，在维护窗口调用 `/api/v1/config/secrets/re-encryption` 创建 `execute=false` 预演任务，通过 `/api/v1/config/secrets/re-encryption/jobs/{jobId}` 轮询状态并分页检查 `/items` 明细；预演以 `COMPLETED` 完成且失败数为 0 后，使用 `confirmText=RE-ENCRYPT` 创建执行任务。任务按主键分页、短事务和数据库 lease 运行，可通过 `/pause`、`/resume` 暂停或继续；只有执行任务以 `COMPLETED` 完成且失败数为 0 后，才可原子替换密钥文件、更新 key ID并重建后端。新实例验证所有集成配置可解密前保留旧密钥的离线副本。
+- 历史明文业务密钥迁移：仅在维护窗口临时设置 `REPOGUARD_SECURITY_ALLOW_PLAINTEXT_SECRETS=true`，通过同一后台任务完成预演与执行；确认任务明细无明文、无失败后立刻恢复为 `false` 并重建后端。
 
 ### MySQL 恢复
 
@@ -309,7 +323,7 @@ ssh -N -L 3000:127.0.0.1:3000 <deploy-user>@<production-host>
 
 本机打开 `http://127.0.0.1:3000`。不得把 Grafana 端口改为 `0.0.0.0`；确需 Web 入口时必须先增加 SSO 或 IP allowlist，并单独评审拓扑。
 
-API 仍固定 `REPOGUARD_API_INSTANCE_COUNT=1`。吞吐不足时先观测数据库连接、RabbitMQ 未确认消息、LLM bulkhead 和内存，再小步调整 `REPOGUARD_REVIEW_WORKER_CONCURRENCY`；需要进程隔离时启用 `worker-split`。当前 Compose 的固定 `container_name` 只支持一个 Worker 服务，不得直接使用 `--scale`；多 Worker 实例要先移除固定名称、验证日志采集规则和容量预算，且不能横向扩展 API。
+默认部署仍使用 `REPOGUARD_API_INSTANCE_COUNT=1` 和本地限流。由外部编排平台横向扩展 API 时，必须启用数据库共享限流并把实例总数写入 `REPOGUARD_API_INSTANCE_COUNT`；当前 Compose 使用固定 `container_name`，不得直接使用 `--scale`。吞吐不足时先观测数据库连接、共享限流写入、RabbitMQ 未确认消息、LLM bulkhead 和内存，再小步调整容量；多 Worker 实例同样需要先移除固定名称并验证日志采集规则和容量预算。
 
 ## 生产数据库备份
 

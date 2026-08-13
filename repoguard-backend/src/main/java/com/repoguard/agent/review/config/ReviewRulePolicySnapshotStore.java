@@ -18,7 +18,7 @@ public class ReviewRulePolicySnapshotStore {
         this.snapshotMapper = Objects.requireNonNull(snapshotMapper, "snapshotMapper");
     }
 
-    public void save(ReviewRuleConfig rule, String changeType, Long sourcePolicyVersion) {
+    public ReviewRulePolicySnapshot save(ReviewRuleConfig rule, String changeType, Long sourcePolicyVersion) {
         ReviewRulePolicySnapshot snapshot = new ReviewRulePolicySnapshot();
         snapshot.setRuleId(rule.getId());
         snapshot.setPolicyVersion(rule.getPolicyVersion());
@@ -39,14 +39,23 @@ public class ReviewRulePolicySnapshotStore {
         snapshot.setSourcePolicyVersion(sourcePolicyVersion);
         snapshot.setCreatedAt(LocalDateTime.now());
         snapshotMapper.insert(snapshot);
+        return snapshot;
     }
 
-    public List<ReviewRulePolicySnapshot> list(String ruleId) {
-        return snapshotMapper.selectList(
-            new LambdaQueryWrapper<ReviewRulePolicySnapshot>()
-                .eq(ReviewRulePolicySnapshot::getRuleId, ruleId)
-                .orderByDesc(ReviewRulePolicySnapshot::getPolicyVersion)
-                .orderByDesc(ReviewRulePolicySnapshot::getId)
+    public List<ReviewRulePolicySnapshot> page(String ruleId, Long cursor, int limit) {
+        LambdaQueryWrapper<ReviewRulePolicySnapshot> query = new LambdaQueryWrapper<ReviewRulePolicySnapshot>()
+            .eq(ReviewRulePolicySnapshot::getRuleId, ruleId)
+            .orderByDesc(ReviewRulePolicySnapshot::getPolicyVersion)
+            .orderByDesc(ReviewRulePolicySnapshot::getId);
+        if (cursor != null) {
+            query.lt(ReviewRulePolicySnapshot::getPolicyVersion, cursor);
+        }
+        return snapshotMapper.selectList(query.last("limit " + limit));
+    }
+
+    public long count(String ruleId) {
+        return snapshotMapper.selectCount(
+            new LambdaQueryWrapper<ReviewRulePolicySnapshot>().eq(ReviewRulePolicySnapshot::getRuleId, ruleId)
         );
     }
 

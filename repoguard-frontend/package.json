@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "typecheck": "vue-tsc -b",
+    "generate:api": "node scripts/generate-openapi-client.mjs",
+    "check:api-generated": "node scripts/generate-openapi-client.mjs --check",
+    "typecheck": "npm run check:api-generated && vue-tsc -b",
     "lint": "eslint \"src/**/*.{ts,vue}\"",
     "test:unit": "vitest run",
     "test:e2e": "vitest run src/e2e",

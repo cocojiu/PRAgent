@@ -64,4 +64,65 @@ class SensitiveTextSanitizerTest {
             .isEqualTo("outer jdbc:****\nCaused by: token=****\n")
             .doesNotContain("internal-db", "raw-db", "raw-token");
     }
+
+    @Test
+    void masksStandaloneCredentialsAndPrivateKeyBlocks() {
+        String githubToken = "gh" + "p_" + "1234567890abcdefghijklmnopqrstuvwxyz";
+        String jwt = "eyJabcdefghijk.abcdefghijklmnop.abcdefghijk";
+        String privateKeyType = "PRIVATE" + " KEY";
+        String privateKey = "-----BEGIN " + privateKeyType + "-----\nraw-private-key-material\n-----END "
+            + privateKeyType + "-----";
+
+        String sanitized = SensitiveTextSanitizer.sanitizePreservingWhitespace(
+            githubToken + "\n" + jwt + "\n" + privateKey
+        );
+
+        assertThat(sanitized)
+            .contains("[REDACTED CREDENTIAL]", "[REDACTED JWT]", "[REDACTED PRIVATE KEY]")
+            .doesNotContain(githubToken, jwt, "raw-private-key-material");
+    }
+
+    @Test
+    void sourceCodeModePreservesSecretLookupExpressionsButMasksHardcodedLiterals() {
+        String sanitized = SensitiveTextSanitizer.sanitizeSourceCodePreservingWhitespace(
+            "String apiKey = System.getenv(\"API_KEY\");\n"
+                + "String password = \"CorrectHorseBatteryStaple42\";"
+        );
+
+        assertThat(sanitized)
+            .contains("apiKey = System.getenv(\"API_KEY\")")
+            .contains("password = \"****\"")
+            .doesNotContain("CorrectHorseBatteryStaple42");
+    }
+
+    @Test
+    void sourceCodeModeKeepsNonCredentialAssignmentsVisible() {
+        String source = "String signatureAlgorithm = \"MD5withRSA\";\n"
+            + "String assignment = \"review-task\";\n"
+            + "int maxTokens = 4096;";
+
+        assertThat(SensitiveTextSanitizer.sanitizeSourceCodePreservingWhitespace(source))
+            .isEqualTo(source);
+    }
+
+    @Test
+    void privateKeyMaskingPreservesDiffLineStructure() {
+        String privateKeyType = "PRIVATE" + " KEY";
+        String patch = "@@ -1,0 +1,5 @@\r\n"
+            + "+-----BEGIN " + privateKeyType + "-----\r\n"
+            + "+raw-line-one\r\n"
+            + "+raw-line-two\r\n"
+            + "+-----END " + privateKeyType + "-----\r\n"
+            + "+dangerousCall();";
+
+        String sanitized = SensitiveTextSanitizer.sanitizeSourceCodePreservingWhitespace(patch);
+
+        assertThat(sanitized.lines().count()).isEqualTo(patch.lines().count());
+        assertThat(sanitized).contains(
+            "+[REDACTED PRIVATE KEY]\r\n+[REDACTED PRIVATE KEY]\r\n",
+            "+dangerousCall();"
+        );
+        assertThat(sanitized)
+            .doesNotContain("+-[REDACTED PRIVATE KEY]", "raw-line-one", "raw-line-two");
+    }
 }

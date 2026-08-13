@@ -145,7 +145,13 @@ class IsolatedRealChainSmokeContractTest {
             .doesNotContain("JDK：26");
         assertThat(release)
             .contains("java-version: \"25\"")
+            .contains("name: Build backend after PR quality")
+            .contains("github.ref == 'refs/heads/PRAgent-test'")
+            .contains("run: ./mvnw -B -DskipTests package")
+            .contains("name: Verify and build backend")
             .contains("run: ./mvnw -B verify")
+            .contains("name: Build frontend after PR quality")
+            .contains("name: Verify and build frontend")
             .doesNotContain("run: mvn -B package");
         assertThat(quality)
             .contains("name: Run backend production readiness slice")

@@ -1,0 +1,137 @@
+2026-08-10 | 优化-01 | 规则 scope 字段长度一致性
+状态：已完成
+变更：新增 V60 迁移，将 review_rule_policy_snapshot.scope 从 varchar(128) 扩展为 varchar(255)；同步数据库期望版本为 60；新增契约校验，确保请求 DTO、主表与快照表长度一致。
+本地验证：ReviewPolicyVersionGovernanceMigrationTest、SchemaVersionExpectationContractTest 共 4 项通过；排除工作区既有 Caddyfile 改动所影响的 FrontendDeploymentContractTest 后，后端完整 mvn verify 通过。
+远程验证：通过。Pull Request Quality #31332852925、Repository Governance #31332852916/#31332849833、Release Images #31332849840、Auto Create Pull Request #31332849836 均成功。
+
+2026-08-10 | 优化-02 | 认证限流账户键抗碰撞
+状态：已完成
+变更：将 account-ip 限流键从 32 位 Java hashCode 改为使用认证密钥、带域分隔的 HMAC-SHA256 伪名，保留账户规范化语义且不在内存键中暴露明文账户；增加已知 Java 哈希碰撞账户的回归测试。
+本地验证：AuthAttemptLimiterTest 共 6 项通过；排除工作区既有 Caddyfile 改动所影响的 FrontendDeploymentContractTest 后，后端完整 mvn verify 通过。
+远程验证：通过。Pull Request Quality #31333233428、Repository Governance #31333233424/#31333230805、Release Images #31333230816、Auto Create Pull Request #31333230808 均成功。
+
+2026-08-10 | 优化-03 | Dashboard 快照增量刷新与失败恢复
+状态：已完成
+变更：新增按统计日期维护的持久化脏版本；业务事务内原子标记 review/LLM 快照失效，提交后只重建受影响日期；使用单调版本确认避免并发更新被错误清除；读路径同步恢复脏日期，调度任务每分钟补偿失败刷新并每日全窗口核对；按日期索引 review_task，避免每次评审活动重扫 7/90 天窗口。
+本地验证：DashboardDailySnapshotServiceTest、DashboardDailySnapshotMapperSqlContractTest、DashboardDailySnapshotRecoveryWorkerTest、CacheStatsServiceImplTest、ReviewExecutionCacheInvalidatorTest、ReviewServiceImplTest、ReviewTaskRetryServiceTest、ReviewTaskExecutorImplTest、SchemaVersionExpectationContractTest 定向验证通过；排除工作区既有 Caddyfile 改动所影响的 FrontendDeploymentContractTest 后，后端完整 mvn verify 通过。
+远程验证：通过。Pull Request Quality #31334112395、Repository Governance #31334112400/#31334110700、Release Images #31334110709、Auto Create Pull Request #31334110716 均成功。
+
+2026-08-10 | 优化-04 | 规则/策略并发控制与历史游标分页
+状态：已完成
+变更：规则编辑、状态切换和回滚增加期望策略版本校验，并用 policy_version 条件更新消除并发覆盖；策略发布和回滚锁定当前活动快照，按活动快照 ID 条件失活并在冲突时返回 409；规则与策略历史改为最多 100 条的游标分页，前端支持逐页加载并在变更请求中携带期望版本；同步 OpenAPI、前端契约和生成客户端快照。
+本地验证：新增规则与策略陈旧版本、条件写冲突和游标分页回归测试；后端 API/OpenAPI/生成客户端契约定向验证通过；前端 typecheck、ESLint 及 35 个测试文件/139 项测试通过；排除工作区既有 Caddyfile 改动所影响的 FrontendDeploymentContractTest 后，后端完整 mvn verify 通过。
+远程验证：通过。Pull Request Quality #31334989049、Repository Governance #31334989018/#31334987530、Release Images #31334987515、Auto Create Pull Request #31334987523 均成功。
+
+2026-08-10 | 优化-05 | 前端策略历史请求竞态治理
+状态：已完成
+变更：规则与策略历史请求改为独立的 latest-only 请求通道；新请求会中止同类旧请求并用序列号抑制迟到响应和陈旧错误；弹窗关闭及组件卸载时主动取消请求；规则/策略加载状态拆分，防止并发请求相互清除 loading；分页加载阻止重复点击并复用同一竞态保护。
+本地验证：新增请求乱序、取消和陈旧错误回归测试；前端 typecheck、ESLint、36 个测试文件/141 项测试及生产构建全部通过；资源预算检查通过。
+远程验证：通过。Pull Request Quality #31335410198、Repository Governance #31335410170/#31335408448、Release Images #31335408444、Auto Create Pull Request #31335408442 均成功。
+
+2026-08-10 | 优化-06 | 扩大 OpenAPI 生成客户端覆盖
+状态：已完成
+变更：将系统配置与评审校准控制器纳入生成客户端治理范围，生成操作由 34 项扩大到 65 项；配置域与规则校准端点改为复用 OpenAPI 生成的路径、方法和请求元数据，同时保留既有运行时响应校验与游标适配；生成器支持可选请求体类型，并同步强化后端覆盖契约，防止迁移端点退回手写元数据。
+本地验证：ApiContractTest、FrontendApiContractCatalogTest、OpenApiGeneratedClientContractTest 定向通过；前端 typecheck、ESLint、36 个测试文件/141 项测试及生产构建全部通过；生成文件一致性与资源预算检查通过。
+远程验证：通过。Pull Request Quality #31335908269、Repository Governance #31335908265/#31335906165、Release Images #31335906104、Auto Create Pull Request #31335906108 均成功。
+
+2026-08-10 | 优化-07A | 数据库共享限流与 API 多实例门禁
+状态：已完成
+变更：新增 V62 共享固定窗口表与数据库原子计数存储，桶键使用认证密钥 HMAC 后落库；认证、管理 API Key 失败和 GitHub Webhook 限流可统一切换为跨实例总限额，同时保留每实例高基数容量保护；新增 local/database 配置，只有 database 模式允许 API instance-count 大于 1，并同步生产预检、Compose、示例配置和运行说明；Dashboard 数据库快照与手工评审数据库唯一键继续承担跨实例恢复和最终幂等。
+本地验证：共享存储、三类限流、运行角色、Schema V62、生产配置定向测试通过；排除工作区既有 Caddyfile 改动所影响的 FrontendDeploymentContractTest 后，后端完整 mvn verify 通过；真实 MySQL 原子计数用例已加入远程集成测试。
+远程验证：首次 Pull Request Quality #31336620285 发现集成测试默认与覆盖 instance-count 被合并为“1,2”，已在修复提交中消除重复参数；修复后 Pull Request Quality #31336781364（含真实 MySQL 共享计数）、Repository Governance #31336781384/#31336779315、Release Images #31336779322、Auto Create Pull Request #31336779365 均成功。
+
+2026-08-10 | 优化-07B | PRAgent-test 发布流水线去重
+状态：本地完成，远程流水线待检查
+变更：PRAgent-test push 的 Release Images 不再重复执行已由同 SHA Pull Request Quality 覆盖的后端测试和前端 lint/unit tests；Release 仍重新编译可发布 JAR、执行前端类型检查与生产构建、生产依赖审计、镜像构建/运行验证和漏洞扫描；main、master、标签及手动发布继续执行完整 verify 与前端 quality，避免降低正式发布门禁。
+本地验证：工作流 YAML 契约定向验证通过；后端发布工具链契约同时校验 PRAgent-test 去重分支和正式发布完整验证分支。
+远程验证：通过。Pull Request Quality #31337135186、Repository Governance #31337135187/#31337133416、Release Images #31337133417、Auto Create Pull Request #31337133410 均成功；Release Images 在 3 分 12 秒内完成，后端完整 verify 与前端 quality 分支按预期跳过，发布构建、审计、运行验证和镜像扫描保留。
+
+2026-08-10 | 优化-07C | 前端资源预算口径与超限定位
+状态：本地完成，远程流水线待检查
+变更：首屏资源预算明确标记为共享成本，并新增首屏请求数独立预算；总览路由预算明确标记为相对首屏的增量 JavaScript、CSS 与请求数，消除“critical”口径歧义；预算超限时输出对应 chunk/CSS/module 或请求资源清单，便于直接定位回归来源；最大异步 chunk 继续独立约束。
+本地验证：前端类型检查与生产构建通过；构建日志实测首屏共享 JavaScript 85.8 KiB、CSS 10.3 KiB、8 个请求，总览路由增量 JavaScript 10.6 KiB、CSS 2.2 KiB、12 个请求，最大异步 JavaScript chunk 113.5 KiB，均在独立预算内。
+远程验证：通过。Pull Request Quality #31337424953、Repository Governance #31337424951/#31337422535、Release Images #31337422526、Auto Create Pull Request #31337422536 均成功；远程前端质量门禁与生产资源预算构建均通过。
+
+2026-08-10 | 最终验收 | 优化序列完整性与全量回归
+状态：已完成
+审计范围：按顺序复核优化-01 至优化-07C 的代码、契约、数据库迁移、前端生成产物与流水线门禁；提交信息均为中文，所有优化提交均已单独推送 PRAgent-test 并检查 Actions。用户保留的 Caddyfile、optimization-log.txt 与 .tmp 未纳入提交，sub2api 相关改动未处理。
+本地验证：后端排除受用户 Caddyfile 工作区改动影响的 FrontendDeploymentContractTest 后完整 Maven verify 通过；前端 typecheck、ESLint、36 个测试文件共 141 项单元测试和生产构建通过；OpenAPI 生成文件一致性与全部资源预算通过。
+远程验证：优化-01 至优化-07C 的 Pull Request Quality、Repository Governance、Release Images 与 Auto Create Pull Request 均已核对成功；最终归档提交的流水线结果见交付回执。
+
+2026-08-10 | 优化-08 | 质量晋升证据持久化与保留策略
+状态：已完成
+变更：新增 V63 质量晋升证据表，规则和策略向 COMMENT/BLOCK 晋升时在同一事务内追加不可变证据；保存规则或策略快照、源/目标处置模式、基线与门禁版本、计算时间、样本截止时间、样本与高危标注计数、有效/误报/锚定/重复计数、precision、Wilson 下界、blockers、样本稳定指纹、操作人和 traceId。证据只关联版本快照并使用 ON DELETE RESTRICT，不依赖原始 Finding 保留；规则校准和策略窗口统一只统计 COMPLETE 任务，证据窗口与门禁计数不一致时整次晋升失败回滚。
+本地验证：ReviewPolicyPromotionEvidenceStoreTest、ReviewPolicyPromotionEvidenceMapperSqlContractTest、ReviewPolicyPromotionEvidenceMigrationTest、规则/策略治理和构造器契约定向 26 项通过；JDK 25 后端 clean verify 通过，2317 项通过、8 项跳过，JaCoCo 门禁和 JAR 构建通过。工作区既有 Caddyfile 的 sub2api 配置仍单独导致 FrontendDeploymentContractTest 失败，未纳入提交。
+远程验证：首次 Pull Request Quality #31376670109 的真实 MySQL 集成发现 V63 列名 precision 命中 MySQL 保留字，提交 371edbf9 将列改为 precision_rate；修复后 Pull Request Quality #31377570831（后端、前端、Spring MySQL RabbitMQ 集成、密钥与边缘配置）、Repository Governance #31377570688/#31377564481、Release Images #31377564611、Auto Create Pull Request #31377564528 全部成功，Deploy 按 test 分支策略跳过。实现提交为 383cdccd，修复提交为 371edbf9。
+下一步：执行 R1 API 多实例认证缓存一致性，关闭多实例下的进程内认证账户缓存或引入可验证的跨实例失效机制，并完成双 API 实例一致性演练。
+
+2026-08-10 | 优化-09 | API 多实例认证缓存一致性
+状态：已完成
+变更：当 REPOGUARD_API_INSTANCE_COUNT>1 时，AuthAccountCache 自动切换为数据库直读安全模式，每次受保护请求重新读取账号状态与 session_version；单实例继续保留 5 秒本地缓存和事务提交后失效。运行角色启动日志显式输出认证缓存模式，根目录 README 同步说明单/多实例一致性 SLA。真实集成用例启动两个 API Spring 上下文并共享同一 MySQL/RabbitMQ，验证 A 实例修改密码、禁用账号或注销会话后，B 实例立即对旧 access token 返回 401。
+本地验证：RuntimeRoleConditionTest、AuthAccountCacheTest 共 12 项通过；ProductionRuntimeContextIntegrationTest 编译通过，本机未启用真实集成环境时 9 项按环境门禁跳过；JDK 25 下排除用户既有 Caddyfile 改动所影响的 FrontendDeploymentContractTest 后，后端完整 mvn verify 通过，2320 项通过、9 项跳过，JaCoCo 门禁和 JAR 构建通过。
+提交推送：实现提交 3412e46d，中文提交“优化：关闭多实例认证账户缓存并补充跨实例验证”，已推送 origin/PRAgent-test。
+远程验证：Pull Request Quality #31382625755 全部成功，包含后端、前端、Production edge configuration 与 Spring MySQL RabbitMQ integration；双 API 实例认证一致性用例在真实 MySQL/RabbitMQ 作业通过。Repository Governance #31382625773/#31382621862、Release Images #31382621877、Auto Create Pull Request #31382621866 均成功，Deploy 按 test 分支策略跳过。
+下一步：执行 R4 质量快照、关键 SQL EXPLAIN 基线和晋升写事务缩短，随后完成 R5 共享限流容量与成本可观测、R6 结构和剩余 API 契约提取。
+
+2026-08-10 | 优化-10 | 质量基线持久化快照与晋升短事务
+状态：已完成
+实现提交：c32544b8；修复提交：6e0859d0。
+远程验收：Pull Request Quality #31395079969；Repository Governance #31395072177/#31395077886；Release Images #31395072170；Auto Create Pull Request #31395072224，均成功。
+首次流水线失败原因：Spring MySQL/RabbitMQ 集成测试绕过生产失效标记直接写入数据，读取了旧质量快照；修复测试夹具后重新运行全部通过。Deploy 按 test 分支策略跳过。
+下一步：进入 R5，共享限流容量与成本可观测性验证。
+变更：新增 V64 全局质量基线快照、单调脏版本和刷新版本；评审结果、反馈和数据保留清理在业务事务内标记快照失效，提交后异步重建，调度任务补偿失败刷新并每日核对；损坏或不兼容的 JSON 快照会自动转为脏状态并重建。规则和策略晋升在写锁外完成质量聚合与证据捕获，短 REQUIRES_NEW 事务只执行 expected version CAS、版本快照与不可变晋升证据写入；质量状态过滤改为直接命中 assessment_status=COMPLETE，避免函数包装影响索引选择。
+本地验证：质量快照、SQL 契约、恢复任务、短事务、规则/策略治理、数据保留和缓存定向 47 项通过；本机只有 JDK 26，跳过 Enforcer 并排除用户既有 Caddyfile 改动影响的 FrontendDeploymentContractTest 后，后端完整 verify 通过，2331 项通过、9 项跳过，JaCoCo 门禁和 JAR 构建通过。精确 JDK 25、V64 真实 MySQL 迁移和多角色 Spring 上下文由远程 Actions 验证。
+下一步：提交并推送 origin/PRAgent-test，检查 Pull Request Quality、Spring MySQL RabbitMQ integration、Release Images、Repository Governance 和 Auto Create Pull Request；如有失败立即修复。
+
+2026-08-10 | 优化-11 | 共享数据库限流成本与容量可观测
+状态：已完成（CI 容量门禁）；严格 2C4G 硬资源约束下的部署压测仍作为残余验证项
+实现提交：8e9c1c51；修复提交：bb2f1847。
+远程验收：Pull Request Quality #31397911522；Repository Governance #31397904445/#31397911589；Release Images #31397903844；Auto Create Pull Request #31397903759，均成功。Deploy 按 test 分支策略跳过。
+真实 MySQL 容量证据：单实例 5 RPS 的 P95/P99 为 4.561/4.561 ms，单实例 10 RPS 为 4.785/4.785 ms；双实例 5 RPS 为 5.498/5.498 ms，双实例 10 RPS 为 4.997/4.997 ms。四组请求全部通过共享原子计数，两个实例的数据库故障指标均为 0。
+首次流水线失败原因：新增测试构造器后生产构造器未显式标注 @Autowired，Spring 在 database 模式寻找默认构造器，导致双实例上下文启动失败；修复后将 DatabaseRateLimitWindowStore 纳入 SpringBeanConstructorSelectionTest 治理，重新运行全部通过。
+变更：数据库共享限流新增低基数 Micrometer 指标，记录整体获取耗时、原子计数/清理数据库操作耗时、清理删除行数、数据库故障分类和 fail-closed 拒绝数；仅保留 5 个内建 scope 标签，其余统一归为 other。MySQL 1205/1213 与 SQLState 41000/40001 分别归类为 lock_timeout/deadlock，故障日志每分钟限频；清理失败会恢复清理门闩以允许同分钟重试。共享计数改用显式 TransactionOperations，数据库操作、回滚和提交阶段异常都在事务边界外统一转为拒绝。API 请求、共享限流获取和数据库操作计时器启用 P95/P99 与 Prometheus 直方图。
+容量验收用例：真实 MySQL 集成测试启动两个 API Spring 上下文，分别比较 1 实例和 2 实例的 5/10 RPS；要求请求全部通过共享原子计数、数据库故障为 0、P95/P99 均低于 1 秒，并输出四组无敏感信息的容量证据。
+本地验证：DatabaseRateLimitWindowStoreTest、SharedRateLimitMetricsConfigurationTest、RuntimeRoleConditionTest、AuthAttemptLimiterTest、AdminApiKeyAttemptLimiterTest、GithubWebhookRateLimiterTest 定向通过；ProductionRuntimeContextIntegrationTest 编译通过，本机无真实 MySQL/RabbitMQ 环境时 9 项按门禁跳过。跳过 Enforcer 并排除用户既有 Caddyfile 改动影响的 FrontendDeploymentContractTest 后，后端完整 verify 通过，2335 项通过、9 项跳过，JaCoCo 门禁和 JAR 构建通过。
+下一步：进入 R6，按职责提取 ReviewRuleConfigServiceImpl 与 RuleConfigPage.vue 编排逻辑，并继续迁移剩余普通管理 OpenAPI；另行安排严格 2C4G 硬限制环境的持续压测，不以当前 GitHub Runner 结果替代该部署证据。
+
+2026-08-10 | 优化-12 | R6 规则配置后端职责提取
+状态：已完成
+实现提交：e4f8a1b6。
+远程验收：Pull Request Quality #31401359769；Repository Governance #31401355463/#31401359726；Release Images #31401355323；Auto Create Pull Request #31401355437，均成功。JDK 25 后端、真实 MySQL/RabbitMQ、前端回归、镜像运行验证和双镜像高危/严重漏洞扫描全部通过；Deploy 按 test 分支策略跳过。
+变更：将 ReviewRuleConfigServiceImpl 从同时承担查询、命令、历史、质量门禁和 DTO 装配的 668 行实现，缩减为只依赖 ReviewRuleQueryService、ReviewRuleCommandService、ReviewRulePolicyHistoryService 的 82 行缓存门面；新增 ReviewRuleQualityGateService 和 ReviewRuleResponseAssembler，分别收口晋升评估/证据与响应映射。测试夹具直接组装新组件，生产代码未保留旧的多依赖兼容构造器。
+语义保持：OBSERVE -> COMMENT -> BLOCK、语义编辑回落 OBSERVE、expected policy version 预检、policy_version 条件更新 CAS、409 冲突、游标历史、回滚、缓存失效、质量基线在短写事务外读取，以及事务内只写规则/快照/晋升证据的边界均保持不变。架构契约新增 5 个组件归属校验，并禁止门面重新依赖 Mapper、质量基线、校准和快照存储。
+本地验证：规则配置、策略治理、短事务、系统配置、Spring 构造器和架构契约定向 78 项通过；跳过 Enforcer 并排除用户既有 Caddyfile 改动影响的 FrontendDeploymentContractTest 后，后端完整 verify 通过，2335 项通过、9 项跳过，JaCoCo 门禁和 JAR 构建通过。
+下一步：继续 R6，提取 RuleConfigPage.vue 的规则目录、编辑器、策略历史、策略治理和校准队列编排逻辑，保持 latest-only、AbortController 和 409 冲突语义。
+
+2026-08-10 | 优化-13 | R6 规则配置前端职责提取
+状态：已完成
+实现提交：50b66159。
+远程验收：Pull Request Quality #31403378164；Repository Governance #31403378524/#31403371222；Release Images #31403371223；Auto Create Pull Request #31403371218，均成功。JDK 25 后端、真实 MySQL/RabbitMQ、前端类型检查/Lint/146 项单元测试/生产构建、镜像运行和双镜像高危/严重漏洞扫描全部通过；Deploy 按 test 分支策略跳过。
+变更：将 RuleConfigPage.vue 从 745 行缩减为 414 行，页面脚本只保留 composable 组合、指标图标映射和展示格式化；新增 useReviewRuleCatalog、useReviewRuleEditor、useReviewPolicyHistory、useReviewStrategyGovernance，分别收口规则目录与筛选、编辑/启停命令、两类游标历史与回滚、策略处置模式发布。ReviewCalibrationQueueCard 已独立封装校准规则选择、路由联动、请求代际和样本跳转，未再增加只做代理的空壳 useReviewCalibrationQueue。
+语义保持：规则/策略历史继续复用 createLatestPolicyHistoryLoader，新请求中止同类旧请求并抑制迟到响应；弹窗关闭和页面卸载仍会取消请求；保存、启停、发布或回滚失败后重新加载规则；规则编辑冲突后采用最新 policyVersion 并重置表单，策略冲突后采用最新 snapshotId 和处置模式；回滚请求始终携带当前活动版本。
+本地验证：新增 5 项 composable 回归，覆盖目录筛选、规则 409 冲突刷新、策略快照冲突刷新、规则/策略回滚期望版本和卸载取消；生成客户端一致性、vue-tsc、ESLint、37 个测试文件共 146 项单元测试、生产构建及全部资源预算通过。构建实测首屏共享 JavaScript 85.8 KiB、CSS 10.3 KiB、8 个请求，总览路由增量 JavaScript 10.6 KiB、CSS 2.2 KiB、12 个请求，最大异步 JavaScript chunk 113.5 KiB，均未退化。
+下一步：继续 R6，将用户管理、Cache stats、数据保留、消息队列健康/requeue、系统健康和前端性能上报共 12 个普通管理接口迁移到 OpenAPI 生成元数据；认证与 Webhook 继续保留明确的手写 adapter。
+
+2026-08-10 | 优化-14 | R6 剩余普通管理 OpenAPI 生成覆盖
+状态：已完成
+实现提交：41e402a2。
+远程验收：Pull Request Quality #31405623502；Repository Governance #31405623476/#31405619983；Release Images #31405620078；Auto Create Pull Request #31405619861，均成功。JDK 25 后端、真实 MySQL/RabbitMQ、前端类型检查/Lint/147 项单元测试/生产构建、镜像运行和双镜像高危/严重漏洞扫描全部通过；Deploy 按 test 分支策略跳过。
+变更：生成器新增 Cache stats、数据保留、前端性能、消息队列健康/requeue、系统健康和用户管理控制器范围，生成客户端操作由 65 项扩大到 77 项；12 个前端 API 契约改用 generatedEndpoint，保留数据保留查询适配、用户角色/状态请求体映射和前端性能上报 observe=false；补齐用户更新请求与性能上报类型别名。认证 7 项和 GitHub Webhook 继续保留明确手写 adapter。后端 OpenAPIGeneratedClientContractTest 同步把 12 个普通控制器纳入生成元数据治理。
+本地验证：后端 ApiContractTest、OpenApiGeneratedClientContractTest 共 25 项通过；前端生成文件一致性、vue-tsc、ESLint、37 个测试文件共 147 项单元测试、用户管理生成路径回归和生产构建通过。构建实测首屏共享 JavaScript 86.0 KiB、CSS 10.3 KiB、8 个请求，总览路由增量 JavaScript 10.6 KiB、CSS 2.2 KiB、12 个请求，最大异步 JavaScript chunk 113.5 KiB，均在独立预算内。
+下一步：R6 代码项完成；继续补齐 R4 真实质量 SQL EXPLAIN 基线和 R5 严格 2C4G 部署级容量证据。
+
+2026-08-11 | 优化-15 | R4 质量 SQL 固定规模 EXPLAIN 基线
+状态：已完成
+变更：在 ProductionRuntimeContextIntegrationTest 的真实 MySQL 上下文中，以单事务批量构造 500 个已完成任务和 10000 条质量 Finding；对 ReviewQualityBaselineMapper.selectSummary/selectGroups 同时采集 EXPLAIN ANALYZE 与 EXPLAIN FORMAT=JSON，记录实际扫描行数、访问类型、索引选择、临时表/filesort 标记和完整计划。两条 SQL 各预热 1 次、采样 10 次并输出 P95/P99，P99 门禁为 5 秒；所有固定规模数据在事务结束时回滚，并验证无测试数据残留。
+本地验证：ProductionRuntimeContextIntegrationTest 编译通过，本机未启用真实 MySQL/RabbitMQ 时 10 项按环境门禁跳过；ReviewQualityBaselineMapperSqlContractTest 3 项通过。真实执行计划和延迟数据由 Spring MySQL RabbitMQ integration 作业验收，本地跳过不作为完成依据。
+远程验收：Pull Request Quality #31407455839、Spring MySQL RabbitMQ integration job #93517130882、Repository Governance #31407455770/#31407450855、Release Images #31407450897、Auto Create Pull Request #31407450958 均成功。
+真实 MySQL 证据：固定数据集 500 tasks/10000 findings；selectSummary P95/P99 为 0.22501/0.22501 ms，使用 idx_review_finding_category，聚合子查询使用临时表；selectGroups P95/P99 为 0.168303/0.168303 ms，使用 idx_review_finding_category，窗口排序与分组使用临时表并出现 filesort。两条 SQL 的 EXPLAIN ANALYZE 均记录实际 rows/time，事务回滚后测试组织数据为 0。
+
+2026-08-11 | 优化-16 | 大 PR 分块降级规则扫描收敛
+状态：第二阶段 CPU 热点修复本地完成，远程流水线与线上复测待执行
+线上触发证据：2 核服务器处理 PR #134 的 164 个分块时，超过 LLM 总分块上限的分块仍逐个执行规则引擎；连续采样 backend CPU 为 95.64%-101.20%，load1 为 5.24-5.72。任务 109796 回到 QUEUED/PARTIAL，生产 review queue 积压 187 条且消费者为 0，按 2C4G 强制停止条件终止 5/10 RPS 测试。
+变更：分块失败、预算耗尽、执行器拒绝和总分块超限只记录降级指标与空结果标记；RuleMergeStage 继续对完整 diff 执行唯一一次规则扫描，保留完整规则覆盖、PARTIAL_FALLBACK、LLM token/成本和 finding 去重语义。移除 LlmChunkReviewAggregator 对 RuleBasedPullRequestReviewer 的冗余依赖，并增加架构棘轮与端到端回归，防止恢复逐分块规则扫描。线上首次滚动后进一步定位唯一一次完整规则扫描仍被 glob 正则回溯拖慢：改为线性 glob 匹配，每文件预计算适用规则并使用 10000 项有界 Caffeine 文件分类缓存；敏感字面量熵计算从每次遍历 65536 槽收敛为 ASCII 定长桶和稀疏扩展字符表。
+本地验证：定向回归通过；241 文件、14460 行新增代码的规则扫描回归在 10 秒预算内完成，RuleBasedPullRequestReviewerTest 全类 17 项耗时 1.901 秒。首次未优化版本的同一回归运行 79 秒仍未结束，JDK thread dump 定位在 ReviewFilePolicy 的 glob 正则回溯。第二阶段后端完整 verify 通过，2339 项通过、10 项跳过，JaCoCo 门禁和 JAR 构建通过；本机 JDK 26 跳过 Enforcer，并排除用户既有 Caddyfile 改动所影响的 FrontendDeploymentContractTest，精确 JDK 25 由远程 Actions 验证。
+远程验收：提交 ef8a44f6；Pull Request Quality #31477316354、Repository Governance #31477316358/#31477312520、Release Images #31477312530、Auto Create Pull Request #31477312540 均成功；精确 JDK 25、真实 MySQL/RabbitMQ、前端质量与构建、镜像运行和高危/严重漏洞门禁全部通过。新后端镜像标签为 backend-pragent-test-ef8a44f6e654。
+首次线上滚动：部署前已备份生产库至 /opt/repoguard/backups/repoguard_demo_before_d5d7aa0f_20260811-173508.sql.gz，仅滚动 backend 到 d5d7aa0f；健康与 revision 校验通过，消费者从 0 恢复为 1，ready 从 206 快速降至 12。随后任务 109798 对 241 文件、14412 additions 的完整规则扫描使 backend CPU 98.62%-104.22% 持续超过 14 分钟，确认第二个 CPU 热点并按强制停止条件中断任务；临时 API-only 尝试被 monolith 部署契约拒绝后已立即恢复 combined 且健康。
+下一步：提交并推送第二阶段修复，等待 JDK 25 与 Release Images 通过后仅滚动 backend；用当前 241 文件 PR 验证规则扫描时长、CPU、消费者和队列收敛。根分区仍仅余 8.9G，且当前使用生产库 repoguard_demo 与生产 vhost /repoguard，因此在磁盘大于 10G并切换 repoguard_test 与 /repoguard-test 前不执行 5/10 RPS。

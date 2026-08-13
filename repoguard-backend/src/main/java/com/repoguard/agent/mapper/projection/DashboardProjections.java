@@ -1,6 +1,7 @@
 package com.repoguard.agent.mapper.projection;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 public final class DashboardProjections {
@@ -68,5 +69,22 @@ public final class DashboardProjections {
         Long validFeedbackCount,
         Long falsePositiveFeedbackCount
     ) {
+    }
+
+    public record SnapshotRefreshState(
+        LocalDate statDate,
+        Long reviewVersion,
+        Long reviewRefreshedVersion,
+        Long llmQualityVersion,
+        Long llmQualityRefreshedVersion
+    ) {
+
+        public boolean reviewDirty() {
+            return reviewVersion > reviewRefreshedVersion;
+        }
+
+        public boolean llmQualityDirty() {
+            return llmQualityVersion > llmQualityRefreshedVersion;
+        }
     }
 }

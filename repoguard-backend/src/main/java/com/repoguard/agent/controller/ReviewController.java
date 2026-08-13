@@ -71,9 +71,7 @@ public class ReviewController {
         @RequestParam(required = false) @Size(max = 64) String source,
         @RequestParam(required = false) @Size(max = 64) String triggerSource,
         @RequestParam(required = false) @Size(max = 255) String keyword,
-        @RequestParam(required = false) @Size(max = 32) String cursorCreatedAt,
-        @RequestParam(required = false) @Min(1) Long cursorId,
-        @RequestParam(required = false) @Min(0) Long totalHint
+        @RequestParam(required = false) @Size(max = 256) String cursor
     ) {
         ReviewQuery query = new ReviewQuery(
             page,
@@ -84,9 +82,7 @@ public class ReviewController {
             source,
             triggerSource,
             keyword,
-            cursorCreatedAt,
-            cursorId,
-            totalHint
+            cursor
         );
         return ApiResponse.ok(reviewService.listReviews(query));
     }

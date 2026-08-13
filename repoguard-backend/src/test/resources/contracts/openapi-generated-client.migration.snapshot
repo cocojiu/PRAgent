@@ -39,6 +39,9 @@ fetchReviewStrategy -> systemConfigControllerGetReviewStrategyPolicy // GET /api
 fetchReviewStrategyVersions -> systemConfigControllerGetReviewStrategyVersions // GET /api/v1/config/review-strategy/versions
 fetchReviewTimeline -> reviewControllerListReviewTimeline // GET /api/v1/reviews/{id}/timeline
 fetchReviews -> reviewControllerListReviews // GET /api/v1/reviews
+fetchSecretReEncryptionJob -> systemConfigControllerGetSecretReEncryptionJob // GET /api/v1/config/secrets/re-encryption/jobs/{jobId}
+fetchSecretReEncryptionJobItems -> systemConfigControllerListSecretReEncryptionJobItems // GET /api/v1/config/secrets/re-encryption/jobs/{jobId}/items
+fetchSecretReEncryptionJobs -> systemConfigControllerListSecretReEncryptionJobs // GET /api/v1/config/secrets/re-encryption/jobs
 fetchSystemHealthSummary -> systemHealthControllerGetSystemHealthSummary // GET /api/v1/system/health/summary
 fetchSystemSettings -> systemConfigControllerGetSystemSettings // GET /api/v1/config/system-settings
 fetchUserOperationAudits -> userManagementControllerListOperationAudits // GET /api/v1/users/audits
@@ -46,12 +49,14 @@ fetchUsers -> userManagementControllerListUsers // GET /api/v1/users
 getCurrentUser -> authControllerMe // GET /api/v1/auth/me
 login -> authControllerLogin // POST /api/v1/auth/login
 logout -> authControllerLogout // POST /api/v1/auth/logout
+pauseSecretReEncryptionJob -> systemConfigControllerPauseSecretReEncryptionJob // POST /api/v1/config/secrets/re-encryption/jobs/{jobId}/pause
 publishGithubComments -> reviewControllerPublishGithubComments // POST /api/v1/reviews/{id}/github-comments
 reEncryptSecrets -> systemConfigControllerReEncryptSecrets // POST /api/v1/config/secrets/re-encryption
 register -> authControllerRegister // POST /api/v1/auth/register
 reportFrontendPerformance -> frontendPerformanceControllerRecordPerformance // POST /api/v1/observability/frontend/performance
 requeueMessageQueueTask -> messageQueueHealthControllerRequeueTask // POST /api/v1/message-queue/tasks/{taskId}/requeue
 resetRefreshToken -> authControllerResetRefreshToken // POST /api/v1/auth/refresh-token/reset
+resumeSecretReEncryptionJob -> systemConfigControllerResumeSecretReEncryptionJob // POST /api/v1/config/secrets/re-encryption/jobs/{jobId}/resume
 retryNotificationEvent -> notificationIntegrationControllerRetryEvent // POST /api/v1/notification-events/{id}/retry
 retryReview -> reviewControllerRetryReview // POST /api/v1/reviews/{id}/retry
 rollbackReviewRule -> systemConfigControllerRollbackReviewRule // POST /api/v1/config/review-rules/{id}/versions/{policyVersion}/rollback

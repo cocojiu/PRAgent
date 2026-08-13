@@ -36,7 +36,7 @@ public class ReviewExecutionFailureHandler {
         }
         timelineRecorder.reviewFailed(task, ex, taskWrite.failedAt());
         metricsRecorder.recordFailed(ex, startedAt, taskWrite.failedAt());
-        cacheInvalidator.reviewTaskChanged();
+        cacheInvalidator.reviewTaskChanged(task);
         return true;
     }
 

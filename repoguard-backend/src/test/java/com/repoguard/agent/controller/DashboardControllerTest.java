@@ -45,15 +45,15 @@ class DashboardControllerTest {
             .andExpect(jsonPath("$.data.overviewMetrics[0].trend").value("0.0%"))
             .andExpect(jsonPath("$.data.overviewMetrics[0].trendType").value("up"))
             .andExpect(jsonPath("$.data.overviewMetrics[0].color").value("blue"))
-            .andExpect(jsonPath("$.data.reviewTrend", hasSize(0)))
-            .andExpect(jsonPath("$.data.riskDistribution", hasSize(0)))
-            .andExpect(jsonPath("$.data.ruleHits", hasSize(0)))
-            .andExpect(jsonPath("$.data.highRiskReviews", hasSize(0)))
-            .andExpect(jsonPath("$.data.failedRules", hasSize(0)))
-            .andExpect(jsonPath("$.data.systemHealth", hasSize(0)))
-            .andExpect(jsonPath("$.data.llmQualityByModel", hasSize(0)))
-            .andExpect(jsonPath("$.data.llmQualityByRepository", hasSize(0)))
-            .andExpect(jsonPath("$.data.llmQualityTrend", hasSize(0)));
+            .andExpect(jsonPath("$.data.reviewTrend[0].date").value("05-31"))
+            .andExpect(jsonPath("$.data.riskDistribution[0].value").value(1))
+            .andExpect(jsonPath("$.data.ruleHits[0].value").value(2))
+            .andExpect(jsonPath("$.data.highRiskReviews[0].repository").value("spring-boot-demo"))
+            .andExpect(jsonPath("$.data.failedRules[0].count").value(2))
+            .andExpect(jsonPath("$.data.systemHealth[0].name").value("MySQL"))
+            .andExpect(jsonPath("$.data.llmQualityByModel[0].taskCount").value(4))
+            .andExpect(jsonPath("$.data.llmQualityByRepository[0].taskCount").value(3))
+            .andExpect(jsonPath("$.data.llmQualityTrend[0].taskCount").value(5));
 
         assertThat(dashboardService.lastLlmTrendDays).isEqualTo(30);
     }
@@ -104,15 +104,15 @@ class DashboardControllerTest {
             this.lastLlmTrendDays = llmTrendDays;
             return new DashboardOverviewResponse(
                 List.of(new DashboardMetricDto("reviews", "8", "0.0%", "up", "blue")),
-                List.of(),
-                List.of(),
-                List.of(),
-                List.of(),
-                List.of(),
-                List.of(),
-                List.of(),
-                List.of(),
-                List.of()
+                List.of(new ReviewTrendPointDto("05-31", 1)),
+                List.of(new ChartSliceDto("high", 1, "#ef4444", "12.5%")),
+                List.of(new ChartSliceDto("secret", 2, "#ef4444", "40.0%")),
+                List.of(new HighRiskReviewDto("export users", "spring-boot-demo", "high", 5, "2025-05-31 14:32", "done")),
+                List.of(new FailedRuleStatDto("secret", 2, "0.0%", "down", "40.0%")),
+                List.of(new SystemHealthItemDto("MySQL", "ok")),
+                List.of(new LlmQualityByModelDto("openai / gpt-4.1", 4, "2.5s", "1200", "$0.12", "95.0%", "3.0%", "2.0%", "80.0%", "5.0%")),
+                List.of(new LlmQualityByRepositoryDto("demo/repo", 3, "4.0%", "1.0%", "75.0%", "6.0%")),
+                List.of(new LlmQualityTrendPointDto("2026-06-22", 5, "96.0%", "2.0%", "2.0%"))
             );
         }
 

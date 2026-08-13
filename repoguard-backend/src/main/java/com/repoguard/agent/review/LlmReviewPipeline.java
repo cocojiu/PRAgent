@@ -100,7 +100,6 @@ class LlmReviewPipeline {
         this.llmChunkExecutor = Objects.requireNonNull(llmChunkExecutor, "llmChunkExecutor");
         this.verificationService = Objects.requireNonNull(verificationService, "verificationService");
         this.chunkReviewAggregator = new LlmChunkReviewAggregator(
-            this.ruleBasedReviewer,
             this.promptBuilder,
             this.reviewMerger,
             this.qualityScorer,

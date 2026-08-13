@@ -5,34 +5,41 @@ import com.repoguard.agent.config.ApiRuntimeEnabled;
 import com.repoguard.agent.dto.ConnectionTestResultDto;
 import com.repoguard.agent.dto.GithubIntegrationConfigDto;
 import com.repoguard.agent.dto.GithubIntegrationConfigRequest;
+import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.ReviewPolicyConfigDto;
 import com.repoguard.agent.dto.ReviewPolicyConfigRequest;
 import com.repoguard.agent.dto.ReviewRuleConfigDto;
 import com.repoguard.agent.dto.ReviewRuleConfigRequest;
 import com.repoguard.agent.dto.ReviewRulePolicyVersionDto;
+import com.repoguard.agent.dto.ReviewRuleRollbackRequest;
 import com.repoguard.agent.dto.ReviewRuleStatusRequest;
 import com.repoguard.agent.dto.ReviewRulesResponse;
 import com.repoguard.agent.dto.ReviewStrategyPolicyDto;
+import com.repoguard.agent.dto.ReviewStrategyRollbackRequest;
 import com.repoguard.agent.dto.ReviewEnforcementModeRequest;
+import com.repoguard.agent.dto.SecretReEncryptionItemDto;
+import com.repoguard.agent.dto.SecretReEncryptionJobDto;
 import com.repoguard.agent.dto.SecretReEncryptionRequest;
-import com.repoguard.agent.dto.SecretReEncryptionResponse;
 import com.repoguard.agent.dto.ServiceIntegrationConfigDto;
 import com.repoguard.agent.dto.ServiceIntegrationConfigRequest;
 import com.repoguard.agent.dto.SystemSettingsDto;
 import com.repoguard.agent.dto.SystemSettingsRequest;
 import com.repoguard.agent.security.RequireRole;
-import com.repoguard.agent.security.SecretReEncryptionService;
+import com.repoguard.agent.security.SecretReEncryptionJobService;
 import com.repoguard.agent.service.SystemConfigService;
+import com.repoguard.agent.web.RequestAuthentication;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
-import java.util.List;
+import jakarta.validation.constraints.Size;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -42,14 +49,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class SystemConfigController {
 
     private final SystemConfigService systemConfigService;
-    private final SecretReEncryptionService secretReEncryptionService;
+    private final SecretReEncryptionJobService secretReEncryptionJobService;
 
     public SystemConfigController(
         SystemConfigService systemConfigService,
-        SecretReEncryptionService secretReEncryptionService
+        SecretReEncryptionJobService secretReEncryptionJobService
     ) {
         this.systemConfigService = systemConfigService;
-        this.secretReEncryptionService = secretReEncryptionService;
+        this.secretReEncryptionJobService = secretReEncryptionJobService;
     }
 
     @GetMapping("/integrations/github")
@@ -148,9 +155,10 @@ public class SystemConfigController {
     @PutMapping("/review-rules/{id}")
     public ApiResponse<ReviewRuleConfigDto> updateReviewRule(
         @PathVariable @Size(max = 64) String id,
+        @RequestParam @Min(1) long expectedPolicyVersion,
         @Valid @RequestBody ReviewRuleConfigRequest request
     ) {
-        return ApiResponse.ok(systemConfigService.updateReviewRule(id, request));
+        return ApiResponse.ok(systemConfigService.updateReviewRule(id, request, expectedPolicyVersion));
     }
 
     @PutMapping("/review-rules/{id}/status")
@@ -158,22 +166,33 @@ public class SystemConfigController {
         @PathVariable @Size(max = 64) String id,
         @Valid @RequestBody ReviewRuleStatusRequest request
     ) {
-        return ApiResponse.ok(systemConfigService.updateReviewRuleStatus(id, request.status()));
+        return ApiResponse.ok(systemConfigService.updateReviewRuleStatus(
+            id,
+            request.status(),
+            request.expectedPolicyVersion()
+        ));
     }
 
     @GetMapping("/review-rules/{id}/versions")
-    public ApiResponse<List<ReviewRulePolicyVersionDto>> getReviewRuleVersions(
-        @PathVariable @Size(max = 64) String id
+    public ApiResponse<PageResponse<ReviewRulePolicyVersionDto>> getReviewRuleVersions(
+        @PathVariable @Size(max = 64) String id,
+        @RequestParam(required = false) @Min(1) Long cursor,
+        @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize
     ) {
-        return ApiResponse.ok(systemConfigService.getReviewRuleVersions(id));
+        return ApiResponse.ok(systemConfigService.getReviewRuleVersions(id, cursor, pageSize));
     }
 
     @PostMapping("/review-rules/{id}/versions/{policyVersion}/rollback")
     public ApiResponse<ReviewRuleConfigDto> rollbackReviewRule(
         @PathVariable @Size(max = 64) String id,
-        @PathVariable @Min(1) long policyVersion
+        @PathVariable @Min(1) long policyVersion,
+        @Valid @RequestBody ReviewRuleRollbackRequest request
     ) {
-        return ApiResponse.ok(systemConfigService.rollbackReviewRule(id, policyVersion));
+        return ApiResponse.ok(systemConfigService.rollbackReviewRule(
+            id,
+            policyVersion,
+            request.expectedPolicyVersion()
+        ));
     }
 
     @GetMapping("/review-strategy")
@@ -182,22 +201,32 @@ public class SystemConfigController {
     }
 
     @GetMapping("/review-strategy/versions")
-    public ApiResponse<List<ReviewStrategyPolicyDto>> getReviewStrategyVersions() {
-        return ApiResponse.ok(systemConfigService.getReviewStrategyVersions());
+    public ApiResponse<PageResponse<ReviewStrategyPolicyDto>> getReviewStrategyVersions(
+        @RequestParam(required = false) @Min(1) Long cursor,
+        @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize
+    ) {
+        return ApiResponse.ok(systemConfigService.getReviewStrategyVersions(cursor, pageSize));
     }
 
     @PutMapping("/review-strategy/enforcement")
     public ApiResponse<ReviewStrategyPolicyDto> promoteReviewStrategy(
         @Valid @RequestBody ReviewEnforcementModeRequest request
     ) {
-        return ApiResponse.ok(systemConfigService.promoteReviewStrategy(request.enforcementMode()));
+        return ApiResponse.ok(systemConfigService.promoteReviewStrategy(
+            request.enforcementMode(),
+            request.expectedSnapshotId()
+        ));
     }
 
     @PostMapping("/review-strategy/versions/{snapshotId}/rollback")
     public ApiResponse<ReviewStrategyPolicyDto> rollbackReviewStrategy(
-        @PathVariable @Min(1) long snapshotId
+        @PathVariable @Min(1) long snapshotId,
+        @Valid @RequestBody ReviewStrategyRollbackRequest request
     ) {
-        return ApiResponse.ok(systemConfigService.rollbackReviewStrategy(snapshotId));
+        return ApiResponse.ok(systemConfigService.rollbackReviewStrategy(
+            snapshotId,
+            request.expectedSnapshotId()
+        ));
     }
 
     @PostMapping("/review-policy/test")
@@ -208,9 +237,53 @@ public class SystemConfigController {
     }
 
     @PostMapping("/secrets/re-encryption")
-    public ApiResponse<SecretReEncryptionResponse> reEncryptSecrets(
-        @Valid @RequestBody SecretReEncryptionRequest request
+    public ApiResponse<SecretReEncryptionJobDto> reEncryptSecrets(
+        @Valid @RequestBody SecretReEncryptionRequest request,
+        HttpServletRequest servletRequest
     ) {
-        return ApiResponse.ok(secretReEncryptionService.reEncrypt(request));
+        var operator = RequestAuthentication.require(servletRequest);
+        return ApiResponse.ok(secretReEncryptionJobService.start(
+            request,
+            operator.id(),
+            operator.username()
+        ));
+    }
+
+    @GetMapping("/secrets/re-encryption/jobs/{jobId}")
+    public ApiResponse<SecretReEncryptionJobDto> getSecretReEncryptionJob(
+        @PathVariable @Min(1) Long jobId
+    ) {
+        return ApiResponse.ok(secretReEncryptionJobService.get(jobId));
+    }
+
+    @GetMapping("/secrets/re-encryption/jobs")
+    public ApiResponse<PageResponse<SecretReEncryptionJobDto>> listSecretReEncryptionJobs(
+        @RequestParam(defaultValue = "1") @Min(1) int page,
+        @RequestParam(defaultValue = "20") @Min(1) @jakarta.validation.constraints.Max(100) int pageSize
+    ) {
+        return ApiResponse.ok(secretReEncryptionJobService.listJobs(page, pageSize));
+    }
+
+    @GetMapping("/secrets/re-encryption/jobs/{jobId}/items")
+    public ApiResponse<PageResponse<SecretReEncryptionItemDto>> listSecretReEncryptionJobItems(
+        @PathVariable @Min(1) Long jobId,
+        @RequestParam(defaultValue = "1") @Min(1) int page,
+        @RequestParam(defaultValue = "50") @Min(1) @jakarta.validation.constraints.Max(100) int pageSize
+    ) {
+        return ApiResponse.ok(secretReEncryptionJobService.listItems(jobId, page, pageSize));
+    }
+
+    @PostMapping("/secrets/re-encryption/jobs/{jobId}/pause")
+    public ApiResponse<SecretReEncryptionJobDto> pauseSecretReEncryptionJob(
+        @PathVariable @Min(1) Long jobId
+    ) {
+        return ApiResponse.ok(secretReEncryptionJobService.pause(jobId));
+    }
+
+    @PostMapping("/secrets/re-encryption/jobs/{jobId}/resume")
+    public ApiResponse<SecretReEncryptionJobDto> resumeSecretReEncryptionJob(
+        @PathVariable @Min(1) Long jobId
+    ) {
+        return ApiResponse.ok(secretReEncryptionJobService.resume(jobId));
     }
 }

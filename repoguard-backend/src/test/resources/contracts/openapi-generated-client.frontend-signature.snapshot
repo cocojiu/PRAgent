@@ -32,13 +32,16 @@ fetchReviewListSummary -> reviewControllerGetReviewListSummary(input?: { query?:
 fetchReviewMissingTests -> reviewControllerListMissingTests(input: { path: { id: number }; query?: { page?: number; pageSize?: number } }): Promise<PageResponse<MissingTest>>; // GET /api/v1/reviews/{id}/missing-tests
 fetchReviewPolicyConfig -> systemConfigControllerGetReviewPolicy(): Promise<ReviewPolicyConfig>; // GET /api/v1/config/review-policy
 fetchReviewRepositories -> reviewControllerListRepositories(): Promise<string[]>; // GET /api/v1/reviews/repositories
-fetchReviewRuleVersions -> systemConfigControllerGetReviewRuleVersions(input: { path: { id: string } }): Promise<ReviewRulePolicyVersion[]>; // GET /api/v1/config/review-rules/{id}/versions
+fetchReviewRuleVersions -> systemConfigControllerGetReviewRuleVersions(input: { path: { id: string }; query?: { cursor?: number; pageSize?: number } }): Promise<PageResponse<ReviewRulePolicyVersion>>; // GET /api/v1/config/review-rules/{id}/versions
 fetchReviewRules -> systemConfigControllerGetReviewRules(): Promise<ReviewRulesResponse>; // GET /api/v1/config/review-rules
 fetchReviewStatus -> reviewControllerGetReviewStatus(input: { path: { id: number } }): Promise<ReviewTaskStatus>; // GET /api/v1/reviews/{id}/status
 fetchReviewStrategy -> systemConfigControllerGetReviewStrategyPolicy(): Promise<ReviewStrategyPolicy>; // GET /api/v1/config/review-strategy
-fetchReviewStrategyVersions -> systemConfigControllerGetReviewStrategyVersions(): Promise<ReviewStrategyPolicy[]>; // GET /api/v1/config/review-strategy/versions
+fetchReviewStrategyVersions -> systemConfigControllerGetReviewStrategyVersions(input?: { query?: { cursor?: number; pageSize?: number } }): Promise<PageResponse<ReviewStrategyPolicy>>; // GET /api/v1/config/review-strategy/versions
 fetchReviewTimeline -> reviewControllerListReviewTimeline(input: { path: { id: number }; query?: { limit?: number } }): Promise<TimelineItem[]>; // GET /api/v1/reviews/{id}/timeline
-fetchReviews -> reviewControllerListReviews(input?: { query?: { cursorCreatedAt?: string; cursorId?: number; keyword?: string; page?: number; pageSize?: number; repository?: string; riskLevel?: string; source?: string; status?: string; totalHint?: number; triggerSource?: string } }): Promise<PageResponse<ReviewTask>>; // GET /api/v1/reviews
+fetchReviews -> reviewControllerListReviews(input?: { query?: { cursor?: string; keyword?: string; page?: number; pageSize?: number; repository?: string; riskLevel?: string; source?: string; status?: string; triggerSource?: string } }): Promise<PageResponse<ReviewTask>>; // GET /api/v1/reviews
+fetchSecretReEncryptionJob -> systemConfigControllerGetSecretReEncryptionJob(input: { path: { jobId: number } }): Promise<SecretReEncryptionJob>; // GET /api/v1/config/secrets/re-encryption/jobs/{jobId}
+fetchSecretReEncryptionJobItems -> systemConfigControllerListSecretReEncryptionJobItems(input: { path: { jobId: number }; query?: { page?: number; pageSize?: number } }): Promise<PageResponse<SecretReEncryptionItem>>; // GET /api/v1/config/secrets/re-encryption/jobs/{jobId}/items
+fetchSecretReEncryptionJobs -> systemConfigControllerListSecretReEncryptionJobs(input?: { query?: { page?: number; pageSize?: number } }): Promise<PageResponse<SecretReEncryptionJob>>; // GET /api/v1/config/secrets/re-encryption/jobs
 fetchSystemHealthSummary -> systemHealthControllerGetSystemHealthSummary(): Promise<SystemHealthItem[]>; // GET /api/v1/system/health/summary
 fetchSystemSettings -> systemConfigControllerGetSystemSettings(): Promise<SystemSettings>; // GET /api/v1/config/system-settings
 fetchUserOperationAudits -> userManagementControllerListOperationAudits(input?: { query?: { page?: number; pageSize?: number } }): Promise<PageResponse<UserOperationAudit>>; // GET /api/v1/users/audits
@@ -46,16 +49,18 @@ fetchUsers -> userManagementControllerListUsers(input?: { query?: { keyword?: st
 getCurrentUser -> authControllerMe(): Promise<CurrentUser>; // GET /api/v1/auth/me
 login -> authControllerLogin(input: { body: AuthLoginRequest }): Promise<AuthResponse>; // POST /api/v1/auth/login
 logout -> authControllerLogout(input?: { body?: AuthLogoutRequest }): Promise<void>; // POST /api/v1/auth/logout
+pauseSecretReEncryptionJob -> systemConfigControllerPauseSecretReEncryptionJob(input: { path: { jobId: number } }): Promise<SecretReEncryptionJob>; // POST /api/v1/config/secrets/re-encryption/jobs/{jobId}/pause
 publishGithubComments -> reviewControllerPublishGithubComments(input: { path: { id: number } }): Promise<GithubCommentPublish>; // POST /api/v1/reviews/{id}/github-comments
-reEncryptSecrets -> systemConfigControllerReEncryptSecrets(input: { body: SecretReEncryptionRequest }): Promise<SecretReEncryptionResponse>; // POST /api/v1/config/secrets/re-encryption
+reEncryptSecrets -> systemConfigControllerReEncryptSecrets(input: { body: SecretReEncryptionRequest }): Promise<SecretReEncryptionJob>; // POST /api/v1/config/secrets/re-encryption
 register -> authControllerRegister(input: { body: AuthRegisterRequest }): Promise<AuthResponse>; // POST /api/v1/auth/register
 reportFrontendPerformance -> frontendPerformanceControllerRecordPerformance(input: { body: FrontendPerformanceReportRequest }): Promise<void>; // POST /api/v1/observability/frontend/performance
 requeueMessageQueueTask -> messageQueueHealthControllerRequeueTask(input: { path: { taskId: number } }): Promise<MessageQueueRequeueResponse>; // POST /api/v1/message-queue/tasks/{taskId}/requeue
 resetRefreshToken -> authControllerResetRefreshToken(input: { body: AuthRefreshTokenResetRequest }): Promise<AuthResponse>; // POST /api/v1/auth/refresh-token/reset
+resumeSecretReEncryptionJob -> systemConfigControllerResumeSecretReEncryptionJob(input: { path: { jobId: number } }): Promise<SecretReEncryptionJob>; // POST /api/v1/config/secrets/re-encryption/jobs/{jobId}/resume
 retryNotificationEvent -> notificationIntegrationControllerRetryEvent(input: { path: { id: number } }): Promise<NotificationEvent>; // POST /api/v1/notification-events/{id}/retry
 retryReview -> reviewControllerRetryReview(input: { path: { id: number } }): Promise<ReviewRetryResponse>; // POST /api/v1/reviews/{id}/retry
-rollbackReviewRule -> systemConfigControllerRollbackReviewRule(input: { path: { id: string; policyVersion: number } }): Promise<ReviewRuleConfig>; // POST /api/v1/config/review-rules/{id}/versions/{policyVersion}/rollback
-rollbackReviewStrategy -> systemConfigControllerRollbackReviewStrategy(input: { path: { snapshotId: number } }): Promise<ReviewStrategyPolicy>; // POST /api/v1/config/review-strategy/versions/{snapshotId}/rollback
+rollbackReviewRule -> systemConfigControllerRollbackReviewRule(input: { path: { id: string; policyVersion: number }; body: ReviewRuleRollbackRequest }): Promise<ReviewRuleConfig>; // POST /api/v1/config/review-rules/{id}/versions/{policyVersion}/rollback
+rollbackReviewStrategy -> systemConfigControllerRollbackReviewStrategy(input: { path: { snapshotId: number }; body: ReviewStrategyRollbackRequest }): Promise<ReviewStrategyPolicy>; // POST /api/v1/config/review-strategy/versions/{snapshotId}/rollback
 submitHumanReview -> reviewControllerSubmitHumanReview(input: { path: { id: number }; body: HumanReviewRequest }): Promise<HumanReviewResponse>; // POST /api/v1/reviews/{id}/human-review
 testGithubIntegrationConnection -> systemConfigControllerTestGithubIntegration(input?: { body?: GithubIntegrationConfigRequest }): Promise<ConnectionTestResult>; // POST /api/v1/config/integrations/github/test
 testMysqlConnection -> systemConfigControllerTestMysqlConnection(input?: { body?: ServiceIntegrationConfigRequest }): Promise<ConnectionTestResult>; // POST /api/v1/config/integrations/mysql/test
@@ -70,7 +75,7 @@ updateNotificationBinding -> notificationIntegrationControllerUpdateBinding(inpu
 updateNotificationBindingStatus -> notificationIntegrationControllerUpdateBindingStatus(input: { path: { id: number }; body: NotificationBindingStatusRequest }): Promise<NotificationBinding>; // PUT /api/v1/config/notification-bindings/{id}/status
 updateRabbitMqIntegrationConfig -> systemConfigControllerUpdateRabbitMqIntegration(input: { body: ServiceIntegrationConfigRequest }): Promise<ServiceIntegrationConfig>; // PUT /api/v1/config/integrations/rabbitmq
 updateReviewPolicyConfig -> systemConfigControllerUpdateReviewPolicy(input: { body: ReviewPolicyConfigRequest }): Promise<ReviewPolicyConfig>; // PUT /api/v1/config/review-policy
-updateReviewRule -> systemConfigControllerUpdateReviewRule(input: { path: { id: string }; body: ReviewRuleConfigRequest }): Promise<ReviewRuleConfig>; // PUT /api/v1/config/review-rules/{id}
+updateReviewRule -> systemConfigControllerUpdateReviewRule(input: { path: { id: string }; query?: { expectedPolicyVersion: number }; body: ReviewRuleConfigRequest }): Promise<ReviewRuleConfig>; // PUT /api/v1/config/review-rules/{id}
 updateReviewRuleStatus -> systemConfigControllerUpdateReviewRuleStatus(input: { path: { id: string }; body: ReviewRuleStatusRequest }): Promise<ReviewRuleConfig>; // PUT /api/v1/config/review-rules/{id}/status
 updateReviewStrategyEnforcement -> systemConfigControllerPromoteReviewStrategy(input: { body: ReviewEnforcementModeRequest }): Promise<ReviewStrategyPolicy>; // PUT /api/v1/config/review-strategy/enforcement
 updateSystemSettings -> systemConfigControllerUpdateSystemSettings(input: { body: SystemSettingsRequest }): Promise<SystemSettings>; // PUT /api/v1/config/system-settings

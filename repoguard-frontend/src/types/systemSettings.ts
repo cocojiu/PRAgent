@@ -43,6 +43,15 @@ export type SecretReEncryptionStatus =
   | "DECRYPT_FAILED"
   | "FAILED";
 
+export type SecretReEncryptionJobStatus =
+  | "PENDING"
+  | "RUNNING"
+  | "RETRY_WAIT"
+  | "PAUSED"
+  | "COMPLETED"
+  | "COMPLETED_WITH_ERRORS"
+  | "FAILED";
+
 export interface SecretReEncryptionRequest {
   sourceEncryptionKey: string;
   sourceKeyId?: string;
@@ -65,13 +74,26 @@ export interface SecretReEncryptionItem {
   message?: string;
 }
 
-export interface SecretReEncryptionResponse {
+export interface SecretReEncryptionJob {
+  id: number;
   executed: boolean;
+  status: SecretReEncryptionJobStatus;
+  sourceKeyId: string;
+  targetKeyId: string;
+  currentTable: string;
+  checkpointId: number;
+  batchSize: number;
   scannedCount: number;
   reEncryptedCount: number;
   skippedCount: number;
   failedCount: number;
-  items: SecretReEncryptionItem[];
+  retryCount: number;
+  nextRetryAt?: string;
+  lastFailureReason?: string;
+  createdByUsername?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  completedAt?: string;
 }
 
 export interface SystemSettings {

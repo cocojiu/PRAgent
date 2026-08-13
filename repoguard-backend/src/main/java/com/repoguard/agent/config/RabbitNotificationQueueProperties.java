@@ -13,9 +13,6 @@ public class RabbitNotificationQueueProperties implements RabbitPublishPropertie
     private String deadLetterExchange = "repoguard.notification.dlx";
     private String deadLetterQueue = "repoguard.notification.dlq";
     private String deadLetterRoutingKey = "repoguard.notification.dead";
-    private int publishMaxAttempts = 3;
-    private long publishInitialIntervalMs = 500;
-    private double publishMultiplier = 3.0;
     private long publishConfirmTimeoutMs = 5000;
     private int publishCompensationMaxAttempts = 5;
     private int publishCompensationBatchSize = 20;
@@ -38,12 +35,6 @@ public class RabbitNotificationQueueProperties implements RabbitPublishPropertie
     public void setDeadLetterQueue(String deadLetterQueue) { this.deadLetterQueue = deadLetterQueue; }
     public String getDeadLetterRoutingKey() { return deadLetterRoutingKey; }
     public void setDeadLetterRoutingKey(String deadLetterRoutingKey) { this.deadLetterRoutingKey = deadLetterRoutingKey; }
-    public int getPublishMaxAttempts() { return publishMaxAttempts; }
-    public void setPublishMaxAttempts(int publishMaxAttempts) { this.publishMaxAttempts = publishMaxAttempts; }
-    public long getPublishInitialIntervalMs() { return publishInitialIntervalMs; }
-    public void setPublishInitialIntervalMs(long publishInitialIntervalMs) { this.publishInitialIntervalMs = publishInitialIntervalMs; }
-    public double getPublishMultiplier() { return publishMultiplier; }
-    public void setPublishMultiplier(double publishMultiplier) { this.publishMultiplier = publishMultiplier; }
     public long getPublishConfirmTimeoutMs() { return publishConfirmTimeoutMs; }
     public void setPublishConfirmTimeoutMs(long publishConfirmTimeoutMs) { this.publishConfirmTimeoutMs = publishConfirmTimeoutMs; }
     public int getPublishCompensationMaxAttempts() { return publishCompensationMaxAttempts; }

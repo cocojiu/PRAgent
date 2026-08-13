@@ -15,6 +15,7 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.review.PullRequestHeadProvider;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
+import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -69,7 +70,7 @@ class ReviewTaskRetryServiceTest {
         ReviewTaskAfterCommitPublisher publisher = org.mockito.Mockito.mock(ReviewTaskAfterCommitPublisher.class);
         CacheEvictionService cacheEvictionService = org.mockito.Mockito.mock(CacheEvictionService.class);
         PullRequestHeadProvider pullRequestHeadProvider = org.mockito.Mockito.mock(PullRequestHeadProvider.class);
-        ReviewTask task = new ReviewTask();
+        ReviewTask task = reviewTask();
         task.setId(42L);
         task.setStatus("FAILED");
         task.setCommitSha("aaaaaaaa");
@@ -104,7 +105,7 @@ class ReviewTaskRetryServiceTest {
         ReviewTaskAfterCommitPublisher publisher = org.mockito.Mockito.mock(ReviewTaskAfterCommitPublisher.class);
         CacheEvictionService cacheEvictionService = org.mockito.Mockito.mock(CacheEvictionService.class);
         PullRequestHeadProvider pullRequestHeadProvider = org.mockito.Mockito.mock(PullRequestHeadProvider.class);
-        ReviewTask task = new ReviewTask();
+        ReviewTask task = reviewTask();
         task.setId(42L);
         task.setOrganization("octocat");
         task.setRepository("api");
@@ -145,5 +146,11 @@ class ReviewTaskRetryServiceTest {
             org.mockito.ArgumentMatchers.any()
         );
         assertThat(messageCaptor.getValue().commit()).isEqualTo("bbbbbbbb");
+    }
+
+    private ReviewTask reviewTask() {
+        ReviewTask task = new ReviewTask();
+        task.setCreatedAt(LocalDateTime.parse("2026-06-05T18:00:00"));
+        return task;
     }
 }

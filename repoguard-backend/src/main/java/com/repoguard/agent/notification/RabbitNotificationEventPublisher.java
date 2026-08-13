@@ -44,7 +44,7 @@ public class RabbitNotificationEventPublisher implements NotificationEventPublis
 
     @Override
     public void publishOnce(NotificationEventMessage message) {
-        publish(message, spec(message).singleAttempt());
+        publish(message, spec(message));
     }
 
     private void publish(NotificationEventMessage message, RabbitPublishSpec publishSpec) {
@@ -62,11 +62,10 @@ public class RabbitNotificationEventPublisher implements NotificationEventPublis
         } catch (MessagePublishException ex) {
             String failureReason = reliablePublisher.failureReason(ex);
             LOGGER.warn(
-                "Rabbit notification event publish failed eventId={} taskId={} eventType={} operation=rabbit_notification_publish result=failed maxAttempts={} failureReason={}",
+                "Rabbit notification event publish failed eventId={} taskId={} eventType={} operation=rabbit_notification_publish result=failed attempt=1 failureReason={}",
                 message.eventId(),
                 message.taskId(),
                 safePart(message.eventType()),
-                publishSpec.normalizedMaxAttempts(),
                 failureReason
             );
             metricsRecorder.recordFailed(RabbitPublishFailurePhase.NOTIFICATION, failureReason);

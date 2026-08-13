@@ -22,6 +22,7 @@ import com.repoguard.agent.mapper.ReviewTaskArchiveSummaryMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper.ReviewTaskListSummaryStat;
 import com.repoguard.agent.review.ReviewRepositoryDimensionService;
+import com.repoguard.agent.review.ReviewTaskCursorCodec;
 import com.repoguard.agent.review.ReviewTaskDetailAssembler;
 import com.repoguard.agent.service.ReviewTaskQueryService;
 import com.repoguard.agent.service.impl.ReviewTaskDetailDataLoader.ReviewTaskDetailData;
@@ -76,8 +77,9 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
 
     @Override
     public PageResponse<ReviewTaskListItem> listReviews(ReviewQuery query) {
-        if (listQueryBuilder.hasKeysetCursor(query)) {
-            return listReviewsByKeyset(query);
+        ReviewTaskCursorCodec.Cursor cursor = listQueryBuilder.decodeCursor(query);
+        if (cursor != null) {
+            return listReviewsByKeyset(query, cursor);
         }
         Page<ReviewTask> page = reviewTaskMapper.selectPage(
             Page.of(query.page(), query.pageSize()),
@@ -85,11 +87,14 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
         );
         List<ReviewTask> tasks = page.getRecords();
         Map<Long, List<ReviewTimeline>> timelinesByTaskId = queryItemLoader.loadTimelinesByTaskId(tasks);
+        boolean hasMore = (long) query.page() * query.pageSize() < page.getTotal();
         return new PageResponse<>(
             tasks.stream()
                 .map(task -> queryItemLoader.assemble(task, timelinesByTaskId.get(task.getId())))
                 .toList(),
-            page.getTotal()
+            page.getTotal(),
+            hasMore ? nextCursor(query, tasks, page.getTotal()) : null,
+            hasMore
         );
     }
 
@@ -112,24 +117,31 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
         );
     }
 
-    private PageResponse<ReviewTaskListItem> listReviewsByKeyset(ReviewQuery query) {
-        List<ReviewTask> tasks = reviewTaskMapper.selectList(listQueryBuilder.buildKeysetPage(query));
-        Long total = normalizedTotalHint(query);
-        if (total == null) {
-            total = reviewTaskMapper.selectCount(listQueryBuilder.buildCountQuery(query));
-        }
+    private PageResponse<ReviewTaskListItem> listReviewsByKeyset(
+        ReviewQuery query,
+        ReviewTaskCursorCodec.Cursor cursor
+    ) {
+        List<ReviewTask> fetchedTasks = reviewTaskMapper.selectList(listQueryBuilder.buildKeysetPage(query, cursor));
+        int pageSize = Math.max(1, Math.min(query.pageSize(), 100));
+        boolean hasMore = fetchedTasks.size() > pageSize;
+        List<ReviewTask> tasks = hasMore ? fetchedTasks.subList(0, pageSize) : fetchedTasks;
         Map<Long, List<ReviewTimeline>> timelinesByTaskId = queryItemLoader.loadTimelinesByTaskId(tasks);
         return new PageResponse<>(
             tasks.stream()
                 .map(task -> queryItemLoader.assemble(task, timelinesByTaskId.get(task.getId())))
                 .toList(),
-            total == null ? 0 : total
+            cursor.total(),
+            hasMore ? nextCursor(query, tasks, cursor.total()) : null,
+            hasMore
         );
     }
 
-    private Long normalizedTotalHint(ReviewQuery query) {
-        Long totalHint = query.totalHint();
-        return totalHint == null || totalHint < 0 ? null : totalHint;
+    private String nextCursor(ReviewQuery query, List<ReviewTask> tasks, long total) {
+        if (tasks == null || tasks.isEmpty()) {
+            return null;
+        }
+        ReviewTask lastTask = tasks.getLast();
+        return listQueryBuilder.encodeCursor(query, lastTask.getCreatedAt(), lastTask.getId(), total);
     }
 
     @Override
@@ -251,40 +263,63 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
         String category,
         String feedbackStatus
     ) {
+        PageResponse<ReviewFindingDto> result = detailDataLoader.loadFindingsPage(
+            id,
+            page,
+            pageSize,
+            severity,
+            category,
+            feedbackStatus
+        );
+        if (hasPageData(result)) {
+            return result;
+        }
         ReviewTaskArchiveSummary archive = archiveIfHotTaskMissing(id);
         if (archive != null) {
             long total = hasAnyText(severity, category, feedbackStatus) ? 0L : longValue(archive.getFindingCount());
             return new PageResponse<>(List.of(), total);
         }
-        return detailDataLoader.loadFindingsPage(id, page, pageSize, severity, category, feedbackStatus);
+        return result;
     }
 
     @Override
     public PageResponse<ChangedFileDto> listChangedFiles(Long id, int page, int pageSize, Boolean hasFinding) {
+        PageResponse<ChangedFileDto> result = detailDataLoader.loadChangedFilesPage(id, page, pageSize, hasFinding);
+        if (hasPageData(result)) {
+            return result;
+        }
         ReviewTaskArchiveSummary archive = archiveIfHotTaskMissing(id);
         if (archive != null) {
             long total = hasFinding == null ? longValue(archive.getChangedFileCount()) : 0L;
             return new PageResponse<>(List.of(), total);
         }
-        return detailDataLoader.loadChangedFilesPage(id, page, pageSize, hasFinding);
+        return result;
     }
 
     @Override
     public PageResponse<MissingTestDto> listMissingTests(Long id, int page, int pageSize) {
+        PageResponse<MissingTestDto> result = detailDataLoader.loadMissingTestsPage(id, page, pageSize);
+        if (hasPageData(result)) {
+            return result;
+        }
         ReviewTaskArchiveSummary archive = archiveIfHotTaskMissing(id);
         if (archive != null) {
             return new PageResponse<>(List.of(), longValue(archive.getMissingTestCount()));
         }
-        return detailDataLoader.loadMissingTestsPage(id, page, pageSize);
+        return result;
     }
 
     @Override
     public List<ReviewTimelineItem> listReviewTimeline(Long id, int limit) {
+        List<ReviewTimelineItem> result = detailDataLoader.loadTimelineItems(id, limit);
+        if (result != null && !result.isEmpty()) {
+            return result;
+        }
         ReviewTaskArchiveSummary archive = archiveIfHotTaskMissing(id);
         if (archive != null) {
             return List.of(archivedTimelineItem(archive));
         }
-        return detailDataLoader.loadTimelineItems(id, limit);
+        return result == null ? List.of() : result;
     }
 
     @Override
@@ -310,6 +345,11 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
             return null;
         }
         return loadArchiveSummaryOrThrow(id);
+    }
+
+    private boolean hasPageData(PageResponse<?> response) {
+        return response != null
+            && (response.total() > 0 || (response.items() != null && !response.items().isEmpty()));
     }
 
     private ReviewTaskArchiveSummary loadArchiveSummaryOrThrow(Long id) {

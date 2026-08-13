@@ -1,5 +1,7 @@
 package com.repoguard.agent.review;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.repoguard.agent.config.ReviewContextProperties;
 import java.util.List;
 import java.util.Locale;
@@ -50,6 +52,9 @@ public class ReviewFilePolicy {
     private final List<String> approvedGithubPublisherPatterns;
     private final List<String> approvedAuthorizationBoundaryPatterns;
     private final Set<String> approvedRedactionMethods;
+    private final Cache<String, FileClassification> fileClassifications = Caffeine.newBuilder()
+        .maximumSize(10_000)
+        .build();
 
     public ReviewFilePolicy(ReviewContextProperties properties) {
         ReviewContextProperties required = Objects.requireNonNull(properties, "properties");
@@ -71,23 +76,23 @@ public class ReviewFilePolicy {
     }
 
     public boolean excluded(String filePath) {
-        return matchesAny(filePath, excludedPathPatterns);
+        return classification(filePath).excluded();
     }
 
     public boolean nonProduction(String filePath) {
-        return excluded(filePath) || matchesAny(filePath, nonProductionPathPatterns);
+        return classification(filePath).nonProduction();
     }
 
     public boolean approvedMessagePublisher(String filePath) {
-        return matchesAny(filePath, approvedMessagePublisherPatterns);
+        return classification(filePath).approvedMessagePublisher();
     }
 
     public boolean approvedGithubPublisher(String filePath) {
-        return matchesAny(filePath, approvedGithubPublisherPatterns);
+        return classification(filePath).approvedGithubPublisher();
     }
 
     public boolean approvedAuthorizationBoundary(String filePath) {
-        return matchesAny(filePath, approvedAuthorizationBoundaryPatterns);
+        return classification(filePath).approvedAuthorizationBoundary();
     }
 
     public boolean approvedRedactionExpression(String expression) {
@@ -128,6 +133,22 @@ public class ReviewFilePolicy {
             : ReviewRuleApplicability.matchesPathPattern(filePath, pattern));
     }
 
+    private FileClassification classification(String filePath) {
+        String normalizedPath = ReviewRuleApplicability.normalizePath(filePath);
+        return fileClassifications.get(normalizedPath, this::classify);
+    }
+
+    private FileClassification classify(String normalizedPath) {
+        boolean excluded = matchesAny(normalizedPath, excludedPathPatterns);
+        return new FileClassification(
+            excluded,
+            excluded || matchesAny(normalizedPath, nonProductionPathPatterns),
+            matchesAny(normalizedPath, approvedMessagePublisherPatterns),
+            matchesAny(normalizedPath, approvedGithubPublisherPatterns),
+            matchesAny(normalizedPath, approvedAuthorizationBoundaryPatterns)
+        );
+    }
+
     private List<String> immutablePatterns(List<String> values) {
         if (values == null) {
             return List.of();
@@ -136,5 +157,14 @@ public class ReviewFilePolicy {
             .filter(StringUtils::hasText)
             .map(String::trim)
             .toList();
+    }
+
+    private record FileClassification(
+        boolean excluded,
+        boolean nonProduction,
+        boolean approvedMessagePublisher,
+        boolean approvedGithubPublisher,
+        boolean approvedAuthorizationBoundary
+    ) {
     }
 }

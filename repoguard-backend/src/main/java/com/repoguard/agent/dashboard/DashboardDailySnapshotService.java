@@ -9,6 +9,7 @@ import com.repoguard.agent.dto.DashboardRiskLevelCount;
 import com.repoguard.agent.dto.DashboardRuleHitCount;
 import com.repoguard.agent.mapper.DashboardDailySnapshotMapper;
 import com.repoguard.agent.mapper.DashboardMapper;
+import com.repoguard.agent.mapper.projection.DashboardProjections.SnapshotRefreshState;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Objects;
@@ -18,6 +19,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Component
 @Transactional
 public class DashboardDailySnapshotService {
+
+    private static final int DIRTY_REFRESH_BATCH_SIZE = 128;
+    private static final LocalDate MYSQL_MIN_DATE = LocalDate.of(1000, 1, 1);
 
     private final DashboardDailySnapshotMapper snapshotMapper;
     private final DashboardMapper dashboardMapper;
@@ -84,8 +88,36 @@ public class DashboardDailySnapshotService {
 
     @Transactional
     public void refreshCurrentWindows() {
+        refreshDirtySnapshots(DIRTY_REFRESH_BATCH_SIZE);
         refreshCurrentReviewWindow();
         refreshCurrentLlmQualityWindow();
+    }
+
+    public void markReviewActivityDirty(LocalDate statDate) {
+        snapshotMapper.markReviewActivityDirty(requireStartDate(statDate));
+    }
+
+    public void markLlmQualityDirty(LocalDate statDate) {
+        snapshotMapper.markLlmQualityDirty(requireStartDate(statDate));
+    }
+
+    @Transactional
+    public void refreshDate(LocalDate statDate) {
+        SnapshotRefreshState state = snapshotMapper.selectRefreshState(requireStartDate(statDate));
+        if (state != null) {
+            refreshDirtyState(state);
+        }
+    }
+
+    @Transactional
+    public int refreshDirtySnapshots(int limit) {
+        int normalizedLimit = Math.max(1, Math.min(limit, DIRTY_REFRESH_BATCH_SIZE));
+        List<SnapshotRefreshState> states = snapshotMapper.selectDirtyRefreshStates(
+            MYSQL_MIN_DATE,
+            normalizedLimit
+        );
+        states.forEach(this::refreshDirtyState);
+        return states.size();
     }
 
     @Transactional
@@ -103,54 +135,83 @@ public class DashboardDailySnapshotService {
     @Transactional
     public void refreshReviewSnapshot(LocalDate startDate) {
         LocalDate normalizedStartDate = requireStartDate(startDate);
-        snapshotMapper.deleteReviewDailyStatsFrom(normalizedStartDate);
-        snapshotMapper.insertReviewDailyStatsFromTasks(normalizedStartDate);
-        snapshotMapper.deleteRuleDailyStatsFrom(normalizedStartDate);
-        snapshotMapper.insertRuleDailyStatsFromFindings(normalizedStartDate);
+        LocalDate latestDate = latestReviewDate();
+        forEachDate(normalizedStartDate, latestDate, this::rebuildReviewDate);
     }
 
     @Transactional
     public void refreshLlmQualitySnapshot(LocalDate startDate) {
         LocalDate normalizedStartDate = requireStartDate(startDate);
-        snapshotMapper.deleteLlmQualityDailyStatsFrom(normalizedStartDate);
-        snapshotMapper.insertLlmQualityDailyStatsFromTasks(normalizedStartDate);
+        LocalDate latestDate = latestReviewDate();
+        forEachDate(normalizedStartDate, latestDate, this::rebuildLlmQualityDate);
     }
 
     private void ensureReviewSnapshot(LocalDate startDate) {
+        refreshDirtySnapshotsFrom(startDate);
         LocalDate latestReviewDate = latestReviewDate();
         if (latestReviewDate == null) {
             return;
         }
         LocalDate latestSnapshotDate = snapshotMapper.selectLatestReviewSnapshotDate();
-        LocalDate earliestSnapshotDate = snapshotMapper.selectEarliestReviewSnapshotDate();
-        if (snapshotMissingOrOutsideWindow(startDate, latestReviewDate, earliestSnapshotDate, latestSnapshotDate)) {
+        if (latestSnapshotDate == null || latestSnapshotDate.isBefore(latestReviewDate)) {
             refreshReviewSnapshot(startDate);
         }
     }
 
     private void ensureLlmQualitySnapshot(LocalDate startDate) {
-        LocalDate latestReviewDate = latestReviewDate();
-        if (latestReviewDate == null) {
+        refreshDirtySnapshotsFrom(startDate);
+        LocalDate latestSourceDate = snapshotMapper.selectLatestLlmQualitySourceDate();
+        if (latestSourceDate == null || latestSourceDate.isBefore(requireStartDate(startDate))) {
             return;
         }
         LocalDate latestSnapshotDate = snapshotMapper.selectLatestLlmQualitySnapshotDate();
-        LocalDate earliestSnapshotDate = snapshotMapper.selectEarliestLlmQualitySnapshotDate();
-        if (snapshotMissingOrOutsideWindow(startDate, latestReviewDate, earliestSnapshotDate, latestSnapshotDate)) {
+        if (latestSnapshotDate == null || latestSnapshotDate.isBefore(latestSourceDate)) {
             refreshLlmQualitySnapshot(startDate);
         }
     }
 
-    private boolean snapshotMissingOrOutsideWindow(
+    private void refreshDirtySnapshotsFrom(LocalDate startDate) {
+        List<SnapshotRefreshState> states = snapshotMapper.selectDirtyRefreshStates(
+            requireStartDate(startDate),
+            DIRTY_REFRESH_BATCH_SIZE
+        );
+        states.forEach(this::refreshDirtyState);
+    }
+
+    private void refreshDirtyState(SnapshotRefreshState state) {
+        if (state.reviewDirty()) {
+            rebuildReviewDate(state.statDate());
+            snapshotMapper.markReviewRefreshed(state.statDate(), state.reviewVersion());
+        }
+        if (state.llmQualityDirty()) {
+            rebuildLlmQualityDate(state.statDate());
+            snapshotMapper.markLlmQualityRefreshed(state.statDate(), state.llmQualityVersion());
+        }
+    }
+
+    private void rebuildReviewDate(LocalDate statDate) {
+        snapshotMapper.deleteReviewDailyStatsOn(statDate);
+        snapshotMapper.insertReviewDailyStatsForDate(statDate);
+        snapshotMapper.deleteRuleDailyStatsOn(statDate);
+        snapshotMapper.insertRuleDailyStatsForDate(statDate);
+    }
+
+    private void rebuildLlmQualityDate(LocalDate statDate) {
+        snapshotMapper.deleteLlmQualityDailyStatsOn(statDate);
+        snapshotMapper.insertLlmQualityDailyStatsForDate(statDate);
+    }
+
+    private void forEachDate(
         LocalDate startDate,
-        LocalDate latestReviewDate,
-        LocalDate earliestSnapshotDate,
-        LocalDate latestSnapshotDate
+        LocalDate endDate,
+        java.util.function.Consumer<LocalDate> refresher
     ) {
-        LocalDate normalizedStartDate = requireStartDate(startDate);
-        return latestSnapshotDate == null
-            || latestSnapshotDate.isBefore(latestReviewDate)
-            || earliestSnapshotDate == null
-            || earliestSnapshotDate.isAfter(normalizedStartDate);
+        if (endDate == null || startDate.isAfter(endDate)) {
+            return;
+        }
+        for (LocalDate statDate = startDate; !statDate.isAfter(endDate); statDate = statDate.plusDays(1)) {
+            refresher.accept(statDate);
+        }
     }
 
     private LocalDate requireStartDate(LocalDate startDate) {

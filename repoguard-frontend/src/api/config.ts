@@ -1,4 +1,5 @@
 import { apiRequest } from "@/api/contracts";
+import type { ApiRequestOptions } from "@/api/contracts";
 import type {
   DataRetentionCleanupRequest,
   GithubIntegrationConfigRequest,
@@ -61,6 +62,24 @@ export const fetchDataRetentionCleanupAudits = (
 export const reEncryptSecrets = (payload: SecretReEncryptionRequest) =>
   apiRequest("reEncryptSecrets", payload);
 
+export const fetchSecretReEncryptionJob = (jobId: number) =>
+  apiRequest("fetchSecretReEncryptionJob", { jobId });
+
+export const fetchSecretReEncryptionJobs = (page = 1, pageSize = 20) =>
+  apiRequest("fetchSecretReEncryptionJobs", { page, pageSize });
+
+export const fetchSecretReEncryptionJobItems = (
+  jobId: number,
+  page = 1,
+  pageSize = 50
+) => apiRequest("fetchSecretReEncryptionJobItems", { jobId, page, pageSize });
+
+export const pauseSecretReEncryptionJob = (jobId: number) =>
+  apiRequest("pauseSecretReEncryptionJob", { jobId });
+
+export const resumeSecretReEncryptionJob = (jobId: number) =>
+  apiRequest("resumeSecretReEncryptionJob", { jobId });
+
 export const fetchReviewRules = () => apiRequest("fetchReviewRules", undefined);
 
 export const fetchReviewCalibrationQueue = (
@@ -71,28 +90,39 @@ export const fetchReviewCalibrationQueue = (
 export const createReviewRule = (payload: ReviewRuleConfigRequest) =>
   apiRequest("createReviewRule", payload);
 
-export const updateReviewRule = (id: string, payload: ReviewRuleConfigRequest) =>
-  apiRequest("updateReviewRule", { id, payload });
+export const updateReviewRule = (
+  id: string,
+  expectedPolicyVersion: number,
+  payload: ReviewRuleConfigRequest
+) => apiRequest("updateReviewRule", { id, expectedPolicyVersion, payload });
 
 export const updateReviewRuleStatus = (id: string, payload: ReviewRuleStatusRequest) =>
   apiRequest("updateReviewRuleStatus", { id, payload });
 
-export const fetchReviewRuleVersions = (id: string) =>
-  apiRequest("fetchReviewRuleVersions", { id });
+export const fetchReviewRuleVersions = (
+  id: string,
+  options: { cursor?: string; pageSize?: number } = {},
+  requestOptions: ApiRequestOptions = {}
+) => apiRequest("fetchReviewRuleVersions", { id, ...options }, requestOptions);
 
-export const rollbackReviewRule = (id: string, policyVersion: number) =>
-  apiRequest("rollbackReviewRule", { id, policyVersion });
+export const rollbackReviewRule = (
+  id: string,
+  policyVersion: number,
+  expectedPolicyVersion: number
+) => apiRequest("rollbackReviewRule", { id, policyVersion, expectedPolicyVersion });
 
 export const fetchReviewStrategy = () => apiRequest("fetchReviewStrategy", undefined);
 
-export const fetchReviewStrategyVersions = () =>
-  apiRequest("fetchReviewStrategyVersions", undefined);
+export const fetchReviewStrategyVersions = (
+  options: { cursor?: string; pageSize?: number } = {},
+  requestOptions: ApiRequestOptions = {}
+) => apiRequest("fetchReviewStrategyVersions", options, requestOptions);
 
 export const updateReviewStrategyEnforcement = (payload: ReviewEnforcementModeRequest) =>
   apiRequest("updateReviewStrategyEnforcement", payload);
 
-export const rollbackReviewStrategy = (snapshotId: number) =>
-  apiRequest("rollbackReviewStrategy", { snapshotId });
+export const rollbackReviewStrategy = (snapshotId: number, expectedSnapshotId: number) =>
+  apiRequest("rollbackReviewStrategy", { snapshotId, expectedSnapshotId });
 
 export const testGithubIntegrationConnection = (payload?: GithubIntegrationConfigRequest) =>
   apiRequest("testGithubIntegrationConnection", payload);

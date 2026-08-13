@@ -20,6 +20,13 @@
   width: 100%;
 }
 
+.settings-field-hint {
+  margin: 6px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .settings-actions {
   display: flex;
   align-items: center;

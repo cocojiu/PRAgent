@@ -12,9 +12,6 @@ class RabbitPublishSpecTest {
         RabbitNotificationQueueProperties properties = new RabbitNotificationQueueProperties();
         properties.setExchange("test.exchange");
         properties.setRoutingKey("test.created");
-        properties.setPublishMaxAttempts(0);
-        properties.setPublishInitialIntervalMs(-1);
-        properties.setPublishMultiplier(0);
         properties.setPublishConfirmTimeoutMs(0);
 
         RabbitPublishSpec spec = RabbitPublishSpec.from(properties, "notification-event-7");
@@ -22,27 +19,6 @@ class RabbitPublishSpecTest {
         assertThat(spec.exchange()).isEqualTo("test.exchange");
         assertThat(spec.routingKey()).isEqualTo("test.created");
         assertThat(spec.correlationIdPrefix()).isEqualTo("notification-event-7");
-        assertThat(spec.normalizedMaxAttempts()).isEqualTo(1);
-        assertThat(spec.normalizedInitialBackoffMs()).isZero();
-        assertThat(spec.normalizedBackoffMultiplier()).isEqualTo(1.0);
         assertThat(spec.normalizedConfirmTimeoutMs()).isEqualTo(1);
-    }
-
-    @Test
-    void singleAttemptDisablesInProcessRetryAndBackoff() {
-        RabbitPublishSpec spec = new RabbitPublishSpec(
-            "test.exchange",
-            "test.created",
-            5,
-            1000,
-            3.0,
-            5000,
-            "notification-event-7"
-        ).singleAttempt();
-
-        assertThat(spec.normalizedMaxAttempts()).isOne();
-        assertThat(spec.normalizedInitialBackoffMs()).isZero();
-        assertThat(spec.normalizedBackoffMultiplier()).isEqualTo(1.0);
-        assertThat(spec.normalizedConfirmTimeoutMs()).isEqualTo(5000);
     }
 }

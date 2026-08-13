@@ -1,0 +1,11 @@
+2026-08-09 | item-01 | dashboard-overview
+scope: 修复 GET /api/v1/dashboard/overview 仅返回 summary、其余模块为空的接口契约问题。
+changes: overview 聚合 reviewTrend、riskDistribution、rules、highRiskReviews、LLM quality 和依赖健康快照；保留拆分模块接口兼容性。
+local-validation: DashboardControllerTest、DashboardServiceImplTest 通过，共 19 项。
+remote-action: passed (Pull Request Quality #31309489898, Repository Governance #31309489900, Release Images #31309488121)
+
+2026-08-09 | item-02 | review-list-cursor
+scope: 消除评审列表由客户端提交 cursorCreatedAt、cursorId、totalHint 的游标与总数控制。
+changes: 使用服务端返回的 nextCursor/hasMore；游标经 HMAC 签名并绑定规范化筛选条件与 pageSize；游标携带可信总数避免后续页重复 COUNT；非法或跨查询复用 cursor 返回 BAD_REQUEST；游标查询多取一条识别是否还有下一页。
+local-validation: ApplicationArchitectureTest、ApiContractTest、OpenApiPathsContractTest、OpenApiGeneratedClientContractTest、ReviewControllerTest、ReviewServiceImplTest、ReviewTaskListQueryBuilderTest、ReviewTaskQueryServiceImplTest、SpringBeanConstructorSelectionTest 定向验证通过，共 166 项；后端排除受工作区既有未暂存 Caddyfile 影响的 FrontendDeploymentContractTest 后通过 2271 项、跳过 7 项；前端 contracts 与任务列表测试通过，共 24 项；前端类型检查、Lint、生产构建通过。
+remote-action: pending

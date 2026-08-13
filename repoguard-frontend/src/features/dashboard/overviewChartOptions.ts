@@ -38,30 +38,9 @@ export const buildRiskDistributionOption = (riskDistribution: ChartSlice[]): ECh
   ]
 });
 
-export const buildRuleHitOption = (ruleHits: Required<ChartSlice>[], totalRuleHits: number): EChartsOption => ({
-  tooltip: { trigger: "item" },
-  series: [
-    {
-      type: "pie",
-      radius: ["48%", "72%"],
-      center: ["50%", "50%"],
-      data: ruleHits.map((item) => ({ name: item.name, value: item.value, itemStyle: { color: item.color } })),
-      label: { show: false },
-      labelLine: { show: false }
-    }
-  ],
-  graphic: {
-    type: "text",
-    left: "center",
-    top: "center",
-    style: { text: `总计\n${totalRuleHits}`, align: "center", fill: "#0f172a", fontSize: 18, fontWeight: 700 }
-  }
-});
-
 export const buildLlmQualityTrendOption = (llmQualityTrend: LlmQualityTrendPoint[]): EChartsOption => ({
   grid: { left: 38, right: 18, top: 42, bottom: 32 },
   tooltip: { trigger: "axis" },
-  legend: { top: 6, right: 12 },
   xAxis: { type: "category", data: llmQualityTrend.map((item) => item.date), boundaryGap: false },
   yAxis: [
     { type: "value", name: "任务", splitLine: { lineStyle: { color: "#e8eef6" } } },

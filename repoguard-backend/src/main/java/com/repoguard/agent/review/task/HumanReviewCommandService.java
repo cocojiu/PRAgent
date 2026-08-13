@@ -69,7 +69,7 @@ public class HumanReviewCommandService {
             reviewedAt,
             ReviewTimelineStatus.DONE
         );
-        evictDashboardReviewActivity();
+        evictDashboardReviewActivity(task);
         return humanReviewResponse(task, humanReviewMessage(humanReviewStatus));
     }
 
@@ -140,8 +140,8 @@ public class HumanReviewCommandService {
         return value == null ? null : value.format(DATE_TIME_FORMATTER);
     }
 
-    private void evictDashboardReviewActivity() {
-        cacheEvictionService.evictDashboardReviewActivity();
+    private void evictDashboardReviewActivity(ReviewTask task) {
+        cacheEvictionService.evictDashboardReviewActivity(task.getCreatedAt().toLocalDate());
     }
 
     private String truncate(String value) {

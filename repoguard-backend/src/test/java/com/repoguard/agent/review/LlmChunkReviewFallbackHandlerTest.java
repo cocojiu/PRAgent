@@ -3,7 +3,6 @@ package com.repoguard.agent.review;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
@@ -16,36 +15,20 @@ import org.slf4j.LoggerFactory;
 
 class LlmChunkReviewFallbackHandlerTest {
 
-    private final RuleBasedPullRequestReviewer ruleBasedReviewer = org.mockito.Mockito.mock(
-        RuleBasedPullRequestReviewer.class
-    );
     private final RepoGuardMetrics metrics = org.mockito.Mockito.mock(RepoGuardMetrics.class);
 
     @Test
     void constructorRejectsMissingFallbackDependencies() {
-        assertThatThrownBy(() -> new LlmChunkReviewFallbackHandler(null, metrics))
-            .isInstanceOf(NullPointerException.class)
-            .hasMessage("ruleBasedReviewer");
-        assertThatThrownBy(() -> new LlmChunkReviewFallbackHandler(ruleBasedReviewer, null))
+        assertThatThrownBy(() -> new LlmChunkReviewFallbackHandler(null))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("metrics");
     }
 
     @Test
-    void recordsFailureAndReturnsRuleReviewWithOriginalLoggerCategory() {
+    void recordsFailureAndReturnsMarkerForTheLaterFullDiffRulePass() {
         PullRequestDiffChunk chunk = chunk(2, 3);
-        ReviewResult ruleReview = ReviewResult.completed("MEDIUM", List.of(new ReviewFindingResult(
-            "MEDIUM",
-            "RULE",
-            "RG-FALLBACK",
-            "src/B.java",
-            1,
-            "Fallback finding",
-            "Review the failed chunk"
-        )));
         RuntimeException failure = new IllegalStateException("chunk failed");
-        when(ruleBasedReviewer.review(chunk.diff())).thenReturn(ruleReview);
-        LlmChunkReviewFallbackHandler handler = new LlmChunkReviewFallbackHandler(ruleBasedReviewer, metrics);
+        LlmChunkReviewFallbackHandler handler = new LlmChunkReviewFallbackHandler(metrics);
         Logger logger = (Logger) LoggerFactory.getLogger(LlmChunkReviewAggregator.class);
         ListAppender<ILoggingEvent> appender = new ListAppender<>();
         appender.setContext(logger.getLoggerContext());
@@ -58,10 +41,10 @@ class LlmChunkReviewFallbackHandlerTest {
                 failure
             );
 
-            assertThat(outcome.review()).isSameAs(ruleReview);
+            assertThat(outcome.review().riskLevel()).isEqualTo("INFO");
+            assertThat(outcome.review().findings()).isEmpty();
             assertThat(outcome.callResult()).isNull();
             verify(metrics).llmFallback(LlmChunkReviewFallbackHandler.CHUNK_PARTIAL_FAILURE_CATEGORY);
-            verify(ruleBasedReviewer).review(chunk.diff());
             assertThat(appender.list).hasSize(1);
             ILoggingEvent event = appender.list.getFirst();
             assertThat(event.getLevel()).isEqualTo(Level.WARN);

@@ -6,22 +6,32 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.repoguard.agent.RepoGuardApplication;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.controller.ReviewController;
+import com.repoguard.agent.dto.AuthLogoutRequest;
+import com.repoguard.agent.dto.AuthPasswordChangeRequest;
 import com.repoguard.agent.dto.AuthRefreshRequest;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ReviewCalibrationQueueMapper;
+import com.repoguard.agent.mapper.ReviewQualityBaselineMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.projection.ReviewCalibrationProjections.Sample;
 import com.repoguard.agent.mapper.projection.ReviewCalibrationProjections.Summary;
 import com.repoguard.agent.service.NotificationDispatchService;
 import com.repoguard.agent.notification.publish.NotificationEventPublishCompensator;
+import com.repoguard.agent.security.AuthAccountCache;
 import com.repoguard.agent.security.AuthTokenService;
+import com.repoguard.agent.security.PasswordHashService;
+import com.repoguard.agent.security.DatabaseRateLimitWindowStore;
 import com.repoguard.agent.service.AuthService;
+import com.repoguard.agent.security.AuthTokenFilter;
 import com.repoguard.agent.review.task.ReviewTaskTransitionStore;
 import com.repoguard.agent.review.quality.ReviewQualityBaseline;
 import com.repoguard.agent.review.quality.ReviewQualityBaselineService;
 import com.repoguard.agent.worker.ReviewTaskClaimService;
 import com.repoguard.agent.worker.ReviewTaskWorker;
 import ch.qos.logback.classic.Logger;
+import io.micrometer.core.instrument.MeterRegistry;
+import jakarta.servlet.ServletException;
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -34,13 +44,19 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.LockSupport;
+import org.apache.ibatis.annotations.Select;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.web.server.context.WebServerApplicationContext;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.mock.web.MockFilterChain;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.DirectExchange;
@@ -51,6 +67,83 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 @EnabledIfEnvironmentVariable(named = "REPOGUARD_RUN_INTEGRATION_TESTS", matches = "true")
 class ProductionRuntimeContextIntegrationTest {
+
+    private static final int QUALITY_EXPLAIN_TASK_COUNT = 500;
+    private static final int QUALITY_EXPLAIN_FINDINGS_PER_TASK = 20;
+    private static final int QUALITY_EXPLAIN_SAMPLE_COUNT = 10;
+
+    private static final org.slf4j.Logger LOGGER = LoggerFactory.getLogger(
+        ProductionRuntimeContextIntegrationTest.class
+    );
+
+    @Test
+    void databaseRateLimitStoreSupportsSharedApiScaleOutAndTargetRps() {
+        String[] scaleOutArguments = {
+            "--app.runtime.api.instance-count=2",
+            "--app.security.rate-limit-store=database"
+        };
+        try (ConfigurableApplicationContext instanceA = start(
+            "api",
+            scaleOutArguments
+        ); ConfigurableApplicationContext instanceB = start("api", scaleOutArguments)) {
+            JdbcTemplate jdbcTemplate = instanceA.getBean(JdbcTemplate.class);
+            DatabaseRateLimitWindowStore storeA = instanceA.getBean(DatabaseRateLimitWindowStore.class);
+            DatabaseRateLimitWindowStore storeB = instanceB.getBean(DatabaseRateLimitWindowStore.class);
+            String suffix = Long.toUnsignedString(System.nanoTime());
+            String scope = "integration-atomic-" + suffix;
+            List<String> capacityScopes = List.of(
+                "integration-single-5-" + suffix,
+                "integration-single-10-" + suffix,
+                "integration-dual-5-" + suffix,
+                "integration-dual-10-" + suffix
+            );
+            long minute = System.currentTimeMillis() / 60_000L;
+            try {
+                assertThat(storeA.tryAcquire(scope, "same-client", minute, 2)).isTrue();
+                assertThat(storeB.tryAcquire(scope, "same-client", minute, 2)).isTrue();
+                assertThat(storeA.tryAcquire(scope, "same-client", minute, 2)).isFalse();
+                assertThat(jdbcTemplate.queryForObject(
+                    "select request_count from api_rate_limit_window where rate_limit_scope = ?",
+                    Long.class,
+                    scope
+                )).isEqualTo(3L);
+
+                List<RateLimitCapacitySample> samples = List.of(
+                    measureRateLimitCapacity(List.of(storeA), capacityScopes.get(0), minute, 5),
+                    measureRateLimitCapacity(List.of(storeA), capacityScopes.get(1), minute, 10),
+                    measureRateLimitCapacity(List.of(storeA, storeB), capacityScopes.get(2), minute, 5),
+                    measureRateLimitCapacity(List.of(storeA, storeB), capacityScopes.get(3), minute, 10)
+                );
+                assertThat(samples).allSatisfy(sample -> {
+                    assertThat(sample.allowedRequests()).isEqualTo(sample.targetRps());
+                    assertThat(sample.p95Nanos()).isLessThan(TimeUnit.SECONDS.toNanos(1));
+                    assertThat(sample.p99Nanos()).isLessThan(TimeUnit.SECONDS.toNanos(1));
+                    LOGGER.info(
+                        "Shared rate-limit capacity evidence instances={} targetRps={} requests={} p95Ms={} p99Ms={}",
+                        sample.instanceCount(),
+                        sample.targetRps(),
+                        sample.allowedRequests(),
+                        nanosToMillis(sample.p95Nanos()),
+                        nanosToMillis(sample.p99Nanos())
+                    );
+                });
+                for (int index = 0; index < capacityScopes.size(); index++) {
+                    assertThat(jdbcTemplate.queryForObject(
+                        "select request_count from api_rate_limit_window where rate_limit_scope = ?",
+                        Long.class,
+                        capacityScopes.get(index)
+                    )).isEqualTo(index % 2 == 0 ? 5L : 10L);
+                }
+                assertThat(databaseFailureCount(instanceA.getBean(MeterRegistry.class))).isZero();
+                assertThat(databaseFailureCount(instanceB.getBean(MeterRegistry.class))).isZero();
+            } finally {
+                jdbcTemplate.update("delete from api_rate_limit_window where rate_limit_scope = ?", scope);
+                for (String capacityScope : capacityScopes) {
+                    jdbcTemplate.update("delete from api_rate_limit_window where rate_limit_scope = ?", capacityScope);
+                }
+            }
+        }
+    }
 
     @Test
     void apiOnlyContextRunsAllMigrationsAndExcludesWorkers() {
@@ -67,6 +160,111 @@ class ProductionRuntimeContextIntegrationTest {
             assertThat(context.getBeansOfType(ReviewController.class)).isEmpty();
             assertThat(context.getBeansOfType(ReviewTaskWorker.class)).hasSize(1);
             assertProductionInfrastructure(context);
+        }
+    }
+
+    @Test
+    void twoApiInstancesRejectStaleAccessTokensAfterCrossInstanceSessionChanges() throws Exception {
+        String[] scaleOutArguments = {
+            "--app.runtime.api.instance-count=2",
+            "--app.security.rate-limit-store=database"
+        };
+        try (ConfigurableApplicationContext instanceA = start("api", scaleOutArguments);
+             ConfigurableApplicationContext instanceB = start("api", scaleOutArguments)) {
+            assertThat(instanceA.getBean(AuthAccountCache.class).isCachingEnabled()).isFalse();
+            assertThat(instanceB.getBean(AuthAccountCache.class).isCachingEnabled()).isFalse();
+
+            JdbcTemplate jdbcTemplate = instanceA.getBean(JdbcTemplate.class);
+            PasswordHashService passwordHashService = instanceA.getBean(PasswordHashService.class);
+            AuthTokenService authTokenService = instanceA.getBean(AuthTokenService.class);
+            AuthService authService = instanceA.getBean(AuthService.class);
+            FilterRegistrationBean<?> instanceBFilterRegistration = instanceB
+                .getBean("authTokenFilterRegistration", FilterRegistrationBean.class);
+            AuthTokenFilter instanceBFilter = (AuthTokenFilter) instanceBFilterRegistration.getFilter();
+            List<Long> userIds = new ArrayList<>();
+            try {
+                LocalDateTime now = LocalDateTime.now();
+                String suffix = Long.toUnsignedString(System.nanoTime());
+                String currentPassword = "CurrentPassword1";
+                String newPassword = "NewPassword2";
+
+                Long passwordUserId = insertAuthAccount(
+                    jdbcTemplate,
+                    "r1-password-" + suffix,
+                    "r1-password-" + suffix + "@integration.local",
+                    passwordHashService.hash(currentPassword),
+                    "ACTIVE",
+                    1,
+                    now
+                );
+                userIds.add(passwordUserId);
+                String passwordToken = authTokenService.issueAccessToken(
+                    passwordUserId,
+                    "r1-password-" + suffix,
+                    "VIEWER",
+                    1
+                ).token();
+                assertApiInstanceAllows(instanceBFilter, passwordToken);
+
+                authService.changePassword(
+                    passwordUserId,
+                    new AuthPasswordChangeRequest(currentPassword, newPassword, newPassword)
+                );
+                assertApiInstanceRejects(instanceBFilter, passwordToken);
+
+                Long disabledUserId = insertAuthAccount(
+                    jdbcTemplate,
+                    "r1-disabled-" + suffix,
+                    "r1-disabled-" + suffix + "@integration.local",
+                    passwordHashService.hash(currentPassword),
+                    "ACTIVE",
+                    1,
+                    now
+                );
+                userIds.add(disabledUserId);
+                String disabledToken = authTokenService.issueAccessToken(
+                    disabledUserId,
+                    "r1-disabled-" + suffix,
+                    "VIEWER",
+                    1
+                ).token();
+                assertApiInstanceAllows(instanceBFilter, disabledToken);
+                jdbcTemplate.update(
+                    "update user_account set status = 'DISABLED', updated_at = ? where id = ?",
+                    LocalDateTime.now(),
+                    disabledUserId
+                );
+                assertApiInstanceRejects(instanceBFilter, disabledToken);
+
+                Long logoutUserId = insertAuthAccount(
+                    jdbcTemplate,
+                    "r1-logout-" + suffix,
+                    "r1-logout-" + suffix + "@integration.local",
+                    passwordHashService.hash(currentPassword),
+                    "ACTIVE",
+                    1,
+                    now
+                );
+                userIds.add(logoutUserId);
+                AuthTokenService.TokenIssue refreshToken = authTokenService.issueRefreshToken(false);
+                insertRefreshToken(jdbcTemplate, logoutUserId, refreshToken, authTokenService);
+                String logoutToken = authTokenService.issueAccessToken(
+                    logoutUserId,
+                    "r1-logout-" + suffix,
+                    "VIEWER",
+                    1
+                ).token();
+                assertApiInstanceAllows(instanceBFilter, logoutToken);
+
+                authService.logout(new AuthLogoutRequest(refreshToken.token()));
+                assertApiInstanceRejects(instanceBFilter, logoutToken);
+            } finally {
+                for (Long userId : userIds) {
+                    jdbcTemplate.update("delete from user_login_audit where user_id = ?", userId);
+                    jdbcTemplate.update("delete from user_refresh_token where user_id = ?", userId);
+                    jdbcTemplate.update("delete from user_account where id = ?", userId);
+                }
+            }
         }
     }
 
@@ -345,6 +543,7 @@ class ProductionRuntimeContextIntegrationTest {
             String organization = "quality-baseline-" + suffix;
             String repository = "quality-baseline-repository-" + suffix;
             String ruleId = "RG-GOLDEN-" + suffix;
+            List<Long> taskIds = new ArrayList<>();
             Long taskId = null;
 
             ReviewQualityBaseline before = baselineService.loadBaseline();
@@ -357,6 +556,7 @@ class ProductionRuntimeContextIntegrationTest {
                     false,
                     "NOT_REQUIRED"
                 );
+                taskIds.add(taskId);
                 jdbcTemplate.update("""
                     update review_task
                     set repository = ?,
@@ -374,6 +574,47 @@ class ProductionRuntimeContextIntegrationTest {
                 insertQualityFinding(jdbcTemplate, taskId, ruleId, "HIGH", null, "IGNORED", "ignored");
                 insertQualityFinding(jdbcTemplate, taskId, ruleId, "LOW", 50, "UNREVIEWED", "pending");
 
+                List<String> excludedAssessmentStatuses = List.of("PARTIAL", "FAILED", "SUPERSEDED");
+                List<String> excludedTaskStatuses = List.of("COMPLETED", "FAILED", "SUPERSEDED");
+                for (int index = 0; index < excludedAssessmentStatuses.size(); index++) {
+                    Long excludedTaskId = insertReviewTask(
+                        jdbcTemplate,
+                        organization,
+                        9151 + index,
+                        excludedTaskStatuses.get(index),
+                        false,
+                        "NOT_REQUIRED"
+                    );
+                    taskIds.add(excludedTaskId);
+                    jdbcTemplate.update("""
+                        update review_task
+                        set repository = ?,
+                            assessment_status = ?,
+                            finished_at = ?,
+                            duration_seconds = 9,
+                            llm_estimated_cost = 0.100000
+                        where id = ?
+                        """,
+                        repository,
+                        excludedAssessmentStatuses.get(index),
+                        LocalDateTime.now(),
+                        excludedTaskId
+                    );
+                    insertQualityFinding(
+                        jdbcTemplate,
+                        excludedTaskId,
+                        ruleId,
+                        "HIGH",
+                        60 + index,
+                        "VALID",
+                        "excluded-" + excludedAssessmentStatuses.get(index).toLowerCase(java.util.Locale.ROOT)
+                    );
+                }
+
+                // This fixture writes directly through JdbcTemplate and therefore
+                // must model the invalidation normally performed by application
+                // command services before asserting the persisted read model.
+                baselineService.markDirty();
                 ReviewQualityBaseline after = baselineService.loadBaseline();
 
                 assertThat(after.totalFindings() - before.totalFindings()).isEqualTo(6);
@@ -383,9 +624,9 @@ class ProductionRuntimeContextIntegrationTest {
                 assertThat(after.falsePositiveHighRiskFindings() - before.falsePositiveHighRiskFindings()).isOne();
                 assertThat(after.anchoredFindings() - before.anchoredFindings()).isEqualTo(5);
                 assertThat(after.duplicateFindings() - before.duplicateFindings()).isOne();
-                assertThat(after.completedTasks() - before.completedTasks()).isOne();
+                assertThat(after.completedTasks() - before.completedTasks()).isEqualTo(4);
                 assertThat(after.totalLlmEstimatedCost().subtract(before.totalLlmEstimatedCost()))
-                    .isEqualByComparingTo("0.123400");
+                    .isEqualByComparingTo("0.423400");
                 assertThat(after.groups())
                     .filteredOn(group -> ruleId.equals(group.ruleId())
                         && repository.equals(group.repository())
@@ -442,11 +683,90 @@ class ProductionRuntimeContextIntegrationTest {
                         assertThat(sample.message()).isEqualTo("ignored");
                     });
             } finally {
-                if (taskId != null) {
-                    jdbcTemplate.update("delete from review_finding where task_id = ?", taskId);
+                for (Long insertedTaskId : taskIds) {
+                    jdbcTemplate.update("delete from review_finding where task_id = ?", insertedTaskId);
                 }
                 jdbcTemplate.update("delete from review_task where organization = ?", organization);
+                if (!taskIds.isEmpty()) {
+                    baselineService.markDirty();
+                    baselineService.refreshIfDirty();
+                }
             }
+        }
+    }
+
+    @Test
+    void reviewQualitySqlHasFixedScaleExplainAndLatencyEvidence() throws NoSuchMethodException {
+        try (ConfigurableApplicationContext context = start("api")) {
+            JdbcTemplate jdbcTemplate = context.getBean(JdbcTemplate.class);
+            ReviewQualityBaselineMapper mapper = context.getBean(ReviewQualityBaselineMapper.class);
+            TransactionTemplate transactionTemplate = new TransactionTemplate(
+                context.getBean(PlatformTransactionManager.class)
+            );
+            String organization = "quality-explain-" + Long.toUnsignedString(System.nanoTime());
+            String summarySql = reviewQualityMapperSql("selectSummary");
+            String groupsSql = reviewQualityMapperSql("selectGroups");
+
+            transactionTemplate.executeWithoutResult(status -> {
+                try {
+                    insertQualityExplainDataset(jdbcTemplate, organization);
+                    int insertedTasks = jdbcTemplate.queryForObject(
+                        "select count(*) from review_task where organization = ?",
+                        Integer.class,
+                        organization
+                    );
+                    int insertedFindings = jdbcTemplate.queryForObject("""
+                        select count(*)
+                        from review_finding finding
+                        join review_task task on task.id = finding.task_id
+                        where task.organization = ?
+                        """, Integer.class, organization);
+                    assertThat(insertedTasks).isEqualTo(QUALITY_EXPLAIN_TASK_COUNT);
+                    assertThat(insertedFindings).isEqualTo(
+                        QUALITY_EXPLAIN_TASK_COUNT * QUALITY_EXPLAIN_FINDINGS_PER_TASK
+                    );
+
+                    String summaryPlan = explainAnalyze(jdbcTemplate, summarySql);
+                    String groupsPlan = explainAnalyze(jdbcTemplate, groupsSql);
+                    String summaryPlanJson = explainJson(jdbcTemplate, summarySql);
+                    String groupsPlanJson = explainJson(jdbcTemplate, groupsSql);
+                    assertExplainEvidence(summaryPlan, summaryPlanJson, "selectSummary");
+                    assertExplainEvidence(groupsPlan, groupsPlanJson, "selectGroups");
+
+                    mapper.selectSummary();
+                    mapper.selectGroups();
+                    List<Long> summaryDurations = measureSql(
+                        () -> mapper.selectSummary(),
+                        QUALITY_EXPLAIN_SAMPLE_COUNT
+                    );
+                    List<Long> groupDurations = measureSql(
+                        () -> mapper.selectGroups(),
+                        QUALITY_EXPLAIN_SAMPLE_COUNT
+                    );
+                    logQualitySqlEvidence(
+                        "selectSummary",
+                        summaryDurations,
+                        summaryPlan,
+                        summaryPlanJson
+                    );
+                    logQualitySqlEvidence(
+                        "selectGroups",
+                        groupDurations,
+                        groupsPlan,
+                        groupsPlanJson
+                    );
+                    assertThat(percentile(summaryDurations, 0.99d)).isLessThan(TimeUnit.SECONDS.toNanos(5));
+                    assertThat(percentile(groupDurations, 0.99d)).isLessThan(TimeUnit.SECONDS.toNanos(5));
+                } finally {
+                    status.setRollbackOnly();
+                }
+            });
+
+            assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from review_task where organization = ?",
+                Integer.class,
+                organization
+            )).isZero();
         }
     }
 
@@ -610,7 +930,6 @@ class ProductionRuntimeContextIntegrationTest {
     private ConfigurableApplicationContext start(String runtimeRole, String... additionalArguments) {
         List<String> arguments = new ArrayList<>(List.of(
             "--app.runtime.role=" + runtimeRole,
-            "--app.runtime.api.instance-count=" + ("worker".equals(runtimeRole) ? 0 : 1),
             "--app.github.webhook.enabled=false",
             "--app.security.admin-api-key.enabled=false",
             "--app.cors.allowed-origins[0]=https://integration.local",
@@ -618,11 +937,241 @@ class ProductionRuntimeContextIntegrationTest {
             "--spring.main.banner-mode=off",
             "--spring.task.scheduling.enabled=false"
         ));
+        if (Arrays.stream(additionalArguments)
+            .noneMatch(argument -> argument.startsWith("--app.runtime.api.instance-count="))) {
+            arguments.add("--app.runtime.api.instance-count=" + ("worker".equals(runtimeRole) ? 0 : 1));
+        }
         arguments.addAll(Arrays.asList(additionalArguments));
         return new SpringApplicationBuilder(RepoGuardApplication.class)
             .web(WebApplicationType.SERVLET)
             .profiles("prod")
             .run(arguments.toArray(String[]::new));
+    }
+
+    private Long insertAuthAccount(
+        JdbcTemplate jdbcTemplate,
+        String username,
+        String email,
+        String passwordHash,
+        String status,
+        int sessionVersion,
+        LocalDateTime now
+    ) {
+        jdbcTemplate.update("""
+            insert into user_account (
+                username, email, password_hash, role, status, failed_login_count,
+                locked_until, session_version, last_login_at, created_at, updated_at
+            ) values (?, ?, ?, 'VIEWER', ?, 0, null, ?, null, ?, ?)
+            """,
+            username,
+            email,
+            passwordHash,
+            status,
+            sessionVersion,
+            now,
+            now
+        );
+        return jdbcTemplate.queryForObject(
+            "select id from user_account where username = ?",
+            Long.class,
+            username
+        );
+    }
+
+    private void insertRefreshToken(
+        JdbcTemplate jdbcTemplate,
+        Long userId,
+        AuthTokenService.TokenIssue refreshToken,
+        AuthTokenService authTokenService
+    ) {
+        LocalDateTime now = LocalDateTime.now();
+        jdbcTemplate.update("""
+            insert into user_refresh_token (
+                user_id, token_hash, session_version, status, expires_at,
+                revoked_at, last_used_at, created_at, updated_at
+            ) values (?, ?, 1, 'ACTIVE', ?, null, null, ?, ?)
+            """,
+            userId,
+            authTokenService.hashRefreshToken(refreshToken.token()),
+            now.plusSeconds(refreshToken.expiresInSeconds()),
+            now,
+            now
+        );
+    }
+
+    private void assertApiInstanceAllows(AuthTokenFilter filter, String token) throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/auth/me");
+        request.addHeader("Authorization", "Bearer " + token);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, new MockFilterChain());
+
+        assertThat(response.getStatus()).isEqualTo(200);
+    }
+
+    private void assertApiInstanceRejects(AuthTokenFilter filter, String token) throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/auth/me");
+        request.addHeader("Authorization", "Bearer " + token);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, new MockFilterChain());
+
+        assertThat(response.getStatus()).isEqualTo(401);
+    }
+
+    private void insertQualityExplainDataset(JdbcTemplate jdbcTemplate, String organization) {
+        LocalDateTime now = LocalDateTime.now();
+        List<Object[]> taskArguments = new ArrayList<>(QUALITY_EXPLAIN_TASK_COUNT);
+        for (int index = 0; index < QUALITY_EXPLAIN_TASK_COUNT; index++) {
+            LocalDateTime createdAt = now.minusDays(index % 90L).minusSeconds(index);
+            taskArguments.add(new Object[] {
+                200_000 + index,
+                "Quality explain task " + index,
+                "quality-explain-repository-" + index % 20,
+                organization,
+                String.format("%040x", index + 1),
+                "quality-explain",
+                "COMPLETED",
+                index % 4 == 0 ? "HIGH" : "LOW",
+                0,
+                0,
+                "COMPLETED",
+                "openai",
+                "quality-explain-model-" + index % 3,
+                "PARSED",
+                "https://example.invalid/quality-explain/" + index,
+                "MANUAL_INPUT",
+                "MANUAL_INPUT",
+                false,
+                "NOT_REQUIRED",
+                "COMPLETE",
+                createdAt,
+                createdAt.plusSeconds(30),
+                30,
+                new BigDecimal("0.001000")
+            });
+        }
+        jdbcTemplate.batchUpdate("""
+            insert into review_task (
+                pr_number, title, repository, organization, commit_sha, branch_name,
+                status, risk_level, mq_retries, publish_attempts, llm_status,
+                llm_provider, llm_model, llm_parse_status, pr_url, source,
+                trigger_source, human_review_required, human_review_status,
+                assessment_status, created_at, finished_at, duration_seconds,
+                llm_estimated_cost
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, taskArguments);
+
+        List<Long> taskIds = jdbcTemplate.queryForList(
+            "select id from review_task where organization = ? order by id",
+            Long.class,
+            organization
+        );
+        List<Object[]> findingArguments = new ArrayList<>(
+            QUALITY_EXPLAIN_TASK_COUNT * QUALITY_EXPLAIN_FINDINGS_PER_TASK
+        );
+        for (Long taskId : taskIds) {
+            for (int index = 0; index < QUALITY_EXPLAIN_FINDINGS_PER_TASK; index++) {
+                int duplicatePattern = index % 10;
+                String extension = switch (duplicatePattern % 4) {
+                    case 0 -> "java";
+                    case 1 -> "sql";
+                    case 2 -> "yml";
+                    default -> "ts";
+                };
+                String feedbackStatus = switch (index % 4) {
+                    case 0 -> "VALID";
+                    case 1 -> "FIXED";
+                    case 2 -> "FALSE_POSITIVE";
+                    default -> "UNREVIEWED";
+                };
+                findingArguments.add(new Object[] {
+                    taskId,
+                    "FINDING",
+                    duplicatePattern % 3 == 0 ? "HIGH" : "LOW",
+                    "RULE",
+                    "RG-EXPLAIN-" + duplicatePattern % 5,
+                    "src/quality/Explain" + duplicatePattern % 4 + "." + extension,
+                    duplicatePattern + 1,
+                    "quality explain finding " + duplicatePattern,
+                    "quality explain recommendation",
+                    feedbackStatus,
+                    duplicatePattern % 5 == 0 ? "NONE" : "ADDED_LINE",
+                    duplicatePattern % 3 == 0
+                });
+            }
+        }
+        jdbcTemplate.batchUpdate("""
+            insert into review_finding (
+                task_id, category, severity, source, rule_id, file_path,
+                line_number, message, recommendation, feedback_status,
+                anchor_type, is_blocking
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, findingArguments);
+    }
+
+    private String reviewQualityMapperSql(String methodName) throws NoSuchMethodException {
+        Select select = ReviewQualityBaselineMapper.class.getMethod(methodName).getAnnotation(Select.class);
+        assertThat(select).as(methodName + " @Select").isNotNull();
+        return String.join("\n", select.value());
+    }
+
+    private String explainAnalyze(JdbcTemplate jdbcTemplate, String sql) {
+        String plan = jdbcTemplate.queryForObject("explain analyze " + sql, String.class);
+        assertThat(plan).isNotBlank();
+        return plan;
+    }
+
+    private String explainJson(JdbcTemplate jdbcTemplate, String sql) {
+        String plan = jdbcTemplate.queryForObject("explain format=json " + sql, String.class);
+        assertThat(plan).isNotBlank();
+        return plan;
+    }
+
+    private void assertExplainEvidence(String plan, String jsonPlan, String mapperMethod) {
+        assertThat(plan)
+            .as(mapperMethod + " EXPLAIN ANALYZE")
+            .contains("actual time=")
+            .contains("rows=")
+            .doesNotContain("never executed");
+        assertThat(jsonPlan)
+            .as(mapperMethod + " EXPLAIN FORMAT=JSON")
+            .contains("\"query_block\"")
+            .contains("\"access_type\"")
+            .contains("\"rows_examined_per_scan\"");
+    }
+
+    private List<Long> measureSql(Runnable query, int sampleCount) {
+        List<Long> durations = new ArrayList<>(sampleCount);
+        for (int index = 0; index < sampleCount; index++) {
+            long startedAt = System.nanoTime();
+            query.run();
+            durations.add(System.nanoTime() - startedAt);
+        }
+        durations.sort(Long::compareTo);
+        return durations;
+    }
+
+    private void logQualitySqlEvidence(
+        String mapperMethod,
+        List<Long> durations,
+        String plan,
+        String jsonPlan
+    ) {
+        LOGGER.info(
+            "Review quality SQL evidence tasks={} findings={} query={} samples={} p95Ms={} p99Ms={} "
+                + "usesTemporaryTable={} usesFilesort={} analyzePlan={} jsonPlan={}",
+            QUALITY_EXPLAIN_TASK_COUNT,
+            QUALITY_EXPLAIN_TASK_COUNT * QUALITY_EXPLAIN_FINDINGS_PER_TASK,
+            mapperMethod,
+            durations.size(),
+            nanosToMillis(percentile(durations, 0.95d)),
+            nanosToMillis(percentile(durations, 0.99d)),
+            jsonPlan.contains("\"using_temporary_table\": true"),
+            jsonPlan.contains("\"using_filesort\": true"),
+            plan.replaceAll("\\s+", " ").trim(),
+            jsonPlan.replaceAll("\\s+", " ").trim()
+        );
     }
 
     private Long insertReviewTask(
@@ -857,6 +1406,55 @@ class ProductionRuntimeContextIntegrationTest {
         rabbitAdmin.deleteExchange(topology.deadLetterExchange());
     }
 
+    private RateLimitCapacitySample measureRateLimitCapacity(
+        List<DatabaseRateLimitWindowStore> stores,
+        String scope,
+        long windowEpochMinute,
+        int targetRps
+    ) {
+        long intervalNanos = TimeUnit.SECONDS.toNanos(1) / targetRps;
+        long nextStartNanos = System.nanoTime();
+        List<Long> durations = new ArrayList<>(targetRps);
+        int allowedRequests = 0;
+        for (int index = 0; index < targetRps; index++) {
+            if (index > 0) {
+                LockSupport.parkNanos(Math.max(0L, nextStartNanos - System.nanoTime()));
+            }
+            long startedAt = System.nanoTime();
+            DatabaseRateLimitWindowStore store = stores.get(index % stores.size());
+            if (store.tryAcquire(scope, "same-client", windowEpochMinute, targetRps)) {
+                allowedRequests++;
+            }
+            durations.add(System.nanoTime() - startedAt);
+            nextStartNanos += intervalNanos;
+        }
+        durations.sort(Long::compareTo);
+        return new RateLimitCapacitySample(
+            stores.size(),
+            targetRps,
+            allowedRequests,
+            percentile(durations, 0.95d),
+            percentile(durations, 0.99d)
+        );
+    }
+
+    private long percentile(List<Long> sortedValues, double percentile) {
+        int index = Math.max(0, (int) Math.ceil(sortedValues.size() * percentile) - 1);
+        return sortedValues.get(index);
+    }
+
+    private double nanosToMillis(long nanos) {
+        return nanos / 1_000_000.0d;
+    }
+
+    private double databaseFailureCount(MeterRegistry meterRegistry) {
+        return meterRegistry.find("repoguard.security.shared_rate_limit.database.failures")
+            .counters()
+            .stream()
+            .mapToDouble(counter -> counter.count())
+            .sum();
+    }
+
     private int runConcurrently(TransitionAction first, TransitionAction second) throws Exception {
         ExecutorService executor = Executors.newFixedThreadPool(2);
         CountDownLatch ready = new CountDownLatch(2);
@@ -907,6 +1505,15 @@ class ProductionRuntimeContextIntegrationTest {
     @FunctionalInterface
     private interface TransitionAction {
         void run();
+    }
+
+    private record RateLimitCapacitySample(
+        int instanceCount,
+        int targetRps,
+        int allowedRequests,
+        long p95Nanos,
+        long p99Nanos
+    ) {
     }
 
     private record RabbitTopology(

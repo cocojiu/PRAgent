@@ -2,6 +2,7 @@ package com.repoguard.agent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.repoguard.agent.cache.CacheEvictionService;
+import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.dto.BaseSettingsDto;
 import com.repoguard.agent.dto.NotificationSettingsDto;
 import com.repoguard.agent.dto.ReviewPolicySettingsDto;
@@ -38,17 +39,20 @@ public class SystemSettingsApplicationServiceImpl implements SystemSettingsAppli
     private final SystemSettingLogMapper systemSettingLogMapper;
     private final ReviewPolicyConfigMapper reviewPolicyConfigMapper;
     private final CacheEvictionService cacheEvictionService;
+    private final RabbitReviewQueueProperties reviewQueueProperties;
 
     public SystemSettingsApplicationServiceImpl(
         SystemSettingsConfigMapper systemSettingsConfigMapper,
         SystemSettingLogMapper systemSettingLogMapper,
         ReviewPolicyConfigMapper reviewPolicyConfigMapper,
-        CacheEvictionService cacheEvictionService
+        CacheEvictionService cacheEvictionService,
+        RabbitReviewQueueProperties reviewQueueProperties
     ) {
         this.systemSettingsConfigMapper = systemSettingsConfigMapper;
         this.systemSettingLogMapper = systemSettingLogMapper;
         this.reviewPolicyConfigMapper = reviewPolicyConfigMapper;
         this.cacheEvictionService = Objects.requireNonNull(cacheEvictionService, "cacheEvictionService");
+        this.reviewQueueProperties = Objects.requireNonNull(reviewQueueProperties, "reviewQueueProperties");
     }
 
     @Override
@@ -82,7 +86,7 @@ public class SystemSettingsApplicationServiceImpl implements SystemSettingsAppli
         systemSettingsConfigMapper.updateById(settingsConfig);
 
         reviewPolicyConfig.setTimeoutSeconds(request.policy().llmTimeoutSeconds());
-        reviewPolicyConfig.setWorkerConcurrency(request.policy().workerConcurrency());
+        reviewPolicyConfig.setWorkerConcurrency(reviewQueueProperties.getWorkerConcurrency());
         reviewPolicyConfig.setUpdatedAt(now);
         reviewPolicyConfigMapper.updateById(reviewPolicyConfig);
 
@@ -112,7 +116,7 @@ public class SystemSettingsApplicationServiceImpl implements SystemSettingsAppli
         defaultConfig.setTemperature(BigDecimal.valueOf(0.20));
         defaultConfig.setMaxTokens(4096);
         defaultConfig.setFallbackToRules(true);
-        defaultConfig.setWorkerConcurrency(1);
+        defaultConfig.setWorkerConcurrency(reviewQueueProperties.getWorkerConcurrency());
         defaultConfig.setChunkFileThreshold(DEFAULT_CHUNK_FILE_THRESHOLD);
         defaultConfig.setChunkLineThreshold(DEFAULT_CHUNK_LINE_THRESHOLD);
         defaultConfig.setChunkMaxFiles(DEFAULT_CHUNK_MAX_FILES);
@@ -192,7 +196,7 @@ public class SystemSettingsApplicationServiceImpl implements SystemSettingsAppli
             new ReviewPolicySettingsDto(
                 settingsConfig.getMaxDiffLines(),
                 reviewPolicyConfig.getTimeoutSeconds(),
-                reviewPolicyConfig.getWorkerConcurrency(),
+                reviewQueueProperties.getWorkerConcurrency(),
                 settingsConfig.getAutoComment(),
                 settingsConfig.getAutoRetry()
             ),

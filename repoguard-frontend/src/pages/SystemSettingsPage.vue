@@ -52,8 +52,11 @@
           <el-form-item label="LLM 超时时间（秒）">
             <el-input-number v-model="policyForm.llmTimeoutSeconds" :disabled="!isEditing" :min="10" :max="300" />
           </el-form-item>
-          <el-form-item label="Worker 并发数">
-            <el-input-number v-model="policyForm.workerConcurrency" :disabled="!isEditing" :min="1" :max="10" />
+          <el-form-item label="Worker 并发数（运行时）">
+            <el-input-number v-model="policyForm.workerConcurrency" disabled :min="1" :max="10" />
+            <p class="settings-field-hint">
+              由 REPOGUARD_REVIEW_WORKER_CONCURRENCY 配置，修改后需重启 Worker。
+            </p>
           </el-form-item>
           <div class="switch-row">
             <span>自动评论</span>

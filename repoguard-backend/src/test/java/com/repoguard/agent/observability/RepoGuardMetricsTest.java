@@ -25,6 +25,7 @@ class RepoGuardMetricsTest {
             RuntimeRoleContract.Mode.API,
             RuntimeRoleContract.DeploymentMode.SPLIT,
             1,
+            RuntimeRoleContract.RateLimitStore.LOCAL,
             false
         );
         SimpleMeterRegistry taggedRegistry = filteredRegistry(

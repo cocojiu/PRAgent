@@ -6,6 +6,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.cache.CacheEvictionService;
+import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.dto.BaseSettingsRequest;
 import com.repoguard.agent.dto.NotificationSettingsRequest;
 import com.repoguard.agent.dto.ReviewPolicySettingsRequest;
@@ -31,11 +32,13 @@ class SystemSettingsApplicationServiceImplTest {
     private final ReviewPolicyConfigMapper reviewPolicyConfigMapper =
         org.mockito.Mockito.mock(ReviewPolicyConfigMapper.class);
     private final CacheEvictionService cacheEvictionService = org.mockito.Mockito.mock(CacheEvictionService.class);
+    private final RabbitReviewQueueProperties reviewQueueProperties = reviewQueueProperties();
     private final SystemSettingsApplicationServiceImpl service = new SystemSettingsApplicationServiceImpl(
         systemSettingsConfigMapper,
         systemSettingLogMapper,
         reviewPolicyConfigMapper,
-        cacheEvictionService
+        cacheEvictionService,
+        reviewQueueProperties
     );
 
     @Test
@@ -72,8 +75,8 @@ class SystemSettingsApplicationServiceImplTest {
         assertThat(settingsConfig.getPublicRepoAllowed()).isTrue();
         assertThat(settingsConfig.getTokenTtlDays()).isEqualTo(45);
         assertThat(reviewPolicyConfig.getTimeoutSeconds()).isEqualTo(90);
-        assertThat(reviewPolicyConfig.getWorkerConcurrency()).isEqualTo(3);
-        assertThat(result.policy().workerConcurrency()).isEqualTo(3);
+        assertThat(reviewPolicyConfig.getWorkerConcurrency()).isEqualTo(4);
+        assertThat(result.policy().workerConcurrency()).isEqualTo(4);
         assertThat(result.logs()).hasSize(1);
         verify(systemSettingsConfigMapper).updateById(settingsConfig);
         verify(reviewPolicyConfigMapper).updateById(reviewPolicyConfig);
@@ -161,5 +164,11 @@ class SystemSettingsApplicationServiceImplTest {
         log.setStatus("成功");
         log.setCreatedAt(LocalDateTime.of(2026, 6, 18, 10, 30));
         return log;
+    }
+
+    private RabbitReviewQueueProperties reviewQueueProperties() {
+        RabbitReviewQueueProperties properties = new RabbitReviewQueueProperties();
+        properties.setWorkerConcurrency(4);
+        return properties;
     }
 }

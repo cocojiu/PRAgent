@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
+import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.ReviewRuleQualityGateDto;
 import com.repoguard.agent.dto.ReviewStrategyPolicyDto;
 import com.repoguard.agent.entity.ReviewStrategyPolicySnapshot;
@@ -12,12 +13,13 @@ import com.repoguard.agent.review.EnforcementMode;
 import com.repoguard.agent.review.ReviewStrategyRelease;
 import com.repoguard.agent.review.quality.ReviewQualityBaseline;
 import com.repoguard.agent.review.quality.ReviewQualityBaselineService;
+import com.repoguard.agent.review.config.ReviewPolicyPromotionEvidenceStore.CapturedPromotionEvidence;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Objects;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ReviewStrategyPolicyService {
@@ -27,15 +29,40 @@ public class ReviewStrategyPolicyService {
     private final ReviewStrategyPolicySnapshotMapper snapshotMapper;
     private final ReviewQualityBaselineService qualityBaselineService;
     private final ReviewStrategyLifecycleGate lifecycleGate;
+    private final ReviewPolicyPromotionEvidenceStore promotionEvidenceStore;
+    private final ReviewPolicyTransactionExecutor transactionExecutor;
 
+    @Autowired
     public ReviewStrategyPolicyService(
         ReviewStrategyPolicySnapshotMapper snapshotMapper,
         ReviewQualityBaselineService qualityBaselineService,
-        ReviewStrategyLifecycleGate lifecycleGate
+        ReviewStrategyLifecycleGate lifecycleGate,
+        ReviewPolicyPromotionEvidenceStore promotionEvidenceStore,
+        ReviewPolicyTransactionExecutor transactionExecutor
     ) {
         this.snapshotMapper = Objects.requireNonNull(snapshotMapper, "snapshotMapper");
         this.qualityBaselineService = Objects.requireNonNull(qualityBaselineService, "qualityBaselineService");
         this.lifecycleGate = Objects.requireNonNull(lifecycleGate, "lifecycleGate");
+        this.promotionEvidenceStore = Objects.requireNonNull(
+            promotionEvidenceStore,
+            "promotionEvidenceStore"
+        );
+        this.transactionExecutor = Objects.requireNonNull(transactionExecutor, "transactionExecutor");
+    }
+
+    public ReviewStrategyPolicyService(
+        ReviewStrategyPolicySnapshotMapper snapshotMapper,
+        ReviewQualityBaselineService qualityBaselineService,
+        ReviewStrategyLifecycleGate lifecycleGate,
+        ReviewPolicyPromotionEvidenceStore promotionEvidenceStore
+    ) {
+        this(
+            snapshotMapper,
+            qualityBaselineService,
+            lifecycleGate,
+            promotionEvidenceStore,
+            ReviewPolicyTransactionExecutor.direct()
+        );
     }
 
     public ReviewStrategyPolicyDto getActive() {
@@ -47,34 +74,55 @@ public class ReviewStrategyPolicyService {
         return toDto(requireActive(), baseline);
     }
 
-    public List<ReviewStrategyPolicyDto> list() {
+    public PageResponse<ReviewStrategyPolicyDto> list(Long cursor, int pageSize) {
+        validatePage(cursor, pageSize);
         ReviewQualityBaseline baseline = qualityBaselineService.loadBaseline();
-        return snapshotMapper.selectList(
-            new LambdaQueryWrapper<ReviewStrategyPolicySnapshot>().orderByDesc(ReviewStrategyPolicySnapshot::getId)
-        ).stream().map(snapshot -> toDto(snapshot, baseline)).toList();
+        LambdaQueryWrapper<ReviewStrategyPolicySnapshot> query =
+            new LambdaQueryWrapper<ReviewStrategyPolicySnapshot>()
+                .orderByDesc(ReviewStrategyPolicySnapshot::getId);
+        if (cursor != null) {
+            query.lt(ReviewStrategyPolicySnapshot::getId, cursor);
+        }
+        List<ReviewStrategyPolicySnapshot> snapshots = snapshotMapper.selectList(
+            query.last("limit " + (pageSize + 1))
+        );
+        boolean hasMore = snapshots.size() > pageSize;
+        List<ReviewStrategyPolicySnapshot> page = hasMore ? snapshots.subList(0, pageSize) : snapshots;
+        List<ReviewStrategyPolicyDto> items = page.stream().map(snapshot -> toDto(snapshot, baseline)).toList();
+        String nextCursor = hasMore ? String.valueOf(page.getLast().getId()) : null;
+        long total = snapshotMapper.selectCount(new LambdaQueryWrapper<ReviewStrategyPolicySnapshot>());
+        return new PageResponse<>(items, total, nextCursor, hasMore);
     }
 
-    @Transactional
-    public ReviewStrategyPolicyDto promote(String requestedMode) {
-        ReviewStrategyPolicySnapshot active = requireActive();
-        ReviewStrategyRelease release = toRelease(active);
+    public ReviewStrategyPolicyDto promote(String requestedMode, long expectedSnapshotId) {
+        ReviewStrategyPolicySnapshot observed = requireActive();
+        requireExpectedSnapshot(observed, expectedSnapshotId);
+        ReviewStrategyRelease release = toRelease(observed);
         EnforcementMode current = release.enforcementMode();
         EnforcementMode target = EnforcementMode.from(requestedMode);
+        ReviewQualityBaseline baseline = rank(target) > rank(current)
+            ? qualityBaselineService.loadFreshBaseline()
+            : qualityBaselineService.loadBaseline();
         if (current == target) {
-            return toDto(active, qualityBaselineService.loadBaseline());
+            return toDto(observed, baseline);
         }
-        ReviewRuleQualityGateDto qualityGate = lifecycleGate.evaluate(
-            release,
-            qualityBaselineService.loadBaseline().groups()
-        );
+        ReviewRuleQualityGateDto qualityGate = lifecycleGate.evaluate(release, baseline.groups());
         validatePromotion(release, current, target, qualityGate);
-        ReviewStrategyPolicySnapshot promoted = copy(active, target, "PROMOTION", active.getId());
-        activate(promoted);
-        return toDto(promoted, qualityBaselineService.loadBaseline());
+        CapturedPromotionEvidence capturedEvidence = rank(target) > rank(current)
+            ? promotionEvidenceStore.captureStrategyPromotion(release, current, target, qualityGate)
+            : null;
+        ReviewStrategyPolicySnapshot promoted = transactionExecutor.write(() -> {
+            ReviewStrategyPolicySnapshot next = copy(observed, target, "PROMOTION", observed.getId());
+            activate(next, observed);
+            if (capturedEvidence != null) {
+                promotionEvidenceStore.recordStrategyPromotion(next, capturedEvidence);
+            }
+            return next;
+        });
+        return toDto(promoted, baseline);
     }
 
-    @Transactional
-    public ReviewStrategyPolicyDto rollback(long snapshotId) {
+    public ReviewStrategyPolicyDto rollback(long snapshotId, long expectedSnapshotId) {
         ReviewStrategyPolicySnapshot target = snapshotMapper.selectById(snapshotId);
         if (target == null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Review strategy snapshot not found: " + snapshotId);
@@ -86,14 +134,20 @@ public class ReviewStrategyPolicyService {
                 "Review strategy snapshot uses versions unsupported by the current runtime"
             );
         }
-        ReviewStrategyPolicySnapshot restored = copy(
-            target,
-            release.enforcementMode(),
-            "ROLLBACK",
-            target.getId()
-        );
-        activate(restored);
-        return toDto(restored, qualityBaselineService.loadBaseline());
+        ReviewStrategyPolicySnapshot active = requireActive();
+        requireExpectedSnapshot(active, expectedSnapshotId);
+        ReviewQualityBaseline baseline = qualityBaselineService.loadBaseline();
+        ReviewStrategyPolicySnapshot restored = transactionExecutor.write(() -> {
+            ReviewStrategyPolicySnapshot next = copy(
+                target,
+                release.enforcementMode(),
+                "ROLLBACK",
+                target.getId()
+            );
+            activate(next, active);
+            return next;
+        });
+        return toDto(restored, baseline);
     }
 
     private void validatePromotion(
@@ -125,13 +179,20 @@ public class ReviewStrategyPolicyService {
         }
     }
 
-    private void activate(ReviewStrategyPolicySnapshot snapshot) {
-        snapshotMapper.update(
+    private void activate(
+        ReviewStrategyPolicySnapshot snapshot,
+        ReviewStrategyPolicySnapshot expectedActive
+    ) {
+        int updated = snapshotMapper.update(
             null,
             new LambdaUpdateWrapper<ReviewStrategyPolicySnapshot>()
+                .eq(ReviewStrategyPolicySnapshot::getId, expectedActive.getId())
                 .eq(ReviewStrategyPolicySnapshot::getActive, true)
                 .set(ReviewStrategyPolicySnapshot::getActive, false)
         );
+        if (updated != 1) {
+            throw strategyConflict();
+        }
         snapshotMapper.insert(snapshot);
     }
 
@@ -168,6 +229,22 @@ public class ReviewStrategyPolicyService {
             throw new IllegalStateException("Active review strategy policy snapshot is missing");
         }
         return active;
+    }
+
+    private void requireExpectedSnapshot(ReviewStrategyPolicySnapshot active, long expectedSnapshotId) {
+        if (!Objects.equals(active.getId(), expectedSnapshotId)) {
+            throw strategyConflict();
+        }
+    }
+
+    private BusinessException strategyConflict() {
+        return new BusinessException(ErrorCode.CONFLICT, "Review strategy changed; reload and retry");
+    }
+
+    private void validatePage(Long cursor, int pageSize) {
+        if ((cursor != null && cursor < 1) || pageSize < 1 || pageSize > 100) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Invalid review strategy history page");
+        }
     }
 
     private ReviewStrategyPolicyDto toDto(

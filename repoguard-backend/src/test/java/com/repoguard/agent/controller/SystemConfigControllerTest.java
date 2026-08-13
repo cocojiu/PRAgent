@@ -12,6 +12,7 @@ import com.repoguard.agent.dto.ConnectionTestResultDto;
 import com.repoguard.agent.dto.GithubIntegrationConfigDto;
 import com.repoguard.agent.dto.GithubIntegrationConfigRequest;
 import com.repoguard.agent.dto.NotificationSettingsDto;
+import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.ReviewPolicyConfigDto;
 import com.repoguard.agent.dto.ReviewPolicyConfigRequest;
 import com.repoguard.agent.dto.ReviewPolicySettingsDto;
@@ -24,14 +25,16 @@ import com.repoguard.agent.dto.ReviewRulesResponse;
 import com.repoguard.agent.dto.ReviewStrategyPolicyDto;
 import com.repoguard.agent.dto.SecuritySettingsDto;
 import com.repoguard.agent.dto.SecretReEncryptionItemDto;
+import com.repoguard.agent.dto.SecretReEncryptionJobDto;
 import com.repoguard.agent.dto.SecretReEncryptionRequest;
-import com.repoguard.agent.dto.SecretReEncryptionResponse;
 import com.repoguard.agent.dto.ServiceIntegrationConfigDto;
 import com.repoguard.agent.dto.ServiceIntegrationConfigRequest;
 import com.repoguard.agent.dto.SettingLogDto;
 import com.repoguard.agent.dto.SystemSettingsDto;
 import com.repoguard.agent.dto.SystemSettingsRequest;
-import com.repoguard.agent.security.SecretReEncryptionService;
+import com.repoguard.agent.authentication.AuthenticatedPrincipal;
+import com.repoguard.agent.authentication.RequestAuthenticationAttributes;
+import com.repoguard.agent.security.SecretReEncryptionJobService;
 import com.repoguard.agent.service.SystemConfigService;
 import java.math.BigDecimal;
 import java.util.List;
@@ -105,12 +108,16 @@ class SystemConfigControllerTest {
         }
 
         @Override
-        public ReviewRuleConfigDto updateReviewRule(String id, ReviewRuleConfigRequest request) {
+        public ReviewRuleConfigDto updateReviewRule(
+            String id,
+            ReviewRuleConfigRequest request,
+            long expectedPolicyVersion
+        ) {
             return reviewRuleDto();
         }
 
         @Override
-        public ReviewRuleConfigDto updateReviewRuleStatus(String id, String status) {
+        public ReviewRuleConfigDto updateReviewRuleStatus(String id, String status, long expectedPolicyVersion) {
             return new ReviewRuleConfigDto(
                 id.toUpperCase(),
                 "异常捕获过宽",
@@ -127,8 +134,12 @@ class SystemConfigControllerTest {
         }
 
         @Override
-        public List<ReviewRulePolicyVersionDto> getReviewRuleVersions(String id) {
-            return List.of(new ReviewRulePolicyVersionDto(
+        public PageResponse<ReviewRulePolicyVersionDto> getReviewRuleVersions(
+            String id,
+            Long cursor,
+            int pageSize
+        ) {
+            return new PageResponse<>(List.of(new ReviewRulePolicyVersionDto(
                 3,
                 2,
                 "rg-java-001-detector-v2",
@@ -140,11 +151,15 @@ class SystemConfigControllerTest {
                 2L,
                 "2026-07-30 12:00:00",
                 true
-            ));
+            )), 1);
         }
 
         @Override
-        public ReviewRuleConfigDto rollbackReviewRule(String id, long policyVersion) {
+        public ReviewRuleConfigDto rollbackReviewRule(
+            String id,
+            long policyVersion,
+            long expectedPolicyVersion
+        ) {
             return reviewRuleDto();
         }
 
@@ -154,17 +169,17 @@ class SystemConfigControllerTest {
         }
 
         @Override
-        public List<ReviewStrategyPolicyDto> getReviewStrategyVersions() {
-            return List.of(reviewStrategyDto("observe"));
+        public PageResponse<ReviewStrategyPolicyDto> getReviewStrategyVersions(Long cursor, int pageSize) {
+            return new PageResponse<>(List.of(reviewStrategyDto("observe")), 1);
         }
 
         @Override
-        public ReviewStrategyPolicyDto promoteReviewStrategy(String enforcementMode) {
+        public ReviewStrategyPolicyDto promoteReviewStrategy(String enforcementMode, long expectedSnapshotId) {
             return reviewStrategyDto(enforcementMode.toLowerCase());
         }
 
         @Override
-        public ReviewStrategyPolicyDto rollbackReviewStrategy(long snapshotId) {
+        public ReviewStrategyPolicyDto rollbackReviewStrategy(long snapshotId, long expectedSnapshotId) {
             return reviewStrategyDto("observe");
         }
 
@@ -189,9 +204,10 @@ class SystemConfigControllerTest {
         }
     };
 
-    private final SecretReEncryptionService secretReEncryptionService = Mockito.mock(SecretReEncryptionService.class);
+    private final SecretReEncryptionJobService secretReEncryptionJobService =
+        Mockito.mock(SecretReEncryptionJobService.class);
     private final MockMvc mockMvc = MockMvcBuilders
-        .standaloneSetup(new SystemConfigController(systemConfigService, secretReEncryptionService))
+        .standaloneSetup(new SystemConfigController(systemConfigService, secretReEncryptionJobService))
         .setControllerAdvice(new GlobalExceptionHandler())
         .build();
 
@@ -356,7 +372,8 @@ class SystemConfigControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
-                      "status": "disabled"
+                      "status": "disabled",
+                      "expectedPolicyVersion": 3
                     }
                     """))
             .andExpect(status().isOk())
@@ -369,10 +386,15 @@ class SystemConfigControllerTest {
     void exposesVersionedRuleAndStrategyGovernanceEndpoints() throws Exception {
         mockMvc.perform(get("/api/v1/config/review-rules/RG-JAVA-001/versions"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data[0].policyVersion").value(3))
-            .andExpect(jsonPath("$.data[0].detectorVersion").value("rg-java-001-detector-v2"));
+            .andExpect(jsonPath("$.data.items[0].policyVersion").value(3))
+            .andExpect(jsonPath("$.data.items[0].detectorVersion").value("rg-java-001-detector-v2"))
+            .andExpect(jsonPath("$.data.total").value(1));
 
-        mockMvc.perform(post("/api/v1/config/review-rules/RG-JAVA-001/versions/2/rollback"))
+        mockMvc.perform(post("/api/v1/config/review-rules/RG-JAVA-001/versions/2/rollback")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"expectedPolicyVersion":3}
+                    """))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.id").value("RG-JAVA-001"));
 
@@ -383,17 +405,21 @@ class SystemConfigControllerTest {
 
         mockMvc.perform(get("/api/v1/config/review-strategy/versions"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data[0].promptVersion").value("review-prompt-v2"));
+            .andExpect(jsonPath("$.data.items[0].promptVersion").value("review-prompt-v2"));
 
         mockMvc.perform(put("/api/v1/config/review-strategy/enforcement")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
-                    {"enforcementMode":"comment"}
+                    {"enforcementMode":"comment","expectedSnapshotId":17}
                     """))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.enforcementMode").value("comment"));
 
-        mockMvc.perform(post("/api/v1/config/review-strategy/versions/11/rollback"))
+        mockMvc.perform(post("/api/v1/config/review-strategy/versions/11/rollback")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"expectedSnapshotId":17}
+                    """))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.changeType").value("ROLLBACK"));
     }
@@ -403,36 +429,45 @@ class SystemConfigControllerTest {
         mockMvc.perform(put("/api/v1/config/review-strategy/enforcement")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
-                    {"enforcementMode":"force"}
+                    {"enforcementMode":"force","expectedSnapshotId":17}
                     """))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
     }
 
     @Test
-    void reEncryptSecretsReturnsOperationReport() throws Exception {
-        Mockito.when(secretReEncryptionService.reEncrypt(org.mockito.ArgumentMatchers.any(SecretReEncryptionRequest.class)))
-            .thenReturn(new SecretReEncryptionResponse(
-                false,
-                1,
-                1,
-                0,
-                0,
-                List.of(new SecretReEncryptionItemDto(
-                    "integration_config",
-                    1L,
-                    "token_value",
-                    "GITHUB",
-                    "enc:v2",
-                    "old-2026",
-                    "new-2026",
-                    "WOULD_RE_ENCRYPT",
-                    null,
-                    "Secret can be re-encrypted"
-                ))
-            ));
+    void reEncryptSecretsReturnsQueuedJob() throws Exception {
+        Mockito.when(secretReEncryptionJobService.start(
+            org.mockito.ArgumentMatchers.any(SecretReEncryptionRequest.class),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any()
+        )).thenReturn(new SecretReEncryptionJobDto(
+            7L,
+            false,
+            "PENDING",
+            "old-2026",
+            "new-2026",
+            "integration_config",
+            0L,
+            100,
+            0L,
+            0L,
+            0L,
+            0L,
+            0,
+            null,
+            null,
+            "admin",
+            "2026-08-09 23:00:00",
+            "2026-08-09 23:00:00",
+            null
+        ));
 
         mockMvc.perform(post("/api/v1/config/secrets/re-encryption")
+                .requestAttr(
+                    RequestAuthenticationAttributes.AUTHENTICATED_PRINCIPAL,
+                    new AuthenticatedPrincipal(11L, "admin", "ADMIN", Long.MAX_VALUE)
+                )
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
@@ -446,8 +481,44 @@ class SystemConfigControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true))
             .andExpect(jsonPath("$.data.executed").value(false))
-            .andExpect(jsonPath("$.data.items[0].status").value("WOULD_RE_ENCRYPT"))
-            .andExpect(jsonPath("$.data.items[0].failureReason").doesNotExist());
+            .andExpect(jsonPath("$.data.status").value("PENDING"))
+            .andExpect(jsonPath("$.data.id").value(7));
+    }
+
+    @Test
+    void listSecretReEncryptionJobsReturnsPagedSummaries() throws Exception {
+        Mockito.when(secretReEncryptionJobService.listJobs(1, 20))
+            .thenReturn(new com.repoguard.agent.dto.PageResponse<>(
+                List.of(new SecretReEncryptionJobDto(
+                    7L,
+                    true,
+                    "RUNNING",
+                    "old-2026",
+                    "new-2026",
+                    "integration_config",
+                    10L,
+                    100,
+                    10L,
+                    9L,
+                    1L,
+                    0L,
+                    0,
+                    null,
+                    null,
+                    "admin",
+                    "2026-08-09 23:00:00",
+                    "2026-08-09 23:01:00",
+                    null
+                )),
+                1
+            ));
+
+        mockMvc.perform(get("/api/v1/config/secrets/re-encryption/jobs"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.total").value(1))
+            .andExpect(jsonPath("$.data.items[0].id").value(7))
+            .andExpect(jsonPath("$.data.items[0].status").value("RUNNING"));
     }
 
     @Test
@@ -467,8 +538,12 @@ class SystemConfigControllerTest {
             .andExpect(jsonPath("$.code").value("BAD_REQUEST"))
             .andExpect(jsonPath("$.message").value("Request validation failed"));
 
-        Mockito.verify(secretReEncryptionService, Mockito.never())
-            .reEncrypt(org.mockito.ArgumentMatchers.any(SecretReEncryptionRequest.class));
+        Mockito.verify(secretReEncryptionJobService, Mockito.never())
+            .start(
+                org.mockito.ArgumentMatchers.any(SecretReEncryptionRequest.class),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any()
+            );
     }
 
     @Test
@@ -489,8 +564,12 @@ class SystemConfigControllerTest {
             .andExpect(jsonPath("$.code").value("BAD_REQUEST"))
             .andExpect(jsonPath("$.message").value("Request validation failed"));
 
-        Mockito.verify(secretReEncryptionService, Mockito.never())
-            .reEncrypt(org.mockito.ArgumentMatchers.any(SecretReEncryptionRequest.class));
+        Mockito.verify(secretReEncryptionJobService, Mockito.never())
+            .start(
+                org.mockito.ArgumentMatchers.any(SecretReEncryptionRequest.class),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any()
+            );
     }
 
     private GithubIntegrationConfigDto githubDto() {

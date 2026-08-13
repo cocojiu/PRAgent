@@ -47,7 +47,7 @@ class ReviewExecutionResultWriter {
         timelineRecorder.reviewGenerated(task, reviewResult, taskWrite.finishedAt());
         timelineRecorder.reviewTerminal(task, taskWrite.humanReviewRequired(), taskWrite.finishedAt());
         metricsRecorder.recordCompleted(reviewResult, startedAt, taskWrite.finishedAt());
-        cacheInvalidator.reviewTaskChanged();
+        cacheInvalidator.reviewTaskChanged(task);
         return new WriteResult(findingCount, taskWrite.humanReviewRequired());
     }
 

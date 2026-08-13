@@ -1,6 +1,8 @@
 package com.repoguard.agent.review;
 
+import java.util.HashMap;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -128,13 +130,24 @@ class SensitiveLiteralRule implements ReviewRule {
     }
 
     private double shannonEntropy(String value) {
-        int[] frequencies = new int[Character.MAX_VALUE + 1];
-        value.chars().forEach(character -> frequencies[character]++);
+        int[] asciiFrequencies = new int[128];
+        Map<Integer, Integer> extendedFrequencies = new HashMap<>();
+        value.chars().forEach(character -> {
+            if (character < asciiFrequencies.length) {
+                asciiFrequencies[character]++;
+            } else {
+                extendedFrequencies.merge(character, 1, Integer::sum);
+            }
+        });
         double entropy = 0.0d;
-        for (int frequency : frequencies) {
+        for (int frequency : asciiFrequencies) {
             if (frequency == 0) {
                 continue;
             }
+            double probability = (double) frequency / value.length();
+            entropy -= probability * (Math.log(probability) / Math.log(2));
+        }
+        for (int frequency : extendedFrequencies.values()) {
             double probability = (double) frequency / value.length();
             entropy -= probability * (Math.log(probability) / Math.log(2));
         }

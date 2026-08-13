@@ -240,8 +240,13 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="ruleVersionDialogVisible" :title="`${selectedRuleId} 策略版本历史`" width="920px">
-      <el-table v-loading="historyLoading" :data="ruleVersions" class="rg-table" size="small">
+    <el-dialog
+      v-model="ruleVersionDialogVisible"
+      :title="`${selectedRuleId} 策略版本历史`"
+      width="920px"
+      @closed="cancelRuleHistoryRequest"
+    >
+      <el-table v-loading="ruleHistoryLoading" :data="ruleVersions" class="rg-table" size="small">
         <el-table-column prop="policyVersion" label="策略版本" width="100" />
         <el-table-column prop="configVersion" label="配置版本" width="100" />
         <el-table-column prop="detectorVersion" label="检测器" min-width="140" />
@@ -263,10 +268,18 @@
           </template>
         </el-table-column>
       </el-table>
+      <div v-if="ruleHistoryHasMore" class="history-load-more">
+        <el-button :loading="ruleHistoryLoading" @click="loadMoreRuleVersions">加载更多</el-button>
+      </div>
     </el-dialog>
 
-    <el-dialog v-model="strategyVersionDialogVisible" title="审查策略版本历史" width="980px">
-      <el-table v-loading="historyLoading" :data="strategyVersions" class="rg-table" size="small">
+    <el-dialog
+      v-model="strategyVersionDialogVisible"
+      title="审查策略版本历史"
+      width="980px"
+      @closed="cancelStrategyHistoryRequest"
+    >
+      <el-table v-loading="strategyHistoryLoading" :data="strategyVersions" class="rg-table" size="small">
         <el-table-column prop="snapshotId" label="快照" width="80" />
         <el-table-column prop="strategyVersion" label="策略版本" width="100" />
         <el-table-column prop="promptVersion" label="Prompt" width="110" />
@@ -289,79 +302,80 @@
           </template>
         </el-table-column>
       </el-table>
+      <div v-if="strategyHistoryHasMore" class="history-load-more">
+        <el-button :loading="strategyHistoryLoading" @click="loadMoreStrategyVersions">加载更多</el-button>
+      </div>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import "@/features/rule-config/ruleConfig.css";
-import { computed, onMounted, reactive, ref } from "vue";
-import { ElMessage } from "element-plus/es/components/message/index.mjs";
+import { computed, onMounted } from "vue";
 import { CheckCircle, ListChecks, Search, ShieldAlert, Target, Zap } from "@lucide/vue";
 import { canManage } from "@/stores/authState";
-import {
-  fetchReviewRules,
-  fetchReviewRuleVersions,
-  fetchReviewStrategyVersions,
-  rollbackReviewRule,
-  rollbackReviewStrategy,
-  updateReviewRule,
-  updateReviewRuleStatus,
-  updateReviewStrategyEnforcement
-} from "@/api/config";
 import MetricGrid, { type MetricGridItem } from "@/components/MetricGrid.vue";
 import { useMetricIcon } from "@/composables/useMetricIcon";
 import ReviewCalibrationQueueCard from "@/features/rule-config/components/ReviewCalibrationQueueCard.vue";
-import type {
-  EnforcementMode,
-  ReviewQualityGroup,
-  ReviewRuleConfig,
-  ReviewRuleConfigRequest,
-  ReviewRulePolicyVersion,
-  ReviewStrategyPolicy,
-  RuleStatus,
-  SimpleMetric
-} from "@/types";
-import { getErrorMessage } from "@/utils/errors";
+import { useReviewPolicyHistory } from "@/features/rule-config/composables/useReviewPolicyHistory";
+import { useReviewRuleCatalog } from "@/features/rule-config/composables/useReviewRuleCatalog";
+import { useReviewRuleEditor } from "@/features/rule-config/composables/useReviewRuleEditor";
+import { useReviewStrategyGovernance } from "@/features/rule-config/composables/useReviewStrategyGovernance";
+import type { ReviewRuleConfig } from "@/types";
 import { riskText } from "@/utils/risk";
 
-const severityFilter = ref("");
-const statusFilter = ref("");
-const keyword = ref("");
-const loading = ref(false);
-const saving = ref(false);
-const statusSavingId = ref("");
-const errorMessage = ref("");
-const dialogVisible = ref(false);
-const ruleVersionDialogVisible = ref(false);
-const strategyVersionDialogVisible = ref(false);
-const editingRuleId = ref("");
-const rules = ref<ReviewRuleConfig[]>([]);
-const metrics = ref<SimpleMetric[]>([]);
-const qualityGroups = ref<ReviewQualityGroup[]>([]);
-const strategyPolicy = ref<ReviewStrategyPolicy | null>(null);
-const strategyTargetMode = ref<EnforcementMode>("observe");
-const strategySaving = ref(false);
-const historyLoading = ref(false);
-const rollbackSavingId = ref("");
-const selectedRuleId = ref("");
-const ruleVersions = ref<ReviewRulePolicyVersion[]>([]);
-const strategyVersions = ref<ReviewStrategyPolicy[]>([]);
+const {
+  errorMessage,
+  filteredRules,
+  keyword,
+  loading,
+  metrics,
+  qualityGroups,
+  rules,
+  severityFilter,
+  statusFilter,
+  strategyPolicy,
+  topRuleDocs,
+  loadRules
+} = useReviewRuleCatalog();
 
-const ruleForm = reactive<ReviewRuleConfigRequest>({
-  id: "",
-  name: "",
-  scope: "",
-  applicableLanguages: "",
-  filePatterns: "",
-  severity: "low",
-  status: "disabled",
-  confidence: 90,
-  description: "",
-  positiveExample: "",
-  falsePositiveGuidance: "",
-  enforcementMode: "comment"
-});
+const {
+  dialogVisible,
+  editingRuleId,
+  ruleForm,
+  saving,
+  statusSavingId,
+  openEditDialog,
+  saveRule,
+  toggleRule
+} = useReviewRuleEditor({ canManage, reloadRules: loadRules, rules });
+
+const {
+  strategySaving,
+  strategyTargetMode,
+  saveStrategyEnforcement
+} = useReviewStrategyGovernance({ canManage, reloadRules: loadRules, strategyPolicy });
+
+const {
+  rollbackSavingId,
+  ruleHistoryHasMore,
+  ruleHistoryLoading,
+  ruleVersionDialogVisible,
+  ruleVersions,
+  selectedRuleId,
+  strategyHistoryHasMore,
+  strategyHistoryLoading,
+  strategyVersionDialogVisible,
+  strategyVersions,
+  cancelRuleHistoryRequest,
+  cancelStrategyHistoryRequest,
+  loadMoreRuleVersions,
+  loadMoreStrategyVersions,
+  openRuleVersions,
+  openStrategyVersions,
+  rollbackRuleVersion,
+  rollbackStrategyVersion
+} = useReviewPolicyHistory({ canManage, reloadRules: loadRules, rules, strategyPolicy });
 
 const metricIconMap = {
   blue: ListChecks,
@@ -380,232 +394,6 @@ const ruleMetricItems = computed<MetricGridItem[]>(() =>
     color: metric.color
   }))
 );
-
-const filteredRules = computed(() => {
-  const query = keyword.value.trim().toLowerCase();
-  return rules.value.filter((rule) => {
-    const matchesSeverity = !severityFilter.value || rule.severity === severityFilter.value;
-    const matchesStatus = !statusFilter.value || rule.status === statusFilter.value;
-    const matchesKeyword =
-      !query
-        || rule.id.toLowerCase().includes(query)
-        || rule.name.toLowerCase().includes(query)
-        || rule.scope.toLowerCase().includes(query)
-        || (rule.applicableLanguages ?? "").toLowerCase().includes(query)
-        || (rule.filePatterns ?? "").toLowerCase().includes(query);
-    return matchesSeverity && matchesStatus && matchesKeyword;
-  });
-});
-
-const topRuleDocs = computed(() => rules.value.slice(0, 4));
-
-const loadRules = async () => {
-  loading.value = true;
-  errorMessage.value = "";
-  try {
-    const response = await fetchReviewRules();
-    metrics.value = response.metrics;
-    rules.value = response.rules;
-    qualityGroups.value = response.qualityGroups ?? [];
-    strategyPolicy.value = response.strategyPolicy ?? null;
-    if (strategyPolicy.value) {
-      strategyTargetMode.value = strategyPolicy.value.enforcementMode;
-    }
-  } catch (error) {
-    errorMessage.value = getErrorMessage(error, "规则加载失败");
-    ElMessage.error(errorMessage.value);
-  } finally {
-    loading.value = false;
-  }
-};
-
-const resetForm = (rule?: ReviewRuleConfig) => {
-  ruleForm.id = rule?.id ?? "";
-  ruleForm.name = rule?.name ?? "";
-  ruleForm.scope = rule?.scope ?? "Java Patch";
-  ruleForm.applicableLanguages = rule?.applicableLanguages ?? "";
-  ruleForm.filePatterns = rule?.filePatterns ?? "";
-  ruleForm.severity = rule?.severity ?? "low";
-  ruleForm.status = rule?.status ?? "disabled";
-  ruleForm.confidence = Number.parseInt(rule?.confidence ?? "90", 10);
-  ruleForm.description = rule?.description ?? "";
-  ruleForm.positiveExample = rule?.positiveExample ?? "";
-  ruleForm.falsePositiveGuidance = rule?.falsePositiveGuidance ?? "";
-  ruleForm.enforcementMode = rule?.enforcementMode ?? "comment";
-};
-
-const openEditDialog = (rule: ReviewRuleConfig) => {
-  if (!canManage.value) {
-    return;
-  }
-  editingRuleId.value = rule.id;
-  resetForm(rule);
-  dialogVisible.value = true;
-};
-
-const openRuleVersions = async (rule: ReviewRuleConfig) => {
-  selectedRuleId.value = rule.id;
-  ruleVersionDialogVisible.value = true;
-  historyLoading.value = true;
-  try {
-    ruleVersions.value = await fetchReviewRuleVersions(rule.id);
-  } catch (error) {
-    ElMessage.error(getErrorMessage(error, "规则版本历史加载失败"));
-  } finally {
-    historyLoading.value = false;
-  }
-};
-
-const openStrategyVersions = async () => {
-  strategyVersionDialogVisible.value = true;
-  historyLoading.value = true;
-  try {
-    strategyVersions.value = await fetchReviewStrategyVersions();
-  } catch (error) {
-    ElMessage.error(getErrorMessage(error, "策略版本历史加载失败"));
-  } finally {
-    historyLoading.value = false;
-  }
-};
-
-const saveStrategyEnforcement = async () => {
-  if (!canManage.value || !strategyPolicy.value) {
-    return;
-  }
-  strategySaving.value = true;
-  try {
-    strategyPolicy.value = await updateReviewStrategyEnforcement({
-      enforcementMode: strategyTargetMode.value
-    });
-    strategyTargetMode.value = strategyPolicy.value.enforcementMode;
-    ElMessage.success("审查策略处置模式已更新");
-    await loadRules();
-  } catch (error) {
-    strategyTargetMode.value = strategyPolicy.value.enforcementMode;
-    ElMessage.error(getErrorMessage(error, "策略处置模式更新失败"));
-  } finally {
-    strategySaving.value = false;
-  }
-};
-
-const rollbackRuleVersion = async (policyVersion: number) => {
-  if (!canManage.value || !selectedRuleId.value) {
-    return;
-  }
-  rollbackSavingId.value = `rule-${policyVersion}`;
-  try {
-    await rollbackReviewRule(selectedRuleId.value, policyVersion);
-    ElMessage.success("规则策略已生成新的回滚版本");
-    await loadRules();
-    ruleVersions.value = await fetchReviewRuleVersions(selectedRuleId.value);
-  } catch (error) {
-    ElMessage.error(getErrorMessage(error, "规则策略回滚失败"));
-  } finally {
-    rollbackSavingId.value = "";
-  }
-};
-
-const rollbackStrategyVersion = async (snapshotId: number) => {
-  if (!canManage.value) {
-    return;
-  }
-  rollbackSavingId.value = `strategy-${snapshotId}`;
-  try {
-    strategyPolicy.value = await rollbackReviewStrategy(snapshotId);
-    strategyTargetMode.value = strategyPolicy.value.enforcementMode;
-    ElMessage.success("审查策略已生成新的回滚快照");
-    await loadRules();
-    strategyVersions.value = await fetchReviewStrategyVersions();
-  } catch (error) {
-    ElMessage.error(getErrorMessage(error, "审查策略回滚失败"));
-  } finally {
-    rollbackSavingId.value = "";
-  }
-};
-
-const saveRule = async () => {
-  if (!canManage.value) {
-    return;
-  }
-  const validationMessage = validateRuleForm();
-  if (validationMessage) {
-    ElMessage.warning(validationMessage);
-    return;
-  }
-  saving.value = true;
-  try {
-    const payload = normalizedPayload();
-    await updateReviewRule(editingRuleId.value, payload);
-    ElMessage.success("规则已更新");
-    dialogVisible.value = false;
-    await loadRules();
-  } catch (error) {
-    ElMessage.error(getErrorMessage(error, "规则操作失败"));
-  } finally {
-    saving.value = false;
-  }
-};
-
-const toggleRule = async (rule: ReviewRuleConfig, value: string | number | boolean) => {
-  if (!canManage.value || statusSavingId.value) {
-    rule.status = value === "enabled" ? "disabled" : "enabled";
-    return;
-  }
-  const nextStatus = value === "enabled" ? "enabled" : "disabled";
-  const previousStatus: RuleStatus = nextStatus === "enabled" ? "disabled" : "enabled";
-  statusSavingId.value = rule.id;
-  try {
-    const updated = await updateReviewRuleStatus(rule.id, { status: nextStatus });
-    Object.assign(rule, updated);
-    ElMessage.success(`${rule.name} 已${nextStatus === "enabled" ? "启用" : "停用"}`);
-    await loadRules();
-  } catch (error) {
-    rule.status = previousStatus;
-    ElMessage.error(getErrorMessage(error, "规则操作失败"));
-  } finally {
-    statusSavingId.value = "";
-  }
-};
-
-const validateRuleForm = () => {
-  if (!ruleForm.id.trim()) {
-    return "请输入规则 ID";
-  }
-  if (!/^[A-Za-z0-9_-]+$/.test(ruleForm.id.trim())) {
-    return "规则 ID 只能包含字母、数字、下划线和连字符";
-  }
-  if (!ruleForm.name.trim()) {
-    return "请输入规则名称";
-  }
-  if (!ruleForm.scope.trim()) {
-    return "请输入适用范围";
-  }
-  if (!ruleForm.description.trim()) {
-    return "请输入规则说明";
-  }
-  if (!ruleForm.applicableLanguages.trim()) {
-    return "请输入适用语言";
-  }
-  if (!ruleForm.filePatterns.trim()) {
-    return "请输入文件匹配规则";
-  }
-  return "";
-};
-
-const normalizedPayload = (): ReviewRuleConfigRequest => ({
-  id: ruleForm.id.trim().toUpperCase(),
-  name: ruleForm.name.trim(),
-  scope: ruleForm.scope.trim(),
-  applicableLanguages: ruleForm.applicableLanguages.trim(),
-  filePatterns: ruleForm.filePatterns.trim(),
-  severity: ruleForm.severity,
-  status: ruleForm.status,
-  confidence: ruleForm.confidence,
-  description: ruleForm.description.trim(),
-  positiveExample: ruleForm.positiveExample.trim(),
-  falsePositiveGuidance: ruleForm.falsePositiveGuidance.trim(),
-  enforcementMode: ruleForm.enforcementMode
-});
 
 const enforcementModeText = (mode: ReviewRuleConfig["enforcementMode"]) => {
   if (mode === "block") return "阻断";

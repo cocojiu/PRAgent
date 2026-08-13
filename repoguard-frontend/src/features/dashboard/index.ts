@@ -5,6 +5,5 @@ export { useDashboardOverview } from "./composables/useDashboardOverview";
 export {
   buildLlmQualityTrendOption,
   buildReviewTrendOption,
-  buildRiskDistributionOption,
-  buildRuleHitOption
+  buildRiskDistributionOption
 } from "./overviewChartOptions";

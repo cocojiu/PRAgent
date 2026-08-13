@@ -120,6 +120,7 @@ export interface ReviewStrategyPolicy {
 
 export interface ReviewEnforcementModeRequest {
   enforcementMode: EnforcementMode;
+  expectedSnapshotId: number;
 }
 
 export interface ReviewRuleConfigRequest {
@@ -139,6 +140,15 @@ export interface ReviewRuleConfigRequest {
 
 export interface ReviewRuleStatusRequest {
   status: RuleStatus;
+  expectedPolicyVersion: number;
+}
+
+export interface ReviewRuleRollbackRequest {
+  expectedPolicyVersion: number;
+}
+
+export interface ReviewStrategyRollbackRequest {
+  expectedSnapshotId: number;
 }
 
 export interface ReviewCalibrationVersion {

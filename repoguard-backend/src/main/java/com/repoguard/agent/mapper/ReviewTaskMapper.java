@@ -15,7 +15,7 @@ import org.apache.ibatis.annotations.Select;
 public interface ReviewTaskMapper extends BaseMapper<ReviewTask> {
 
     @Insert("""
-        insert ignore into review_task (
+        insert into review_task (
             pr_number, title, repository, organization, commit_sha, branch_name,
             status, risk_level, assessment_status, mq_retries, publish_attempts, llm_status, pr_url,
             source, trigger_source, human_review_required, human_review_status,
@@ -28,7 +28,7 @@ public interface ReviewTaskMapper extends BaseMapper<ReviewTask> {
         )
         """)
     @Options(useGeneratedKeys = true, keyProperty = "id")
-    int insertManualReviewOrReuse(ReviewTask task);
+    int insertManualReview(ReviewTask task);
 
     @Select("""
         select

@@ -1,8 +1,11 @@
 import type { AuthResponse, AuthUser, CurrentUser } from "@/api/auth";
 import type {
   GithubIntegrationConfig,
+  PageResponse,
   ReviewPolicyConfig,
   ReviewTaskSummary,
+  SecretReEncryptionItem,
+  SecretReEncryptionJob,
   ServiceIntegrationConfig
 } from "@/types";
 import { RequestError } from "@/utils/errors";
@@ -75,6 +78,46 @@ export const isReviewPolicyConfig: ApiResponseValidator<ReviewPolicyConfig> = (v
   && hasNumber(value, "chunkMaxLines")
   && hasNumber(value, "inputTokenPricePerMillion")
   && hasNumber(value, "outputTokenPricePerMillion");
+
+export const isSecretReEncryptionJob: ApiResponseValidator<SecretReEncryptionJob> =
+  (value): value is SecretReEncryptionJob =>
+    isRecord(value)
+    && hasNumber(value, "id")
+    && hasBoolean(value, "executed")
+    && hasString(value, "status")
+    && hasString(value, "sourceKeyId")
+    && hasString(value, "targetKeyId")
+    && hasString(value, "currentTable")
+    && hasNumber(value, "checkpointId")
+    && hasNumber(value, "batchSize")
+    && hasNumber(value, "scannedCount")
+    && hasNumber(value, "reEncryptedCount")
+    && hasNumber(value, "skippedCount")
+    && hasNumber(value, "failedCount")
+    && hasNumber(value, "retryCount");
+
+export const isSecretReEncryptionItem: ApiResponseValidator<SecretReEncryptionItem> =
+  (value): value is SecretReEncryptionItem =>
+    isRecord(value)
+    && hasString(value, "tableName")
+    && hasNumber(value, "recordId")
+    && hasString(value, "fieldName")
+    && hasString(value, "targetKeyId")
+    && hasString(value, "status");
+
+export const isSecretReEncryptionItemPage: ApiResponseValidator<PageResponse<SecretReEncryptionItem>> =
+  (value): value is PageResponse<SecretReEncryptionItem> =>
+    isRecord(value)
+    && hasNumber(value, "total")
+    && Array.isArray(value.items)
+    && value.items.every(isSecretReEncryptionItem);
+
+export const isSecretReEncryptionJobPage: ApiResponseValidator<PageResponse<SecretReEncryptionJob>> =
+  (value): value is PageResponse<SecretReEncryptionJob> =>
+    isRecord(value)
+    && hasNumber(value, "total")
+    && Array.isArray(value.items)
+    && value.items.every(isSecretReEncryptionJob);
 
 export const validateApiResponse = <T>(
   operation: string,

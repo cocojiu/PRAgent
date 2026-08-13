@@ -76,13 +76,20 @@ class DashboardServiceImplTest {
         FIXED_CLOCK
     );
     private final DashboardReviewTrendWindow reviewTrendWindow = DashboardReviewTrendWindow.forTest(FIXED_CLOCK);
+    private final DashboardSnapshotStore snapshotStore = new DashboardSnapshotStore(Runnable::run);
+    private final DashboardQualityFacade qualityFacade = new DashboardQualityFacade(
+        new DashboardLlmQualityStatsAssembler(llmQualityFormatter),
+        llmQualityTrendBuilder,
+        reviewTrendWindow,
+        snapshotStore,
+        dailySnapshotService
+    );
     private final DashboardSystemHealthProbe systemHealthProbe = new DashboardSystemHealthProbe(
         githubIntegrationProvider,
         reviewPolicyProvider,
         rabbitRuntimeHealthProbe,
         statusMapper
     );
-    private final DashboardSnapshotStore snapshotStore = new DashboardSnapshotStore(Runnable::run);
     private final DashboardOverviewFacade overviewFacade = new DashboardOverviewFacade(
         dashboardMapper,
         new DashboardMetricAssembler(overviewDisplayMapper),
@@ -92,14 +99,8 @@ class DashboardServiceImplTest {
         new DashboardHighRiskReviewAssembler(statusMapper),
         reviewTrendWindow,
         snapshotStore,
-        dailySnapshotService
-    );
-    private final DashboardQualityFacade qualityFacade = new DashboardQualityFacade(
-        new DashboardLlmQualityStatsAssembler(llmQualityFormatter),
-        llmQualityTrendBuilder,
-        reviewTrendWindow,
-        snapshotStore,
-        dailySnapshotService
+        dailySnapshotService,
+        qualityFacade
     );
     private final DashboardServiceImpl service = new DashboardServiceImpl(
         overviewFacade,
@@ -233,13 +234,16 @@ class DashboardServiceImplTest {
     }
 
     @Test
-    void overviewDoesNotRunSynchronousDependencyHealthProbe() {
+    void overviewIncludesDependencyHealthSnapshot() {
         when(rabbitRuntimeHealthProbe.connectionStatus())
-            .thenThrow(new IllegalStateException("RabbitMQ unavailable"));
+            .thenReturn("CONNECTED");
+        when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings("CONFIGURED", "ghp_test"));
+        when(reviewPolicyProvider.getSettings()).thenReturn(reviewPolicySettings("sk-test"));
 
         var overview = service.getOverview(null);
 
-        assertThat(overview.systemHealth()).isEmpty();
+        assertThat(overview.systemHealth()).extracting("name")
+            .containsExactly("MySQL", "RabbitMQ", "GitHub", "Spring AI");
     }
 
     @Test
@@ -252,14 +256,7 @@ class DashboardServiceImplTest {
         var metrics = service.getOverview(null).overviewMetrics();
 
         verify(dailySnapshotService).selectMetricStat(LocalDate.of(2026, 6, 13));
-        verify(dailySnapshotService, never()).selectReviewTrendCounts(any());
-        verify(dailySnapshotService, never()).selectRiskLevelCounts(any());
-        verify(dailySnapshotService, never()).selectRuleHitCounts(any());
-        verify(dashboardMapper, never()).selectRecentHighRiskReviews(any());
         verify(dashboardMapper, never()).selectMetricStat(any());
-        verify(dailySnapshotService, never()).selectLlmQualityByModelStats(any());
-        verify(dailySnapshotService, never()).selectLlmQualityByRepositoryStats(any());
-        verify(dailySnapshotService, never()).selectLlmQualityTrendCounts(any());
         assertThat(metrics).extracting("label").containsExactly("本周审查", "高风险 PR", "失败任务", "平均审查耗时");
         assertThat(metrics).extracting("trendType").containsExactly("up", "up-danger", "down", "down");
         assertThat(metrics).extracting("color").containsExactly("blue", "red", "orange", "green");
@@ -303,16 +300,12 @@ class DashboardServiceImplTest {
 
         LocalDate fallbackStartDate = LocalDate.of(2026, 6, 4);
         verify(dailySnapshotService).selectMetricStat(fallbackStartDate);
-        verify(dailySnapshotService, never()).selectReviewTrendCounts(any());
-        verify(dailySnapshotService, never()).selectRiskLevelCounts(any());
-        verify(dailySnapshotService, never()).selectRuleHitCounts(any());
-        verify(dashboardMapper, never()).selectRecentHighRiskReviews(any());
-        verify(dailySnapshotService, never()).selectLlmQualityByModelStats(any());
-        verify(dailySnapshotService, never()).selectLlmQualityByRepositoryStats(any());
-        verify(dailySnapshotService, never()).selectLlmQualityTrendCounts(any());
         assertThat(overview.overviewMetrics()).hasSize(4);
         assertThat(overview.reviewTrend()).isEmpty();
-        assertThat(overview.llmQualityTrend()).isEmpty();
+        assertThat(overview.llmQualityTrend()).hasSize(7);
+        assertThat(overview.llmQualityTrend()).allSatisfy(point ->
+            assertThat(point.taskCount()).isZero()
+        );
     }
 
     @Test

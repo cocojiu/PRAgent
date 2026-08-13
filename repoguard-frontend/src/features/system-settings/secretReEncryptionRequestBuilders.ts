@@ -13,7 +13,8 @@ export interface SecretReEncryptionFormState {
 export const canSubmitSecretReEncryption = (form: SecretReEncryptionFormState) =>
   form.sourceEncryptionKey.trim().length > 0
   && form.targetEncryptionKey.trim().length > 0
-  && form.targetKeyId.trim().length > 0;
+  && form.targetKeyId.trim().length > 0
+  && form.targetKeyId.trim() !== (form.sourceKeyId?.trim() || "local");
 
 export const buildSecretReEncryptionRequest = (
   form: SecretReEncryptionFormState,
@@ -30,5 +31,5 @@ export const buildSecretReEncryptionRequest = (
 export const secretReEncryptionExecutionConfirmMessage = (form: SecretReEncryptionFormState) => {
   const sourceKeyId = form.sourceKeyId?.trim() || "local";
   const targetKeyId = form.targetKeyId.trim();
-  return `确认将可解密字段从 ${sourceKeyId} 重加密到 ${targetKeyId}？该操作会更新已扫描到的密文字段。`;
+  return `确认将可解密字段从 ${sourceKeyId} 重加密到 ${targetKeyId}？该任务会分批更新密文，只能在维护窗口执行；完成后需立即切换活动密钥并重启服务。`;
 };

@@ -45,7 +45,7 @@ class ReviewPolicyProviderTest {
         assertThat(settings.llmProvider()).isEqualTo("dashscope");
         assertThat(settings.modelName()).isEqualTo("qwen-plus");
         assertThat(settings.apiKey()).isEqualTo("sk-test");
-        assertThat(settings.workerConcurrency()).isEqualTo(2);
+        assertThat(settings.workerConcurrency()).isEqualTo(1);
         assertThat(settings.chunkMaxFiles()).isEqualTo(4);
         assertThat(settings.inputTokenPricePerMillion()).isEqualByComparingTo(BigDecimal.valueOf(0.5));
     }

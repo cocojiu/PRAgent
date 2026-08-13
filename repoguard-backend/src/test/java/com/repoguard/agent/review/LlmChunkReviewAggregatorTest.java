@@ -2,10 +2,8 @@ package com.repoguard.agent.review;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
@@ -40,16 +38,12 @@ import org.slf4j.MDC;
 
 class LlmChunkReviewAggregatorTest {
 
-    private final RuleBasedPullRequestReviewer ruleBasedReviewer = org.mockito.Mockito.mock(
-        RuleBasedPullRequestReviewer.class
-    );
     private final RepoGuardMetrics metrics = org.mockito.Mockito.mock(RepoGuardMetrics.class);
     private final ThreadPoolExecutor chunkExecutor = new BoundedExecutorFactory(
         new SimpleMeterRegistry(),
         new AsyncExecutorProperties()
     ).create("llm-chunk-test", 4, 16);
     private final LlmChunkReviewAggregator aggregator = new LlmChunkReviewAggregator(
-        ruleBasedReviewer,
         new LlmReviewPromptBuilder(),
         new LlmRuleReviewMerger(new RiskLevelRanker()),
         new LlmReviewQualityScorer(),
@@ -76,7 +70,6 @@ class LlmChunkReviewAggregatorTest {
     @Test
     void constructorRejectsMissingMetrics() {
         assertThatThrownBy(() -> new LlmChunkReviewAggregator(
-            ruleBasedReviewer,
             new LlmReviewPromptBuilder(),
             new LlmRuleReviewMerger(new RiskLevelRanker()),
             new LlmReviewQualityScorer(),
@@ -93,7 +86,6 @@ class LlmChunkReviewAggregatorTest {
     @Test
     void constructorRejectsMissingChunkExecutor() {
         assertThatThrownBy(() -> new LlmChunkReviewAggregator(
-            ruleBasedReviewer,
             new LlmReviewPromptBuilder(),
             new LlmRuleReviewMerger(new RiskLevelRanker()),
             new LlmReviewQualityScorer(),
@@ -108,7 +100,7 @@ class LlmChunkReviewAggregatorTest {
     }
 
     @Test
-    void aggregatesSuccessfulChunksAndFallsBackOnlyFailedChunksToRules() {
+    void aggregatesSuccessfulChunksAndDefersFailedChunksToTheFullDiffRulePass() {
         PullRequestDiff fullDiff = diff("src/A.java", "src/B.java", "src/C.java");
         List<PullRequestDiffChunk> chunks = List.of(
             chunk(1, "src/A.java"),
@@ -132,24 +124,11 @@ class LlmChunkReviewAggregatorTest {
             System.nanoTime(),
             caller
         );
-        when(ruleBasedReviewer.review(any(PullRequestDiff.class))).thenReturn(ReviewResult.completed(
-            "MEDIUM",
-            List.of(new ReviewFindingResult(
-                "MEDIUM",
-                "RULE",
-                "RG-FALLBACK",
-                "src/B.java",
-                1,
-                "Fallback rule finding",
-                "Review failed chunk"
-            ))
-        ));
-
         ReviewResult result = aggregator.aggregate(context, fullDiff, chunks, parser, budget());
 
-        assertThat(result.riskLevel()).isEqualTo("MEDIUM");
+        assertThat(result.riskLevel()).isEqualTo("INFO");
         assertThat(result.llmParseStatus()).isEqualTo(LlmParseStatus.PARTIAL_FALLBACK.code());
-        assertThat(result.findings()).extracting(ReviewFindingResult::source).containsExactly("LLM", "RULE", "LLM");
+        assertThat(result.findings()).extracting(ReviewFindingResult::source).containsExactly("LLM", "LLM");
         assertThat(result.llmPromptTokens()).isEqualTo(200);
         assertThat(result.llmCompletionTokens()).isEqualTo(50);
         assertThat(result.llmTotalTokens()).isEqualTo(250);
@@ -166,7 +145,6 @@ class LlmChunkReviewAggregatorTest {
         ).create("llm-chunk-parallel-test", 2, 16);
         try {
             LlmChunkReviewAggregator boundedAggregator = new LlmChunkReviewAggregator(
-                ruleBasedReviewer,
                 new LlmReviewPromptBuilder(),
                 new LlmRuleReviewMerger(new RiskLevelRanker()),
                 new LlmReviewQualityScorer(),
@@ -231,7 +209,6 @@ class LlmChunkReviewAggregatorTest {
             initialWindowSubmitted.countDown();
         };
         LlmChunkReviewAggregator windowedAggregator = new LlmChunkReviewAggregator(
-            ruleBasedReviewer,
             new LlmReviewPromptBuilder(),
             new LlmRuleReviewMerger(new RiskLevelRanker()),
             new LlmReviewQualityScorer(),
@@ -267,9 +244,6 @@ class LlmChunkReviewAggregatorTest {
                 return new LlmCallResult(llmJson("unused"), 100, 25, 125);
             }
         );
-        when(ruleBasedReviewer.review(any(PullRequestDiff.class)))
-            .thenReturn(ReviewResult.completed("LOW", List.of()));
-
         CompletableFuture<ReviewResult> result = CompletableFuture.supplyAsync(
             () -> windowedAggregator.aggregate(
                 context,
@@ -291,7 +265,6 @@ class LlmChunkReviewAggregatorTest {
     @Test
     void capsLlmCallsAndFallsBackChunksBeyondConfiguredTotal() {
         LlmChunkReviewAggregator cappedAggregator = new LlmChunkReviewAggregator(
-            ruleBasedReviewer,
             new LlmReviewPromptBuilder(),
             new LlmRuleReviewMerger(new RiskLevelRanker()),
             new LlmReviewQualityScorer(),
@@ -321,9 +294,6 @@ class LlmChunkReviewAggregatorTest {
                 return new LlmCallResult(llmJson(path), 100, 25, 125);
             }
         );
-        when(ruleBasedReviewer.review(any(PullRequestDiff.class)))
-            .thenReturn(ReviewResult.completed("LOW", List.of()));
-
         ReviewResult result = cappedAggregator.aggregate(context, fullDiff, chunks, parser, budget());
 
         assertThat(llmCalls.get()).isEqualTo(2);
@@ -345,7 +315,6 @@ class LlmChunkReviewAggregatorTest {
             throw new RejectedExecutionException("saturated");
         };
         LlmChunkReviewAggregator rejectingAggregator = new LlmChunkReviewAggregator(
-            ruleBasedReviewer,
             new LlmReviewPromptBuilder(),
             new LlmRuleReviewMerger(new RiskLevelRanker()),
             new LlmReviewQualityScorer(),
@@ -374,9 +343,6 @@ class LlmChunkReviewAggregatorTest {
                 125
             )
         );
-        when(ruleBasedReviewer.review(any(PullRequestDiff.class)))
-            .thenReturn(ReviewResult.completed("LOW", List.of()));
-
         ReviewResult result = rejectingAggregator.aggregate(context, fullDiff, chunks, parser, budget());
 
         assertThat(result.llmParseStatus()).isEqualTo(LlmParseStatus.PARTIAL_FALLBACK.code());
@@ -395,7 +361,6 @@ class LlmChunkReviewAggregatorTest {
         ).create("llm-chunk-budget-test", 2, 4);
         try {
             LlmChunkReviewAggregator budgetedAggregator = new LlmChunkReviewAggregator(
-                ruleBasedReviewer,
                 new LlmReviewPromptBuilder(),
                 new LlmRuleReviewMerger(new RiskLevelRanker()),
                 new LlmReviewQualityScorer(),
@@ -432,23 +397,6 @@ class LlmChunkReviewAggregatorTest {
                 System.nanoTime(),
                 caller
             );
-            when(ruleBasedReviewer.review(any(PullRequestDiff.class))).thenAnswer(invocation -> {
-                PullRequestDiff fallbackDiff = invocation.getArgument(0);
-                String path = fallbackDiff.files().getFirst().filename();
-                return ReviewResult.completed(
-                    "MEDIUM",
-                    List.of(new ReviewFindingResult(
-                        "MEDIUM",
-                        "RULE",
-                        "RG-BUDGET",
-                        path,
-                        1,
-                        "Budget fallback",
-                        "Review the unfinished chunk"
-                    ))
-                );
-            });
-
             ReviewResult result = budgetedAggregator.aggregate(
                 context,
                 fullDiff,
@@ -461,10 +409,10 @@ class LlmChunkReviewAggregatorTest {
             assertThat(result.llmParseStatus()).isEqualTo(LlmParseStatus.PARTIAL_FALLBACK.code());
             assertThat(result.findings())
                 .extracting(ReviewFindingResult::source)
-                .containsExactly("RULE", "LLM");
+                .containsExactly("LLM");
             assertThat(result.findings())
                 .extracting(ReviewFindingResult::filePath)
-                .containsExactly("src/A.java", "src/B.java");
+                .containsExactly("src/B.java");
             assertThat(result.llmPromptTokens()).isEqualTo(100);
         } finally {
             boundedExecutor.shutdownNow();
@@ -536,9 +484,6 @@ class LlmChunkReviewAggregatorTest {
                 System.nanoTime(),
                 caller
             );
-            when(ruleBasedReviewer.review(any(PullRequestDiff.class)))
-                .thenReturn(ReviewResult.completed("INFO", List.of()));
-
             aggregator.aggregate(context, fullDiff, chunks, parser, budget());
 
             assertThat(appender.list).hasSize(1);

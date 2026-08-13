@@ -695,6 +695,76 @@ a {
   gap: 10px;
 }
 
+.rule-donut-chart {
+  display: grid;
+  width: min(220px, 100%);
+  aspect-ratio: 1;
+  margin: 0 auto;
+  border-radius: 50%;
+  place-items: center;
+}
+
+.rule-donut-hole {
+  display: grid;
+  width: 58%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #fff;
+  place-content: center;
+  text-align: center;
+}
+
+.rule-donut-hole span {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.rule-donut-hole strong {
+  color: #0f172a;
+  font-size: 21px;
+  line-height: 1.2;
+}
+
+.chart-inline-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px 16px;
+  margin: 8px 0 -18px;
+  padding: 0 12px;
+  color: #475569;
+  font-size: 12px;
+  list-style: none;
+}
+
+.chart-inline-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.legend-swatch--task {
+  background: #2563eb;
+}
+
+.legend-swatch--parse {
+  background: #22c55e;
+}
+
+.legend-swatch--fallback {
+  background: #f59e0b;
+}
+
+.legend-swatch--partial {
+  background: #14b8a6;
+}
+
 .rule-legend {
   display: flex;
   flex-direction: column;

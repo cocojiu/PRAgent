@@ -24,7 +24,13 @@ import com.repoguard.agent.review.task.ManualReviewIdempotencyCoordinator;
 import com.repoguard.agent.review.task.ReviewTaskAfterCommitPublisher;
 import com.repoguard.agent.review.task.ReviewTaskAfterCommitPublisherExecutor;
 import com.repoguard.agent.review.task.ReviewTaskRetryService;
+import com.repoguard.agent.review.config.ReviewRuleCommandService;
+import com.repoguard.agent.review.config.ReviewRulePolicyHistoryService;
+import com.repoguard.agent.review.config.ReviewRuleQualityGateService;
+import com.repoguard.agent.review.config.ReviewRuleQueryService;
+import com.repoguard.agent.review.config.ReviewRuleResponseAssembler;
 import com.repoguard.agent.security.AuthTokenService;
+import com.repoguard.agent.security.DatabaseRateLimitWindowStore;
 import com.repoguard.agent.security.SecretCryptoService;
 import com.repoguard.agent.service.impl.FindingFeedbackServiceImpl;
 import com.repoguard.agent.service.impl.ReviewTaskCommandServiceImpl;
@@ -52,6 +58,7 @@ class SpringBeanConstructorSelectionTest {
             Class.forName("com.repoguard.agent.review.ReviewPolicyProvider"),
             RuleBasedPullRequestReviewer.class,
             AuthTokenService.class,
+            DatabaseRateLimitWindowStore.class,
             SecretCryptoService.class,
             CacheEvictionService.class,
             DataRetentionServiceImpl.class,
@@ -74,6 +81,11 @@ class SpringBeanConstructorSelectionTest {
             ReviewTaskRetryService.class,
             ReviewServiceImpl.class,
             Class.forName("com.repoguard.agent.review.config.ReviewRuleConfigServiceImpl"),
+            ReviewRuleCommandService.class,
+            ReviewRulePolicyHistoryService.class,
+            ReviewRuleQualityGateService.class,
+            ReviewRuleQueryService.class,
+            ReviewRuleResponseAssembler.class,
             ReviewTaskExecutorImpl.class
         );
         List<Class<?>> packagePrivateSpringManagedTypes = List.of(

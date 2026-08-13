@@ -22,7 +22,6 @@ class LlmChunkReviewAggregator {
     private final LlmHighRiskVerificationService verificationService;
 
     LlmChunkReviewAggregator(
-        RuleBasedPullRequestReviewer ruleBasedReviewer,
         LlmReviewPromptBuilder promptBuilder,
         LlmRuleReviewMerger reviewMerger,
         LlmReviewQualityScorer qualityScorer,
@@ -33,7 +32,6 @@ class LlmChunkReviewAggregator {
         int maxInFlightChunks
     ) {
         this(
-            ruleBasedReviewer,
             promptBuilder,
             reviewMerger,
             qualityScorer,
@@ -47,7 +45,6 @@ class LlmChunkReviewAggregator {
     }
 
     LlmChunkReviewAggregator(
-        RuleBasedPullRequestReviewer ruleBasedReviewer,
         LlmReviewPromptBuilder promptBuilder,
         LlmRuleReviewMerger reviewMerger,
         LlmReviewQualityScorer qualityScorer,
@@ -58,10 +55,6 @@ class LlmChunkReviewAggregator {
         int maxInFlightChunks,
         LlmHighRiskVerificationService verificationService
     ) {
-        RuleBasedPullRequestReviewer requiredRuleBasedReviewer = Objects.requireNonNull(
-            ruleBasedReviewer,
-            "ruleBasedReviewer"
-        );
         LlmReviewPromptBuilder requiredPromptBuilder = Objects.requireNonNull(promptBuilder, "promptBuilder");
         LlmRuleReviewMerger requiredReviewMerger = Objects.requireNonNull(reviewMerger, "reviewMerger");
         this.qualityScorer = Objects.requireNonNull(qualityScorer, "qualityScorer");
@@ -73,10 +66,7 @@ class LlmChunkReviewAggregator {
             maxTotalChunks,
             maxInFlightChunks
         );
-        this.fallbackHandler = new LlmChunkReviewFallbackHandler(
-            requiredRuleBasedReviewer,
-            requiredMetrics
-        );
+        this.fallbackHandler = new LlmChunkReviewFallbackHandler(requiredMetrics);
         this.resultAggregator = new LlmChunkReviewResultAggregator(
             requiredPromptBuilder,
             requiredReviewMerger,

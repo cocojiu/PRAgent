@@ -14,12 +14,9 @@ const { disconnect, dispose, init, observe, off, on, resize, setOption, use } = 
 }));
 
 vi.mock("echarts/core", () => ({ init, use }));
-vi.mock("echarts/charts", () => ({ BarChart: {}, LineChart: {}, PieChart: {} }));
+vi.mock("echarts/charts", () => ({ BarChart: {}, LineChart: {} }));
 vi.mock("echarts/components", () => ({
-  AriaComponent: {},
-  GraphicComponent: {},
   GridComponent: {},
-  LegendComponent: {},
   TooltipComponent: {}
 }));
 vi.mock("echarts/renderers", () => ({ CanvasRenderer: {} }));
@@ -78,13 +75,7 @@ describe("EChartPanel", () => {
     expect(chart?.getAttribute("aria-label")).toBe("审查趋势图");
     expect(chart?.getAttribute("aria-describedby")).toBe(summary?.id);
     expect(summary?.textContent).toContain("12 次审查");
-    expect(setOption).toHaveBeenCalledWith(expect.objectContaining({
-      aria: {
-        enabled: true,
-        description: "审查趋势图。过去两天共完成 12 次审查",
-        decal: { show: true }
-      }
-    }));
+    expect(setOption).toHaveBeenCalledWith({ series: [] });
     expect(on).toHaveBeenCalledWith("finished", expect.any(Function));
     finishedCallback();
     finishedCallback();

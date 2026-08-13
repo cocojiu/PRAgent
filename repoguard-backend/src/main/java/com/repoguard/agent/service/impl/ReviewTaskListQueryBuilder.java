@@ -3,9 +3,11 @@ package com.repoguard.agent.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.repoguard.agent.dto.ReviewQuery;
 import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.review.ReviewTaskCursorCodec;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
+import java.util.Base64;
 import java.util.Locale;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -16,7 +18,12 @@ public class ReviewTaskListQueryBuilder {
     private static final int MIN_TEXT_KEYWORD_LENGTH = 3;
     private static final int MIN_COMMIT_PREFIX_LENGTH = 7;
     private static final int MAX_PAGE_SIZE = 100;
-    private static final DateTimeFormatter CURSOR_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+    private final ReviewTaskCursorCodec cursorCodec;
+
+    public ReviewTaskListQueryBuilder(ReviewTaskCursorCodec cursorCodec) {
+        this.cursorCodec = cursorCodec;
+    }
 
     public LambdaQueryWrapper<ReviewTask> build(ReviewQuery query) {
         ReviewTaskListQueryCriteria criteria = normalize(query);
@@ -24,7 +31,11 @@ public class ReviewTaskListQueryBuilder {
     }
 
     public LambdaQueryWrapper<ReviewTask> buildKeysetPage(ReviewQuery query) {
-        ReviewTaskListQueryCriteria criteria = normalize(query);
+        return buildKeysetPage(query, decodeCursor(query));
+    }
+
+    LambdaQueryWrapper<ReviewTask> buildKeysetPage(ReviewQuery query, ReviewTaskCursorCodec.Cursor decodedCursor) {
+        ReviewTaskListQueryCriteria criteria = normalize(query, decodedCursor);
         LambdaQueryWrapper<ReviewTask> wrapper = filteredQuery(criteria, false);
         if (criteria.hasCursor()) {
             wrapper.and(cursor -> cursor
@@ -36,7 +47,7 @@ public class ReviewTaskListQueryBuilder {
             );
         }
         applyStableListOrder(wrapper);
-        return wrapper.last("limit " + boundedPageSize(query.pageSize()));
+        return wrapper.last("limit " + keysetFetchSize(query.pageSize()));
     }
 
     public LambdaQueryWrapper<ReviewTask> buildCountQuery(ReviewQuery query) {
@@ -44,7 +55,15 @@ public class ReviewTaskListQueryBuilder {
     }
 
     public boolean hasKeysetCursor(ReviewQuery query) {
-        return normalize(query).hasCursor();
+        return decodeCursor(query) != null;
+    }
+
+    ReviewTaskCursorCodec.Cursor decodeCursor(ReviewQuery query) {
+        return cursorCodec.decode(query.cursor(), cursorScope(query));
+    }
+
+    String encodeCursor(ReviewQuery query, LocalDateTime createdAt, Long id, long total) {
+        return cursorCodec.encode(createdAt, id, total, cursorScope(query));
     }
 
     private LambdaQueryWrapper<ReviewTask> filteredQuery(ReviewTaskListQueryCriteria criteria, boolean ordered) {
@@ -93,6 +112,10 @@ public class ReviewTaskListQueryBuilder {
     }
 
     ReviewTaskListQueryCriteria normalize(ReviewQuery query) {
+        return normalize(query, decodeCursor(query));
+    }
+
+    private ReviewTaskListQueryCriteria normalize(ReviewQuery query, ReviewTaskCursorCodec.Cursor cursor) {
         RepositoryFilter repositoryFilter = normalizeRepositoryFilter(query.repository());
         String status = upperTrimToNull(query.status());
         String riskLevel = upperTrimToNull(query.riskLevel());
@@ -102,7 +125,6 @@ public class ReviewTaskListQueryBuilder {
         Integer prNumber = StringUtils.hasText(keyword) ? parseIntegerOrNull(keyword) : null;
         String commitPrefix = prNumber == null && isCommitPrefix(keyword) ? keyword : null;
         String textKeyword = prNumber == null && commitPrefix == null && isUsableTextKeyword(keyword) ? keyword : null;
-        Long cursorId = query.cursorId();
         return new ReviewTaskListQueryCriteria(
             repositoryFilter.organization(),
             repositoryFilter.repository(),
@@ -114,8 +136,8 @@ public class ReviewTaskListQueryBuilder {
             prNumber,
             commitPrefix,
             textKeyword,
-            parseCursorCreatedAt(query.cursorCreatedAt()),
-            cursorId == null || cursorId <= 0 ? null : cursorId
+            cursor == null ? null : cursor.createdAt(),
+            cursor == null ? null : cursor.id()
         );
     }
 
@@ -162,28 +184,34 @@ public class ReviewTaskListQueryBuilder {
         return StringUtils.hasText(value) && value.length() >= MIN_TEXT_KEYWORD_LENGTH;
     }
 
-    private LocalDateTime parseCursorCreatedAt(String value) {
-        String normalized = trimToNull(value);
-        if (normalized == null) {
-            return null;
-        }
-        try {
-            return LocalDateTime.parse(normalized, CURSOR_FORMATTER);
-        } catch (DateTimeParseException ignored) {
-            return parseIsoCursorCreatedAt(normalized);
-        }
-    }
-
-    private LocalDateTime parseIsoCursorCreatedAt(String value) {
-        try {
-            return LocalDateTime.parse(value);
-        } catch (DateTimeParseException ignored) {
-            return null;
-        }
-    }
-
     private int boundedPageSize(int pageSize) {
         return Math.max(1, Math.min(pageSize, MAX_PAGE_SIZE));
+    }
+
+    private int keysetFetchSize(int pageSize) {
+        return boundedPageSize(pageSize) + 1;
+    }
+
+    private String cursorScope(ReviewQuery query) {
+        RepositoryFilter repositoryFilter = normalizeRepositoryFilter(query.repository());
+        String payload = lengthPrefixed(repositoryFilter.organization())
+            + lengthPrefixed(repositoryFilter.repository())
+            + lengthPrefixed(upperTrimToNull(query.status()))
+            + lengthPrefixed(upperTrimToNull(query.riskLevel()))
+            + lengthPrefixed(upperTrimToNull(query.source()))
+            + lengthPrefixed(upperTrimToNull(query.triggerSource()))
+            + lengthPrefixed(trimToNull(query.keyword()))
+            + lengthPrefixed(Integer.toString(boundedPageSize(query.pageSize())));
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(payload.getBytes(StandardCharsets.UTF_8));
+            return Base64.getUrlEncoder().withoutPadding().encodeToString(digest);
+        } catch (Exception exception) {
+            throw new IllegalStateException("Review list cursor scope hashing is not available", exception);
+        }
+    }
+
+    private String lengthPrefixed(String value) {
+        return value == null ? "-1:" : value.length() + ":" + value;
     }
 
     record ReviewTaskListQueryCriteria(

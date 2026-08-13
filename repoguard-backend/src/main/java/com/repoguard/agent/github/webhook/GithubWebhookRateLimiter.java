@@ -2,6 +2,7 @@ package com.repoguard.agent.github.webhook;
 
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
+import com.repoguard.agent.security.DatabaseRateLimitWindowStore;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
 import java.util.Locale;
@@ -12,6 +13,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -24,18 +26,33 @@ public class GithubWebhookRateLimiter {
     private final GithubWebhookProperties properties;
     private final MeterRegistry meterRegistry;
     private final Clock clock;
+    private final DatabaseRateLimitWindowStore sharedWindowStore;
     private final Dimension ipDimension = new Dimension("ip");
     private final Dimension repositoryDimension = new Dimension("repository");
 
     @Autowired
-    public GithubWebhookRateLimiter(GithubWebhookProperties properties, MeterRegistry meterRegistry) {
-        this(properties, meterRegistry, Clock.systemUTC());
+    public GithubWebhookRateLimiter(
+        GithubWebhookProperties properties,
+        MeterRegistry meterRegistry,
+        ObjectProvider<DatabaseRateLimitWindowStore> sharedWindowStoreProvider
+    ) {
+        this(properties, meterRegistry, Clock.systemUTC(), sharedWindowStoreProvider.getIfAvailable());
     }
 
     GithubWebhookRateLimiter(GithubWebhookProperties properties, MeterRegistry meterRegistry, Clock clock) {
+        this(properties, meterRegistry, clock, null);
+    }
+
+    GithubWebhookRateLimiter(
+        GithubWebhookProperties properties,
+        MeterRegistry meterRegistry,
+        Clock clock,
+        DatabaseRateLimitWindowStore sharedWindowStore
+    ) {
         this.properties = properties;
         this.meterRegistry = meterRegistry;
         this.clock = clock;
+        this.sharedWindowStore = sharedWindowStore;
     }
 
     public boolean tryAcquireIp(String clientIp) {
@@ -78,6 +95,9 @@ public class GithubWebhookRateLimiter {
             ).increment();
             dimension.logSaturationOncePerMinute(minute);
             return false;
+        }
+        if (sharedWindowStore != null) {
+            return sharedWindowStore.tryAcquire("github-webhook-" + dimension.name, key, minute, limit);
         }
         return result.count() <= limit;
     }

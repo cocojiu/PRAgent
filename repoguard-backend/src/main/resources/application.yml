@@ -53,6 +53,16 @@ mybatis-plus:
       id-type: auto
 
 management:
+  metrics:
+    distribution:
+      percentiles:
+        repoguard.api.request.duration: 0.95,0.99
+        repoguard.security.shared_rate_limit.acquire.duration: 0.95,0.99
+        repoguard.security.shared_rate_limit.database.operation.duration: 0.95,0.99
+      percentiles-histogram:
+        repoguard.api.request.duration: true
+        repoguard.security.shared_rate_limit.acquire.duration: true
+        repoguard.security.shared_rate_limit.database.operation.duration: true
   endpoints:
     web:
       exposure:
@@ -98,7 +108,7 @@ repoguard:
     # Roles that do not own Flyway migrations refuse to start below this version.
     # Keep in sync with the highest version under db/migration; the production
     # readiness check enforces the match.
-    expected-version: ${REPOGUARD_SCHEMA_EXPECTED_VERSION:58}
+    expected-version: ${REPOGUARD_SCHEMA_EXPECTED_VERSION:64}
   async:
     github-comment-threads: ${REPOGUARD_ASYNC_GITHUB_COMMENT_THREADS:2}
     github-comment-queue-capacity: ${REPOGUARD_ASYNC_GITHUB_COMMENT_QUEUE_CAPACITY:100}
@@ -214,6 +224,12 @@ repoguard:
     encryption-key-id: ${REPOGUARD_SECURITY_ENCRYPTION_KEY_ID}
     encryption-salt: ${REPOGUARD_SECURITY_ENCRYPTION_SALT:}
     allow-plaintext-secrets: ${REPOGUARD_SECURITY_ALLOW_PLAINTEXT_SECRETS:false}
+    re-encryption:
+      batch-size: ${REPOGUARD_SECRET_RE_ENCRYPTION_BATCH_SIZE:100}
+      lease-seconds: ${REPOGUARD_SECRET_RE_ENCRYPTION_LEASE_SECONDS:120}
+      retry-delay-seconds: ${REPOGUARD_SECRET_RE_ENCRYPTION_RETRY_DELAY_SECONDS:30}
+      max-attempts: ${REPOGUARD_SECRET_RE_ENCRYPTION_MAX_ATTEMPTS:5}
+      poll-interval-ms: ${REPOGUARD_SECRET_RE_ENCRYPTION_POLL_INTERVAL_MS:1000}
   auth:
     token-secret: ${REPOGUARD_AUTH_TOKEN_SECRET}
     token-secret-id: ${REPOGUARD_AUTH_TOKEN_SECRET_ID:k1}
@@ -235,6 +251,7 @@ app:
     api:
       instance-count: ${REPOGUARD_API_INSTANCE_COUNT:}
   security:
+    rate-limit-store: ${REPOGUARD_RATE_LIMIT_STORE:local}
     admin-api-key:
       enabled: ${REPOGUARD_ADMIN_API_KEY_ENABLED:true}
       key: ${REPOGUARD_ADMIN_API_KEY:}
@@ -314,9 +331,6 @@ app:
       dead-letter-exchange: ${REPOGUARD_REVIEW_DLX:repoguard.review.dlx}
       dead-letter-queue: ${REPOGUARD_REVIEW_DLQ:repoguard.review.dlq}
       dead-letter-routing-key: ${REPOGUARD_REVIEW_DLQ_ROUTING_KEY:repoguard.review.dead}
-      publish-max-attempts: ${REPOGUARD_REVIEW_PUBLISH_MAX_ATTEMPTS:3}
-      publish-initial-interval-ms: ${REPOGUARD_REVIEW_PUBLISH_INITIAL_INTERVAL_MS:500}
-      publish-multiplier: ${REPOGUARD_REVIEW_PUBLISH_MULTIPLIER:3.0}
       publish-confirm-timeout-ms: ${REPOGUARD_REVIEW_PUBLISH_CONFIRM_TIMEOUT_MS:5000}
       publish-compensation-max-attempts: ${REPOGUARD_REVIEW_PUBLISH_COMPENSATION_MAX_ATTEMPTS:10}
       publish-compensation-interval-ms: ${REPOGUARD_REVIEW_PUBLISH_COMPENSATION_INTERVAL_MS:60000}
@@ -335,9 +349,6 @@ app:
       dead-letter-exchange: ${REPOGUARD_NOTIFICATION_DLX:repoguard.notification.dlx}
       dead-letter-queue: ${REPOGUARD_NOTIFICATION_DLQ:repoguard.notification.dlq}
       dead-letter-routing-key: ${REPOGUARD_NOTIFICATION_DLQ_ROUTING_KEY:repoguard.notification.dead}
-      publish-max-attempts: ${REPOGUARD_NOTIFICATION_PUBLISH_MAX_ATTEMPTS:3}
-      publish-initial-interval-ms: ${REPOGUARD_NOTIFICATION_PUBLISH_INITIAL_INTERVAL_MS:500}
-      publish-multiplier: ${REPOGUARD_NOTIFICATION_PUBLISH_MULTIPLIER:3.0}
       publish-confirm-timeout-ms: ${REPOGUARD_NOTIFICATION_PUBLISH_CONFIRM_TIMEOUT_MS:5000}
       publish-compensation-max-attempts: ${REPOGUARD_NOTIFICATION_PUBLISH_COMPENSATION_MAX_ATTEMPTS:5}
       publish-compensation-batch-size: ${REPOGUARD_NOTIFICATION_PUBLISH_COMPENSATION_BATCH_SIZE:20}

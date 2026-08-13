@@ -55,6 +55,7 @@ import com.repoguard.agent.mapper.ReviewTaskArchiveSummaryMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.mapper.projection.ReviewFindingProjections.GithubCommentPreviewFindingStat;
+import com.repoguard.agent.mapper.projection.ReviewFindingProjections.ReviewTaskDetailSummary;
 import com.repoguard.agent.mapper.projection.ReviewFindingProjections.SeverityCounts;
 import com.repoguard.agent.service.NotificationDispatchService;
 import com.repoguard.agent.dto.FindingFeedbackRequest;
@@ -72,6 +73,7 @@ import com.repoguard.agent.review.HumanReviewPolicyEvaluator;
 import com.repoguard.agent.review.ReviewFindingRiskRecalibrator;
 import com.repoguard.agent.review.ReviewRepositoryDimensionService;
 import com.repoguard.agent.review.ReviewRiskProfileBuilder;
+import com.repoguard.agent.review.ReviewTaskCursorCodec;
 import com.repoguard.agent.review.RiskLevelRanker;
 import com.repoguard.agent.review.ServerRiskAggregator;
 import com.repoguard.agent.review.ReviewTaskDetailAssembler;
@@ -85,6 +87,7 @@ import com.repoguard.agent.review.task.ReviewTaskAfterCommitPublisherExecutor;
 import com.repoguard.agent.review.task.ReviewTaskListItemAssembler;
 import com.repoguard.agent.review.task.ReviewTaskRetryService;
 import com.repoguard.agent.review.task.ReviewTaskTransitionStore;
+import com.repoguard.agent.security.AuthProperties;
 import com.repoguard.agent.service.FindingFeedbackService;
 import com.repoguard.agent.service.GithubCommentApplicationService;
 import com.repoguard.agent.service.GithubCommentHistoryQueryService;
@@ -112,6 +115,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.AbstractPlatformTransactionManager;
 import org.springframework.transaction.support.DefaultTransactionStatus;
@@ -146,6 +150,7 @@ class ReviewServiceImplTest {
     private final ReviewTimelineQueryService reviewTimelineQueryService =
         new ReviewTimelineQueryService(reviewTimelineMapper);
     private final ReviewTaskListItemAssembler reviewTaskListItemAssembler = new ReviewTaskListItemAssembler();
+    private final ReviewTaskCursorCodec reviewTaskCursorCodec = reviewTaskCursorCodec();
     private final ReviewTaskQueryService reviewTaskQueryService = new ReviewTaskQueryServiceImpl(
         reviewTaskMapper,
         reviewTaskArchiveSummaryMapper,
@@ -166,7 +171,7 @@ class ReviewServiceImplTest {
             reviewTaskListItemAssembler
         ),
         new ReviewTaskStatusAssembler(),
-        new ReviewTaskListQueryBuilder(),
+        new ReviewTaskListQueryBuilder(reviewTaskCursorCodec),
         repositoryDimensionService
     );
     private final ReviewTaskCommandService reviewTaskCommandService = new ReviewTaskCommandServiceImpl(
@@ -608,8 +613,7 @@ class ReviewServiceImplTest {
         assertThat(finding.getFeedbackAt()).isNotNull();
         verify(reviewFindingMapper).updateById(finding);
         verify(reviewTimelineMapper).insert(any(ReviewTimeline.class));
-        verify(cacheEvictionService).evictDashboardFeedbackQuality();
-        verify(cacheEvictionService).evictDashboardReviewActivity();
+        verify(cacheEvictionService).evictDashboardReviewActivity(task.getCreatedAt().toLocalDate());
         verify(cacheEvictionService).evictReviewRules();
     }
 
@@ -1009,7 +1013,7 @@ class ReviewServiceImplTest {
         assertThat(result.existing()).isTrue();
         assertThat(result.triggerSource()).isEqualTo("existing_reused");
         assertThat(result.message()).isEqualTo("Review task already exists");
-        verify(reviewTaskMapper, never()).insertManualReviewOrReuse(any(ReviewTask.class));
+        verify(reviewTaskMapper, never()).insertManualReview(any(ReviewTask.class));
         verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
         verify(reviewTaskPublisher, never()).publish(any(ReviewTaskMessage.class));
     }
@@ -1021,7 +1025,7 @@ class ReviewServiceImplTest {
             ReviewTask task = invocation.getArgument(0);
             task.setId(522L);
             return 1;
-        }).when(reviewTaskMapper).insertManualReviewOrReuse(any(ReviewTask.class));
+        }).when(reviewTaskMapper).insertManualReview(any(ReviewTask.class));
 
         var result = service.triggerManualReview(new ManualReviewRequest(
             "octocat",
@@ -1036,7 +1040,7 @@ class ReviewServiceImplTest {
         assertThat(result.existing()).isFalse();
         assertThat(result.source()).isEqualTo("github_pr_picker");
         assertThat(result.triggerSource()).isEqualTo("github_pr_picker");
-        verify(reviewTaskMapper).insertManualReviewOrReuse(org.mockito.Mockito.argThat((ReviewTask task) ->
+        verify(reviewTaskMapper).insertManualReview(org.mockito.Mockito.argThat((ReviewTask task) ->
             "GITHUB_PR_PICKER".equals(task.getSource()) && "GITHUB_PR_PICKER".equals(task.getTriggerSource())
         ));
         verify(metrics).reviewTaskCreated("GITHUB_PR_PICKER");
@@ -1050,7 +1054,7 @@ class ReviewServiceImplTest {
             ReviewTask task = invocation.getArgument(0);
             task.setId(522L);
             return 1;
-        }).when(reviewTaskMapper).insertManualReviewOrReuse(any(ReviewTask.class));
+        }).when(reviewTaskMapper).insertManualReview(any(ReviewTask.class));
         org.mockito.Mockito.doAnswer(invocation -> {
             assertThat(manualReviewTransactionManager.committed).isTrue();
             return null;
@@ -1079,7 +1083,8 @@ class ReviewServiceImplTest {
         ReviewTask existing = task();
         existing.setStatus("QUEUED");
         when(reviewTaskMapper.selectOne(any())).thenReturn(null, existing);
-        when(reviewTaskMapper.insertManualReviewOrReuse(any(ReviewTask.class))).thenReturn(0);
+        when(reviewTaskMapper.insertManualReview(any(ReviewTask.class)))
+            .thenThrow(new DuplicateKeyException("uk_review_task_pr_commit"));
 
         var result = service.triggerManualReview(new ManualReviewRequest(
             "octocat",
@@ -1095,7 +1100,7 @@ class ReviewServiceImplTest {
         assertThat(result.existing()).isTrue();
         assertThat(result.status()).isEqualTo("queued");
         assertThat(result.triggerSource()).isEqualTo("existing_reused");
-        verify(reviewTaskMapper).insertManualReviewOrReuse(any(ReviewTask.class));
+        verify(reviewTaskMapper).insertManualReview(any(ReviewTask.class));
         verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
         verify(reviewTimelineMapper, never()).insert(any(ReviewTimeline.class));
         verify(reviewTaskPublisher, never()).publish(any(ReviewTaskMessage.class));
@@ -1118,7 +1123,7 @@ class ReviewServiceImplTest {
             .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode()).isEqualTo(ErrorCode.BAD_REQUEST));
 
         verify(reviewTaskMapper, never()).selectOne(any());
-        verify(reviewTaskMapper, never()).insertManualReviewOrReuse(any(ReviewTask.class));
+        verify(reviewTaskMapper, never()).insertManualReview(any(ReviewTask.class));
         verify(reviewTaskPublisher, never()).publish(any(ReviewTaskMessage.class));
     }
 
@@ -1129,7 +1134,7 @@ class ReviewServiceImplTest {
             ReviewTask task = invocation.getArgument(0);
             task.setId(522L);
             return 1;
-        }).when(reviewTaskMapper).insertManualReviewOrReuse(any(ReviewTask.class));
+        }).when(reviewTaskMapper).insertManualReview(any(ReviewTask.class));
         doThrow(new MessagePublishException("publisher confirm timed out password=raw-password token=raw-token"))
             .when(reviewTaskPublisher)
             .publish(any(ReviewTaskMessage.class));
@@ -1147,7 +1152,7 @@ class ReviewServiceImplTest {
         assertThat(result.status()).isEqualTo("queued");
 
         ArgumentCaptor<ReviewTask> taskCaptor = ArgumentCaptor.forClass(ReviewTask.class);
-        verify(reviewTaskMapper).insertManualReviewOrReuse(taskCaptor.capture());
+        verify(reviewTaskMapper).insertManualReview(taskCaptor.capture());
         verify(reviewTaskMapper).update(any());
         verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
         assertThat(taskCaptor.getValue().getStatus()).isEqualTo("PUBLISH_FAILED");
@@ -1180,7 +1185,7 @@ class ReviewServiceImplTest {
             task.setId(9001L);
             coordinator.awaitDuplicateRegistrations();
             return 1;
-        }).when(reviewTaskMapper).insertManualReviewOrReuse(any(ReviewTask.class));
+        }).when(reviewTaskMapper).insertManualReview(any(ReviewTask.class));
 
         ExecutorService executor = Executors.newFixedThreadPool(concurrency);
         CountDownLatch ready = new CountDownLatch(concurrency);
@@ -1216,7 +1221,7 @@ class ReviewServiceImplTest {
         assertThat(results).filteredOn(result -> !result.existing()).hasSize(1);
         assertThat(results).filteredOn(ManualReviewResult::existing).hasSize(concurrency - 1);
         assertThat(results).allMatch(result -> result.status().equals("queued"));
-        verify(reviewTaskMapper, org.mockito.Mockito.times(1)).insertManualReviewOrReuse(any(ReviewTask.class));
+        verify(reviewTaskMapper, org.mockito.Mockito.times(1)).insertManualReview(any(ReviewTask.class));
         verify(reviewTimelineMapper, org.mockito.Mockito.times(1)).insert(any(ReviewTimeline.class));
         verify(reviewTaskPublisher, org.mockito.Mockito.times(1)).publish(any(ReviewTaskMessage.class));
     }
@@ -1303,9 +1308,17 @@ class ReviewServiceImplTest {
     ) {
         when(changedFileMapper.selectPage(any(), any())).thenReturn(page(changedFiles));
         when(reviewFindingMapper.selectPage(any(), any())).thenReturn(page(findings), page(missingTests));
-        when(changedFileMapper.selectCount(any())).thenReturn((long) changedFiles.size());
-        when(reviewFindingMapper.selectCount(any())).thenReturn((long) findings.size(), (long) missingTests.size());
-        when(reviewFindingMapper.selectFindingSeverityCounts(521L)).thenReturn(severityCounts(findings));
+        SeverityCounts severityCounts = severityCounts(findings);
+        when(reviewFindingMapper.selectReviewTaskDetailSummary(521L)).thenReturn(new ReviewTaskDetailSummary(
+            (long) changedFiles.size(),
+            (long) findings.size(),
+            (long) missingTests.size(),
+            severityCounts.critical(),
+            severityCounts.high(),
+            severityCounts.medium(),
+            severityCounts.low(),
+            severityCounts.info()
+        ));
     }
 
     private void stubGithubCommentPreviewPage(List<ReviewFinding> findings) {
@@ -1483,6 +1496,13 @@ class ReviewServiceImplTest {
             repository,
             1L
         );
+    }
+
+    private ReviewTaskCursorCodec reviewTaskCursorCodec() {
+        AuthProperties properties = new AuthProperties();
+        properties.setTokenSecret("review-task-cursor-test-secret-32-characters");
+        properties.setTokenSecretId("review-test");
+        return new ReviewTaskCursorCodec(properties);
     }
 
     private static void await(CountDownLatch latch) {

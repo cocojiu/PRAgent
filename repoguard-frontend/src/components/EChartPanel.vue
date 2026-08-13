@@ -12,19 +12,15 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, useId, watch } from "vue";
 import * as echarts from "echarts/core";
-import { BarChart, LineChart, PieChart } from "echarts/charts";
-import { AriaComponent, GraphicComponent, GridComponent, LegendComponent, TooltipComponent } from "echarts/components";
+import { BarChart, LineChart } from "echarts/charts";
+import { GridComponent, TooltipComponent } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
 import type { EChartsOption } from "echarts";
 
 echarts.use([
-  AriaComponent,
   BarChart,
   LineChart,
-  PieChart,
-  GraphicComponent,
   GridComponent,
-  LegendComponent,
   TooltipComponent,
   CanvasRenderer
 ]);
@@ -59,14 +55,7 @@ const renderChart = () => {
     chart = echarts.init(chartRef.value);
     chart.on("finished", notifyRendered);
   }
-  chart.setOption({
-    ...props.option,
-    aria: {
-      enabled: true,
-      description: props.summary ? `${props.accessibleLabel}。${props.summary}` : props.accessibleLabel,
-      decal: { show: true }
-    }
-  });
+  chart.setOption(props.option);
 };
 
 const resize = () => chart?.resize();

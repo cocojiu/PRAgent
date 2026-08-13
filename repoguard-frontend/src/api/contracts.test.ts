@@ -42,9 +42,7 @@ describe("apiRequest", () => {
       source: undefined,
       triggerSource: undefined,
       keyword: "",
-      cursorCreatedAt: "2026-07-08 12:00:00",
-      cursorId: 123,
-      totalHint: 42
+      cursor: "MjAyNi0wNy0wOFQxMjowMDoxNXwxMjM"
     });
 
     expect(result).toEqual({ items: [], total: 0 });
@@ -55,9 +53,7 @@ describe("apiRequest", () => {
     expect(url).toContain("repository=repo");
     expect(url).toContain("status=completed");
     expect(url).toContain("riskLevel=high");
-    expect(url).toContain("cursorCreatedAt=2026-07-08+12%3A00%3A00");
-    expect(url).toContain("cursorId=123");
-    expect(url).toContain("totalHint=42");
+    expect(url).toContain("cursor=MjAyNi0wNy0wOFQxMjowMDoxNXwxMjM");
     expect(url).not.toContain("keyword=");
     expect(init.method).toBeUndefined();
   });
@@ -176,12 +172,19 @@ describe("apiRequest", () => {
 
   it("posts secret re-encryption requests to the protected system config endpoint", async () => {
     const fetchMock = vi.fn().mockResolvedValue(okResponse({
+      id: 7,
       executed: false,
-      scannedCount: 1,
-      reEncryptedCount: 1,
+      status: "PENDING",
+      sourceKeyId: "old-key",
+      targetKeyId: "new-key",
+      currentTable: "integration_config",
+      checkpointId: 0,
+      batchSize: 100,
+      scannedCount: 0,
+      reEncryptedCount: 0,
       skippedCount: 0,
       failedCount: 0,
-      items: []
+      retryCount: 0
     }));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -203,6 +206,43 @@ describe("apiRequest", () => {
       targetKeyId: "new-key",
       execute: false
     }));
+  });
+
+  it("loads and controls secret re-encryption background jobs", async () => {
+    const job = {
+      id: 7,
+      executed: true,
+      status: "RUNNING",
+      sourceKeyId: "old-key",
+      targetKeyId: "new-key",
+      currentTable: "review_policy_config",
+      checkpointId: 11,
+      batchSize: 100,
+      scannedCount: 11,
+      reEncryptedCount: 10,
+      skippedCount: 1,
+      failedCount: 0,
+      retryCount: 0
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(okResponse(job))
+      .mockResolvedValueOnce(okResponse({ items: [job], total: 1 }))
+      .mockResolvedValueOnce(okResponse({ items: [], total: 0 }))
+      .mockResolvedValueOnce(okResponse({ ...job, status: "PAUSED" }))
+      .mockResolvedValueOnce(okResponse({ ...job, status: "PENDING" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await apiRequest("fetchSecretReEncryptionJob", { jobId: 7 });
+    await apiRequest("fetchSecretReEncryptionJobs", { page: 1, pageSize: 1 });
+    await apiRequest("fetchSecretReEncryptionJobItems", { jobId: 7, page: 2, pageSize: 50 });
+    await apiRequest("pauseSecretReEncryptionJob", { jobId: 7 });
+    await apiRequest("resumeSecretReEncryptionJob", { jobId: 7 });
+
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/secrets/re-encryption/jobs/7");
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain("/secrets/re-encryption/jobs?page=1&pageSize=1");
+    expect(String(fetchMock.mock.calls[2]?.[0])).toContain("/secrets/re-encryption/jobs/7/items?page=2&pageSize=50");
+    expect(fetchMock.mock.calls[3]?.[1]).toMatchObject({ method: "POST" });
+    expect(fetchMock.mock.calls[4]?.[1]).toMatchObject({ method: "POST" });
   });
 
   it("keeps operational cache, data retention, and refresh reset endpoint contracts", async () => {
@@ -592,6 +632,7 @@ describe("apiRequest", () => {
     });
     await apiRequest("updateReviewRule", {
       id: "RG-JAVA-001",
+      expectedPolicyVersion: 4,
       payload: {
         id: "RG-JAVA-001",
         name: "Java rule",
@@ -609,7 +650,7 @@ describe("apiRequest", () => {
     });
     await apiRequest("updateReviewRuleStatus", {
       id: "RG-JAVA-001",
-      payload: { status: "disabled" }
+      payload: { status: "disabled", expectedPolicyVersion: 4 }
     });
 
     const calls = fetchMock.mock.calls as [string, RequestInit][];
@@ -640,37 +681,94 @@ describe("apiRequest", () => {
     expect(calls[9][0]).toContain("/api/v1/config/review-rules");
     expect(calls[9][1].method).toBe("POST");
     expect(calls[10][0]).toContain("/api/v1/config/review-rules/RG-JAVA-001");
+    expect(calls[10][0]).toContain("expectedPolicyVersion=4");
     expect(calls[10][1].method).toBe("PUT");
     expect(calls[11][0]).toContain("/api/v1/config/review-rules/RG-JAVA-001/status");
     expect(calls[11][1].method).toBe("PUT");
-    expect(calls[11][1].body).toBe(JSON.stringify({ status: "disabled" }));
+    expect(calls[11][1].body).toBe(JSON.stringify({ status: "disabled", expectedPolicyVersion: 4 }));
   });
 
   it("keeps versioned review policy governance endpoint contracts", async () => {
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(okResponse({})));
     vi.stubGlobal("fetch", fetchMock);
 
-    await apiRequest("fetchReviewRuleVersions", { id: "RG/JAVA 001" });
-    await apiRequest("rollbackReviewRule", { id: "RG/JAVA 001", policyVersion: 7 });
+    await apiRequest("fetchReviewRuleVersions", { id: "RG/JAVA 001", cursor: "7", pageSize: 20 });
+    await apiRequest("rollbackReviewRule", {
+      id: "RG/JAVA 001",
+      policyVersion: 7,
+      expectedPolicyVersion: 9
+    });
     await apiRequest("fetchReviewStrategy", undefined);
-    await apiRequest("fetchReviewStrategyVersions", undefined);
-    await apiRequest("updateReviewStrategyEnforcement", { enforcementMode: "comment" });
-    await apiRequest("rollbackReviewStrategy", { snapshotId: 13 });
+    await apiRequest("fetchReviewStrategyVersions", { cursor: "13", pageSize: 20 });
+    await apiRequest("updateReviewStrategyEnforcement", {
+      enforcementMode: "comment",
+      expectedSnapshotId: 17
+    });
+    await apiRequest("rollbackReviewStrategy", { snapshotId: 13, expectedSnapshotId: 17 });
 
     const calls = fetchMock.mock.calls as [string, RequestInit][];
     expect(calls[0][0]).toContain("/api/v1/config/review-rules/RG%2FJAVA%20001/versions");
+    expect(calls[0][0]).toContain("cursor=7");
+    expect(calls[0][0]).toContain("pageSize=20");
     expect(calls[0][1].method).toBeUndefined();
     expect(calls[1][0]).toContain("/api/v1/config/review-rules/RG%2FJAVA%20001/versions/7/rollback");
     expect(calls[1][1].method).toBe("POST");
+    expect(calls[1][1].body).toBe(JSON.stringify({ expectedPolicyVersion: 9 }));
     expect(calls[2][0]).toContain("/api/v1/config/review-strategy");
     expect(calls[2][1].method).toBeUndefined();
     expect(calls[3][0]).toContain("/api/v1/config/review-strategy/versions");
+    expect(calls[3][0]).toContain("cursor=13");
     expect(calls[3][1].method).toBeUndefined();
     expect(calls[4][0]).toContain("/api/v1/config/review-strategy/enforcement");
     expect(calls[4][1].method).toBe("PUT");
-    expect(calls[4][1].body).toBe(JSON.stringify({ enforcementMode: "comment" }));
+    expect(calls[4][1].body).toBe(JSON.stringify({
+      enforcementMode: "comment",
+      expectedSnapshotId: 17
+    }));
     expect(calls[5][0]).toContain("/api/v1/config/review-strategy/versions/13/rollback");
     expect(calls[5][1].method).toBe("POST");
+    expect(calls[5][1].body).toBe(JSON.stringify({ expectedSnapshotId: 17 }));
+  });
+
+  it("uses generated metadata for user management paths and request bodies", async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(okResponse({})));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await apiRequest("fetchUsers", {
+      page: 2,
+      pageSize: 25,
+      role: "ADMIN",
+      status: "ACTIVE",
+      keyword: "alice"
+    });
+    await apiRequest("fetchUserOperationAudits", { page: 3, pageSize: 10 });
+    await apiRequest("createUser", {
+      username: "alice",
+      email: "alice@example.com",
+      password: "password",
+      confirmPassword: "password"
+    });
+    await apiRequest("updateUserRole", { id: 42, role: "VIEWER" });
+    await apiRequest("updateUserStatus", { id: 42, status: "DISABLED" });
+
+    const calls = fetchMock.mock.calls as [string, RequestInit][];
+    expect(calls[0][0]).toContain("/api/v1/users");
+    expect(calls[0][0]).toContain("page=2");
+    expect(calls[0][0]).toContain("pageSize=25");
+    expect(calls[0][0]).toContain("role=ADMIN");
+    expect(calls[0][0]).toContain("status=ACTIVE");
+    expect(calls[0][0]).toContain("keyword=alice");
+    expect(calls[1][0]).toContain("/api/v1/users/audits");
+    expect(calls[1][0]).toContain("page=3");
+    expect(calls[1][0]).toContain("pageSize=10");
+    expect(calls[2][0]).toContain("/api/v1/users");
+    expect(calls[2][1].method).toBe("POST");
+    expect(calls[3][0]).toContain("/api/v1/users/42/role");
+    expect(calls[3][1].method).toBe("PUT");
+    expect(calls[3][1].body).toBe(JSON.stringify({ role: "VIEWER" }));
+    expect(calls[4][0]).toContain("/api/v1/users/42/status");
+    expect(calls[4][1].method).toBe("PUT");
+    expect(calls[4][1].body).toBe(JSON.stringify({ status: "DISABLED" }));
   });
 });
 

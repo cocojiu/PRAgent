@@ -63,11 +63,11 @@ class ReviewPolicyLifecycleGateTest {
                 LlmReviewVersions.CONTEXT,
                 LlmReviewVersions.SCHEMA,
                 LlmReviewVersions.VERIFIER,
-                30,
-                30,
-                30,
+                40,
+                40,
+                40,
                 0,
-                30,
+                40,
                 0
             ))
         );
@@ -93,22 +93,22 @@ class ReviewPolicyLifecycleGateTest {
                 LlmReviewVersions.CONTEXT,
                 LlmReviewVersions.SCHEMA,
                 LlmReviewVersions.VERIFIER,
-                30,
-                30,
-                30,
+                40,
+                40,
+                40,
                 0,
-                30,
+                40,
                 0
             ))
         );
 
-        assertThat(gate.labeledHighRiskSamples()).isEqualTo(30);
+        assertThat(gate.labeledHighRiskSamples()).isEqualTo(40);
         assertThat(gate.blockEligible()).isTrue();
         assertThat(gate.status()).isEqualTo("PASS");
     }
 
     @Test
-    void ruleGatePassesOnlyWhenAllHighRiskThresholdsPass() {
+    void ruleGateBlocksWhenPointPrecisionLacksStatisticalConfidence() {
         var gate = ruleGate.evaluate(
             "RG-JAVA-001",
             "rg-java-001-detector-v2",
@@ -132,12 +132,72 @@ class ReviewPolicyLifecycleGateTest {
             ))
         );
 
-        assertThat(gate.blockEligible()).isTrue();
-        assertThat(gate.status()).isEqualTo("PASS");
+        assertThat(gate.blockEligible()).isFalse();
+        assertThat(gate.status()).isEqualTo("ALERT");
         assertThat(gate.precision()).isEqualByComparingTo("90.00");
         assertThat(gate.falsePositiveRate()).isEqualByComparingTo("10.00");
         assertThat(gate.anchorRate()).isEqualByComparingTo("96.67");
         assertThat(gate.duplicateRate()).isEqualByComparingTo("3.33");
+        assertThat(gate.blockers()).containsExactly("precision_wilson_lower_bound_below_90");
+    }
+
+    @Test
+    void ruleGateRejectsInconsistentLabeledOutcomeCounts() {
+        var gate = ruleGate.evaluate(
+            "RG-JAVA-001",
+            "rg-java-001-detector-v2",
+            3,
+            List.of(group(
+                "RG-JAVA-001",
+                "RULE",
+                "HIGH",
+                "rg-java-001-detector-v2",
+                3,
+                LlmReviewVersions.PROMPT,
+                LlmReviewVersions.CONTEXT,
+                LlmReviewVersions.SCHEMA,
+                LlmReviewVersions.VERIFIER,
+                100,
+                100,
+                95,
+                4,
+                100,
+                0
+            ))
+        );
+
+        assertThat(gate.blockEligible()).isFalse();
+        assertThat(gate.blockers()).contains("labeled_outcome_counts_inconsistent");
+    }
+
+    @Test
+    void ruleGateDoesNotPromoteARoundedUpWilsonLowerBound() {
+        var gate = ruleGate.evaluate(
+            "RG-JAVA-001",
+            "rg-java-001-detector-v2",
+            3,
+            List.of(group(
+                "RG-JAVA-001",
+                "RULE",
+                "HIGH",
+                "rg-java-001-detector-v2",
+                3,
+                LlmReviewVersions.PROMPT,
+                LlmReviewVersions.CONTEXT,
+                LlmReviewVersions.SCHEMA,
+                LlmReviewVersions.VERIFIER,
+                126,
+                126,
+                120,
+                6,
+                126,
+                0
+            ))
+        );
+
+        assertThat(gate.precision()).isEqualByComparingTo("95.24");
+        assertThat(gate.blockEligible()).isFalse();
+        assertThat(gate.blockers()).containsExactly("precision_wilson_lower_bound_below_90");
     }
 
     @Test

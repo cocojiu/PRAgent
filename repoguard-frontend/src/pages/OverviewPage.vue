@@ -12,9 +12,9 @@
       :review-trend="reviewTrend"
       :risk-distribution="riskDistribution"
       :rule-hits="ruleHits"
+      :total-rule-hits="totalRuleHits"
       :trend-option="trendOption"
       :risk-option="riskOption"
-      :rule-option="ruleOption"
     />
 
     <template v-if="deferredSectionsVisible">
@@ -51,8 +51,7 @@ import { useDashboardOverview } from "@/features/dashboard/composables/useDashbo
 import {
   buildLlmQualityTrendOption,
   buildReviewTrendOption,
-  buildRiskDistributionOption,
-  buildRuleHitOption
+  buildRiskDistributionOption
 } from "@/features/dashboard/overviewChartOptions";
 import { recordRoutePerformanceMilestone } from "@/observability/frontendPerformanceDiagnosticsBridge";
 import { routeNames } from "@/router/names";
@@ -163,7 +162,6 @@ const trendOption = computed(() => buildReviewTrendOption(reviewTrend.value));
 
 const riskOption = computed(() => buildRiskDistributionOption(riskDistribution.value));
 
-const ruleOption = computed(() => buildRuleHitOption(ruleHits.value, totalRuleHits.value));
 const llmQualityTrendOption = computed(() => buildLlmQualityTrendOption(llmQualityTrend.value));
 
 onBeforeUnmount(() => {

@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.cache.CacheEvictionService;
+import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.dto.BaseSettingsRequest;
 import com.repoguard.agent.dto.GithubIntegrationConfigRequest;
 import com.repoguard.agent.dto.NotificationSettingsRequest;
@@ -45,10 +46,21 @@ import com.repoguard.agent.review.LlmReviewSchemaRepairer;
 import com.repoguard.agent.review.ReviewRuleRegistry;
 import com.repoguard.agent.review.config.ReviewRuleConfigPolicy;
 import com.repoguard.agent.review.config.ReviewRuleConfigServiceImpl;
+import com.repoguard.agent.review.config.ReviewRuleCommandService;
+import com.repoguard.agent.review.config.ReviewRuleLifecycleGate;
 import com.repoguard.agent.review.config.ReviewRuleMetricAssembler;
+import com.repoguard.agent.review.config.ReviewRulePolicyHistoryService;
+import com.repoguard.agent.review.config.ReviewRulePolicySnapshotStore;
+import com.repoguard.agent.review.config.ReviewRuleQualityGateService;
+import com.repoguard.agent.review.config.ReviewRuleQueryService;
+import com.repoguard.agent.review.config.ReviewRuleResponseAssembler;
+import com.repoguard.agent.review.config.ReviewStrategyPolicyService;
+import com.repoguard.agent.review.config.ReviewPolicyPromotionEvidenceStore;
+import com.repoguard.agent.review.config.ReviewPolicyTransactionExecutor;
 import com.repoguard.agent.review.quality.ReviewQualityBaseline;
 import com.repoguard.agent.review.quality.ReviewQualityBaselineService;
 import com.repoguard.agent.security.SecretCryptoService;
+import com.repoguard.agent.service.ReviewCalibrationService;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -76,6 +88,48 @@ class SystemConfigServiceImplTest {
     private final ReviewQualityBaselineService reviewQualityBaselineService =
         org.mockito.Mockito.mock(ReviewQualityBaselineService.class);
     private final ReviewRuleRegistry reviewRuleRegistry = org.mockito.Mockito.mock(ReviewRuleRegistry.class);
+    private final ReviewRulePolicySnapshotStore policySnapshotStore =
+        org.mockito.Mockito.mock(ReviewRulePolicySnapshotStore.class);
+    private final ReviewStrategyPolicyService strategyPolicyService =
+        org.mockito.Mockito.mock(ReviewStrategyPolicyService.class);
+    private final ReviewCalibrationService reviewCalibrationService =
+        org.mockito.Mockito.mock(ReviewCalibrationService.class);
+    private final ReviewPolicyPromotionEvidenceStore promotionEvidenceStore =
+        org.mockito.Mockito.mock(ReviewPolicyPromotionEvidenceStore.class);
+    private final ReviewRuleConfigPolicy reviewRuleConfigPolicy = new ReviewRuleConfigPolicy();
+    private final ReviewRuleLifecycleGate reviewRuleLifecycleGate = new ReviewRuleLifecycleGate();
+    private final ReviewRuleResponseAssembler reviewRuleResponseAssembler = new ReviewRuleResponseAssembler(
+        reviewRuleRegistry,
+        reviewRuleLifecycleGate
+    );
+    private final ReviewRuleQueryService reviewRuleQueryService = new ReviewRuleQueryService(
+        reviewRuleConfigMapper,
+        reviewFindingMapper,
+        reviewRuleConfigPolicy,
+        new ReviewRuleMetricAssembler(),
+        reviewQualityBaselineService,
+        reviewRuleRegistry,
+        reviewRuleResponseAssembler,
+        strategyPolicyService
+    );
+    private final ReviewRuleQualityGateService reviewRuleQualityGateService = new ReviewRuleQualityGateService(
+        reviewCalibrationService,
+        promotionEvidenceStore
+    );
+    private final ReviewRuleCommandService reviewRuleCommandService = new ReviewRuleCommandService(
+        reviewRuleConfigMapper,
+        cacheEvictionService,
+        reviewRuleConfigPolicy,
+        policySnapshotStore,
+        reviewRuleQualityGateService,
+        reviewRuleQueryService,
+        ReviewPolicyTransactionExecutor.direct()
+    );
+    private final ReviewRulePolicyHistoryService reviewRulePolicyHistoryService = new ReviewRulePolicyHistoryService(
+        reviewRuleQueryService,
+        policySnapshotStore,
+        reviewRuleResponseAssembler
+    );
     private final ConnectionTestServiceImpl connectionTestService = ConnectionTestServiceTestFactory.create(
         integrationConfigMapper,
         reviewPolicyConfigMapper,
@@ -96,20 +150,17 @@ class SystemConfigServiceImplTest {
         cacheEvictionService
     );
     private final ReviewRuleConfigServiceImpl reviewRuleConfigService = new ReviewRuleConfigServiceImpl(
-        reviewRuleConfigMapper,
-        reviewFindingMapper,
-        cacheEvictionService,
-        new ReviewRuleConfigPolicy(),
-        new ReviewRuleMetricAssembler(),
-        reviewQualityBaselineService,
-        reviewRuleRegistry
+        reviewRuleQueryService,
+        reviewRuleCommandService,
+        reviewRulePolicyHistoryService
     );
     private final SystemSettingsApplicationServiceImpl systemSettingsApplicationService =
         new SystemSettingsApplicationServiceImpl(
             systemSettingsConfigMapper,
             systemSettingLogMapper,
             reviewPolicyConfigMapper,
-            cacheEvictionService
+            cacheEvictionService,
+            new RabbitReviewQueueProperties()
         );
     private final SystemConfigServiceImpl service = new SystemConfigServiceImpl(
         connectionTestService,
@@ -183,7 +234,7 @@ class SystemConfigServiceImplTest {
         assertThat(config.getApiKeyValue()).startsWith("enc:v3:local:");
         assertThat(secretCryptoService.decrypt(config.getApiKeyValue())).isEqualTo("sk-existing-5678");
         assertThat(config.getTimeoutSeconds()).isEqualTo(90);
-        assertThat(config.getWorkerConcurrency()).isEqualTo(2);
+        assertThat(config.getWorkerConcurrency()).isEqualTo(1);
         assertThat(config.getChunkFileThreshold()).isEqualTo(6);
         assertThat(config.getInputTokenPricePerMillion()).isEqualByComparingTo("0.50");
         assertThat(result.apiKey()).isEqualTo("****5678");
@@ -298,9 +349,9 @@ class SystemConfigServiceImplTest {
         assertThat(settingsConfig.getPublicRepoAllowed()).isTrue();
         assertThat(settingsConfig.getTokenTtlDays()).isEqualTo(45);
         assertThat(reviewPolicyConfig.getTimeoutSeconds()).isEqualTo(90);
-        assertThat(reviewPolicyConfig.getWorkerConcurrency()).isEqualTo(3);
+        assertThat(reviewPolicyConfig.getWorkerConcurrency()).isEqualTo(1);
         assertThat(secretCryptoService.decrypt(reviewPolicyConfig.getApiKeyValue())).isEqualTo("sk-existing-5678");
-        assertThat(result.policy().workerConcurrency()).isEqualTo(3);
+        assertThat(result.policy().workerConcurrency()).isEqualTo(1);
         assertThat(result.logs()).hasSize(1);
         verify(systemSettingsConfigMapper).updateById(settingsConfig);
         verify(reviewPolicyConfigMapper).updateById(reviewPolicyConfig);
@@ -501,13 +552,14 @@ class SystemConfigServiceImplTest {
     void updateReviewRuleStatusPersistsNormalizedStatus() {
         ReviewRuleConfig rule = rule("RG-JAVA-001", "异常捕获过宽", "MEDIUM", "ENABLED", 88);
         when(reviewRuleConfigMapper.selectById("RG-JAVA-001")).thenReturn(rule);
+        when(reviewRuleConfigMapper.update(any(ReviewRuleConfig.class), any())).thenReturn(1);
         when(reviewFindingMapper.selectReviewRuleHitCounts()).thenReturn(List.of());
 
-        var result = service.updateReviewRuleStatus("rg-java-001", "disabled");
+        var result = service.updateReviewRuleStatus("rg-java-001", "disabled", 1);
 
         assertThat(rule.getStatus()).isEqualTo("DISABLED");
         assertThat(result.status()).isEqualTo("disabled");
-        verify(reviewRuleConfigMapper).updateById(rule);
+        verify(reviewRuleConfigMapper).update(any(ReviewRuleConfig.class), any());
     }
 
     private IntegrationConfig githubConfig(String token) {

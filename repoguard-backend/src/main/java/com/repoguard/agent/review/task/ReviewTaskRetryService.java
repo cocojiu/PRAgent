@@ -63,7 +63,7 @@ public class ReviewTaskRetryService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Review task commit SHA is unavailable");
         }
         transitionStore.retryReviewTask(task, retryCount, replacementCommitSha);
-        evictDashboardReviewActivity();
+        evictDashboardReviewActivity(task);
 
         reviewTimelineAppender.completeCurrentAndAppend(
             task.getId(),
@@ -102,7 +102,7 @@ public class ReviewTaskRetryService {
         }
     }
 
-    private void evictDashboardReviewActivity() {
-        cacheEvictionService.evictDashboardReviewActivity();
+    private void evictDashboardReviewActivity(ReviewTask task) {
+        cacheEvictionService.evictDashboardReviewActivity(task.getCreatedAt().toLocalDate());
     }
 }

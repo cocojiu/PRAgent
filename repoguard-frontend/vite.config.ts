@@ -12,10 +12,11 @@ const BUNDLE_BUDGET_MINIMUM_HEADROOM_PERCENT = Math.round((1 - BUNDLE_BUDGET_WAR
 const bundleBudgets = {
   initialJavaScriptGzip: 150 * KIB,
   initialCssGzip: 24 * KIB,
+  initialRequests: 16,
   maxAsyncJavaScriptGzip: 140 * KIB,
-  overviewRouteJavaScriptGzip: 60 * KIB,
-  overviewRouteCssGzip: 12 * KIB,
-  overviewRouteRequests: 16
+  overviewRouteIncrementalJavaScriptGzip: 60 * KIB,
+  overviewRouteIncrementalCssGzip: 12 * KIB,
+  overviewRouteIncrementalRequests: 16
 } as const;
 
 const apiProxy = {
@@ -82,6 +83,7 @@ const bundleBudgetPlugin = (): Plugin => ({
         initialCssGzip += gzipSize(asset.source);
       }
     }
+    const initialRequests = initialChunkNames.size + initialCssNames.size;
 
     const isOverviewModule = (moduleId: string | null | undefined) =>
       moduleId?.replaceAll("\\", "/").endsWith("/src/pages/OverviewPage.vue") === true;
@@ -106,16 +108,51 @@ const bundleBudgetPlugin = (): Plugin => ({
     const overviewRouteIncrementalCssNames = new Set(
       [...overviewRouteCssNames].filter((fileName) => !initialCssNames.has(fileName))
     );
-    const overviewRouteJavaScriptGzip = [...overviewRouteIncrementalChunkNames].reduce(
+    const overviewRouteIncrementalJavaScriptGzip = [...overviewRouteIncrementalChunkNames].reduce(
       (total, fileName) => total + gzipSize(chunkByFileName.get(fileName)?.code ?? ""),
       0
     );
-    const overviewRouteCssGzip = [...overviewRouteIncrementalCssNames].reduce((total, fileName) => {
-      const asset = bundle[fileName];
-      return total + (asset?.type === "asset" ? gzipSize(asset.source) : 0);
-    }, 0);
-    const overviewRouteRequests =
+    const overviewRouteIncrementalCssGzip = [...overviewRouteIncrementalCssNames].reduce(
+      (total, fileName) => {
+        const asset = bundle[fileName];
+        return total + (asset?.type === "asset" ? gzipSize(asset.source) : 0);
+      },
+      0
+    );
+    const overviewRouteIncrementalRequests =
       overviewRouteIncrementalChunkNames.size + overviewRouteIncrementalCssNames.size;
+
+    const formatJavaScriptContributors = (fileNames: Iterable<string>) =>
+      [...fileNames]
+        .map((fileName) => ({
+          fileName,
+          gzipBytes: gzipSize(chunkByFileName.get(fileName)?.code ?? "")
+        }))
+        .sort((left, right) => right.gzipBytes - left.gzipBytes)
+        .map(({ fileName, gzipBytes }) => `${fileName} (${formatKiB(gzipBytes)})`)
+        .join(", ");
+    const formatCssContributors = (fileNames: Iterable<string>) =>
+      [...fileNames]
+        .map((fileName) => {
+          const asset = bundle[fileName];
+          return {
+            fileName,
+            gzipBytes: asset?.type === "asset" ? gzipSize(asset.source) : 0
+          };
+        })
+        .sort((left, right) => right.gzipBytes - left.gzipBytes)
+        .map(({ fileName, gzipBytes }) => `${fileName} (${formatKiB(gzipBytes)})`)
+        .join(", ");
+    const formatRequestContributors = (
+      chunkNames: Iterable<string>,
+      cssNames: Iterable<string>
+    ) => [...chunkNames, ...cssNames].join(", ");
+    const formatModuleContributors = (moduleIds: string[]) =>
+      moduleIds
+        .map((moduleId) => moduleId.replaceAll("\\", "/"))
+        .filter((moduleId) => moduleId.includes("/src/") || moduleId.includes("/node_modules/"))
+        .slice(0, 12)
+        .join(", ");
 
     const asyncJavaScriptChunks = chunks
       .filter((chunk) => !initialChunkNames.has(chunk.fileName))
@@ -125,40 +162,58 @@ const bundleBudgetPlugin = (): Plugin => ({
 
     const measurements = [
       {
-        label: "initial JavaScript gzip",
+        label: "initial shared JavaScript gzip",
         actual: initialJavaScriptGzip,
         budget: bundleBudgets.initialJavaScriptGzip,
-        format: formatKiB
+        format: formatKiB,
+        contributors: formatJavaScriptContributors(initialChunkNames)
       },
       {
-        label: "initial CSS gzip",
+        label: "initial shared CSS gzip",
         actual: initialCssGzip,
         budget: bundleBudgets.initialCssGzip,
-        format: formatKiB
+        format: formatKiB,
+        contributors: formatCssContributors(initialCssNames)
+      },
+      {
+        label: "initial shared requests",
+        actual: initialRequests,
+        budget: bundleBudgets.initialRequests,
+        format: String,
+        contributors: formatRequestContributors(initialChunkNames, initialCssNames)
       },
       {
         label: `largest async JavaScript gzip (${largestAsyncChunk.fileName})`,
         actual: largestAsyncChunk.gzipBytes,
         budget: bundleBudgets.maxAsyncJavaScriptGzip,
-        format: formatKiB
+        format: formatKiB,
+        contributors: formatModuleContributors(
+          chunkByFileName.get(largestAsyncChunk.fileName)?.moduleIds ?? []
+        )
       },
       {
-        label: "overview route critical JavaScript gzip",
-        actual: overviewRouteJavaScriptGzip,
-        budget: bundleBudgets.overviewRouteJavaScriptGzip,
-        format: formatKiB
+        label: "overview route incremental JavaScript gzip",
+        actual: overviewRouteIncrementalJavaScriptGzip,
+        budget: bundleBudgets.overviewRouteIncrementalJavaScriptGzip,
+        format: formatKiB,
+        contributors: formatJavaScriptContributors(overviewRouteIncrementalChunkNames)
       },
       {
-        label: "overview route critical CSS gzip",
-        actual: overviewRouteCssGzip,
-        budget: bundleBudgets.overviewRouteCssGzip,
-        format: formatKiB
+        label: "overview route incremental CSS gzip",
+        actual: overviewRouteIncrementalCssGzip,
+        budget: bundleBudgets.overviewRouteIncrementalCssGzip,
+        format: formatKiB,
+        contributors: formatCssContributors(overviewRouteIncrementalCssNames)
       },
       {
-        label: "overview route critical requests",
-        actual: overviewRouteRequests,
-        budget: bundleBudgets.overviewRouteRequests,
-        format: String
+        label: "overview route incremental requests",
+        actual: overviewRouteIncrementalRequests,
+        budget: bundleBudgets.overviewRouteIncrementalRequests,
+        format: String,
+        contributors: formatRequestContributors(
+          overviewRouteIncrementalChunkNames,
+          overviewRouteIncrementalCssNames
+        )
       }
     ];
     const summary = measurements
@@ -167,7 +222,10 @@ const bundleBudgetPlugin = (): Plugin => ({
     const violations = measurements.filter(({ actual, budget }) => actual > budget);
 
     if (violations.length > 0) {
-      this.error(`[bundle-budget] Budget exceeded. ${summary}`);
+      const violationDetails = violations
+        .map(({ label, contributors }) => `${label} contributors: ${contributors || "none"}`)
+        .join("; ");
+      this.error(`[bundle-budget] Budget exceeded. ${summary}. ${violationDetails}`);
     }
 
     const lowHeadroomMeasurements = measurements.filter(

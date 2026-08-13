@@ -6,7 +6,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.repoguard.agent.config.RabbitReviewQueueProperties;
@@ -101,7 +100,7 @@ class RabbitReviewTaskPublisherTest {
     }
 
     @Test
-    void publishRetriesAndFailsWhenPublisherConfirmIsNacked() {
+    void publishLeavesNackedRetryToDatabaseCompensation() {
         RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
         RabbitReviewQueueProperties properties = properties();
         ReviewTaskMessage message = message();
@@ -116,7 +115,7 @@ class RabbitReviewTaskPublisherTest {
         assertThatThrownBy(() -> publisher.publish(message))
             .isInstanceOf(MessagePublishException.class)
             .hasMessageContaining("nacked");
-        verify(rabbitTemplate, times(3))
+        verify(rabbitTemplate)
             .convertAndSend(eq("test.review.exchange"), eq("test.review.created"), eq(message), any(CorrelationData.class));
         assertThat(meterRegistry.find("repoguard.rabbit.publish.failed")
             .tag("failure_phase", "publish")
@@ -126,7 +125,7 @@ class RabbitReviewTaskPublisherTest {
     }
 
     @Test
-    void publishRetriesAndFailsWhenMessageIsReturned() {
+    void publishLeavesReturnedMessageRetryToDatabaseCompensation() {
         RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
         RabbitReviewQueueProperties properties = properties();
         ReviewTaskMessage message = message();
@@ -148,12 +147,12 @@ class RabbitReviewTaskPublisherTest {
         assertThatThrownBy(() -> publisher.publish(message))
             .isInstanceOf(MessagePublishException.class)
             .hasMessageContaining("unroutable");
-        verify(rabbitTemplate, times(3))
+        verify(rabbitTemplate)
             .convertAndSend(eq("test.review.exchange"), eq("test.review.created"), eq(message), any(CorrelationData.class));
     }
 
     @Test
-    void publishRetriesAndFailsWhenSendThrowsAmqpException() {
+    void publishLeavesConnectionFailureRetryToDatabaseCompensation() {
         RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
         RabbitReviewQueueProperties properties = properties();
         ReviewTaskMessage message = message();
@@ -166,7 +165,7 @@ class RabbitReviewTaskPublisherTest {
         assertThatThrownBy(() -> publisher.publish(message))
             .isInstanceOf(MessagePublishException.class)
             .hasMessageContaining("publish attempt failed");
-        verify(rabbitTemplate, times(3))
+        verify(rabbitTemplate)
             .convertAndSend(eq("test.review.exchange"), eq("test.review.created"), eq(message), any(CorrelationData.class));
     }
 
@@ -193,8 +192,6 @@ class RabbitReviewTaskPublisherTest {
         RabbitReviewQueueProperties properties = new RabbitReviewQueueProperties();
         properties.setExchange("test.review.exchange");
         properties.setRoutingKey("test.review.created");
-        properties.setPublishMaxAttempts(3);
-        properties.setPublishInitialIntervalMs(0);
         properties.setPublishConfirmTimeoutMs(100);
         return properties;
     }

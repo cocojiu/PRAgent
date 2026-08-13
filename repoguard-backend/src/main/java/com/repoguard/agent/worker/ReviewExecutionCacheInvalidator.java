@@ -1,6 +1,7 @@
 package com.repoguard.agent.worker;
 
 import com.repoguard.agent.cache.CacheEvictionService;
+import com.repoguard.agent.entity.ReviewTask;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
 
@@ -13,7 +14,8 @@ class ReviewExecutionCacheInvalidator {
         this.cacheEvictionService = Objects.requireNonNull(cacheEvictionService, "cacheEvictionService");
     }
 
-    void reviewTaskChanged() {
-        cacheEvictionService.evictDashboardReviewActivity();
+    void reviewTaskChanged(ReviewTask task) {
+        Objects.requireNonNull(task, "task");
+        cacheEvictionService.evictDashboardReviewActivity(task.getCreatedAt().toLocalDate());
     }
 }

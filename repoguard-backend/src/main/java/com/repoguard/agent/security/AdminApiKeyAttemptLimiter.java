@@ -11,6 +11,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -22,6 +23,7 @@ public class AdminApiKeyAttemptLimiter {
     private final MeterRegistry meterRegistry;
     private final TrustedProxyClientIpResolver clientIpResolver;
     private final Clock clock;
+    private final DatabaseRateLimitWindowStore sharedWindowStore;
     private final ConcurrentHashMap<String, Window> windows = new ConcurrentHashMap<>();
     private final AtomicInteger trackedClients = new AtomicInteger();
     private final AtomicLong pruneMinute = new AtomicLong(Long.MIN_VALUE);
@@ -31,9 +33,16 @@ public class AdminApiKeyAttemptLimiter {
     public AdminApiKeyAttemptLimiter(
         AdminApiKeyProperties properties,
         MeterRegistry meterRegistry,
-        TrustedProxyClientIpResolver clientIpResolver
+        TrustedProxyClientIpResolver clientIpResolver,
+        ObjectProvider<DatabaseRateLimitWindowStore> sharedWindowStoreProvider
     ) {
-        this(properties, meterRegistry, clientIpResolver, Clock.systemUTC());
+        this(
+            properties,
+            meterRegistry,
+            clientIpResolver,
+            Clock.systemUTC(),
+            sharedWindowStoreProvider.getIfAvailable()
+        );
     }
 
     AdminApiKeyAttemptLimiter(
@@ -42,10 +51,21 @@ public class AdminApiKeyAttemptLimiter {
         TrustedProxyClientIpResolver clientIpResolver,
         Clock clock
     ) {
+        this(properties, meterRegistry, clientIpResolver, clock, null);
+    }
+
+    AdminApiKeyAttemptLimiter(
+        AdminApiKeyProperties properties,
+        MeterRegistry meterRegistry,
+        TrustedProxyClientIpResolver clientIpResolver,
+        Clock clock,
+        DatabaseRateLimitWindowStore sharedWindowStore
+    ) {
         this.properties = properties;
         this.meterRegistry = meterRegistry;
         this.clientIpResolver = clientIpResolver;
         this.clock = clock;
+        this.sharedWindowStore = sharedWindowStore;
     }
 
     public boolean recordFailureAllowed(HttpServletRequest request) {
@@ -69,7 +89,14 @@ public class AdminApiKeyAttemptLimiter {
             logSaturationOncePerMinute(minute);
             return false;
         }
-        boolean allowed = result.count() <= properties.getFailedRequestsPerMinutePerIp();
+        boolean allowed = sharedWindowStore == null
+            ? result.count() <= properties.getFailedRequestsPerMinutePerIp()
+            : sharedWindowStore.tryAcquire(
+                "admin-api-key-ip",
+                clientIp,
+                minute,
+                properties.getFailedRequestsPerMinutePerIp()
+            );
         if (!allowed) {
             meterRegistry.counter("repoguard.security.admin_api_key.rate_limited").increment();
         }
