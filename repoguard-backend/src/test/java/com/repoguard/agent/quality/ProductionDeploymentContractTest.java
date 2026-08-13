@@ -121,6 +121,27 @@ class ProductionDeploymentContractTest {
     }
 
     @Test
+    void releaseKeepsAcrImagesCompatibleAndPublishesExternalAttestations() throws IOException {
+        String workflow = read(repositoryRoot().resolve(".github/workflows/release-images.yml"));
+
+        assertThat(workflow)
+            .contains(
+                "attestations: write",
+                "id-token: write",
+                "sbom: false",
+                "provenance: false",
+                "name: Generate backend SBOM",
+                "name: Generate frontend SBOM",
+                "anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610",
+                "actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8",
+                "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6",
+                "subject-digest: ${{ steps.backend_image.outputs.digest }}",
+                "subject-digest: ${{ steps.frontend_image.outputs.digest }}"
+            )
+            .doesNotContain("sbom: true", "provenance: mode=max");
+    }
+
+    @Test
     void deployPreflightsBeforeMutationAndRollbackRestoresAssetsFirst() throws IOException {
         String script = read(repositoryRoot().resolve("scripts/deploy-prod.sh"));
 
