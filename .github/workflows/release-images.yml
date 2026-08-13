@@ -373,8 +373,10 @@ jobs:
           context: repoguard-backend
           file: repoguard-backend/Dockerfile
           push: true
-          sbom: true
-          provenance: mode=max
+          # Aliyun ACR rejects BuildKit OCI attestation manifests with an empty config.
+          # Trivy still scans the published image below for HIGH/CRITICAL vulnerabilities.
+          sbom: false
+          provenance: false
           build-args: |
             OCI_VERSION=${{ env.IMAGE_VERSION }}
             OCI_REVISION=${{ github.sha }}
@@ -409,8 +411,10 @@ jobs:
           context: repoguard-frontend
           file: repoguard-frontend/Dockerfile
           push: true
-          sbom: true
-          provenance: mode=max
+          # Aliyun ACR rejects BuildKit OCI attestation manifests with an empty config.
+          # Trivy still scans the published image below for HIGH/CRITICAL vulnerabilities.
+          sbom: false
+          provenance: false
           build-args: |
             OCI_VERSION=${{ env.IMAGE_VERSION }}
             OCI_REVISION=${{ github.sha }}
