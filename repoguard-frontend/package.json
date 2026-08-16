@@ -19,26 +19,26 @@
     "node": ">=20.19.0"
   },
   "dependencies": {
-    "@lucide/vue": "^1.25.0",
+    "@lucide/vue": "^1.31.0",
     "echarts": "^6.0.0",
-    "element-plus": "^2.14.3",
-    "pinia": "^4.0.2",
-    "vue": "^3.5.40",
+    "element-plus": "^2.14.4",
+    "pinia": "^4.0.3",
+    "vue": "^3.5.41",
     "vue-router": "^5.2.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/node": "^26.1.1",
+    "@types/node": "^26.2.0",
     "@vitejs/plugin-vue": "^6.0.8",
-    "eslint": "^10.7.0",
-    "eslint-plugin-vue": "^10.9.2",
-    "jsdom": "^29.1.1",
-    "typescript": "~6.0.3",
-    "typescript-eslint": "^8.64.0",
+    "eslint": "^10.8.1",
+    "eslint-plugin-vue": "^10.10.0",
+    "jsdom": "^30.0.1",
+    "typescript": "~7.0.2",
+    "typescript-eslint": "^8.67.0",
     "unplugin-vue-components": "^32.1.0",
-    "vite": "^8.1.4",
+    "vite": "^8.2.1",
     "vitest": "^4.1.10",
     "vue-eslint-parser": "^10.4.1",
-    "vue-tsc": "^3.3.7"
+    "vue-tsc": "^3.3.9"
   }
 }
