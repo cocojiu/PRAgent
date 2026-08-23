@@ -122,6 +122,15 @@ class SupplyChainPolicyTest {
     }
 
     @Test
+    void backendPinsRabbitMqClientPastKnownHighSeverityVulnerabilities() throws IOException {
+        String pom = read("repoguard-backend/pom.xml");
+
+        assertThat(pom).contains(
+            "<rabbit-amqp-client.version>5.33.1</rabbit-amqp-client.version>"
+        );
+    }
+
+    @Test
     void vulnerabilityExceptionsRequireReasonAndUnexpiredDate() throws IOException {
         List<VulnerabilityException> exceptions = parseExceptions(read(".trivyignore.yaml"));
         LocalDate today = LocalDate.now(ZoneOffset.UTC);
