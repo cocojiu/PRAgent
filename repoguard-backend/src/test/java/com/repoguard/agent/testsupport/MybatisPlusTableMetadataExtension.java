@@ -13,6 +13,7 @@ import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.entity.NotificationChannelBinding;
 import com.repoguard.agent.entity.NotificationDeliveryLog;
 import com.repoguard.agent.entity.NotificationEvent;
+import com.repoguard.agent.entity.ReviewExecutionAttempt;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.entity.ReviewRepositoryDimension;
@@ -51,6 +52,7 @@ public final class MybatisPlusTableMetadataExtension implements BeforeAllCallbac
         NotificationChannelBinding.class,
         NotificationDeliveryLog.class,
         NotificationEvent.class,
+        ReviewExecutionAttempt.class,
         ReviewFinding.class,
         ReviewPolicyConfig.class,
         ReviewRepositoryDimension.class,
