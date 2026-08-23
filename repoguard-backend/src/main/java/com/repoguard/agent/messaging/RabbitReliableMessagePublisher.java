@@ -34,7 +34,20 @@ public class RabbitReliableMessagePublisher {
     private void publishOnce(Object message, RabbitPublishSpec spec, int attempt) {
         CorrelationData correlationData = new CorrelationData(correlationId(spec, attempt));
         try {
-            rabbitTemplate.convertAndSend(spec.exchange(), spec.routingKey(), message, correlationData);
+            if (spec.priority() == null) {
+                rabbitTemplate.convertAndSend(spec.exchange(), spec.routingKey(), message, correlationData);
+            } else {
+                rabbitTemplate.convertAndSend(
+                    spec.exchange(),
+                    spec.routingKey(),
+                    message,
+                    amqpMessage -> {
+                        amqpMessage.getMessageProperties().setPriority(Math.max(0, Math.min(spec.priority(), 10)));
+                        return amqpMessage;
+                    },
+                    correlationData
+                );
+            }
             CorrelationData.Confirm confirm = correlationData.getFuture()
                 .get(spec.normalizedConfirmTimeoutMs(), TimeUnit.MILLISECONDS);
             ReturnedMessage returned = correlationData.getReturned();

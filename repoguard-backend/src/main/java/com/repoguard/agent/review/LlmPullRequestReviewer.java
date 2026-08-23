@@ -89,12 +89,23 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
 
     @Override
     public ReviewResult review(ReviewTask task, PullRequestDiff diff) {
+        return review(task, diff, null);
+    }
+
+    @Override
+    public ReviewResult review(ReviewTask task, PullRequestDiff diff, ReviewDeadline deadline) {
         long startedAt = System.nanoTime();
+        if (deadline != null) {
+            deadline.requireRemaining("review_context");
+        }
         ReviewPolicySettings settings = reviewPolicyProvider.getSettings();
         LlmReviewContext promptContext = promptBuilder.buildContext(diff);
         String promptSummary = promptBuilder.promptSummary(diff, promptContext);
+        if (deadline != null) {
+            deadline.requireRemaining("review_context");
+        }
         return reviewPipeline.execute(
-            new ReviewPipelineContext(task, diff, settings, promptSummary, startedAt, this, promptContext)
+            new ReviewPipelineContext(task, diff, settings, promptSummary, startedAt, this, promptContext, deadline)
         );
     }
 

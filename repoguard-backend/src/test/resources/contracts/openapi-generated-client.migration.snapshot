@@ -27,6 +27,8 @@ fetchRabbitMqIntegrationConfig -> systemConfigControllerGetRabbitMqIntegration /
 fetchReviewCalibrationQueue -> reviewCalibrationControllerGetReviewCalibrationQueue // GET /api/v1/config/review-calibration/queue
 fetchReviewChangedFiles -> reviewControllerListChangedFiles // GET /api/v1/reviews/{id}/changed-files
 fetchReviewDetail -> reviewControllerGetReviewDetail // GET /api/v1/reviews/{id}
+fetchReviewExecutionAttemptResult -> reviewExecutionAttemptControllerGetResult // GET /api/v1/reviews/{taskId}/attempts/{attemptId}
+fetchReviewExecutionAttempts -> reviewExecutionAttemptControllerList // GET /api/v1/reviews/{taskId}/attempts
 fetchReviewFindings -> reviewControllerListReviewFindings // GET /api/v1/reviews/{id}/findings
 fetchReviewListSummary -> reviewControllerGetReviewListSummary // GET /api/v1/reviews/summary
 fetchReviewMissingTests -> reviewControllerListMissingTests // GET /api/v1/reviews/{id}/missing-tests

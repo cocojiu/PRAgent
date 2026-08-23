@@ -8,6 +8,10 @@ import com.repoguard.agent.dto.ManualReviewResponse;
 import com.repoguard.agent.review.ReviewTaskSource;
 import com.repoguard.agent.service.ReviewService;
 import java.util.Locale;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeParseException;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -51,8 +55,9 @@ public class GithubPullRequestWebhookService {
         Integer prNumber = requiredInt(pullRequest, "number");
         String title = textOrNull(pullRequest, "title");
         String commit = requiredText(head, "sha");
+        LocalDateTime headUpdatedAt = requiredTimestamp(pullRequest, "updated_at");
 
-        ManualReviewResponse response = reviewService.triggerManualReview(new ManualReviewRequest(
+        ManualReviewResponse response = reviewService.triggerWebhookReview(new ManualReviewRequest(
             organization,
             repositoryName,
             prNumber,
@@ -60,7 +65,7 @@ public class GithubPullRequestWebhookService {
             commit,
             branch,
             ReviewTaskSource.GITHUB_WEBHOOK.dtoCode()
-        ));
+        ), headUpdatedAt);
         return new GithubWebhookResponse(
             response.status(),
             response.message(),
@@ -133,6 +138,15 @@ public class GithubPullRequestWebhookService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "GitHub webhook payload is missing " + fieldName);
         }
         return value.asInt();
+    }
+
+    private LocalDateTime requiredTimestamp(JsonNode node, String fieldName) {
+        String value = requiredText(node, fieldName);
+        try {
+            return OffsetDateTime.parse(value).withOffsetSameInstant(ZoneOffset.UTC).toLocalDateTime();
+        } catch (DateTimeParseException exception) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "GitHub webhook payload has invalid " + fieldName);
+        }
     }
 
     private String textOrNull(JsonNode node, String fieldName) {

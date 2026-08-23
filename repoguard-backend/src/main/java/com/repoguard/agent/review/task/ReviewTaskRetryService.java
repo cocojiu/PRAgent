@@ -78,7 +78,8 @@ public class ReviewTaskRetryService {
             task.getPrNumber(),
             task.getCommitSha(),
             queuedAt,
-            LogContext.currentTraceId()
+            LogContext.currentTraceId(),
+            8
         );
         try {
             boolean queued = reviewTaskAfterCommitPublisher.publishAfterCommit(task, message, queuedAt);

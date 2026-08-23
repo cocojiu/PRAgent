@@ -10,13 +10,23 @@ import com.repoguard.agent.mapper.projection.ReviewFindingProjections.SeverityCo
 import java.util.List;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
+
+    @Update("""
+        update review_finding
+        set current_attempt = 0
+        where task_id = #{taskId}
+          and current_attempt = 1
+        """)
+    int markCurrentAttemptHistorical(Long taskId);
 
     @Select("""
         select rule_id as ruleId, count(*) as total
         from review_finding
         where category = 'FINDING'
+          and current_attempt = 1
           and rule_id is not null
           and trim(rule_id) <> ''
         group by rule_id
@@ -37,6 +47,7 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
                 then 1 else 0 end) as reviewedCount
         from review_finding
         where category = 'FINDING'
+          and current_attempt = 1
         """)
     RuleFeedbackStat selectReviewRuleFeedbackStat();
 
@@ -59,6 +70,7 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
                 then 1 else 0 end) as info
         from review_finding
         where task_id = #{taskId}
+          and current_attempt = 1
           and category = 'FINDING'
           and feedback_status_norm <> 'FALSE_POSITIVE'
           and enforcement_mode <> 'OBSERVE'
@@ -71,6 +83,7 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
                 select count(*)
                 from changed_file changed
                 where changed.task_id = #{taskId}
+                  and changed.current_attempt = 1
             ) as changedFileTotal,
             sum(case
                 when finding.category = 'FINDING'
@@ -110,6 +123,7 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
                 then 1 else 0 end) as info
         from review_finding finding
         where finding.task_id = #{taskId}
+          and finding.current_attempt = 1
         """)
     ReviewTaskDetailSummary selectReviewTaskDetailSummary(Long taskId);
 
@@ -140,16 +154,18 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
                 and finding.enforcement_mode <> 'OBSERVE'
                 then 1 else 0 end
             ) as commentableFindings
-        from review_finding finding force index (idx_review_finding_task_category_id)
+        from review_finding finding force index (idx_review_finding_current_category_id)
         where finding.task_id = #{taskId}
+          and finding.current_attempt = 1
           and finding.category = 'FINDING'
         """)
     GithubCommentPreviewFindingStat selectGithubCommentPreviewFindingStat(Long taskId);
 
     @Select("""
         select *
-        from review_finding finding force index (idx_review_finding_task_category_id)
+        from review_finding finding force index (idx_review_finding_current_category_id)
         where finding.task_id = #{taskId}
+          and finding.current_attempt = 1
           and finding.category = 'FINDING'
         order by finding.id asc
         limit #{limit} offset #{offset}
@@ -162,8 +178,9 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
 
     @Select("""
         select *
-        from review_finding finding force index (idx_review_finding_task_category_id)
+        from review_finding finding force index (idx_review_finding_current_category_id)
         where finding.task_id = #{taskId}
+          and finding.current_attempt = 1
           and finding.category = 'FINDING'
           and not exists (
               select 1
@@ -187,8 +204,9 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
 
     @Select("""
         select *
-        from review_finding finding force index (idx_review_finding_task_category_id)
+        from review_finding finding force index (idx_review_finding_current_category_id)
         where finding.task_id = #{taskId}
+          and finding.current_attempt = 1
           and finding.category = 'FINDING'
           and finding.id > #{afterFindingId}
           and not exists (

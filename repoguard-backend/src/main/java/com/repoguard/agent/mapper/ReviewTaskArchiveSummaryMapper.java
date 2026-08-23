@@ -48,6 +48,7 @@ public interface ReviewTaskArchiveSummaryMapper extends BaseMapper<ReviewTaskArc
             select task_id, count(*) as finding_count
             from review_finding
             where category = 'FINDING'
+              and current_attempt = 1
               and task_id in
             <foreach collection="taskIds" item="taskId" open="(" separator="," close=")">
                 #{taskId}
@@ -58,6 +59,7 @@ public interface ReviewTaskArchiveSummaryMapper extends BaseMapper<ReviewTaskArc
             select task_id, count(*) as missing_test_count
             from review_finding
             where category = 'MISSING_TEST'
+              and current_attempt = 1
               and task_id in
             <foreach collection="taskIds" item="taskId" open="(" separator="," close=")">
                 #{taskId}
@@ -67,7 +69,8 @@ public interface ReviewTaskArchiveSummaryMapper extends BaseMapper<ReviewTaskArc
         left join (
             select task_id, count(*) as changed_file_count
             from changed_file
-            where task_id in
+            where current_attempt = 1
+              and task_id in
             <foreach collection="taskIds" item="taskId" open="(" separator="," close=")">
                 #{taskId}
             </foreach>

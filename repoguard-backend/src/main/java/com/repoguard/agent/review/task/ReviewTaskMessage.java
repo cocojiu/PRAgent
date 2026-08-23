@@ -10,8 +10,21 @@ public record ReviewTaskMessage(
     Integer prNumber,
     String commit,
     LocalDateTime queuedAt,
-    String traceId
+    String traceId,
+    Integer priority
 ) implements ReviewTaskLogContextValues {
+
+    public ReviewTaskMessage(
+        Long taskId,
+        String organization,
+        String repository,
+        Integer prNumber,
+        String commit,
+        LocalDateTime queuedAt,
+        String traceId
+    ) {
+        this(taskId, organization, repository, prNumber, commit, queuedAt, traceId, 4);
+    }
 
     public ReviewTaskMessage(
         Long taskId,
@@ -21,6 +34,10 @@ public record ReviewTaskMessage(
         String commit,
         LocalDateTime queuedAt
     ) {
-        this(taskId, organization, repository, prNumber, commit, queuedAt, null);
+        this(taskId, organization, repository, prNumber, commit, queuedAt, null, 4);
+    }
+
+    public int normalizedPriority() {
+        return Math.max(0, Math.min(priority == null ? 4 : priority, 10));
     }
 }

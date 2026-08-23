@@ -128,6 +128,16 @@ class LlmReviewPipeline {
             }
             return applyStrategyEnforcement(context, state.result());
         } catch (RuntimeException ex) {
+            if (context.deadline() != null && context.deadline().exhausted()) {
+                return applyStrategyEnforcement(
+                    context,
+                    fallbackReview(
+                        context,
+                        ReviewBudgetExceededException.CATEGORY,
+                        ReviewBudgetExceededException.CATEGORY + ":llm"
+                    )
+                );
+            }
             ReviewPolicySettings settings = context.settings();
             if (settings != null && Boolean.TRUE.equals(settings.fallbackToRules())) {
                 return applyStrategyEnforcement(context, fallbackReview(context, ex));
@@ -168,7 +178,11 @@ class LlmReviewPipeline {
         private ReviewResult reviewWithOptionalChunks(ReviewPipelineContext context) {
             ReviewPolicySettings settings = context.settings();
             PullRequestDiff diff = context.diff();
-            ReviewBudget budget = ReviewBudget.startingAt(context.startedAtNanos(), pipelineBudget);
+            ReviewBudget budget = ReviewBudget.boundedBy(
+                context.startedAtNanos(),
+                pipelineBudget,
+                context.deadline()
+            );
             List<PullRequestDiffChunk> chunks = diffChunker.chunk(diff, settings);
             if (chunks.size() == 1) {
                 LlmCallResult callResult = callSingleChunk(context, settings, diff, budget);
@@ -280,7 +294,16 @@ class LlmReviewPipeline {
         @Override
         public ReviewPipelineState apply(ReviewPipelineState state) {
             ReviewPipelineContext context = state.context();
+            if (context.deadline() != null && context.deadline().exhausted()) {
+                return state.complete(state.llmReview().withIncompleteInput(
+                    ReviewBudgetExceededException.CATEGORY + ":rule_scan",
+                    "executionBudgetExceededStage=rule_scan"
+                ));
+            }
             ReviewResult ruleReview = ruleBasedReviewer.review(context.diff());
+            if (context.deadline() != null) {
+                ruleReview = ruleBasedReviewer.review(context.diff(), context.deadline());
+            }
             ReviewResult parsed = state.llmReview();
             ReviewResult merged = reviewMerger.mergeWithRuleReview(parsed, ruleReview);
             ReviewPolicySettings settings = context.settings();
@@ -302,6 +325,13 @@ class LlmReviewPipeline {
                 parsed.llmEstimatedCost(),
                 ReviewExecutionProvenance.from(settings.strategyRelease())
             );
+            if (ruleReview.statusDetail() != null
+                && ruleReview.statusDetail().contains(ReviewBudgetExceededException.CATEGORY)) {
+                completed = completed.withIncompleteInput(
+                    ruleReview.statusDetail(),
+                    "executionBudgetExceededStage=rule_scan"
+                );
+            }
             return state.withRuleReview(ruleReview).complete(completed);
         }
     }
@@ -339,7 +369,7 @@ class LlmReviewPipeline {
 
     private ReviewResult fallbackReview(ReviewPipelineContext context, String category, String reason) {
         metrics.llmFallback(category);
-        ReviewResult fallback = ruleBasedReviewer.review(context.diff());
+        ReviewResult fallback = ruleReview(context);
         ReviewPolicySettings settings = context.settings();
         return ReviewResult.fallback(
             fallback.riskLevel(),
@@ -355,6 +385,13 @@ class LlmReviewPipeline {
 
     private Long taskId(ReviewPipelineContext context) {
         return context.task() == null ? null : context.task().getId();
+    }
+
+    private ReviewResult ruleReview(ReviewPipelineContext context) {
+        if (context.deadline() == null) {
+            return ruleBasedReviewer.review(context.diff());
+        }
+        return ruleBasedReviewer.review(context.diff(), context.deadline());
     }
 
     private boolean isLlmReady(ReviewPolicySettings settings) {

@@ -1,0 +1,117 @@
+name: Production MySQL Binlog Archive
+
+on:
+  schedule:
+    - cron: '12 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-mysql-binlog-archive
+  cancel-in-progress: false
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Prepare SSH
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "${DEPLOY_HOST}" && test -n "${DEPLOY_SSH_KEY}"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${DEPLOY_SSH_KEY}" >~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -T 30 -p "${DEPLOY_PORT:-22}" "${DEPLOY_HOST}" >~/.ssh/known_hosts
+
+      - name: Archive closed binary logs
+        id: archive
+        shell: bash
+        env:
+          BACKUP_ENCRYPTION_PASSWORD: ${{ secrets.REPOGUARD_BACKUP_ENCRYPTION_PASSWORD }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          test -n "${BACKUP_ENCRYPTION_PASSWORD}" && test -n "${DEPLOY_USER}" && test -n "${DEPLOY_PATH}"
+          [[ "${DEPLOY_PATH}" == /opt/repoguard || "${DEPLOY_PATH}" == /opt/repoguard/* ]]
+          echo "::add-mask::${BACKUP_ENCRYPTION_PASSWORD}"
+          ssh_args=(-i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}")
+          scp_args=(-i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}")
+          ssh "${ssh_args[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "install -m 700 -d '${DEPLOY_PATH}/scripts' '/opt/repoguard/backups/mysql-binlog'"
+          scp "${scp_args[@]}" scripts/archive-prod-mysql-binlogs.sh \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/scripts/archive-prod-mysql-binlogs.sh"
+          ssh "${ssh_args[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "chmod 0700 '${DEPLOY_PATH}/scripts/archive-prod-mysql-binlogs.sh'"
+
+          result="${RUNNER_TEMP}/binlog-result.txt"
+          printf '%s\n' "${BACKUP_ENCRYPTION_PASSWORD}" \
+            | ssh "${ssh_args[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+                "cd '${DEPLOY_PATH}' && bash scripts/archive-prod-mysql-binlogs.sh --password-stdin" \
+            | tee "${result}"
+          [[ "$(awk -F= '$1 == "BINLOG_ARCHIVE_EMPTY" {print $2}' "${result}")" == "false" ]]
+          path="$(awk -F= '$1 == "BINLOG_ARCHIVE_PATH" {print $2}' "${result}")"
+          sha="$(awk -F= '$1 == "BINLOG_ARCHIVE_SHA256" {print $2}' "${result}")"
+          last="$(awk -F= '$1 == "BINLOG_LAST_FILE" {print $2}' "${result}")"
+          name="${path##*/}"
+          [[ "${path}" == "/opt/repoguard/backups/mysql-binlog/${name}" ]]
+          [[ "${name}" =~ ^repoguard-binlog-[0-9]{6}-[0-9]{6}-[0-9]{8}T[0-9]{6}Z\.tar\.gz\.enc$ ]]
+          [[ "${sha}" =~ ^[0-9a-f]{64}$ && "${last}" =~ ^mysql-bin\.[0-9]{6}$ ]]
+
+          directory="${RUNNER_TEMP}/mysql-binlog-offsite"
+          install -m 700 -d "${directory}"
+          scp "${scp_args[@]}" \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:${path}" \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:${path}.sha256" \
+            "${directory}/"
+          (cd "${directory}" && sha256sum --check --status "${name}.sha256")
+          {
+            echo "directory=${directory}"
+            echo "last=${last}"
+            echo "archive_name=${name}"
+          } >>"${GITHUB_OUTPUT}"
+
+      - name: Persist encrypted binlogs off host
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: production-mysql-binlog-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.archive.outputs.directory }}/
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+      - name: Acknowledge off-host archive
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
+          LAST_BINLOG: ${{ steps.archive.outputs.last }}
+        run: |
+          set -euo pipefail
+          [[ "${LAST_BINLOG}" =~ ^mysql-bin\.[0-9]{6}$ ]]
+          ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "cd '${DEPLOY_PATH}' && bash scripts/archive-prod-mysql-binlogs.sh --ack '${LAST_BINLOG}'"
+
+      - name: Summary
+        run: |
+          {
+            echo "## Production MySQL binary log archive"
+            echo "- Archive: \`${{ steps.archive.outputs.archive_name }}\`"
+            echo "- Last off-host binlog: \`${{ steps.archive.outputs.last }}\`"
+            echo "- PITR archive retention: \`14 days\`"
+          } >>"${GITHUB_STEP_SUMMARY}"

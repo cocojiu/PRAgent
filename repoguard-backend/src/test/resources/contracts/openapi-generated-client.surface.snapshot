@@ -15,7 +15,7 @@ dashboardControllerGetRules(): Promise<DashboardRules>; // GET /api/v1/dashboard
 dashboardControllerGetSummary(): Promise<DashboardMetric[]>; // GET /api/v1/dashboard/summary
 dataRetentionControllerCleanup(input?: { body?: DataRetentionCleanupRequest }): Promise<DataRetentionCleanupResponse>; // POST /api/v1/config/data-retention/cleanup
 dataRetentionControllerListCleanupAudits(input?: { query?: { backupReference?: string; mode?: string; page?: number; pageSize?: number; status?: string } }): Promise<PageResponse<DataRetentionCleanupAudit>>; // GET /api/v1/config/data-retention/cleanup-audits
-frontendPerformanceControllerRecordPerformance(input: { body: FrontendPerformanceReportRequest }): Promise<void>; // POST /api/v1/observability/frontend/performance
+frontendPerformanceControllerRecordPerformance(input: { body: FrontendPerformanceReport }): Promise<void>; // POST /api/v1/observability/frontend/performance
 githubWebhookControllerReceive(input: { body: Uint8Array }): Promise<GithubWebhookResponse>; // POST /api/v1/github/webhooks
 messageQueueHealthControllerGetHealth(): Promise<MessageQueueHealth>; // GET /api/v1/message-queue/health
 messageQueueHealthControllerRequeueTask(input: { path: { taskId: number } }): Promise<MessageQueueRequeueResponse>; // POST /api/v1/message-queue/tasks/{taskId}/requeue
@@ -47,6 +47,8 @@ reviewControllerRetryReview(input: { path: { id: number } }): Promise<ReviewRetr
 reviewControllerSubmitHumanReview(input: { path: { id: number }; body: HumanReviewRequest }): Promise<HumanReviewResponse>; // POST /api/v1/reviews/{id}/human-review
 reviewControllerTriggerManualReview(input: { body: ManualReviewRequest }): Promise<ManualReviewResponse>; // POST /api/v1/reviews/manual
 reviewControllerUpdateFindingFeedback(input: { path: { findingId: number; id: number }; body: FindingFeedbackRequest }): Promise<FindingFeedbackResponse>; // POST /api/v1/reviews/{id}/findings/{findingId}/feedback
+reviewExecutionAttemptControllerGetResult(input: { path: { attemptId: number; taskId: number }; query?: { page?: number; pageSize?: number } }): Promise<ReviewExecutionAttemptResult>; // GET /api/v1/reviews/{taskId}/attempts/{attemptId}
+reviewExecutionAttemptControllerList(input: { path: { taskId: number } }): Promise<ReviewExecutionAttempt[]>; // GET /api/v1/reviews/{taskId}/attempts
 systemConfigControllerCreateReviewRule(input: { body: ReviewRuleConfigRequest }): Promise<ReviewRuleConfig>; // POST /api/v1/config/review-rules
 systemConfigControllerGetGithubIntegration(): Promise<GithubIntegrationConfig>; // GET /api/v1/config/integrations/github
 systemConfigControllerGetMysqlIntegration(): Promise<ServiceIntegrationConfig>; // GET /api/v1/config/integrations/mysql

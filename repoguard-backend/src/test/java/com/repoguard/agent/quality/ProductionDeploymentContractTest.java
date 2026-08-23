@@ -276,6 +276,21 @@ class ProductionDeploymentContractTest {
             .doesNotContain("MYSQL_PWD=\"$MYSQL_ROOT_PASSWORD\"");
     }
 
+    @Test
+    void verifiedEncryptedBackupIsCopiedOffTheOnlyServerBeforeLocalRetention() throws IOException {
+        String workflow = read(repositoryRoot().resolve(".github/workflows/production-mysql-backup.yml"));
+
+        assertThat(workflow)
+            .contains("cron: '30 */6 * * *'")
+            .contains("Copy verified encrypted backup off host")
+            .contains("sha256sum --check --status")
+            .contains("actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a")
+            .contains("retention-days: 30")
+            .contains("steps.offsite.outputs.verified == 'true'");
+        assertThat(workflow.indexOf("Persist off-host encrypted backup"))
+            .isLessThan(workflow.indexOf("Apply verified seven-backup retention"));
+    }
+
     private int rabbitConsumerTimeout() throws IOException {
         String config = read(repositoryRoot().resolve("config/rabbitmq/rabbitmq.conf"));
         Matcher matcher = Pattern.compile(

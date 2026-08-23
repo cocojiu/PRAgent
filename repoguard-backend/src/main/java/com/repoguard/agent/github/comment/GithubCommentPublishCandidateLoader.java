@@ -141,6 +141,7 @@ public class GithubCommentPublishCandidateLoader {
         List<ChangedFile> files = changedFileMapper.selectList(
             new LambdaQueryWrapper<ChangedFile>()
                 .eq(ChangedFile::getTaskId, taskId)
+                .eq(ChangedFile::getCurrentAttempt, true)
                 .in(ChangedFile::getFilePath, paths)
                 .orderByAsc(ChangedFile::getId)
         );
@@ -171,7 +172,9 @@ public class GithubCommentPublishCandidateLoader {
 
     private long countChangedFiles(Long taskId) {
         Long total = changedFileMapper.selectCount(
-            new LambdaQueryWrapper<ChangedFile>().eq(ChangedFile::getTaskId, taskId)
+            new LambdaQueryWrapper<ChangedFile>()
+                .eq(ChangedFile::getTaskId, taskId)
+                .eq(ChangedFile::getCurrentAttempt, true)
         );
         return total == null ? 0L : total;
     }
@@ -180,6 +183,7 @@ public class GithubCommentPublishCandidateLoader {
         Long total = reviewFindingMapper.selectCount(
             new LambdaQueryWrapper<ReviewFinding>()
                 .eq(ReviewFinding::getTaskId, taskId)
+                .eq(ReviewFinding::getCurrentAttempt, true)
                 .eq(ReviewFinding::getCategory, "MISSING_TEST")
         );
         return total == null ? 0L : total;

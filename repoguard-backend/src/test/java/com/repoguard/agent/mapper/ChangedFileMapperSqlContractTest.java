@@ -23,10 +23,12 @@ class ChangedFileMapperSqlContractTest {
 
     private org.assertj.core.api.AbstractStringAssert<?> assertFindingPresenceSql(String sql) {
         return assertThat(sql)
-            .contains("from changed_file file force index (idx_changed_file_task)")
+            .contains("from changed_file file force index (idx_changed_file_current_attempt)")
             .contains("where file.task_id = #{taskid}")
-            .contains("from review_finding finding force index (idx_review_finding_task_category_file)")
+            .contains("file.current_attempt = 1")
+            .contains("from review_finding finding force index (idx_review_finding_current_category_file)")
             .contains("finding.task_id = file.task_id")
+            .contains("finding.current_attempt = 1")
             .contains("finding.category = 'finding'")
             .contains("finding.file_path = file.file_path")
             .contains("order by file.id asc")

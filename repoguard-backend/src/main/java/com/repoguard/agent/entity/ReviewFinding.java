@@ -10,6 +10,8 @@ public class ReviewFinding {
     @TableId
     private Long id;
     private Long taskId;
+    private Long attemptId;
+    private Boolean currentAttempt;
     private String category;
     private String severity;
     private String source;
@@ -68,6 +70,22 @@ public class ReviewFinding {
 
     public void setTaskId(Long taskId) {
         this.taskId = taskId;
+    }
+
+    public Long getAttemptId() {
+        return attemptId;
+    }
+
+    public void setAttemptId(Long attemptId) {
+        this.attemptId = attemptId;
+    }
+
+    public Boolean getCurrentAttempt() {
+        return currentAttempt;
+    }
+
+    public void setCurrentAttempt(Boolean currentAttempt) {
+        this.currentAttempt = currentAttempt;
     }
 
     public String getCategory() {

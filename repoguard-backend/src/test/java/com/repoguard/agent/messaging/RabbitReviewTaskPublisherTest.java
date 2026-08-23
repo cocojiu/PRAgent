@@ -19,6 +19,7 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.amqp.AmqpConnectException;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
+import org.springframework.amqp.core.MessagePostProcessor;
 import org.springframework.amqp.core.ReturnedMessage;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -77,13 +78,14 @@ class RabbitReviewTaskPublisherTest {
         RabbitReviewQueueProperties properties = properties();
         ReviewTaskMessage message = message();
         doAnswer(invocation -> {
-            CorrelationData correlationData = invocation.getArgument(3);
+            CorrelationData correlationData = invocation.getArgument(4);
             correlationData.getFuture().complete(new CorrelationData.Confirm(true, null));
             return null;
         }).when(rabbitTemplate).convertAndSend(
             eq("test.review.exchange"),
             eq("test.review.created"),
             eq(message),
+            any(MessagePostProcessor.class),
             any(CorrelationData.class)
         );
 
@@ -94,6 +96,7 @@ class RabbitReviewTaskPublisherTest {
             eq("test.review.exchange"),
             eq("test.review.created"),
             eq(message),
+            any(MessagePostProcessor.class),
             correlationCaptor.capture()
         );
         assertThat(correlationCaptor.getValue().getId()).contains("review-task-42-attempt-1");
@@ -105,10 +108,12 @@ class RabbitReviewTaskPublisherTest {
         RabbitReviewQueueProperties properties = properties();
         ReviewTaskMessage message = message();
         doAnswer(invocation -> {
-            CorrelationData correlationData = invocation.getArgument(3);
+            CorrelationData correlationData = invocation.getArgument(4);
             correlationData.getFuture().complete(new CorrelationData.Confirm(false, "broker refused"));
             return null;
-        }).when(rabbitTemplate).convertAndSend(any(String.class), any(String.class), eq(message), any(CorrelationData.class));
+        }).when(rabbitTemplate).convertAndSend(
+            any(String.class), any(String.class), eq(message), any(MessagePostProcessor.class), any(CorrelationData.class)
+        );
 
         RabbitReviewTaskPublisher publisher = publisher(rabbitTemplate, properties);
 
@@ -116,7 +121,10 @@ class RabbitReviewTaskPublisherTest {
             .isInstanceOf(MessagePublishException.class)
             .hasMessageContaining("nacked");
         verify(rabbitTemplate)
-            .convertAndSend(eq("test.review.exchange"), eq("test.review.created"), eq(message), any(CorrelationData.class));
+            .convertAndSend(
+                eq("test.review.exchange"), eq("test.review.created"), eq(message),
+                any(MessagePostProcessor.class), any(CorrelationData.class)
+            );
         assertThat(meterRegistry.find("repoguard.rabbit.publish.failed")
             .tag("failure_phase", "publish")
             .tag("reason", "nacked")
@@ -130,7 +138,7 @@ class RabbitReviewTaskPublisherTest {
         RabbitReviewQueueProperties properties = properties();
         ReviewTaskMessage message = message();
         doAnswer(invocation -> {
-            CorrelationData correlationData = invocation.getArgument(3);
+            CorrelationData correlationData = invocation.getArgument(4);
             correlationData.setReturned(new ReturnedMessage(
                 new Message(new byte[0], new MessageProperties()),
                 312,
@@ -140,7 +148,9 @@ class RabbitReviewTaskPublisherTest {
             ));
             correlationData.getFuture().complete(new CorrelationData.Confirm(true, null));
             return null;
-        }).when(rabbitTemplate).convertAndSend(any(String.class), any(String.class), eq(message), any(CorrelationData.class));
+        }).when(rabbitTemplate).convertAndSend(
+            any(String.class), any(String.class), eq(message), any(MessagePostProcessor.class), any(CorrelationData.class)
+        );
 
         RabbitReviewTaskPublisher publisher = publisher(rabbitTemplate, properties);
 
@@ -148,7 +158,10 @@ class RabbitReviewTaskPublisherTest {
             .isInstanceOf(MessagePublishException.class)
             .hasMessageContaining("unroutable");
         verify(rabbitTemplate)
-            .convertAndSend(eq("test.review.exchange"), eq("test.review.created"), eq(message), any(CorrelationData.class));
+            .convertAndSend(
+                eq("test.review.exchange"), eq("test.review.created"), eq(message),
+                any(MessagePostProcessor.class), any(CorrelationData.class)
+            );
     }
 
     @Test
@@ -158,7 +171,10 @@ class RabbitReviewTaskPublisherTest {
         ReviewTaskMessage message = message();
         doThrow(new AmqpConnectException(new RuntimeException("connection refused")))
             .when(rabbitTemplate)
-            .convertAndSend(any(String.class), any(String.class), eq(message), any(CorrelationData.class));
+            .convertAndSend(
+                any(String.class), any(String.class), eq(message),
+                any(MessagePostProcessor.class), any(CorrelationData.class)
+            );
 
         RabbitReviewTaskPublisher publisher = publisher(rabbitTemplate, properties);
 
@@ -166,7 +182,10 @@ class RabbitReviewTaskPublisherTest {
             .isInstanceOf(MessagePublishException.class)
             .hasMessageContaining("publish attempt failed");
         verify(rabbitTemplate)
-            .convertAndSend(eq("test.review.exchange"), eq("test.review.created"), eq(message), any(CorrelationData.class));
+            .convertAndSend(
+                eq("test.review.exchange"), eq("test.review.created"), eq(message),
+                any(MessagePostProcessor.class), any(CorrelationData.class)
+            );
     }
 
     @Test
@@ -175,7 +194,10 @@ class RabbitReviewTaskPublisherTest {
         ReviewTaskMessage message = message();
         doThrow(new AmqpConnectException(new RuntimeException("connection refused")))
             .when(rabbitTemplate)
-            .convertAndSend(any(String.class), any(String.class), eq(message), any(CorrelationData.class));
+            .convertAndSend(
+                any(String.class), any(String.class), eq(message),
+                any(MessagePostProcessor.class), any(CorrelationData.class)
+            );
 
         assertThatThrownBy(() -> publisher(rabbitTemplate, properties()).publishOnce(message))
             .isInstanceOf(MessagePublishException.class)
@@ -184,6 +206,7 @@ class RabbitReviewTaskPublisherTest {
             eq("test.review.exchange"),
             eq("test.review.created"),
             eq(message),
+            any(MessagePostProcessor.class),
             any(CorrelationData.class)
         );
     }

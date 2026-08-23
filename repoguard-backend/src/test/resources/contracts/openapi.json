@@ -4749,6 +4749,141 @@
         }
       }
     },
+    "/api/v1/reviews/{taskId}/attempts" : {
+      "get" : {
+        "tags" : [ "ReviewExecutionAttempt" ],
+        "operationId" : "reviewExecutionAttemptControllerList",
+        "x-controller-operation" : "ReviewExecutionAttemptController#list",
+        "parameters" : [ {
+          "name" : "taskId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "List<ReviewExecutionAttemptDto>",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "array",
+                      "items" : {
+                        "$ref" : "#/components/schemas/ReviewExecutionAttemptDto"
+                      }
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reviews/{taskId}/attempts/{attemptId}" : {
+      "get" : {
+        "tags" : [ "ReviewExecutionAttempt" ],
+        "operationId" : "reviewExecutionAttemptControllerGetResult",
+        "x-controller-operation" : "ReviewExecutionAttemptController#getResult",
+        "parameters" : [ {
+          "name" : "taskId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        }, {
+          "name" : "attemptId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        }, {
+          "name" : "page",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "default" : 1
+          }
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 100,
+            "default" : 50
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ReviewExecutionAttemptResultDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ReviewExecutionAttemptResultDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/system/health/summary" : {
       "get" : {
         "tags" : [ "SystemHealth" ],
@@ -7733,6 +7868,171 @@
           }
         },
         "required" : [ "enforcementMode", "expectedSnapshotId" ]
+      },
+      "ReviewExecutionAttemptDto" : {
+        "type" : "object",
+        "x-java-type" : "ReviewExecutionAttemptDto",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "attemptNo" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "generation" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "commitSha" : {
+            "type" : "string"
+          },
+          "inputFingerprint" : {
+            "type" : "string"
+          },
+          "workerId" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "failureCategory" : {
+            "type" : "string"
+          },
+          "budgetExhaustedStage" : {
+            "type" : "string"
+          },
+          "policyVersion" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "promptVersion" : {
+            "type" : "string"
+          },
+          "contextVersion" : {
+            "type" : "string"
+          },
+          "schemaVersion" : {
+            "type" : "string"
+          },
+          "verifierVersion" : {
+            "type" : "string"
+          },
+          "aggregationVersion" : {
+            "type" : "string"
+          },
+          "diffFetchMs" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "reviewMs" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "persistMs" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "totalMs" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "promptTokens" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "completionTokens" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "totalTokens" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "estimatedCost" : {
+            "type" : "number"
+          },
+          "queuedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "startedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "finishedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "payloadPurgedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "current" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "current" ]
+      },
+      "ReviewExecutionAttemptResultDto" : {
+        "type" : "object",
+        "x-java-type" : "ReviewExecutionAttemptResultDto",
+        "properties" : {
+          "attempt" : {
+            "$ref" : "#/components/schemas/ReviewExecutionAttemptDto"
+          },
+          "changedFiles" : {
+            "type" : "object",
+            "x-java-type" : "PageResponse<ReviewAttemptChangedFileDto>",
+            "properties" : {
+              "items" : {
+                "type" : "array",
+                "items" : {
+                  "$ref" : "#/components/schemas/ReviewAttemptChangedFileDto"
+                }
+              },
+              "total" : {
+                "type" : "integer",
+                "format" : "int64"
+              },
+              "nextCursor" : {
+                "type" : "string"
+              },
+              "hasMore" : {
+                "type" : "boolean"
+              }
+            },
+            "required" : [ "total", "hasMore" ]
+          },
+          "findings" : {
+            "type" : "object",
+            "x-java-type" : "PageResponse<ReviewAttemptFindingDto>",
+            "properties" : {
+              "items" : {
+                "type" : "array",
+                "items" : {
+                  "$ref" : "#/components/schemas/ReviewAttemptFindingDto"
+                }
+              },
+              "total" : {
+                "type" : "integer",
+                "format" : "int64"
+              },
+              "nextCursor" : {
+                "type" : "string"
+              },
+              "hasMore" : {
+                "type" : "boolean"
+              }
+            },
+            "required" : [ "total", "hasMore" ]
+          }
+        }
       },
       "ReviewFindingDto" : {
         "type" : "object",

@@ -2,26 +2,45 @@ package com.repoguard.agent.worker;
 
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.mapper.ReviewExecutionAttemptMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.review.LlmStatus;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.LocalDateTime;
 import java.util.Objects;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 @Component
 public class ReviewTaskClaimService {
 
     private final ReviewTaskMapper reviewTaskMapper;
     private final ReviewTaskStateMachine reviewTaskStateMachine;
+    private final ReviewExecutionAttemptMapper attemptMapper;
+    private final boolean useGenerationFence;
 
+    @Autowired
     public ReviewTaskClaimService(
+        ReviewTaskMapper reviewTaskMapper,
+        ReviewTaskStateMachine reviewTaskStateMachine,
+        ReviewExecutionAttemptMapper attemptMapper
+    ) {
+        this.reviewTaskMapper = Objects.requireNonNull(reviewTaskMapper, "reviewTaskMapper");
+        this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
+        this.attemptMapper = Objects.requireNonNull(attemptMapper, "attemptMapper");
+        this.useGenerationFence = true;
+    }
+
+    ReviewTaskClaimService(
         ReviewTaskMapper reviewTaskMapper,
         ReviewTaskStateMachine reviewTaskStateMachine
     ) {
         this.reviewTaskMapper = Objects.requireNonNull(reviewTaskMapper, "reviewTaskMapper");
         this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
+        this.attemptMapper = null;
+        this.useGenerationFence = false;
     }
 
     public String newClaimId() {
@@ -29,17 +48,19 @@ public class ReviewTaskClaimService {
     }
 
     public boolean claimReviewing(ReviewTask task, LocalDateTime startedAt, String claimId) {
-        int updated = reviewTaskMapper.update(
-            new UpdateWrapper<ReviewTask>()
-                .eq("id", task.getId())
-                .eq("status", reviewTaskStateMachine.statusWhenQueued())
-                .set("status", reviewTaskStateMachine.statusWhenReviewing())
-                .set("started_at", startedAt)
-                .set("review_claimed_at", startedAt)
-                .set("review_claimed_by", claimId)
-                .set("publish_claimed_at", null)
-                .set("publish_claimed_by", null)
-        );
+        int updated = useGenerationFence
+            ? reviewTaskMapper.claimCurrentReview(task.getId(), startedAt, claimId)
+            : reviewTaskMapper.update(
+                new UpdateWrapper<ReviewTask>()
+                    .eq("id", task.getId())
+                    .eq("status", reviewTaskStateMachine.statusWhenQueued())
+                    .set("status", reviewTaskStateMachine.statusWhenReviewing())
+                    .set("started_at", startedAt)
+                    .set("review_claimed_at", startedAt)
+                    .set("review_claimed_by", claimId)
+                    .set("publish_claimed_at", null)
+                    .set("publish_claimed_by", null)
+            );
         if (updated <= 0) {
             return false;
         }
@@ -96,8 +117,19 @@ public class ReviewTaskClaimService {
         return true;
     }
 
+    @Transactional
     public boolean markRequeuePendingIfClaimOwned(
         ReviewTask task,
+        LocalDateTime expiredBefore,
+        String recoveryReason
+    ) {
+        return markRequeuePendingIfClaimOwned(task, LocalDateTime.now(), expiredBefore, recoveryReason);
+    }
+
+    @Transactional
+    public boolean markRequeuePendingIfClaimOwned(
+        ReviewTask task,
+        LocalDateTime recoveredAt,
         LocalDateTime expiredBefore,
         String recoveryReason
     ) {
@@ -117,6 +149,15 @@ public class ReviewTaskClaimService {
         );
         if (updated <= 0) {
             return false;
+        }
+        if (attemptMapper != null && task.getCurrentAttemptId() != null) {
+            attemptMapper.abandonRunningAttempt(
+                task.getCurrentAttemptId(),
+                task.getId(),
+                task.getReviewClaimedBy(),
+                "EXECUTION_LEASE_EXPIRED",
+                recoveredAt
+            );
         }
         task.setStatus(reviewTaskStateMachine.statusWhenRequeuePending());
         task.setLlmStatus(LlmStatus.PENDING.code());

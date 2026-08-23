@@ -29,6 +29,7 @@ import com.repoguard.agent.service.ReviewTaskCommandService;
 import com.repoguard.agent.service.ReviewTaskQueryService;
 import java.util.List;
 import java.util.Objects;
+import java.time.LocalDateTime;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -145,6 +146,12 @@ public class ReviewServiceImpl implements ReviewService {
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public ManualReviewResponse triggerManualReview(ManualReviewRequest request) {
         return reviewTaskCommandService.triggerManualReview(request);
+    }
+
+    @Override
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public ManualReviewResponse triggerWebhookReview(ManualReviewRequest request, LocalDateTime headUpdatedAt) {
+        return reviewTaskCommandService.triggerWebhookReview(request, headUpdatedAt);
     }
 
     @Override

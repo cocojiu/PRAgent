@@ -11,7 +11,7 @@ spring:
   task:
     scheduling:
       pool:
-        size: ${REPOGUARD_SCHEDULER_POOL_SIZE:4}
+        size: ${REPOGUARD_SCHEDULER_POOL_SIZE:2}
       thread-name-prefix: repoguard-scheduler-
       shutdown:
         await-termination: true
@@ -74,6 +74,17 @@ management:
 
 repoguard:
   review:
+    execution:
+      # End-to-end budget starts before GitHub diff retrieval and covers rule,
+      # LLM and result persistence stages. Terminal persistence may use a short
+      # cleanup grace so the partial outcome is never retried indefinitely.
+      budget-ms: ${REPOGUARD_REVIEW_EXECUTION_BUDGET_MS:600000}
+      persistence-reserve-ms: ${REPOGUARD_REVIEW_PERSISTENCE_RESERVE_MS:30000}
+      terminal-persistence-grace-ms: ${REPOGUARD_REVIEW_TERMINAL_PERSISTENCE_GRACE_MS:5000}
+      large-pr:
+        enabled: ${REPOGUARD_REVIEW_LARGE_PR_DEGRADATION_ENABLED:true}
+        max-files-for-llm: ${REPOGUARD_REVIEW_LARGE_PR_MAX_FILES_FOR_LLM:300}
+        max-changes-for-llm: ${REPOGUARD_REVIEW_LARGE_PR_MAX_CHANGES_FOR_LLM:15000}
     changed-file-context:
       max-files: ${REPOGUARD_REVIEW_CONTEXT_MAX_FILES:100}
       max-file-bytes: ${REPOGUARD_REVIEW_CONTEXT_MAX_FILE_BYTES:524288}
@@ -97,18 +108,16 @@ repoguard:
       minimum-confidence: ${REPOGUARD_HUMAN_REVIEW_MINIMUM_CONFIDENCE:HIGH}
       require-blocking: ${REPOGUARD_HUMAN_REVIEW_REQUIRE_BLOCKING:true}
     pipeline:
-      # Total wall-clock budget for one LLM review. Layering (each backstops the
-      # previous): this < RabbitMQ consumer_timeout < app.rabbit.review
-      # .review-execution-timeout-ms. ReviewTimeoutLayeringValidator enforces the
-      # two application-side bounds at startup.
-      budget-ms: ${REPOGUARD_REVIEW_PIPELINE_BUDGET_MS:600000}
+      # The LLM sub-budget leaves time inside the end-to-end execution budget
+      # for diff retrieval, deterministic rules and terminal persistence.
+      budget-ms: ${REPOGUARD_REVIEW_PIPELINE_BUDGET_MS:480000}
       max-total-chunks: ${REPOGUARD_REVIEW_PIPELINE_MAX_TOTAL_CHUNKS:64}
-      max-in-flight-chunks: ${REPOGUARD_REVIEW_PIPELINE_MAX_IN_FLIGHT_CHUNKS:3}
+      max-in-flight-chunks: ${REPOGUARD_REVIEW_PIPELINE_MAX_IN_FLIGHT_CHUNKS:2}
   schema:
     # Roles that do not own Flyway migrations refuse to start below this version.
     # Keep in sync with the highest version under db/migration; the production
     # readiness check enforces the match.
-    expected-version: ${REPOGUARD_SCHEMA_EXPECTED_VERSION:64}
+    expected-version: ${REPOGUARD_SCHEMA_EXPECTED_VERSION:67}
   async:
     github-comment-threads: ${REPOGUARD_ASYNC_GITHUB_COMMENT_THREADS:2}
     github-comment-queue-capacity: ${REPOGUARD_ASYNC_GITHUB_COMMENT_QUEUE_CAPACITY:100}
@@ -122,7 +131,7 @@ repoguard:
     dashboard-queue-capacity: ${REPOGUARD_ASYNC_DASHBOARD_QUEUE_CAPACITY:16}
     rabbit-health-threads: ${REPOGUARD_ASYNC_RABBIT_HEALTH_THREADS:1}
     rabbit-health-queue-capacity: ${REPOGUARD_ASYNC_RABBIT_HEALTH_QUEUE_CAPACITY:4}
-    llm-chunk-threads: ${REPOGUARD_ASYNC_LLM_CHUNK_THREADS:3}
+    llm-chunk-threads: ${REPOGUARD_ASYNC_LLM_CHUNK_THREADS:2}
     llm-chunk-queue-capacity: ${REPOGUARD_ASYNC_LLM_CHUNK_QUEUE_CAPACITY:100}
     shutdown-wait-seconds: ${REPOGUARD_ASYNC_SHUTDOWN_WAIT_SECONDS:10}
     rabbit-health-cache-millis: ${REPOGUARD_ASYNC_RABBIT_HEALTH_CACHE_MILLIS:5000}
@@ -139,6 +148,8 @@ repoguard:
     operation-audit-days: ${REPOGUARD_OPERATION_AUDIT_RETENTION_DAYS:365}
     system-setting-log-days: ${REPOGUARD_SYSTEM_SETTING_LOG_RETENTION_DAYS:365}
     notification-log-days: ${REPOGUARD_NOTIFICATION_LOG_RETENTION_DAYS:90}
+    review-attempt-payload-days: ${REPOGUARD_REVIEW_ATTEMPT_PAYLOAD_RETENTION_DAYS:90}
+    review-attempt-metadata-days: ${REPOGUARD_REVIEW_ATTEMPT_METADATA_RETENTION_DAYS:180}
   observability:
     thresholds:
       enabled: ${REPOGUARD_OBSERVABILITY_THRESHOLDS_ENABLED:true}
@@ -321,13 +332,13 @@ app:
         rate-limit-for-period: ${REPOGUARD_LLM_RATE_LIMIT_FOR_PERIOD:10}
         rate-limit-refresh-millis: ${REPOGUARD_LLM_RATE_LIMIT_REFRESH_MILLIS:1000}
         rate-limit-timeout-millis: ${REPOGUARD_LLM_RATE_LIMIT_TIMEOUT_MILLIS:0}
-        bulkhead-max-concurrent-calls: ${REPOGUARD_LLM_BULKHEAD_MAX_CONCURRENT_CALLS:4}
+        bulkhead-max-concurrent-calls: ${REPOGUARD_LLM_BULKHEAD_MAX_CONCURRENT_CALLS:2}
         bulkhead-max-wait-millis: ${REPOGUARD_LLM_BULKHEAD_MAX_WAIT_MILLIS:250}
   rabbit:
     review:
-      exchange: ${REPOGUARD_REVIEW_EXCHANGE:repoguard.review.exchange.v2}
-      queue: ${REPOGUARD_REVIEW_QUEUE:repoguard.review.queue.v2}
-      routing-key: ${REPOGUARD_REVIEW_ROUTING_KEY:repoguard.review.created.v2}
+      exchange: ${REPOGUARD_REVIEW_EXCHANGE:repoguard.review.exchange.v3}
+      queue: ${REPOGUARD_REVIEW_QUEUE:repoguard.review.queue.v3}
+      routing-key: ${REPOGUARD_REVIEW_ROUTING_KEY:repoguard.review.created.v3}
       dead-letter-exchange: ${REPOGUARD_REVIEW_DLX:repoguard.review.dlx}
       dead-letter-queue: ${REPOGUARD_REVIEW_DLQ:repoguard.review.dlq}
       dead-letter-routing-key: ${REPOGUARD_REVIEW_DLQ_ROUTING_KEY:repoguard.review.dead}

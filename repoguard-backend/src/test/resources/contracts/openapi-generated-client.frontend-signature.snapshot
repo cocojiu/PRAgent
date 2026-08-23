@@ -27,6 +27,8 @@ fetchRabbitMqIntegrationConfig -> systemConfigControllerGetRabbitMqIntegration()
 fetchReviewCalibrationQueue -> reviewCalibrationControllerGetReviewCalibrationQueue(input?: { query?: { includeIgnored?: boolean; limit?: number; ruleId: string } }): Promise<ReviewCalibrationQueue>; // GET /api/v1/config/review-calibration/queue
 fetchReviewChangedFiles -> reviewControllerListChangedFiles(input: { path: { id: number }; query?: { hasFinding?: boolean; page?: number; pageSize?: number } }): Promise<PageResponse<ChangedFile>>; // GET /api/v1/reviews/{id}/changed-files
 fetchReviewDetail -> reviewControllerGetReviewDetail(input: { path: { id: number } }): Promise<ReviewTaskSummary>; // GET /api/v1/reviews/{id}
+fetchReviewExecutionAttemptResult -> reviewExecutionAttemptControllerGetResult(input: { path: { attemptId: number; taskId: number }; query?: { page?: number; pageSize?: number } }): Promise<ReviewExecutionAttemptResult>; // GET /api/v1/reviews/{taskId}/attempts/{attemptId}
+fetchReviewExecutionAttempts -> reviewExecutionAttemptControllerList(input: { path: { taskId: number } }): Promise<ReviewExecutionAttempt[]>; // GET /api/v1/reviews/{taskId}/attempts
 fetchReviewFindings -> reviewControllerListReviewFindings(input: { path: { id: number }; query?: { category?: string; feedbackStatus?: string; page?: number; pageSize?: number; severity?: string } }): Promise<PageResponse<ReviewFinding>>; // GET /api/v1/reviews/{id}/findings
 fetchReviewListSummary -> reviewControllerGetReviewListSummary(input?: { query?: { keyword?: string; repository?: string; riskLevel?: string; source?: string; status?: string; triggerSource?: string } }): Promise<ReviewTaskListSummary>; // GET /api/v1/reviews/summary
 fetchReviewMissingTests -> reviewControllerListMissingTests(input: { path: { id: number }; query?: { page?: number; pageSize?: number } }): Promise<PageResponse<MissingTest>>; // GET /api/v1/reviews/{id}/missing-tests
@@ -53,7 +55,7 @@ pauseSecretReEncryptionJob -> systemConfigControllerPauseSecretReEncryptionJob(i
 publishGithubComments -> reviewControllerPublishGithubComments(input: { path: { id: number } }): Promise<GithubCommentPublish>; // POST /api/v1/reviews/{id}/github-comments
 reEncryptSecrets -> systemConfigControllerReEncryptSecrets(input: { body: SecretReEncryptionRequest }): Promise<SecretReEncryptionJob>; // POST /api/v1/config/secrets/re-encryption
 register -> authControllerRegister(input: { body: AuthRegisterRequest }): Promise<AuthResponse>; // POST /api/v1/auth/register
-reportFrontendPerformance -> frontendPerformanceControllerRecordPerformance(input: { body: FrontendPerformanceReportRequest }): Promise<void>; // POST /api/v1/observability/frontend/performance
+reportFrontendPerformance -> frontendPerformanceControllerRecordPerformance(input: { body: FrontendPerformanceReport }): Promise<void>; // POST /api/v1/observability/frontend/performance
 requeueMessageQueueTask -> messageQueueHealthControllerRequeueTask(input: { path: { taskId: number } }): Promise<MessageQueueRequeueResponse>; // POST /api/v1/message-queue/tasks/{taskId}/requeue
 resetRefreshToken -> authControllerResetRefreshToken(input: { body: AuthRefreshTokenResetRequest }): Promise<AuthResponse>; // POST /api/v1/auth/refresh-token/reset
 resumeSecretReEncryptionJob -> systemConfigControllerResumeSecretReEncryptionJob(input: { path: { jobId: number } }): Promise<SecretReEncryptionJob>; // POST /api/v1/config/secrets/re-encryption/jobs/{jobId}/resume

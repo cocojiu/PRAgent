@@ -83,16 +83,16 @@ class FrontendDeploymentContractTest {
     }
 
     @Test
-    void productionCaddyOnlyProxiesPlainHttpHealthChecks() throws IOException {
+    void productionCaddyKeepsHealthAndCanonicalFallbackContractsOnPlainHttp() throws IOException {
         Path repositoryRoot = findRepositoryRoot();
         String caddyfile = read(repositoryRoot.resolve("Caddyfile"));
         String plainHttpCatchAll = requiredSiteBlock(caddyfile, ":80");
         String normalized = plainHttpCatchAll.replaceAll("\\s+", " ").trim();
 
-        assertThat(normalized).contains(
-            "@health path /actuator/health handle @health { reverse_proxy frontend:8080 } "
-                + "handle { respond \"HTTPS canonical host required\" 421 }"
-        );
+        String healthHandler = "@health path /actuator/health handle @health { reverse_proxy frontend:8080 }";
+        String canonicalFallback = "handle { respond \"HTTPS canonical host required\" 421 }";
+        assertThat(normalized).contains(healthHandler, canonicalFallback);
+        assertThat(normalized.indexOf(healthHandler)).isLessThan(normalized.indexOf(canonicalFallback));
         assertThat(occurrences(plainHttpCatchAll, "reverse_proxy frontend:8080")).isEqualTo(1);
     }
 

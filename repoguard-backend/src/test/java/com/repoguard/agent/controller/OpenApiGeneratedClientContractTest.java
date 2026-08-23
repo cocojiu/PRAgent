@@ -34,6 +34,7 @@ class OpenApiGeneratedClientContractTest {
         "messageQueueHealthController",
         "reviewCalibrationController",
         "reviewController",
+        "reviewExecutionAttemptController",
         "notificationController",
         "notificationIntegrationController",
         "systemConfigController",

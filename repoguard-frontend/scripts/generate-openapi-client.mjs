@@ -8,6 +8,10 @@ const openApiPath = resolve(
   frontendDirectory,
   "../repoguard-backend/src/test/resources/contracts/openapi.json"
 );
+const typeAliasesPath = resolve(
+  frontendDirectory,
+  "../repoguard-backend/src/test/resources/contracts/typescript-type-aliases.json"
+);
 const outputPath = resolve(
   frontendDirectory,
   "src/api/generated/openapiOperations.ts"
@@ -21,6 +25,7 @@ const migratedOperationPrefixes = [
   "messageQueueHealthController",
   "reviewCalibrationController",
   "reviewController",
+  "reviewExecutionAttemptController",
   "notificationController",
   "notificationIntegrationController",
   "systemConfigController",
@@ -29,29 +34,9 @@ const migratedOperationPrefixes = [
 ];
 const httpMethods = ["get", "post", "put", "delete"];
 
-const javaTypeAliases = new Map([
-  ["AuthCurrentUserDto", "CurrentUser"],
-  ["CacheStatsResponse", "CacheStats"],
-  ["ChartSliceDto", "Required<ChartSlice>"],
-  ["ConnectionTestResultDto", "ConnectionTestResult"],
-  ["DashboardLlmQualityResponse", "DashboardLlmQuality"],
-  ["DashboardOverviewResponse", "DashboardOverview"],
-  ["DashboardRulesResponse", "DashboardRules"],
-  ["FrontendPerformanceReportRequest", "FrontendPerformanceReport"],
-  ["GithubCommentPreviewResponse", "GithubCommentPreview"],
-  ["GithubCommentPublicationHistoryResponse", "GithubCommentPublicationHistory"],
-  ["GithubCommentPublishResponse", "GithubCommentPublish"],
-  ["GithubPullRequestOptionsResponse", "GithubPullRequestOptions"],
-  ["MessageQueueHealthResponse", "MessageQueueHealth"],
-  ["NotificationCenterDto", "NotificationCenter"],
-  ["ReviewTaskListItem", "ReviewTask"],
-  ["ReviewTaskStatusResponse", "ReviewTaskStatus"],
-  ["ReviewTimelineItem", "TimelineItem"],
-  ["ServiceIntegrationConfigDto", "ServiceIntegrationConfig"],
-  ["SystemSettingsDto", "SystemSettings"],
-  ["UserManagementItemDto", "ManagedUser"],
-  ["UserOperationAuditDto", "UserOperationAudit"]
-]);
+const javaTypeAliases = new Map(
+  Object.entries(JSON.parse(await readFile(typeAliasesPath, "utf8")))
+);
 
 const document = JSON.parse(await readFile(openApiPath, "utf8"));
 const operations = [];

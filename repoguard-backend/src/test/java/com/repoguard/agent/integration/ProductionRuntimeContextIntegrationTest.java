@@ -1071,6 +1071,7 @@ class ProductionRuntimeContextIntegrationTest {
             QUALITY_EXPLAIN_TASK_COUNT * QUALITY_EXPLAIN_FINDINGS_PER_TASK
         );
         for (Long taskId : taskIds) {
+            Long attemptId = ensureExecutionAttemptFixture(jdbcTemplate, taskId);
             for (int index = 0; index < QUALITY_EXPLAIN_FINDINGS_PER_TASK; index++) {
                 int duplicatePattern = index % 10;
                 String extension = switch (duplicatePattern % 4) {
@@ -1087,6 +1088,7 @@ class ProductionRuntimeContextIntegrationTest {
                 };
                 findingArguments.add(new Object[] {
                     taskId,
+                    attemptId,
                     "FINDING",
                     duplicatePattern % 3 == 0 ? "HIGH" : "LOW",
                     "RULE",
@@ -1103,10 +1105,10 @@ class ProductionRuntimeContextIntegrationTest {
         }
         jdbcTemplate.batchUpdate("""
             insert into review_finding (
-                task_id, category, severity, source, rule_id, file_path,
+                task_id, attempt_id, category, severity, source, rule_id, file_path,
                 line_number, message, recommendation, feedback_status,
                 anchor_type, is_blocking
-            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, findingArguments);
     }
 
@@ -1263,14 +1265,16 @@ class ProductionRuntimeContextIntegrationTest {
         String feedbackStatus,
         String message
     ) {
+        Long attemptId = ensureExecutionAttemptFixture(jdbcTemplate, taskId);
         jdbcTemplate.update("""
             insert into review_finding (
-                task_id, category, severity, source, rule_id, file_path,
+                task_id, attempt_id, category, severity, source, rule_id, file_path,
                 line_number, message, recommendation, feedback_status, anchor_type
-            ) values (?, 'FINDING', ?, 'RULE', ?, 'src/main/java/example/Quality.java',
+            ) values (?, ?, 'FINDING', ?, 'RULE', ?, 'src/main/java/example/Quality.java',
                       ?, ?, 'quality baseline recommendation', ?, ?)
             """,
             taskId,
+            attemptId,
             severity,
             ruleId,
             lineNumber,
@@ -1435,6 +1439,40 @@ class ProductionRuntimeContextIntegrationTest {
             allowedRequests,
             percentile(durations, 0.95d),
             percentile(durations, 0.99d)
+        );
+    }
+
+    private Long ensureExecutionAttemptFixture(JdbcTemplate jdbcTemplate, Long taskId) {
+        jdbcTemplate.update("""
+            insert into review_execution_attempt (
+                task_id, attempt_no, generation, commit_sha, input_fingerprint,
+                claim_id, worker_id, status, diff_fetch_ms, review_ms, persist_ms,
+                total_ms, queued_at, started_at, finished_at, created_at
+            )
+            select
+                task.id, 1, task.generation, task.commit_sha,
+                sha2(concat_ws('|', task.organization, task.repository, task.pr_number,
+                    task.commit_sha, task.generation), 256),
+                'integration-fixture', 'integration-test', 'COMPLETED',
+                0, 0, 0, 0, task.created_at, coalesce(task.started_at, task.created_at),
+                coalesce(task.finished_at, task.created_at), task.created_at
+            from review_task task
+            where task.id = ?
+              and not exists (
+                  select 1 from review_execution_attempt attempt where attempt.task_id = task.id
+              )
+            """, taskId);
+        jdbcTemplate.update("""
+            update review_task task
+            join review_execution_attempt attempt
+              on attempt.task_id = task.id and attempt.attempt_no = 1
+            set task.current_attempt_id = attempt.id
+            where task.id = ? and task.current_attempt_id is null
+            """, taskId);
+        return jdbcTemplate.queryForObject(
+            "select current_attempt_id from review_task where id = ?",
+            Long.class,
+            taskId
         );
     }
 

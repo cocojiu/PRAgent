@@ -22,6 +22,7 @@ import com.repoguard.agent.dto.FindingFeedbackResponse;
 import com.repoguard.agent.dto.HumanReviewRequest;
 import com.repoguard.agent.dto.HumanReviewResponse;
 import java.util.List;
+import java.time.LocalDateTime;
 
 public interface ReviewService {
 
@@ -80,6 +81,10 @@ public interface ReviewService {
     GithubPullRequestOptionsResponse listConfiguredGithubPullRequests();
 
     ManualReviewResponse triggerManualReview(ManualReviewRequest request);
+
+    default ManualReviewResponse triggerWebhookReview(ManualReviewRequest request, LocalDateTime headUpdatedAt) {
+        return triggerManualReview(request);
+    }
 
     HumanReviewResponse submitHumanReview(Long id, HumanReviewRequest request, String operator);
 

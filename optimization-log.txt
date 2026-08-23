@@ -9,3 +9,146 @@ scope: 消除评审列表由客户端提交 cursorCreatedAt、cursorId、totalHi
 changes: 使用服务端返回的 nextCursor/hasMore；游标经 HMAC 签名并绑定规范化筛选条件与 pageSize；游标携带可信总数避免后续页重复 COUNT；非法或跨查询复用 cursor 返回 BAD_REQUEST；游标查询多取一条识别是否还有下一页。
 local-validation: ApplicationArchitectureTest、ApiContractTest、OpenApiPathsContractTest、OpenApiGeneratedClientContractTest、ReviewControllerTest、ReviewServiceImplTest、ReviewTaskListQueryBuilderTest、ReviewTaskQueryServiceImplTest、SpringBeanConstructorSelectionTest 定向验证通过，共 166 项；后端排除受工作区既有未暂存 Caddyfile 影响的 FrontendDeploymentContractTest 后通过 2271 项、跳过 7 项；前端 contracts 与任务列表测试通过，共 24 项；前端类型检查、Lint、生产构建通过。
 remote-action: pending
+
+2026-08-09 | item-03 | codebase-optimization-proposals
+scope: 基于 2026-08-09 当前后端、前端、数据库迁移、运行时配置和现有契约测试代码进行静态分析，形成下一阶段优化建议；本条仅记录建议，不代表已修改生产代码。
+status: proposed
+
+baseline:
+- 后端以 Java 25、Spring Boot 4.1、MyBatis-Plus、MySQL 8、RabbitMQ、Flyway、Resilience4j 为主；前端以 Node 22、Vue 3.5、Vite 8、TypeScript 6、ECharts 6 为主。
+- 后端使用 JDK 25 执行 `mvn -DskipTests package` 通过；前端执行 `npm run build` 通过，类型检查通过，构建预算通过。
+- 当前前端构建指标：initial JavaScript gzip 92.2 KiB / 150 KiB，initial CSS gzip 12.0 KiB / 24 KiB，最大异步 JavaScript 为 ECharts 117.23 KiB / 140 KiB。ECharts 已使用 `echarts/core` 和按需组件，当前属于需要持续监控的性能项，不建议无数据直接重构。
+- 本次未执行完整后端测试集；文档写入不会新增测试脚本、测试生成物或 Markdown 文件。
+
+findings:
+
+[S0][security][认证限流容量耗尽时存在 fail-open]
+evidence:
+- `repoguard-backend/src/main/java/com/repoguard/agent/security/AuthAttemptLimiter.java:56-80` 在单个维度达到 20,000 个跟踪 key 后记录饱和指标，但对新 key 返回 `true`，日志也明确写出 `allowing new keys without limiting`。
+- 同类的 `AdminApiKeyAttemptLimiter` 和 `GithubWebhookRateLimiter` 在容量耗尽时拒绝未跟踪客户端，当前三套限流策略的安全语义不一致。
+risk:
+- 攻击者可以通过制造大量新 account/IP 组合耗尽本地窗口，使后续新 key 绕过认证请求限流；同时限流器仍是单实例内存状态，无法形成全局保护。
+proposal:
+- 短期将容量耗尽策略改为“保守拒绝”或进入固定容量的全局 overflow bucket，不能仅因内存容量不足而放行。
+- 使用带过期策略的有界缓存或固定窗口桶，明确 `saturated`、`rejected_by_overflow`、`rate_limited` 三类指标，并加入告警阈值。
+- 中长期与 API 横向扩容方案合并，迁移到网关或共享限流存储；本地限流仅作为故障降级保护。
+acceptance:
+- 新 key 触发容量上限后不会绕过限制；饱和期间的行为、429 响应和审计指标有定向测试覆盖。
+- 经过压测验证，限流器在高基数输入下内存上界稳定，且不会因清理竞争导致计数错误。
+priority: 立即处理，优先于普通性能优化。
+
+[S1][availability][生产 API 被进程内状态限制为单实例]
+evidence:
+- `repoguard-backend/src/main/java/com/repoguard/agent/config/RuntimeRoleContract.java:139-153` 明确要求 API `instance-count=1`，原因是认证/ webhook 限流和 dashboard snapshot 使用进程内状态。
+- `scripts/deploy-prod.sh:578-592` 在部署前再次拒绝非 1 的 API 实例数。
+- 进程内状态还包括 `DashboardSnapshotStore` 的 snapshot、loading lock、refreshing key，`AuthAttemptLimiter`/`GithubWebhookRateLimiter` 的窗口，以及 `ManualReviewIdempotencyCoordinator` 的 in-flight future。
+impact:
+- 当前部署边界是可控的，但 API 无法通过增加实例提升读流量、故障转移或滚动发布弹性；实例切换还会丢失本地缓存和进行中的协调状态。
+proposal:
+- 先把状态按“必须共享”和“可丢失缓存”分类：限流窗口、跨实例幂等锁/结果必须共享；dashboard snapshot 可放入共享缓存或改为完全由数据库快照驱动；普通查询缓存允许本地 TTL，但必须接受短暂不一致。
+- Manual review 的最终正确性继续以 `V16__review_task_idempotency_indexes.sql` 的数据库唯一键为准，进程内 coordinator 仅保留为低延迟优化，不能承担跨实例正确性。
+- 选定共享实现后，再解除 RuntimeRoleContract 和 production-readiness 脚本的单实例门禁，并补充双实例一致性验证。
+acceptance:
+- `instance-count=2` 可以通过启动和生产就绪检查；同一认证来源、Webhook repository、手工评审幂等键在两个实例之间遵守同一个限额/唯一性语义。
+- 实例重启、滚动发布和单实例故障不会导致 dashboard snapshot 永久丢失，也不会产生重复评审任务。
+priority: S0 修复后进入第一阶段架构优化；在共享状态落地前保留单实例门禁。
+
+[S1][security/operations][密钥轮换是全表、全结果、单长事务]
+evidence:
+- `repoguard-backend/src/main/java/com/repoguard/agent/security/SecretReEncryptionService.java:53-92` 使用一个 `@Transactional` 方法处理全部表，并将所有结果保存在 `items` 后一次性返回。
+- `:70-78` 对 `integration_config`、`review_policy_config`、`notification_channel_binding` 分别执行 `selectList(null)`；`:111-185` 逐行 update。
+impact:
+- 数据量增长后，dry-run 和 execute 都会同时放大堆内存、事务持有时间、锁竞争和接口响应时间；中途失败只能整体回滚或重新扫描，运维无法从断点继续。
+proposal:
+- 将轮换改为后台 job：创建任务、记录 source/target key id、模式和操作者，按表和主键范围分页。
+- 每批使用独立短事务，保存 checkpoint、成功数、失败数和最后错误类别；复用已有目标 key 检测保证幂等，支持暂停、继续和失败重试。
+- 查询接口只返回汇总和分页明细，禁止一次性返回全量结果；execute 前保留确认文本和权限校验。
+- 对批量轮换增加数据库/应用级 lease，避免两个管理员同时执行。
+acceptance:
+- 在生产规模数据量下单批内存与锁持有时间有上限；任务可中断后继续，重复执行不会重复加密或破坏已有目标密文。
+- dry-run 与 execute 的计数、失败原因、审计记录一致，且响应不会包含明文 secret。
+priority: S1；建议在下一次扩大集成配置规模或执行生产密钥切换前完成。
+
+[S1][throughput][RabbitMQ 发布重试会占用有限发布线程]
+evidence:
+- `repoguard-backend/src/main/java/com/repoguard/agent/messaging/RabbitReliableMessagePublisher.java:49-74` 同步等待 publisher confirm，单次最多等待配置的 confirm timeout。
+- `:81-90` 使用 `Thread.sleep` 执行指数退避；相关 after-commit、通知发布和补偿线程池均为有界线程池，默认发布线程数为 2。
+impact:
+- RabbitMQ 暂时抖动时，发布线程会在 confirm 等待和 sleep 期间被占满；队列堆积和拒绝会进一步触发补偿路径，延长任务从创建到消费的尾延迟。
+proposal:
+- 将“尝试一次”和“安排下一次”分离：发布线程只执行一次发送和 confirm，失败后把 `next_retry_at`、attempt、failure phase 写入现有 outbox/补偿记录，由定时恢复器重新投递。
+- 若保留进程内快速重试，重试间隔也应交给调度器，禁止在 worker/publisher 线程 sleep；保留现有 DLQ、补偿上限和幂等记录。
+- 增加按 executor、failure phase、队列深度和 oldest age 的联动告警，避免只看到 publish failure 而看不到线程池饱和。
+acceptance:
+- 发布线程不再执行阻塞 sleep；RabbitMQ 故障期间消息仍可恢复，重试次数、退避上限、确认超时和最终状态与当前契约一致。
+- 压测验证发布线程拒绝率和消息端到端 p95/p99，至少覆盖 confirm timeout、returned message 和连接断开三种失败。
+priority: S1；与消息可靠性改造一起实施，不单独删除现有补偿机制。
+
+[S1][database/performance][任务详情摘要存在可合并的重复聚合查询]
+evidence:
+- `repoguard-backend/src/main/java/com/repoguard/agent/service/impl/ReviewTaskQueryServiceImpl.java:153-174` 先读取任务，再调用摘要加载器，并额外读取时间线。
+- `repoguard-backend/src/main/java/com/repoguard/agent/service/impl/ReviewTaskDetailDataLoader.java:69-82` 对同一 task 分别执行 finding severity 聚合、changed file count、finding count、missing test count；当前摘要路径合计约 6 次数据库 round trip。
+- 详情分页已按 section 延迟加载，但后端仍对每个 section 通过 `archiveIfHotTaskMissing` 先做一次热表存在性查询（`:266-290`）。
+proposal:
+- 增加单个 `ReviewTaskDetailSummaryProjection`，一次返回 changed files/findings/missing tests 总数和 severity counts；时间线保持独立查询或在同一 projection 中只取最新一条。
+- 对详情 section 统一采用“先查业务数据、数据为空时再查 archive summary”的策略，或在一次请求上下文中缓存任务/归档判定，避免重复 `selectById`。
+- 用 EXPLAIN 和真实规模数据验证 `(task_id, category, id)`、feedback/severity 组合索引的命中情况，避免为减少 round trip 盲目增加宽索引。
+acceptance:
+- 非归档详情摘要在结果完全一致的前提下，数据库 round trip 从约 6 次降到 2-3 次；分页、归档任务和空结果语义不变。
+- 记录 SQL duration、rows 和接口 p95/p99，只有在数据集上确认收益后再提交迁移。
+priority: S1；先做 projection 和查询计数基准，再决定是否补索引。
+
+[S1][maintainability][前后端 API 契约已有护栏，但仍手工维护客户端]
+evidence:
+- `repoguard-frontend/src/api/contracts.ts` 当前约 725 行，集中维护 endpoint、query/body 映射和响应类型。
+- `repoguard-backend/src/test/java/com/repoguard/agent/controller/ApiContractTest.java:156-239` 通过解析前端源码校验接口表面。
+- `OpenApiGeneratedClientContractTest.java:30-117` 已能从 `src/test/resources/contracts/openapi.json` 生成 dry-run client surface，并维护 migration/signature snapshots，但生产前端仍未直接使用生成客户端。
+impact:
+- 目前能较早发现漂移，但接口变更需要同时修改 Controller、DTO、`contracts.ts`、响应校验器和多个 snapshot；源码解析测试本身也成为维护成本。
+proposal:
+- 把后端构建出的 reviewed OpenAPI 文档作为唯一契约输入，在前端构建阶段生成 TypeScript types/client；保留 `api/` 下稳定的业务 wrapper，逐模块迁移而非一次性替换。
+- 对认证、Webhook、二进制 payload 等特殊端点保留明确的手写 adapter；对不可信响应继续保留必要的 runtime validator。
+- 迁移完成后将现有 snapshot 测试降级为生成物审查和关键兼容性测试，删除对生产源码文本结构的强耦合。
+acceptance:
+- 新增或修改 Controller DTO 后，前端类型检查能由生成物自动反映变化；生产代码不再新增 endpoint 字符串和重复请求体定义。
+- 生成客户端的 operationId、参数 optionality、响应 data type 与后端 OpenAPI 保持一致，特殊端点有显式 allowlist。
+priority: S1；优先迁移 review、dashboard、notification 三条高变更链路。
+
+[S2][maintainability][后端规则配置服务与前端页面编排职责仍偏重]
+evidence:
+- `ReviewRuleConfigServiceImpl.java` 约 489 行，构造器注入 11 个协作者（`:45-55`），同时承担规则查询、更新、状态流转、版本快照、回滚、质量门禁、指标组装和缓存失效。
+- `repoguard-frontend/src/pages/ReviewDetailPage.vue` 约 605 行，`RuleConfigPage.vue` 约 591 行；虽然已有 feature composable，页面仍承担较多状态编排、轮询、分页和写回流程。
+proposal:
+- 后端按 query、command、policy version/history、quality gate 四个用例边界拆分，事务只保留在 command/application service；统一在提交后执行 cache eviction。
+- 前端将页面拆为 route-level container、section coordinator 和 action facade，统一 loading/error/request sequence，减少页面直接持有跨 feature 状态。
+- 先以不改变 API 和状态机为前提做提取式重构，避免借重构之机改变 `OBSERVE -> COMMENT -> BLOCK` 规则语义。
+acceptance:
+- 单个 application service 依赖数和方法数下降，现有规则状态机、回滚、质量门禁和契约测试全部保持通过。
+- 详情页轮询、section 懒加载、GitHub comment 写回的取消和竞态行为保持不变。
+priority: S2；在 S0/S1 的安全、可靠性和查询收益完成后处理。
+
+[S2][frontend/performance][总览页预算目前无法真实衡量总览路由增量]
+evidence:
+- `repoguard-frontend/src/router/index.ts:3-4` 静态导入 `OverviewPage`，其他管理页面在 `:16-23` 使用动态 import。
+- `repoguard-frontend/vite.config.ts:86-118` 先找到总览 chunk，再从 initial chunk 集合中扣除；由于总览已经属于 initial chunk，当前构建日志的 `overview route critical JavaScript/CSS/requests` 被计算为 0，而不是总览页真实成本。
+- 当前 ECharts 异步 chunk gzip 为 117.23 KiB / 140 KiB，仍在预算内但余量只有约 22.77 KiB。
+proposal:
+- 将 `OverviewPage` 改为与其他路由一致的 lazy import，或者修正预算插件，同时报告“initial shared cost”和“route incremental cost”，不能用静态导入把路由预算归零。
+- 继续保持 `DeferredEChartPanel` 的可见性和 idle 加载策略；只有在真实性能采样确认收益后，再考虑进一步拆分 ECharts 组件或缩减组件注册。
+acceptance:
+- 构建日志中的 overview route 指标不再固定为 0，并能区分首屏共享成本与路由增量成本。
+- 首屏 gzip、总览路由 gzip、最大异步 chunk 和请求数都有独立预算；预算超限时 CI 能给出可定位的 chunk/module。
+priority: S2；属于工程度量准确性，优先修正预算口径，再做实际 bundle 优化。
+
+implementation-order:
+1. S0：修复 AuthAttemptLimiter 容量耗尽 fail-open，并补饱和压测和告警。
+2. S1：确定单实例边界下的密钥轮换批处理方案和 RabbitMQ 非阻塞重试方案。
+3. S1：为任务详情摘要建立 SQL projection/query-count 基准，按 EXPLAIN 结果决定索引变更。
+4. S1：以 OpenAPI 生成客户端迁移 review/dashboard/notification，保留特殊端点 adapter。
+5. S1 architecture：设计共享限流、共享 dashboard snapshot 和跨实例幂等的存储边界；完成前不得解除 API 单实例门禁。
+6. S2：提取规则配置/详情页编排职责，并修正总览路由 bundle budget 口径。
+
+non_goals:
+- 不新增一次性测试脚本、验证脚本或新的 Markdown 文档。
+- 不在没有 EXPLAIN、压测和 p95/p99 对比的情况下新增宽索引或调整线程数。
+- 不以提前拆分微服务、替换消息中间件或一次性重写前端为目标；优先收敛现有模块边界、状态和契约。

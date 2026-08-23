@@ -31,6 +31,7 @@ public class RabbitMqConfig {
         return QueueBuilder.durable(properties.getQueue())
             .withArgument("x-dead-letter-exchange", properties.getDeadLetterExchange())
             .withArgument("x-dead-letter-routing-key", properties.getDeadLetterRoutingKey())
+            .withArgument("x-max-priority", 10)
             .build();
     }
 

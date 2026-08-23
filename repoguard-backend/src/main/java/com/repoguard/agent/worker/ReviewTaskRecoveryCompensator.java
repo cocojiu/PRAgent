@@ -172,7 +172,8 @@ public class ReviewTaskRecoveryCompensator {
             task.getPrNumber(),
             task.getCommitSha(),
             queuedAt,
-            LogContext.currentTraceId()
+            LogContext.currentTraceId(),
+            3
         );
     }
 

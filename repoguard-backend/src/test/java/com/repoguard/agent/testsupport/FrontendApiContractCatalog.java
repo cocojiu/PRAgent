@@ -39,6 +39,7 @@ public final class FrontendApiContractCatalog {
         Pattern.DOTALL
     );
     private static final Pattern FRONTEND_QUERY_KEY_PATTERN = Pattern.compile("^\\s+([a-zA-Z0-9_]+):", Pattern.MULTILINE);
+    private static final Map<String, String> JAVA_RESPONSE_TYPE_ALIASES = loadJavaResponseTypeAliases();
 
     private FrontendApiContractCatalog() {
     }
@@ -286,7 +287,8 @@ public final class FrontendApiContractCatalog {
         if (!javaType) {
             return type;
         }
-        return javaResponseTypeAliases().getOrDefault(type, defaultJavaResponseTypeName(type));
+        String alias = JAVA_RESPONSE_TYPE_ALIASES.get(type);
+        return alias == null ? defaultJavaResponseTypeName(type) : normalizeResponseType(alias, false);
     }
 
     private static String genericContent(String type) {
@@ -301,28 +303,15 @@ public final class FrontendApiContractCatalog {
         };
     }
 
-    private static Map<String, String> javaResponseTypeAliases() {
-        return Map.ofEntries(
-            Map.entry("AuthCurrentUserDto", "CurrentUser"),
-            Map.entry("CacheStatsResponse", "CacheStats"),
-            Map.entry("DashboardLlmQualityResponse", "DashboardLlmQuality"),
-            Map.entry("DashboardOverviewResponse", "DashboardOverview"),
-            Map.entry("DashboardRulesResponse", "DashboardRules"),
-            Map.entry("GithubCommentPreviewResponse", "GithubCommentPreview"),
-            Map.entry("GithubCommentPublicationHistoryResponse", "GithubCommentPublicationHistory"),
-            Map.entry("GithubCommentPublishResponse", "GithubCommentPublish"),
-            Map.entry("GithubPullRequestOptionsResponse", "GithubPullRequestOptions"),
-            Map.entry("MessageQueueHealthResponse", "MessageQueueHealth"),
-            Map.entry("NotificationCenterDto", "NotificationCenter"),
-            Map.entry("ReviewTaskListItem", "ReviewTask"),
-            Map.entry("ReviewTaskSummary", "ReviewTaskSummary"),
-            Map.entry("ReviewTaskStatusResponse", "ReviewTaskStatus"),
-            Map.entry("ReviewTimelineItem", "TimelineItem"),
-            Map.entry("ServiceIntegrationConfigDto", "ServiceIntegrationConfig"),
-            Map.entry("SystemSettingsDto", "SystemSettings"),
-            Map.entry("UserManagementItemDto", "ManagedUser"),
-            Map.entry("UserOperationAuditDto", "UserOperationAudit")
-        );
+    private static Map<String, String> loadJavaResponseTypeAliases() {
+        try {
+            Map<String, Object> aliases = OpenApiContractDocument.fromJson(Files.readString(typeAliasesPath()));
+            Map<String, String> result = new LinkedHashMap<>();
+            aliases.forEach((javaType, typescriptType) -> result.put(javaType, String.valueOf(typescriptType)));
+            return Map.copyOf(result);
+        } catch (IOException ex) {
+            throw new IllegalStateException("Failed to load shared TypeScript type aliases", ex);
+        }
     }
 
     private static Path contractsPath() {
@@ -335,6 +324,14 @@ public final class FrontendApiContractCatalog {
             return backendCandidate;
         }
         return Path.of("repoguard-backend", "src/test/resources/contracts/openapi.json");
+    }
+
+    private static Path typeAliasesPath() {
+        Path backendCandidate = Path.of("src/test/resources/contracts/typescript-type-aliases.json");
+        if (Files.exists(backendCandidate)) {
+            return backendCandidate;
+        }
+        return Path.of("repoguard-backend", "src/test/resources/contracts/typescript-type-aliases.json");
     }
 
     private static Path sourceRoot() {

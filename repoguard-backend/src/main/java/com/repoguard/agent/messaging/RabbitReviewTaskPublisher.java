@@ -74,7 +74,7 @@ public class RabbitReviewTaskPublisher implements ReviewTaskPublisher {
     }
 
     private RabbitPublishSpec spec(ReviewTaskMessage message) {
-        return specFactory.reviewTask(properties, message.taskId());
+        return specFactory.reviewTask(properties, message.taskId()).withPriority(message.normalizedPriority());
     }
 
     private String safePart(String value) {

@@ -245,7 +245,8 @@ public class ReviewTaskPublishCompensator {
             task.getPrNumber(),
             task.getCommitSha(),
             queuedAt,
-            LogContext.currentTraceId()
+            LogContext.currentTraceId(),
+            "GITHUB_WEBHOOK".equalsIgnoreCase(task.getTriggerSource()) ? 4 : 8
         );
     }
 

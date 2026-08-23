@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 
 import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.review.PullRequestChangedFile;
@@ -30,7 +31,7 @@ class ChangedFileReplacementServiceTest {
     );
 
     @Test
-    void deletesExistingFilesAndStoresMappedChangedFilesFromDiff() {
+    void appendsAttemptOwnedChangedFilesWithoutDeletingHistory() {
         when(sqlSessionFactory.openSession(ExecutorType.BATCH)).thenReturn(sqlSession);
         when(sqlSession.getMapper(ChangedFileMapper.class)).thenReturn(changedFileMapper);
         PullRequestChangedFile firstFile = new PullRequestChangedFile("src/New.java", "added", 3, null, "+class New {}");
@@ -43,27 +44,27 @@ class ChangedFileReplacementServiceTest {
         );
         ChangedFile firstEntity = changedFile("src/New.java");
         ChangedFile secondEntity = changedFile("src/Old.java");
-        when(changedFileEntityMapper.toEntity(42L, firstFile)).thenReturn(firstEntity);
-        when(changedFileEntityMapper.toEntity(42L, secondFile)).thenReturn(secondEntity);
+        when(changedFileEntityMapper.toEntity(42L, 101L, firstFile)).thenReturn(firstEntity);
+        when(changedFileEntityMapper.toEntity(42L, 101L, secondFile)).thenReturn(secondEntity);
 
-        service.replace(42L, diff);
+        service.replace(42L, 101L, diff);
 
-        verify(changedFileEntityMapper).toEntity(42L, firstFile);
-        verify(changedFileEntityMapper).toEntity(42L, secondFile);
+        verify(changedFileEntityMapper).toEntity(42L, 101L, firstFile);
+        verify(changedFileEntityMapper).toEntity(42L, 101L, secondFile);
         InOrder inOrder = org.mockito.Mockito.inOrder(changedFileMapper, sqlSession);
-        inOrder.verify(changedFileMapper).delete(any());
         ArgumentCaptor<ChangedFile> fileCaptor = ArgumentCaptor.forClass(ChangedFile.class);
         inOrder.verify(changedFileMapper, org.mockito.Mockito.times(2)).insert(fileCaptor.capture());
         inOrder.verify(sqlSession).flushStatements();
         inOrder.verify(sqlSession).close();
+        verify(changedFileMapper, never()).delete(any());
         assertThat(fileCaptor.getAllValues()).containsExactly(firstEntity, secondEntity);
     }
 
     @Test
-    void deletesExistingFilesWithoutOpeningBatchSessionWhenDiffHasNoFiles() {
-        service.replace(42L, new PullRequestDiff("octocat", "Hello-World", 7, List.of()));
+    void emptyAttemptDoesNotDeleteHistoryOrOpenBatchSession() {
+        service.replace(42L, 101L, new PullRequestDiff("octocat", "Hello-World", 7, List.of()));
 
-        verify(changedFileMapper).delete(any());
+        verify(changedFileMapper, never()).delete(any());
         org.mockito.Mockito.verifyNoInteractions(sqlSessionFactory);
     }
 

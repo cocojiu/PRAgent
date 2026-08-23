@@ -47,7 +47,7 @@ class ReviewTaskRecoveryStore {
         LocalDateTime expiredBefore,
         String recoveryReason
     ) {
-        return claimService.markRequeuePendingIfClaimOwned(task, expiredBefore, recoveryReason);
+        return claimService.markRequeuePendingIfClaimOwned(task, recoveredAt, expiredBefore, recoveryReason);
     }
 
     boolean markQueuedForRecoveryPublish(ReviewTask task, LocalDateTime queuedAt, int nextAttempt) {

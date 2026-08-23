@@ -56,12 +56,13 @@ class LlmCapacityConfigurationContractTest {
         Map<String, Object> backendEnvironment = environment(services, "backend");
 
         assertThat(backendEnvironment)
-            .containsEntry("REPOGUARD_REVIEW_PIPELINE_BUDGET_MS", 600000)
+            .containsEntry("REPOGUARD_REVIEW_EXECUTION_BUDGET_MS", 600000)
+            .containsEntry("REPOGUARD_REVIEW_PIPELINE_BUDGET_MS", 480000)
             .containsEntry("REPOGUARD_REVIEW_PIPELINE_MAX_TOTAL_CHUNKS", 64)
-            .containsEntry("REPOGUARD_REVIEW_PIPELINE_MAX_IN_FLIGHT_CHUNKS", 3)
-            .containsEntry("REPOGUARD_ASYNC_LLM_CHUNK_THREADS", 3)
+            .containsEntry("REPOGUARD_REVIEW_PIPELINE_MAX_IN_FLIGHT_CHUNKS", 2)
+            .containsEntry("REPOGUARD_ASYNC_LLM_CHUNK_THREADS", 2)
             .containsEntry("REPOGUARD_ASYNC_LLM_CHUNK_QUEUE_CAPACITY", 100)
-            .containsEntry("REPOGUARD_LLM_BULKHEAD_MAX_CONCURRENT_CALLS", 4)
+            .containsEntry("REPOGUARD_LLM_BULKHEAD_MAX_CONCURRENT_CALLS", 2)
             .containsEntry("REPOGUARD_LLM_BULKHEAD_MAX_WAIT_MILLIS", 250);
     }
 

@@ -10,6 +10,7 @@ import com.repoguard.agent.dto.ManualReviewResponse;
 import com.repoguard.agent.dto.ReviewRetryResponse;
 import com.repoguard.agent.service.ReviewTaskCommandService;
 import java.util.Objects;
+import java.time.LocalDateTime;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,6 +34,11 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
     @Override
     public ManualReviewResponse triggerManualReview(ManualReviewRequest request) {
         return manualReviewCreationService.triggerManualReview(request);
+    }
+
+    @Override
+    public ManualReviewResponse triggerWebhookReview(ManualReviewRequest request, LocalDateTime headUpdatedAt) {
+        return manualReviewCreationService.triggerWebhookReview(request, headUpdatedAt);
     }
 
     @Override

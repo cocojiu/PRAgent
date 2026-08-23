@@ -1,3 +1,7 @@
+{
+    default_sni 47.111.168.74
+}
+
 {$REPOGUARD_FRONTEND_SERVER_NAME} {
     log {
         output stdout
@@ -13,6 +17,20 @@
     }
 }
 
+https://47.111.168.74 {
+    log {
+        output stdout
+        format json
+    }
+    encode zstd gzip
+    tls {
+        issuer acme {
+            profile shortlived
+        }
+    }
+    reverse_proxy sub2api:8080
+}
+
 :80 {
     log {
         output stdout
@@ -25,6 +43,11 @@
     @health path /actuator/health
     handle @health {
         reverse_proxy frontend:8080
+    }
+    @sub2apiPublic host 47.111.168.74
+    handle @sub2apiPublic {
+        encode zstd gzip
+        reverse_proxy sub2api:8080
     }
     handle {
         respond "HTTPS canonical host required" 421

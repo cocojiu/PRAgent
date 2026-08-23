@@ -156,7 +156,7 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
         String expectedHeadSha = requiredTaskCommitSha(task);
 
         return healthReporter.recordReadOperation(settings, "fetch_pull_request_diff", () -> {
-            String headBeforeFetch = headReader.fetchHeadSha(
+            GithubPullRequestHeadReader.GithubPullRequestHeadSnapshot headBeforeFetch = headReader.fetchHead(
                 settings,
                 baseUrl,
                 owner,
@@ -174,7 +174,7 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
                 expectedHeadSha,
                 resilience
             );
-            String headAfterFetch = headReader.fetchHeadSha(
+            GithubPullRequestHeadReader.GithubPullRequestHeadSnapshot headAfterFetch = headReader.fetchHead(
                 settings,
                 baseUrl,
                 owner,
@@ -243,9 +243,16 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
         return task.getCommitSha().trim();
     }
 
-    private void ensureExpectedHead(String expectedHeadSha, String currentHeadSha) {
-        if (!expectedHeadSha.equalsIgnoreCase(currentHeadSha)) {
-            throw new GithubPullRequestHeadChangedException(expectedHeadSha, currentHeadSha);
+    private void ensureExpectedHead(
+        String expectedHeadSha,
+        GithubPullRequestHeadReader.GithubPullRequestHeadSnapshot currentHead
+    ) {
+        if (!expectedHeadSha.equalsIgnoreCase(currentHead.sha())) {
+            throw new GithubPullRequestHeadChangedException(
+                expectedHeadSha,
+                currentHead.sha(),
+                currentHead.updatedAt()
+            );
         }
     }
 

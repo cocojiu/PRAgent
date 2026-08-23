@@ -5,6 +5,8 @@ set -Eeuo pipefail
 MYSQL_CONTAINER="${MYSQL_CONTAINER:-repoguard-mysql}"
 BACKUP_ROOT="${BACKUP_ROOT:-/opt/repoguard/backups/mysql}"
 VERIFY_RESTORE="${VERIFY_RESTORE:-true}"
+VERIFY_MIGRATIONS="${VERIFY_MIGRATIONS:-true}"
+MIGRATION_DIR="${MIGRATION_DIR:-}"
 VERIFY_MEMORY_MB="${VERIFY_MEMORY_MB:-384}"
 VERIFY_CPU_LIMIT="${VERIFY_CPU_LIMIT:-0.50}"
 
@@ -55,7 +57,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-for command_name in awk cut date df docker find gzip mktemp openssl seq sha256sum sleep tail wc; do
+for command_name in awk cut date df docker find gzip mktemp openssl seq sha256sum sleep sort tail wc; do
   command -v "${command_name}" >/dev/null 2>&1 \
     || fail "missing_required_command_${command_name}"
 done
@@ -73,6 +75,15 @@ case "${VERIFY_RESTORE}" in
     fail "verify_restore_must_be_true_or_false"
     ;;
 esac
+
+case "${VERIFY_MIGRATIONS}" in
+  true | false) ;;
+  *) fail "verify_migrations_must_be_true_or_false" ;;
+esac
+if [[ "${VERIFY_MIGRATIONS}" == "true" ]]; then
+  [[ "${VERIFY_RESTORE}" == "true" ]] || fail "migration_rehearsal_requires_restore_verification"
+  [[ -d "${MIGRATION_DIR}" ]] || fail "migration_directory_not_found"
+fi
 
 case "${VERIFY_MEMORY_MB}" in
   *[!0-9]* | "")
@@ -182,6 +193,7 @@ dump_database() {
       --skip-comments \
       --default-character-set=utf8mb4 \
       --set-gtid-purged=OFF \
+      --source-data=2 \
       --column-statistics=0 \
       --no-tablespaces \
       --databases "$1"
@@ -314,6 +326,11 @@ logical_dump_sha256="$(
 )"
 
 restore_verified="skipped"
+migration_rehearsal="skipped"
+migration_rehearsal_from=""
+migration_rehearsal_to=""
+migration_rehearsal_count=0
+migration_rehearsal_seconds=0
 if [[ "${VERIFY_RESTORE}" == "true" ]]; then
   mem_available_kb="$(awk '/^MemAvailable:/ { print $2 }' /proc/meminfo)"
   case "${mem_available_kb}" in
@@ -457,6 +474,36 @@ if [[ "${VERIFY_RESTORE}" == "true" ]]; then
     fail "isolated_table_check_failed"
   fi
 
+  if [[ "${VERIFY_MIGRATIONS}" == "true" ]]; then
+    migration_rehearsal_from="$(mysql_query "${verify_container}" "${database_name}" \
+      "SELECT COALESCE(MAX(CAST(version AS UNSIGNED)), 0) FROM flyway_schema_history WHERE success = 1;")"
+    [[ "${migration_rehearsal_from}" =~ ^[0-9]+$ ]] || fail "invalid_restored_flyway_version"
+    migration_rehearsal_to="${migration_rehearsal_from}"
+    migration_started_epoch="$(date +%s)"
+    while IFS= read -r migration_file; do
+      migration_name="${migration_file##*/}"
+      [[ "${migration_name}" =~ ^V([0-9]+)__[A-Za-z0-9_.-]+\.sql$ ]] || fail "invalid_migration_filename"
+      migration_version="${BASH_REMATCH[1]}"
+      if (( migration_version <= migration_rehearsal_from )); then
+        continue
+      fi
+      docker exec -i "${verify_container}" sh -lc '
+        if [ -n "${MYSQL_ROOT_PASSWORD:-}" ]; then
+          mysql_root_password="$MYSQL_ROOT_PASSWORD"
+        elif [ -n "${MYSQL_ROOT_PASSWORD_FILE:-}" ] && [ -r "$MYSQL_ROOT_PASSWORD_FILE" ]; then
+          mysql_root_password="$(cat "$MYSQL_ROOT_PASSWORD_FILE")"
+        else
+          exit 64
+        fi
+        MYSQL_PWD="$mysql_root_password" exec mysql --user=root --binary-mode=1 "$1"
+      ' sh "${database_name}" <"${migration_file}"
+      migration_rehearsal_to="${migration_version}"
+      migration_rehearsal_count=$((migration_rehearsal_count + 1))
+    done < <(find "${MIGRATION_DIR}" -maxdepth 1 -type f -name 'V*__*.sql' -print | sort -V)
+    migration_rehearsal_seconds=$(( $(date +%s) - migration_started_epoch ))
+    migration_rehearsal="true"
+  fi
+
   docker rm -f "${verify_container}" >/dev/null
   verify_container=""
   docker volume rm "${verify_volume}" >/dev/null
@@ -480,3 +527,8 @@ echo "LOGICAL_DUMP_SHA256=${logical_dump_sha256}"
 echo "KEY_FINGERPRINT=${key_fingerprint}"
 echo "LEGACY_PLAINTEXT_BACKUP_COUNT=${legacy_plaintext_backup_count}"
 echo "RESTORE_VERIFIED=${restore_verified}"
+echo "MIGRATION_REHEARSAL=${migration_rehearsal}"
+echo "MIGRATION_REHEARSAL_FROM=${migration_rehearsal_from}"
+echo "MIGRATION_REHEARSAL_TO=${migration_rehearsal_to}"
+echo "MIGRATION_REHEARSAL_COUNT=${migration_rehearsal_count}"
+echo "MIGRATION_REHEARSAL_SECONDS=${migration_rehearsal_seconds}"

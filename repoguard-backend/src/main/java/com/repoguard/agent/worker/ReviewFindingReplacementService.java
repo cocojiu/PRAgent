@@ -1,6 +1,5 @@
 package com.repoguard.agent.worker;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.review.ReviewFindingResult;
@@ -30,10 +29,13 @@ class ReviewFindingReplacementService {
     }
 
     int replace(Long taskId, ReviewResult reviewResult) {
-        reviewFindingMapper.delete(new LambdaQueryWrapper<ReviewFinding>().eq(ReviewFinding::getTaskId, taskId));
+        return replace(taskId, null, reviewResult);
+    }
+
+    int replace(Long taskId, Long attemptId, ReviewResult reviewResult) {
         List<ReviewFindingResult> findings = findingDeduplicator.deduplicate(reviewResult.findings());
         List<ReviewFinding> entities = findings.stream()
-            .map(findingResult -> findingEntityMapper.toEntity(taskId, findingResult, reviewResult))
+            .map(findingResult -> findingEntityMapper.toEntity(taskId, attemptId, findingResult, reviewResult))
             .toList();
         batchInserter.insertAll(ReviewFindingMapper.class, entities);
         return findings.size();

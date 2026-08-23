@@ -2,7 +2,9 @@ name: Production MySQL Backup
 
 on:
   schedule:
-    - cron: '30 19 * * *'
+    # Four verified, encrypted restore points per day; the GitHub artifact copy
+    # survives loss of the only application server.
+    - cron: '30 */6 * * *'
   workflow_dispatch:
     inputs:
       verify_restore:
@@ -22,7 +24,7 @@ jobs:
   backup:
     name: Encrypted backup and isolated restore verification
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
     environment: production
     steps:
       - name: Checkout
@@ -93,13 +95,17 @@ jobs:
           esac
 
           ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "install -m 700 -d '${DEPLOY_PATH}/scripts' '/opt/repoguard/backups/mysql'"
+            "install -m 700 -d '${DEPLOY_PATH}/scripts' '${DEPLOY_PATH}/migration-rehearsal' '/opt/repoguard/backups/mysql' && \
+             find '${DEPLOY_PATH}/migration-rehearsal' -maxdepth 1 -type f -name 'V*__*.sql' -delete"
           scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" \
             scripts/backup-prod-mysql.sh \
             "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/scripts/backup-prod-mysql.sh"
           scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" \
             scripts/prune-prod-mysql-backups.sh \
             "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/scripts/prune-prod-mysql-backups.sh"
+          scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" \
+            repoguard-backend/src/main/resources/db/migration/V*__*.sql \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/migration-rehearsal/"
           ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "chmod 0700 \
               '${DEPLOY_PATH}/scripts/backup-prod-mysql.sh' \
@@ -152,16 +158,23 @@ jobs:
                 "cd '${DEPLOY_PATH}' && \
                  BACKUP_ROOT='/opt/repoguard/backups/mysql' \
                  VERIFY_RESTORE='${verify_restore}' \
+                 VERIFY_MIGRATIONS='${verify_restore}' \
+                 MIGRATION_DIR='${DEPLOY_PATH}/migration-rehearsal' \
                  bash scripts/backup-prod-mysql.sh --password-stdin" \
             | tee "${result_file}"
 
           restore_verified="$(awk -F= '$1 == "RESTORE_VERIFIED" { print $2 }' "${result_file}")"
+          migration_rehearsal="$(awk -F= '$1 == "MIGRATION_REHEARSAL" { print $2 }' "${result_file}")"
           expected_restore="${verify_restore}"
           if [[ "${expected_restore}" == "false" ]]; then
             expected_restore="skipped"
           fi
           [[ "${restore_verified}" == "${expected_restore}" ]] || {
             echo "Restore verification result was not the expected value." >&2
+            exit 1
+          }
+          [[ "${migration_rehearsal}" == "${expected_restore}" ]] || {
+            echo "Migration rehearsal result was not the expected value." >&2
             exit 1
           }
 
@@ -183,6 +196,59 @@ jobs:
             echo "backup_sha256=${backup_sha256}"
             echo "restore_verified=${restore_verified}"
           } >>"${GITHUB_OUTPUT}"
+
+      - name: Copy verified encrypted backup off host
+        id: offsite
+        shell: bash
+        env:
+          BACKUP_PATH: ${{ steps.backup.outputs.backup_path }}
+          BACKUP_SHA256: ${{ steps.backup.outputs.backup_sha256 }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          backup_name="${BACKUP_PATH##*/}"
+          [[ "${BACKUP_PATH}" == "/opt/repoguard/backups/mysql/${backup_name}" \
+            && "${backup_name}" =~ ^repoguard-[0-9]{8}T[0-9]{6}Z\.sql\.gz\.enc$ ]] || {
+            echo "Refusing to copy an unexpected server path." >&2
+            exit 1
+          }
+          [[ "${BACKUP_SHA256}" =~ ^[0-9a-f]{64}$ ]] || {
+            echo "Backup SHA-256 was not valid." >&2
+            exit 1
+          }
+
+          offsite_dir="${RUNNER_TEMP}/repoguard-offsite-backup"
+          install -m 700 -d "${offsite_dir}"
+          scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:${BACKUP_PATH}" \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:${BACKUP_PATH}.sha256" \
+            "${offsite_dir}/"
+
+          [[ "$(awk 'NR == 1 { print $1 }' "${offsite_dir}/${backup_name}.sha256")" == "${BACKUP_SHA256}" ]] || {
+            echo "Downloaded checksum manifest did not match the workflow result." >&2
+            exit 1
+          }
+          (
+            cd "${offsite_dir}"
+            sha256sum --check --status "${backup_name}.sha256"
+          )
+          chmod 600 "${offsite_dir}/${backup_name}" "${offsite_dir}/${backup_name}.sha256"
+          {
+            echo "directory=${offsite_dir}"
+            echo "backup_name=${backup_name}"
+            echo "verified=true"
+          } >>"${GITHUB_OUTPUT}"
+
+      - name: Persist off-host encrypted backup
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: production-mysql-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.offsite.outputs.directory }}/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
 
       - name: Write sanitized backup summary
         if: always()
@@ -239,8 +305,24 @@ jobs:
                 RESTORE_VERIFIED)
                   echo "- Isolated restore verified: \`${value}\`"
                   ;;
+                MIGRATION_REHEARSAL)
+                  echo "- Migration rehearsal: \`${value}\`"
+                  ;;
+                MIGRATION_REHEARSAL_FROM)
+                  echo "- Rehearsal schema from: \`V${value}\`"
+                  ;;
+                MIGRATION_REHEARSAL_TO)
+                  echo "- Rehearsal schema to: \`V${value}\`"
+                  ;;
+                MIGRATION_REHEARSAL_COUNT)
+                  echo "- Rehearsed migrations: \`${value}\`"
+                  ;;
+                MIGRATION_REHEARSAL_SECONDS)
+                  echo "- Migration rehearsal seconds: \`${value}\`"
+                  ;;
               esac
             done <"${result_file}"
+            echo "- Off-host artifact verified: \`${{ steps.offsite.outputs.verified }}\`"
           } >>"${GITHUB_STEP_SUMMARY}"
 
       - name: Verify production health before retention
@@ -260,7 +342,7 @@ jobs:
 
       - name: Apply verified seven-backup retention
         id: retention
-        if: ${{ success() && steps.backup.outputs.restore_verified == 'true' }}
+        if: ${{ success() && steps.backup.outputs.restore_verified == 'true' && steps.offsite.outputs.verified == 'true' }}
         shell: bash
         env:
           CURRENT_BACKUP_PATH: ${{ steps.backup.outputs.backup_path }}

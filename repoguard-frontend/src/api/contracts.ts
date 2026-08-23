@@ -60,6 +60,8 @@ import type {
   ReviewPolicyConfigRequest,
   ReviewQuery,
   ReviewFinding,
+  ReviewExecutionAttempt,
+  ReviewExecutionAttemptResult,
   ReviewCalibrationQueue,
   ReviewRetryResponse,
   ReviewRuleConfig,
@@ -182,6 +184,11 @@ export type ApiContract = {
   fetchReviewChangedFiles: ApiOperation<ReviewChangedFilesPageInput, PageResponse<ChangedFile>>;
   fetchReviewMissingTests: ApiOperation<ReviewDetailPageInput, PageResponse<MissingTest>>;
   fetchReviewTimeline: ApiOperation<{ id: number; limit?: number }, TimelineItem[]>;
+  fetchReviewExecutionAttempts: ApiOperation<{ taskId: number }, ReviewExecutionAttempt[]>;
+  fetchReviewExecutionAttemptResult: ApiOperation<
+    { taskId: number; attemptId: number; page?: number; pageSize?: number },
+    ReviewExecutionAttemptResult
+  >;
   fetchReviewRepositories: ApiOperation<undefined, string[]>;
   fetchReviewStatus: ApiOperation<{ id: number }, ReviewTaskStatus>;
   fetchGithubCommentPreview: ApiOperation<GithubCommentPreviewInput, GithubCommentPreview>;
@@ -395,6 +402,13 @@ const apiEndpoints: ApiEndpointMap = {
   fetchReviewTimeline: generatedEndpoint("reviewControllerListReviewTimeline", {
     path: input => ({ id: input.id }),
     query: input => ({ limit: input.limit })
+  }),
+  fetchReviewExecutionAttempts: generatedEndpoint("reviewExecutionAttemptControllerList", {
+    path: input => ({ taskId: input.taskId })
+  }),
+  fetchReviewExecutionAttemptResult: generatedEndpoint("reviewExecutionAttemptControllerGetResult", {
+    path: input => ({ taskId: input.taskId, attemptId: input.attemptId }),
+    query: input => ({ page: input.page, pageSize: input.pageSize })
   }),
   fetchReviewRepositories: generatedEndpoint("reviewControllerListRepositories", {}),
   fetchReviewStatus: generatedEndpoint("reviewControllerGetReviewStatus", {

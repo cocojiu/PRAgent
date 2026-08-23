@@ -56,40 +56,66 @@ public class RuleBasedPullRequestReviewer {
     }
 
     public ReviewResult review(PullRequestDiff diff) {
+        return review(diff, ReviewDeadline.unlimited());
+    }
+
+    public ReviewResult review(PullRequestDiff diff, ReviewDeadline deadline) {
         Map<String, ReviewRuleSettings> loadedRules = reviewRuleProvider.getRulesById();
         Map<String, ReviewRuleSettings> configuredRules = loadedRules == null ? Map.of() : loadedRules;
         List<RuleMatch> matches = new ArrayList<>();
         List<PullRequestChangedFile> files = diff.files() == null ? List.of() : diff.files();
+        boolean budgetExhausted = false;
         for (PullRequestChangedFile file : files) {
+            if (deadline.exhausted()) {
+                budgetExhausted = true;
+                break;
+            }
             String patch = file.patch();
             if (patch == null || patch.isBlank()) {
                 continue;
             }
-            scanPatch(file, configuredRules, matches);
+            if (!scanPatch(file, configuredRules, matches, deadline)) {
+                budgetExhausted = true;
+                break;
+            }
         }
-        scanPullRequestLevelRules(diff, configuredRules, matches);
+        if (!budgetExhausted) {
+            budgetExhausted = !scanPullRequestLevelRules(diff, configuredRules, matches, deadline);
+        }
         List<ReviewFindingResult> findings = matches.stream()
             .map(match -> resolveFinding(match, configuredRules))
             .filter(Objects::nonNull)
             .toList();
         List<ReviewFindingResult> uniqueFindings = findingDeduplicator.deduplicate(findings);
-        return ReviewResult.completed(riskAggregator.aggregate(uniqueFindings), uniqueFindings);
+        ReviewResult result = ReviewResult.completed(riskAggregator.aggregate(uniqueFindings), uniqueFindings);
+        return budgetExhausted
+            ? result.withIncompleteInput(
+                ReviewBudgetExceededException.CATEGORY + ":rule_scan",
+                "executionBudgetExceededStage=rule_scan"
+            )
+            : result;
     }
 
-    private void scanPullRequestLevelRules(
+    private boolean scanPullRequestLevelRules(
         PullRequestDiff diff,
         Map<String, ReviewRuleSettings> configuredRules,
-        List<RuleMatch> matches
+        List<RuleMatch> matches,
+        ReviewDeadline deadline
     ) {
         for (PullRequestReviewRule rule : pullRequestRules) {
+            if (deadline.exhausted()) {
+                return false;
+            }
             matches.addAll(rule.evaluate(diff, configuredRules));
         }
+        return true;
     }
 
-    private void scanPatch(
+    private boolean scanPatch(
         PullRequestChangedFile file,
         Map<String, ReviewRuleSettings> configuredRules,
-        List<RuleMatch> matches
+        List<RuleMatch> matches,
+        ReviewDeadline deadline
     ) {
         String filePath = file.filename();
         Set<String> applicableRuleIds = ReviewRuleApplicability.applicableRuleIds(filePath, configuredRules);
@@ -97,13 +123,16 @@ public class RuleBasedPullRequestReviewer {
             .filter(rule -> applicableRuleIds.contains(rule.id()))
             .toList();
         if (applicableRules.isEmpty()) {
-            return;
+            return true;
         }
         String patch = file.patch();
         String[] lines = patch.split("\\R");
         int currentLine = 0;
         boolean hasAuthorizationGuard = patchHasAuthorizationGuard(lines);
         for (String line : lines) {
+            if (deadline.exhausted()) {
+                return false;
+            }
             if (line.startsWith("@@")) {
                 currentLine = parseNewFileStart(line);
                 continue;
@@ -127,6 +156,7 @@ public class RuleBasedPullRequestReviewer {
                 currentLine++;
             }
         }
+        return true;
     }
 
     private void evaluateLineRules(

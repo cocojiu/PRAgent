@@ -34,6 +34,7 @@ public interface ReviewQualityBaselineMapper {
                     from review_finding duplicateFinding
                     join review_task duplicateTask on duplicateTask.id = duplicateFinding.task_id
                     where duplicateFinding.category = 'FINDING'
+                      and duplicateFinding.current_attempt = 1
                       and duplicateTask.assessment_status = 'COMPLETE'
                     group by
                         duplicateFinding.task_id,
@@ -47,6 +48,7 @@ public interface ReviewQualityBaselineMapper {
         from review_finding finding
         join review_task task on task.id = finding.task_id
         where finding.category = 'FINDING'
+          and finding.current_attempt = 1
           and task.assessment_status = 'COMPLETE'
         """)
     Summary selectSummary();
@@ -89,6 +91,7 @@ public interface ReviewQualityBaselineMapper {
             from review_finding finding
             join review_task task on task.id = finding.task_id
             where finding.category = 'FINDING'
+              and finding.current_attempt = 1
               and task.assessment_status = 'COMPLETE'
         )
         select
