@@ -33,6 +33,11 @@ import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.servlet.ServletException;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -146,7 +151,7 @@ class ProductionRuntimeContextIntegrationTest {
     }
 
     @Test
-    void apiOnlyContextRunsAllMigrationsAndExcludesWorkers() {
+    void apiOnlyContextRunsAllMigrationsAndExcludesWorkers() throws Exception {
         try (ConfigurableApplicationContext context = start("api")) {
             assertThat(context.getBeansOfType(ReviewController.class)).hasSize(1);
             assertThat(context.getBeansOfType(ReviewTaskWorker.class)).isEmpty();
@@ -155,7 +160,7 @@ class ProductionRuntimeContextIntegrationTest {
     }
 
     @Test
-    void workerOnlyContextRunsAllMigrationsAndExcludesApiControllers() {
+    void workerOnlyContextRunsAllMigrationsAndExcludesApiControllers() throws Exception {
         try (ConfigurableApplicationContext context = start("worker")) {
             assertThat(context.getBeansOfType(ReviewController.class)).isEmpty();
             assertThat(context.getBeansOfType(ReviewTaskWorker.class)).hasSize(1);
@@ -1528,12 +1533,31 @@ class ProductionRuntimeContextIntegrationTest {
         }
     }
 
-    private void assertProductionInfrastructure(ConfigurableApplicationContext context) {
+    private void assertProductionInfrastructure(ConfigurableApplicationContext context)
+        throws IOException, InterruptedException {
         WebServerApplicationContext webContext = (WebServerApplicationContext) context;
-        assertThat(webContext.getWebServer().getPort()).isPositive();
+        int port = webContext.getWebServer().getPort();
+        assertThat(port).isPositive();
         assertThat(context.getBean(JdbcTemplate.class).queryForObject("select 1", Integer.class)).isEqualTo(1);
         Boolean rabbitOpen = context.getBean(RabbitTemplate.class).execute(channel -> channel.isOpen());
         assertThat(rabbitOpen).isTrue();
+
+        HttpClient client = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(5))
+            .build();
+        for (String probe : List.of("liveness", "readiness")) {
+            HttpResponse<String> response = client.send(
+                HttpRequest.newBuilder(
+                    URI.create("http://127.0.0.1:" + port + "/actuator/health/" + probe)
+                )
+                    .timeout(Duration.ofSeconds(10))
+                    .GET()
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            );
+            assertThat(response.statusCode()).as(probe + " HTTP status").isEqualTo(200);
+            assertThat(response.body()).as(probe + " response").contains("\"status\":\"UP\"");
+        }
 
         Logger rootLogger = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
         assertThat(rootLogger.getAppender("CONSOLE")).isNotNull();

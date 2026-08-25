@@ -675,7 +675,7 @@ jobs:
           test -n "${APP_CORS_ALLOWED_ORIGINS}" || { echo "Missing APP_CORS_ALLOWED_ORIGINS secret or variable"; exit 1; }
           backend_image="${ALIYUN_DEPLOY_REGISTRY}/${ALIYUN_NAMESPACE}/${ALIYUN_REPOSITORY}:backend-${image_tag}"
           frontend_image="${ALIYUN_DEPLOY_REGISTRY}/${ALIYUN_NAMESPACE}/${ALIYUN_REPOSITORY}:frontend-${image_tag}"
-          health_url="${HEALTH_URL:-http://127.0.0.1/actuator/health}"
+          health_url="${HEALTH_URL:-http://127.0.0.1/actuator/health/readiness}"
           health_url="${health_url%%,*}"
           health_url="${health_url%% *}"
           test -n "${health_url}" || { echo "HEALTH_URL resolved to an empty value"; exit 1; }

@@ -271,7 +271,7 @@ jobs:
           health="$(curl --fail --silent --show-error \
             --retry 3 --retry-delay 3 --retry-all-errors \
             --connect-timeout 8 --max-time 20 \
-            https://pragent.top/actuator/health)"
+            https://pragent.top/actuator/health/readiness)"
           status="$(jq -r '.status // empty' <<<"${health}")"
           [[ "${status}" == "UP" ]] || {
             echo "Production health is not UP after legacy backup operation." >&2

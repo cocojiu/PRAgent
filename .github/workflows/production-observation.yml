@@ -111,7 +111,8 @@ jobs:
             rm -f "${body_file}" "${header_file}"
           }
 
-          probe_endpoint "health" "/actuator/health" "200" "health_up" "dynamic"
+          probe_endpoint "liveness" "/actuator/health/liveness" "200" "health_up" "dynamic"
+          probe_endpoint "readiness" "/actuator/health/readiness" "200" "health_up" "dynamic"
           probe_endpoint "home" "/" "200" "none" "page"
           probe_endpoint "login" "/login" "200" "none" "page"
           probe_endpoint "overview" "/repoguard/overview" "200" "none" "page"

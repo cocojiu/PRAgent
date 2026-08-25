@@ -178,7 +178,7 @@ REPOGUARD_GITHUB_WEBHOOK_IGNORE_DRAFT=true
 
 HTTP_PORT_BIND=${HTTP_PORT_BIND}
 HTTPS_PORT_BIND=${HTTPS_PORT_BIND}
-HEALTH_URL=http://127.0.0.1/actuator/health
+HEALTH_URL=http://127.0.0.1/actuator/health/readiness
 EOF
   chmod 600 "$APP_DIR/.env"
 }

@@ -89,7 +89,8 @@ class FrontendDeploymentContractTest {
         String plainHttpCatchAll = requiredSiteBlock(caddyfile, ":80");
         String normalized = plainHttpCatchAll.replaceAll("\\s+", " ").trim();
 
-        String healthHandler = "@health path /actuator/health handle @health { reverse_proxy frontend:8080 }";
+        String healthHandler =
+            "@health path /actuator/health /actuator/health/* handle @health { reverse_proxy frontend:8080 }";
         String canonicalFallback = "handle { respond \"HTTPS canonical host required\" 421 }";
         assertThat(normalized).contains(healthHandler, canonicalFallback);
         assertThat(normalized.indexOf(healthHandler)).isLessThan(normalized.indexOf(canonicalFallback));

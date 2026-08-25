@@ -69,8 +69,12 @@ management:
         include: health,info,metrics,prometheus
   endpoint:
     health:
+      show-details: never
       probes:
         enabled: true
+      group:
+        readiness:
+          include: readinessState,db,rabbit
 
 repoguard:
   review:

@@ -316,7 +316,7 @@ BACKEND_IMAGE='<目标后端镜像>' FRONTEND_IMAGE='<目标前端镜像>' \
 
 - 日常使用 `Production MySQL Backup` workflow；只有加密、SHA-256 校验、隔离恢复、逐表检查和待发布 Flyway SQL 演练全部成功的备份才可作为恢复点。
 - 恢复前记录目标镜像 tag、备份文件和校验文件 SHA-256，停止业务写入；先在 `--network none` 的临时 MySQL 容器和临时卷中恢复验证，禁止直接把未验证 SQL 导入生产卷。
-- 生产恢复必须在独立维护窗口执行，保留原卷只读快照或可回切副本；恢复后校验表集合、精确行数、`CHECK TABLE`、Flyway 版本和外部 `/actuator/health`，最后再恢复流量。
+- 生产恢复必须在独立维护窗口执行，保留原卷只读快照或可回切副本；恢复后校验表集合、精确行数、`CHECK TABLE`、Flyway 版本和外部 `/actuator/health/readiness`，最后再恢复流量。
 - `Production MySQL Binlog Archive` 每小时强制切换一个 binlog，将尚未确认离站的已关闭 ROW binlog 加密并保存为 14 天 Artifact，Artifact 上传成功后才推进服务器确认水位。点时间恢复只能对名称匹配 `repoguard-mysql-pitr-*` 的隔离容器运行 `scripts/restore-prod-mysql-pitr.sh`，先导入带 `--source-data=2` 坐标的全量备份，再回放 binlog 到指定 UTC 秒。
 
 ### RabbitMQ 堆积与出箱补偿
@@ -333,7 +333,7 @@ Grafana 只绑定服务器 `127.0.0.1:3000`，应用 Nginx/Caddy 不提供 `/gra
 ssh -N -L 3000:127.0.0.1:3000 <deploy-user>@<production-host>
 ```
 
-本机打开 `http://127.0.0.1:3000`。不得把 Grafana 端口改为 `0.0.0.0`；确需 Web 入口时必须先增加 SSO 或 IP allowlist，并单独评审拓扑。
+本机打开 `http://127.0.0.1:3000`。预置的 `RepoGuard Review Observability` 仪表盘统一查询 API 与 Worker 容器日志，可通过 `taskId`、`traceId` 和 `operation` 关联完整评审链路。不得把 Grafana 端口改为 `0.0.0.0`；确需 Web 入口时必须先增加 SSO 或 IP allowlist，并单独评审拓扑。
 
 默认部署使用一个 API 容器、一个 Worker 容器、`REPOGUARD_API_INSTANCE_COUNT=1` 和本地限流。当前 Compose 使用固定 `container_name`，不得直接使用 `--scale`。吞吐不足时先观测数据库连接、RabbitMQ 未确认消息、LLM bulkhead、API P99 和内存，再小步调整容量；只有迁移到多服务器后，才进入数据库共享限流、多实例日志采集和多 Worker 容量验证。
 
@@ -361,7 +361,7 @@ ssh -N -L 3000:127.0.0.1:3000 <deploy-user>@<production-host>
 - `/api/v1/config/**`：系统设置、集成配置、连接测试、密钥重加密。
 - `/api/v1/message-queue/**`：RabbitMQ 健康、异常任务、重新入队。
 - `/api/v1/users/**`：用户管理。
-- `/actuator/health`、`/actuator/info`、`/actuator/metrics`：健康检查和指标。
+- `/actuator/health/liveness`：仅判断进程是否可自行恢复，不依赖 MySQL/RabbitMQ；`/actuator/health/readiness`：同时检查应用就绪状态、MySQL 与 RabbitMQ，用于容器、发布、备份和外部流量门禁；`/actuator/health` 保留为聚合诊断端点。`/actuator/info`、`/actuator/metrics`、`/actuator/prometheus` 提供版本与指标。
 
 API 响应通常使用统一 `ApiResponse` 包装。业务错误优先使用稳定 `ErrorCode`。
 
@@ -396,13 +396,13 @@ $env:REPOGUARD_LOG_PATH = "../logs/backend"
 Grafana 的 Explore 页面选择 `Loki` 数据源后，可以用这些查询：
 
 ```logql
-{service="repoguard-backend"}
-{service="repoguard-backend"} |= "ERROR"
-{container="repoguard-backend"}
-{container="repoguard-backend"} |= "traceId=<X-Trace-Id>"
-{container="repoguard-backend"} |= "operation=review_execute"
-{container="repoguard-backend"} |= "operation=github_diff_fetch"
-{container="repoguard-backend"} |= "failureCategory="
+{service=~"backend(-worker)?"}
+{service=~"backend(-worker)?"} |= "ERROR"
+{container=~"repoguard-backend(-worker)?"}
+{container=~"repoguard-backend(-worker)?"} |= "traceId=<X-Trace-Id>"
+{container=~"repoguard-backend(-worker)?"} |= "operation=review_execute"
+{container=~"repoguard-backend(-worker)?"} |= "operation=github_diff_fetch"
+{container=~"repoguard-backend(-worker)?"} |= "failureCategory="
 ```
 
 也可以打开 Grafana Dashboard：

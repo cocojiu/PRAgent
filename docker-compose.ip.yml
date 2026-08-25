@@ -121,7 +121,7 @@ services:
       REPOGUARD_SCHEDULER_POOL_SIZE: ${REPOGUARD_SCHEDULER_POOL_SIZE:-4}
       REPOGUARD_SCHEDULER_SHUTDOWN_WAIT: ${REPOGUARD_SCHEDULER_SHUTDOWN_WAIT:-10s}
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8081/actuator/health | grep -q 'UP'"]
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8081/actuator/health/readiness | grep -q 'UP'"]
       interval: 15s
       timeout: 5s
       retries: 20

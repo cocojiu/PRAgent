@@ -388,6 +388,14 @@ jobs:
             echo "LOKI_BACKEND_CONTAINER_LABEL_OK=false"
           fi
 
+          if curl -fsS --connect-timeout 5 --max-time 10 \
+            http://127.0.0.1:3100/loki/api/v1/label/container/values 2>/dev/null \
+            | grep -q '"repoguard-backend-worker"'; then
+            echo "LOKI_WORKER_CONTAINER_LABEL_OK=true"
+          else
+            echo "LOKI_WORKER_CONTAINER_LABEL_OK=false"
+          fi
+
           count_service_errors() {
             since="$1"
             container_name="$2"

@@ -511,6 +511,70 @@ class ProductionConfigurationContractTest {
     }
 
     @Test
+    void productionHealthProbesSeparateLivenessFromDependencyReadiness() throws IOException {
+        Path root = findRepositoryRoot();
+        String application = read(root.resolve("repoguard-backend/src/main/resources/application.yml"));
+        Map<String, Object> production = yaml(root.resolve("docker-compose.prod.yml"));
+        Map<String, Object> ipDeployment = yaml(root.resolve("docker-compose.ip.yml"));
+        Map<String, Object> smoke = yaml(root.resolve("docker-compose.smoke.yml"));
+
+        assertThat(application)
+            .contains("show-details: never")
+            .contains("readiness:\n          include: readinessState,db,rabbit");
+        for (String serviceName : List.of("backend", "backend-worker")) {
+            assertThat(stringList(map(service(production, serviceName).get("healthcheck")).get("test")).toString())
+                .contains("/actuator/health/readiness");
+        }
+        assertThat(stringList(map(service(ipDeployment, "backend").get("healthcheck")).get("test")).toString())
+            .contains("/actuator/health/readiness");
+        assertThat(stringList(map(service(smoke, "backend").get("healthcheck")).get("test")).toString())
+            .contains("/actuator/health/readiness");
+
+        assertThat(read(root.resolve("Caddyfile")))
+            .contains("@health path /actuator/health /actuator/health/*");
+        assertThat(read(root.resolve("repoguard-frontend/nginx.ip.conf")))
+            .contains("location /actuator/health")
+            .contains("location ~ ^/actuator/(?!health(?:/|$))");
+        assertThat(read(root.resolve(".env.prod.example")))
+            .contains("HEALTH_URL=http://127.0.0.1/actuator/health/readiness");
+        assertThat(read(root.resolve("scripts/deploy-prod.sh")))
+            .contains("HEALTH_URL=\"${HEALTH_URL:-http://127.0.0.1/actuator/health/readiness}\"");
+        assertThat(read(root.resolve(".github/workflows/release-images.yml")))
+            .contains("${HEALTH_URL:-http://127.0.0.1/actuator/health/readiness}");
+
+        String observation = read(root.resolve(".github/workflows/production-observation.yml"));
+        assertThat(observation)
+            .contains(
+                "probe_endpoint \"liveness\" \"/actuator/health/liveness\" \"200\" \"health_up\" \"dynamic\"",
+                "probe_endpoint \"readiness\" \"/actuator/health/readiness\" \"200\" \"health_up\" \"dynamic\""
+            )
+            .doesNotContain("probe_endpoint \"health\" \"/actuator/health\"");
+    }
+
+    @Test
+    void observabilityLogsCoverApiAndWorkerAcrossCollectionInventoryAndDashboard() throws IOException {
+        Path root = findRepositoryRoot();
+        String alloy = read(root.resolve("config/observability/alloy/config.alloy"));
+        String inventory = read(root.resolve(".github/workflows/production-observability-inventory.yml"));
+        String dashboard = read(
+            root.resolve(
+                "config/observability/grafana/provisioning/dashboards/repoguard-review-observability.json"
+            )
+        );
+
+        assertThat(alloy)
+            .contains("/(repoguard-backend|repoguard-backend-worker|repoguard-frontend|repoguard-caddy)");
+        assertThat(inventory)
+            .contains("LOKI_BACKEND_CONTAINER_LABEL_OK")
+            .contains("LOKI_WORKER_CONTAINER_LABEL_OK")
+            .contains("repoguard-backend-worker");
+        assertThat(dashboard)
+            .contains("Filter API and worker logs")
+            .contains("{container=~\\\"repoguard-backend(-worker)?\\\"}")
+            .doesNotContain("{container=\\\"repoguard-backend\\\"}");
+    }
+
+    @Test
     void prometheusEndpointAndRegistryAreEnabledWithoutEmbeddingCredentials() throws IOException {
         Path root = findRepositoryRoot();
         String application = read(
