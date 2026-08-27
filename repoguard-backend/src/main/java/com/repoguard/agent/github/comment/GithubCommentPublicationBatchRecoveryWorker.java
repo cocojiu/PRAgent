@@ -2,6 +2,7 @@ package com.repoguard.agent.github.comment;
 
 import com.repoguard.agent.config.SchedulerRuntimeEnabled;
 import com.repoguard.agent.entity.GithubCommentPublicationBatch;
+import com.repoguard.agent.tenancy.ScheduledJobLeaseContext;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.slf4j.Logger;
@@ -39,6 +40,7 @@ public class GithubCommentPublicationBatchRecoveryWorker {
             batchSize
         );
         for (GithubCommentPublicationBatch batch : batches) {
+            ScheduledJobLeaseContext.assertHeld();
             LOGGER.info(
                 "GitHub comment publish recovery dispatching batch. taskId={}, batchId={}, status={}",
                 batch.getTaskId(),

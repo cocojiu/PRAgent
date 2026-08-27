@@ -16,18 +16,18 @@ class TenantScheduledTaskRunnerTest {
 
     private final TenantCatalogMapper tenantCatalogMapper = mock(TenantCatalogMapper.class);
     private final TenantProperties properties = new TenantProperties();
-    private final ScheduledJobLeaseStore leaseStore = mock(ScheduledJobLeaseStore.class);
+    private final ScheduledJobLeaseGuardFactory leaseGuardFactory = mock(ScheduledJobLeaseGuardFactory.class);
     private final TenantScheduledTaskRunner runner = new TenantScheduledTaskRunner(
         tenantCatalogMapper,
         properties,
-        leaseStore
+        leaseGuardFactory
     );
 
     TenantScheduledTaskRunnerTest() {
-        when(leaseStore.tryAcquireCurrentTenant(org.mockito.ArgumentMatchers.anyString()))
-            .thenAnswer(invocation -> lease("tenant:" + TenantContext.currentTenantId() + ":" + invocation.getArgument(0)));
-        when(leaseStore.tryAcquireGlobal(org.mockito.ArgumentMatchers.anyString()))
-            .thenAnswer(invocation -> lease("global:" + invocation.getArgument(0)));
+        when(leaseGuardFactory.tryAcquireCurrentTenant(org.mockito.ArgumentMatchers.anyString()))
+            .thenAnswer(invocation -> guard());
+        when(leaseGuardFactory.tryAcquireGlobal(org.mockito.ArgumentMatchers.anyString()))
+            .thenAnswer(invocation -> guard());
     }
 
     @AfterEach
@@ -107,8 +107,8 @@ class TenantScheduledTaskRunnerTest {
             .thenReturn(List.of(2L, 3L));
         when(tenantCatalogMapper.selectActiveTenantIdsAfter(3L, TenantScheduledTaskRunner.ACTIVE_TENANT_PAGE_SIZE))
             .thenReturn(List.of());
-        when(leaseStore.tryAcquireCurrentTenant("leased"))
-            .thenAnswer(invocation -> TenantContext.currentTenantId() == 2L ? null : lease("tenant:3:leased"));
+        when(leaseGuardFactory.tryAcquireCurrentTenant("leased"))
+            .thenAnswer(invocation -> TenantContext.currentTenantId() == 2L ? null : guard());
         List<Long> observed = new ArrayList<>();
 
         TenantScheduledTaskRunner.TenantRunSummary summary = runner.runForEachActiveTenant(
@@ -125,7 +125,7 @@ class TenantScheduledTaskRunnerTest {
         List<String> observed = new ArrayList<>();
 
         assertThat(runner.runGlobal("global_job", () -> observed.add("first"))).isTrue();
-        when(leaseStore.tryAcquireGlobal("global_job")).thenReturn(null);
+        when(leaseGuardFactory.tryAcquireGlobal("global_job")).thenReturn(null);
         assertThat(runner.runGlobal("global_job", () -> observed.add("second"))).isFalse();
 
         assertThat(observed).containsExactly("first");
@@ -152,7 +152,7 @@ class TenantScheduledTaskRunnerTest {
             .hasMessageContaining("non-increasing");
     }
 
-    private ScheduledJobLeaseStore.Lease lease(String scopeKey) {
-        return new ScheduledJobLeaseStore.Lease(scopeKey, "owner");
+    private ScheduledJobLeaseGuard guard() {
+        return mock(ScheduledJobLeaseGuard.class);
     }
 }

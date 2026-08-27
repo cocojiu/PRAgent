@@ -48,7 +48,28 @@ public class ScheduledJobLeaseStore {
         if (lease == null) {
             return;
         }
-        leaseMapper.release(lease.scopeKey(), lease.ownerId());
+        leaseMapper.release(lease.scopeKey(), lease.ownerId(), lease.fencingToken());
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean renew(Lease lease) {
+        Objects.requireNonNull(lease, "lease");
+        return leaseMapper.renew(
+            lease.scopeKey(),
+            lease.ownerId(),
+            lease.fencingToken(),
+            properties.getLeaseSeconds()
+        ) == 1;
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
+    public boolean isHeld(Lease lease) {
+        Objects.requireNonNull(lease, "lease");
+        return leaseMapper.isHeld(
+            lease.scopeKey(),
+            lease.ownerId(),
+            lease.fencingToken()
+        ) == 1;
     }
 
     private Lease tryAcquire(String scopeKey, Long tenantId, String jobName) {
@@ -60,8 +81,9 @@ public class ScheduledJobLeaseStore {
             ownerId,
             properties.getLeaseSeconds()
         );
-        return ownerId.equals(leaseMapper.selectOwner(scopeKey))
-            ? new Lease(scopeKey, ownerId)
+        ScheduledJobLeaseMapper.LeaseOwner owner = leaseMapper.selectOwner(scopeKey);
+        return owner != null && ownerId.equals(owner.ownerId()) && owner.fencingToken() > 0
+            ? new Lease(scopeKey, ownerId, owner.fencingToken())
             : null;
     }
 
@@ -73,10 +95,13 @@ public class ScheduledJobLeaseStore {
         return normalized;
     }
 
-    public record Lease(String scopeKey, String ownerId) {
+    public record Lease(String scopeKey, String ownerId, long fencingToken) {
         public Lease {
             Objects.requireNonNull(scopeKey, "scopeKey");
             Objects.requireNonNull(ownerId, "ownerId");
+            if (fencingToken < 1) {
+                throw new IllegalArgumentException("fencingToken must be positive");
+            }
         }
     }
 }

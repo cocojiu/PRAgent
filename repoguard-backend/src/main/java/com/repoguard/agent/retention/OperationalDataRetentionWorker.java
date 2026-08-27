@@ -3,6 +3,7 @@ package com.repoguard.agent.retention;
 import com.repoguard.agent.config.OperationalDataRetentionProperties;
 import com.repoguard.agent.config.SchedulerRuntimeEnabled;
 import com.repoguard.agent.mapper.OperationalDataRetentionMapper;
+import com.repoguard.agent.tenancy.ScheduledJobLeaseContext;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.LocalDateTime;
 import java.util.function.Function;
@@ -74,6 +75,7 @@ public class OperationalDataRetentionWorker {
         int limit = properties.normalizedBatchSize();
         int maxBatches = properties.normalizedMaxBatchesPerRun();
         for (int batch = 0; batch < maxBatches; batch++) {
+            ScheduledJobLeaseContext.assertHeld();
             try {
                 int deleted = batchExecutor.deleteAndAudit(table, cutoff, () -> delete.apply(cutoff));
                 meterRegistry.counter("repoguard.operational.retention.deleted", "table", table).increment(deleted);

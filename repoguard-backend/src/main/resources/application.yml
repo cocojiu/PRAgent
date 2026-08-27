@@ -121,12 +121,14 @@ repoguard:
     # Roles that do not own Flyway migrations refuse to start below this version.
     # Keep in sync with the highest version under db/migration; the production
     # readiness check enforces the match.
-    expected-version: ${REPOGUARD_SCHEMA_EXPECTED_VERSION:70}
+    expected-version: ${REPOGUARD_SCHEMA_EXPECTED_VERSION:71}
   tenancy:
     enabled: ${REPOGUARD_TENANCY_ENABLED:false}
     header-name: ${REPOGUARD_TENANCY_HEADER_NAME:X-RepoGuard-Tenant}
   scheduling:
     lease-seconds: ${REPOGUARD_SCHEDULING_LEASE_SECONDS:900}
+    heartbeat-seconds: ${REPOGUARD_SCHEDULING_HEARTBEAT_SECONDS:60}
+    heartbeat-threads: ${REPOGUARD_SCHEDULING_HEARTBEAT_THREADS:2}
   enterprise-oidc:
     enabled: ${REPOGUARD_ENTERPRISE_OIDC_ENABLED:false}
     issuer-uri: ${REPOGUARD_ENTERPRISE_OIDC_ISSUER_URI:}

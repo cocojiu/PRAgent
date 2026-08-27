@@ -3,6 +3,8 @@ package com.repoguard.agent.concurrency;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import com.repoguard.agent.tenancy.TenantContext;
+import com.repoguard.agent.tenancy.ScheduledJobLeaseContext;
+import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadFactory;
@@ -67,12 +69,25 @@ public class BoundedExecutorFactory {
 
         @Override
         public void execute(Runnable command) {
+            ScheduledJobLeaseContext.CapturedTask leaseTask = ScheduledJobLeaseContext.capture(command);
             try {
-                super.execute(new TimedRunnable(TenantContext.wrap(command)));
+                super.execute(new TimedRunnable(TenantContext.wrap(leaseTask), leaseTask));
             } catch (RejectedExecutionException ex) {
+                leaseTask.discard();
                 rejected.increment();
                 throw ex;
             }
+        }
+
+        @Override
+        public List<Runnable> shutdownNow() {
+            List<Runnable> abandoned = super.shutdownNow();
+            abandoned.forEach(runnable -> {
+                if (runnable instanceof TimedRunnable timed) {
+                    timed.discard();
+                }
+            });
+            return abandoned;
         }
 
         private double oldestAgeSeconds() {
@@ -97,14 +112,22 @@ public class BoundedExecutorFactory {
         }
     }
 
-    private record TimedRunnable(Runnable delegate, long submittedAtNanos) implements Runnable {
-        private TimedRunnable(Runnable delegate) {
-            this(delegate, System.nanoTime());
+    private record TimedRunnable(
+        Runnable delegate,
+        ScheduledJobLeaseContext.CapturedTask leaseTask,
+        long submittedAtNanos
+    ) implements Runnable {
+        private TimedRunnable(Runnable delegate, ScheduledJobLeaseContext.CapturedTask leaseTask) {
+            this(delegate, leaseTask, System.nanoTime());
         }
 
         @Override
         public void run() {
             delegate.run();
+        }
+
+        private void discard() {
+            leaseTask.discard();
         }
     }
 

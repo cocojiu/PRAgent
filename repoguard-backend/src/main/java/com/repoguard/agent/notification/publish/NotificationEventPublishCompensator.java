@@ -7,6 +7,7 @@ import com.repoguard.agent.messaging.RabbitPublishCompensationMetricsRecorder;
 import com.repoguard.agent.messaging.RabbitPublishCompensationOutcome;
 import com.repoguard.agent.messaging.RabbitPublishFailurePhase;
 import com.repoguard.agent.notification.outbox.NotificationPublishCompensationQuery;
+import com.repoguard.agent.tenancy.ScheduledJobLeaseContext;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
@@ -61,6 +62,7 @@ public class NotificationEventPublishCompensator {
         LocalDateTime now = LocalDateTime.now();
         List<NotificationEvent> events = compensationQuery.loadDueEvents(now);
         for (NotificationEvent event : events) {
+            ScheduledJobLeaseContext.assertHeld();
             if (!recoveryWorkDispatcher.submit(
                 "notification_publish_compensation",
                 () -> compensate(event)

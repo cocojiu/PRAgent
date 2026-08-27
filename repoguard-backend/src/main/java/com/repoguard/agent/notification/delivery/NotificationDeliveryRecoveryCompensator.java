@@ -6,6 +6,7 @@ import com.repoguard.agent.config.SchedulerRuntimeEnabled;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.mapper.NotificationEventMapper;
 import com.repoguard.agent.notification.NotificationEventStatus;
+import com.repoguard.agent.tenancy.ScheduledJobLeaseContext;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -62,6 +63,7 @@ public class NotificationDeliveryRecoveryCompensator {
                 .last("limit " + recoveryBatchSize())
         );
         for (NotificationEvent event : expiredEvents) {
+            ScheduledJobLeaseContext.assertHeld();
             NotificationDeliveryFailureDecision decision = failurePolicy.decide(event);
             if (eventStateUpdater.recoverExpired(event, decision)) {
                 LOGGER.warn(

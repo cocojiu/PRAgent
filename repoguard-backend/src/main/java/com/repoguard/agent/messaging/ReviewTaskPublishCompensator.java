@@ -8,6 +8,7 @@ import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.review.task.ReviewTaskMessage;
 import com.repoguard.agent.review.task.ReviewTaskPublisher;
 import com.repoguard.agent.timeline.ReviewTimelineStatus;
+import com.repoguard.agent.tenancy.ScheduledJobLeaseContext;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
@@ -102,6 +103,7 @@ public class ReviewTaskPublishCompensator {
         LocalDateTime now = LocalDateTime.now();
         List<ReviewTask> tasks = compensationQuery.loadDueTasks(now);
         for (ReviewTask task : tasks) {
+            ScheduledJobLeaseContext.assertHeld();
             if (!recoveryWorkDispatcher.submit(
                 "review_publish_compensation",
                 () -> compensate(task)

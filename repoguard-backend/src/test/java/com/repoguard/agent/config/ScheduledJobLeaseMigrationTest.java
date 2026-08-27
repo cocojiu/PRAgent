@@ -26,4 +26,18 @@ class ScheduledJobLeaseMigrationTest {
             .contains("locked_until datetime(6) not null")
             .contains("foreign key (tenant_id) references tenant(id)");
     }
+
+    @Test
+    void addsMonotonicFencingTokenWithoutRewritingTheAppliedLeaseMigration() throws IOException {
+        String migration = Files.readString(
+            Path.of("src/main/resources/db/migration/V71__scheduled_job_lease_fencing.sql"),
+            StandardCharsets.UTF_8
+        ).toLowerCase(Locale.ROOT);
+
+        assertThat(migration)
+            .contains("alter table scheduled_job_lease")
+            .contains("add column fencing_token bigint unsigned not null default 0")
+            .contains("set fencing_token = 1")
+            .contains("where owner_id is not null");
+    }
 }

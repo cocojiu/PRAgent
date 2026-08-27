@@ -16,16 +16,16 @@ public class TenantScheduledTaskRunner {
 
     private final TenantCatalogMapper tenantCatalogMapper;
     private final TenantProperties properties;
-    private final ScheduledJobLeaseStore leaseStore;
+    private final ScheduledJobLeaseGuardFactory leaseGuardFactory;
 
     public TenantScheduledTaskRunner(
         TenantCatalogMapper tenantCatalogMapper,
         TenantProperties properties,
-        ScheduledJobLeaseStore leaseStore
+        ScheduledJobLeaseGuardFactory leaseGuardFactory
     ) {
         this.tenantCatalogMapper = Objects.requireNonNull(tenantCatalogMapper, "tenantCatalogMapper");
         this.properties = Objects.requireNonNull(properties, "properties");
-        this.leaseStore = Objects.requireNonNull(leaseStore, "leaseStore");
+        this.leaseGuardFactory = Objects.requireNonNull(leaseGuardFactory, "leaseGuardFactory");
     }
 
     public TenantRunSummary runForEachActiveTenant(String operation, Runnable task) {
@@ -74,16 +74,16 @@ public class TenantScheduledTaskRunner {
                 "Global scheduled task runner requires an empty tenant context operation=" + normalizedOperation
             );
         }
-        ScheduledJobLeaseStore.Lease lease = leaseStore.tryAcquireGlobal(normalizedOperation);
-        if (lease == null) {
+        ScheduledJobLeaseGuard guard = leaseGuardFactory.tryAcquireGlobal(normalizedOperation);
+        if (guard == null) {
             LOGGER.debug("Global scheduled task skipped because lease is owned operation={}", normalizedOperation);
             return false;
         }
-        try {
+        try (guard; ScheduledJobLeaseContext.Scope _ = ScheduledJobLeaseContext.withGuard(guard)) {
+            guard.assertHeld();
             requiredTask.run();
+            guard.assertHeld();
             return true;
-        } finally {
-            leaseStore.release(lease);
         }
     }
 
@@ -101,8 +101,8 @@ public class TenantScheduledTaskRunner {
     ) {
         summary.attempted++;
         try (TenantContext.Scope _ = TenantContext.withTenant(tenantId)) {
-            ScheduledJobLeaseStore.Lease lease = leaseStore.tryAcquireCurrentTenant(operation);
-            if (lease == null) {
+            ScheduledJobLeaseGuard guard = leaseGuardFactory.tryAcquireCurrentTenant(operation);
+            if (guard == null) {
                 summary.skipped++;
                 LOGGER.debug(
                     "Tenant scheduled task skipped because lease is owned operation={} tenantId={}",
@@ -111,11 +111,11 @@ public class TenantScheduledTaskRunner {
                 );
                 return;
             }
-            try {
+            try (guard; ScheduledJobLeaseContext.Scope _ = ScheduledJobLeaseContext.withGuard(guard)) {
+                guard.assertHeld();
                 task.run();
+                guard.assertHeld();
                 summary.succeeded++;
-            } finally {
-                leaseStore.release(lease);
             }
         } catch (RuntimeException exception) {
             summary.failed++;

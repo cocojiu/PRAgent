@@ -10,6 +10,7 @@ import com.repoguard.agent.messaging.RabbitPublishFailurePhase;
 import com.repoguard.agent.messaging.RabbitPublishFailureMetricsRecorder;
 import com.repoguard.agent.review.task.ReviewTaskMessage;
 import com.repoguard.agent.review.task.ReviewTaskPublisher;
+import com.repoguard.agent.tenancy.ScheduledJobLeaseContext;
 import com.repoguard.agent.observability.LogContext;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -90,6 +91,7 @@ public class ReviewTaskRecoveryCompensator {
         LocalDateTime expiredBefore = recoveryPolicy.expiredBefore(now);
         List<ReviewTask> tasks = recoveryStore.findExpiredReviewingTasks(expiredBefore, recoveryPolicy.batchSize());
         for (ReviewTask task : tasks) {
+            ScheduledJobLeaseContext.assertHeld();
             if (!recoveryWorkDispatcher.submit(
                 "review_execution_recovery",
                 () -> recover(task, now, expiredBefore)

@@ -3,6 +3,7 @@ package com.repoguard.agent.retention;
 import com.repoguard.agent.config.OperationalDataRetentionProperties;
 import com.repoguard.agent.config.SchedulerRuntimeEnabled;
 import com.repoguard.agent.mapper.ReviewExecutionAttemptMapper;
+import com.repoguard.agent.tenancy.ScheduledJobLeaseContext;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -46,6 +47,7 @@ public class ReviewAttemptRetentionWorker {
         LocalDateTime cutoff = LocalDateTime.now().minusDays(properties.normalizedReviewAttemptPayloadDays());
         int limit = properties.normalizedBatchSize();
         for (int batch = 0; batch < properties.normalizedMaxBatchesPerRun(); batch++) {
+            ScheduledJobLeaseContext.assertHeld();
             try {
                 List<Long> candidates = mapper.selectPayloadPurgeCandidates(cutoff, limit);
                 if (candidates.isEmpty()) {
@@ -69,6 +71,7 @@ public class ReviewAttemptRetentionWorker {
         LocalDateTime cutoff = LocalDateTime.now().minusDays(properties.normalizedReviewAttemptMetadataDays());
         int limit = properties.normalizedBatchSize();
         for (int batch = 0; batch < properties.normalizedMaxBatchesPerRun(); batch++) {
+            ScheduledJobLeaseContext.assertHeld();
             try {
                 int deleted = executor.deleteMetadata(cutoff, limit);
                 meterRegistry.counter("repoguard.review.attempt.retention", "operation", "metadata_deleted").increment(deleted);
