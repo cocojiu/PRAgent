@@ -298,18 +298,33 @@ class ProductionDeploymentContractTest {
     }
 
     @Test
-    void verifiedEncryptedBackupIsCopiedOffTheOnlyServerBeforeLocalRetention() throws IOException {
-        String workflow = read(repositoryRoot().resolve(".github/workflows/production-mysql-backup.yml"));
+    void verifiedEncryptedBackupIsDurableInTwoImmutableTargetsBeforeLocalRetention() throws IOException {
+        Path root = repositoryRoot();
+        String workflow = read(root.resolve(".github/workflows/production-mysql-backup.yml"));
+        String binlogWorkflow = read(root.resolve(".github/workflows/production-mysql-binlog-archive.yml"));
+        String uploader = read(root.resolve("scripts/upload-immutable-backup-object.sh"));
 
         assertThat(workflow)
-            .contains("cron: '30 */6 * * *'")
-            .contains("Copy verified encrypted backup off host")
-            .contains("sha256sum --check --status")
-            .contains("actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a")
-            .contains("retention-days: 30")
-            .contains("steps.offsite.outputs.verified == 'true'");
-        assertThat(workflow.indexOf("Persist off-host encrypted backup"))
-            .isLessThan(workflow.indexOf("Apply verified seven-backup retention"));
+            .contains(
+                "cron: '30 */6 * * *'",
+                "permissions:",
+                "id-token: write",
+                "aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c",
+                "Copy verified encrypted backup off host",
+                "Persist to immutable primary and replica storage",
+                "steps.object_storage.outputs.verified == 'true'"
+            )
+            .doesNotContain("actions/upload-artifact@");
+        assertThat(workflow.indexOf("Persist to immutable primary and replica storage"))
+            .isLessThan(workflow.indexOf("Apply local seven-backup retention"));
+        assertThat(binlogWorkflow.indexOf("Persist to immutable primary and replica storage"))
+            .isLessThan(binlogWorkflow.indexOf("Acknowledge durable PITR archive"));
+        assertThat(uploader).contains(
+            "--server-side-encryption aws:kms",
+            "--object-lock-mode COMPLIANCE",
+            "REPOGUARD_BACKUP_REPLICA_BUCKET",
+            "IMMUTABLE_REPLICATION_VERIFIED=true"
+        );
     }
 
     private int rabbitConsumerTimeout() throws IOException {

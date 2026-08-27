@@ -340,7 +340,7 @@ class ProductionConfigurationContractTest {
         Map<String, Object> smoke = yaml(root.resolve("docker-compose.smoke.yml"));
         assertThat(environment(smoke, "backend").get("SPRING_DATASOURCE_URL").toString())
             .contains("rewriteBatchedStatements=true");
-        Map<String, Object> ip = yaml(root.resolve("docker-compose.ip.yml"));
+        Map<String, Object> ip = yaml(root.resolve("docker-compose.prod.yml"));
         assertThat(environment(ip, "backend").get("SPRING_DATASOURCE_URL").toString())
             .contains("rewriteBatchedStatements=true");
         assertThat(read(root.resolve("repoguard-backend/src/main/resources/application-dev.yml")))
@@ -364,7 +364,7 @@ class ProductionConfigurationContractTest {
             )
         );
         Map<String, Object> production = yaml(root.resolve("docker-compose.prod.yml"));
-        Map<String, Object> ip = yaml(root.resolve("docker-compose.ip.yml"));
+        Map<String, Object> ip = yaml(root.resolve("docker-compose.prod.yml"));
         Map<String, Object> smoke = yaml(root.resolve("docker-compose.smoke.yml"));
         String template = read(root.resolve(".env.prod.example"));
         String key = "REPOGUARD_GITHUB_WEBHOOK_ALLOWED_HEAD_BRANCHES";
@@ -515,7 +515,7 @@ class ProductionConfigurationContractTest {
         Path root = findRepositoryRoot();
         String application = read(root.resolve("repoguard-backend/src/main/resources/application.yml"));
         Map<String, Object> production = yaml(root.resolve("docker-compose.prod.yml"));
-        Map<String, Object> ipDeployment = yaml(root.resolve("docker-compose.ip.yml"));
+        Map<String, Object> ipDeployment = yaml(root.resolve("docker-compose.prod.yml"));
         Map<String, Object> smoke = yaml(root.resolve("docker-compose.smoke.yml"));
 
         assertThat(application)
@@ -531,7 +531,8 @@ class ProductionConfigurationContractTest {
             .contains("/actuator/health/readiness");
 
         assertThat(read(root.resolve("Caddyfile")))
-            .contains("@health path /actuator/health /actuator/health/*");
+            .contains("@health path /healthz")
+            .doesNotContain("/actuator/health");
         assertThat(read(root.resolve("repoguard-frontend/nginx.ip.conf")))
             .contains("location /actuator/health")
             .contains("location ~ ^/actuator/(?!health(?:/|$))");
@@ -639,7 +640,7 @@ class ProductionConfigurationContractTest {
     void applicationContainersAreHealthCheckedAndLeastPrivilege() throws IOException {
         Path root = findRepositoryRoot();
         Map<String, Object> production = yaml(root.resolve("docker-compose.prod.yml"));
-        Map<String, Object> ipDeployment = yaml(root.resolve("docker-compose.ip.yml"));
+        Map<String, Object> ipDeployment = yaml(root.resolve("docker-compose.prod.yml"));
 
         for (String serviceName : List.of("backend", "backend-worker", "frontend", "caddy")) {
             assertLeastPrivilegeApplicationContainer(production, serviceName);

@@ -2,6 +2,7 @@ package com.repoguard.agent.concurrency;
 
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
+import com.repoguard.agent.tenancy.TenantContext;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadFactory;
@@ -67,7 +68,7 @@ public class BoundedExecutorFactory {
         @Override
         public void execute(Runnable command) {
             try {
-                super.execute(new TimedRunnable(command));
+                super.execute(new TimedRunnable(TenantContext.wrap(command)));
             } catch (RejectedExecutionException ex) {
                 rejected.increment();
                 throw ex;

@@ -1,0 +1,498 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: repoguard
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: repoguard-runtime
+data:
+  SPRING_PROFILES_ACTIVE: prod
+  SPRING_CONFIG_IMPORT: optional:configtree:/run/secrets/
+  REPOGUARD_DEPLOYMENT_MODE: split
+  REPOGUARD_RATE_LIMIT_STORE: database
+  REPOGUARD_AUTH_REGISTRATION_ENABLED: "false"
+  REPOGUARD_SECURITY_ALLOW_PLAINTEXT_SECRETS: "false"
+  REPOGUARD_GITHUB_WEBHOOK_REQUIRE_SIGNATURE: "true"
+  REPOGUARD_TENANCY_ENABLED: "true"
+  REPOGUARD_TENANCY_HEADER_NAME: X-RepoGuard-Tenant
+  REPOGUARD_ENTERPRISE_OIDC_ENABLED: "true"
+  REPOGUARD_ENTERPRISE_OIDC_REQUIRED_AMR: mfa
+  REPOGUARD_GITHUB_APP_ENABLED: "true"
+  REPOGUARD_GITHUB_APP_TOKEN_REFRESH_SKEW_SECONDS: "90"
+  REPOGUARD_SCHEMA_EXPECTED_VERSION: "70"
+  REPOGUARD_SCHEDULING_LEASE_SECONDS: "900"
+  SERVER_SHUTDOWN: graceful
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: repoguard-api
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: repoguard-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: repoguard-api
+        app.kubernetes.io/component: api
+    spec:
+      serviceAccountName: repoguard
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 45
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: repoguard-api
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: repoguard-api
+      containers:
+        - name: api
+          image: ghcr.io/replace-me/repoguard-backend@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8081
+          envFrom:
+            - configMapRef:
+                name: repoguard-runtime
+            - secretRef:
+                name: repoguard-enterprise-env
+          env:
+            - name: REPOGUARD_RUNTIME_ROLE
+              value: api
+            - name: REPOGUARD_API_INSTANCE_COUNT
+              value: "3"
+            - name: SERVER_PORT
+              value: "8081"
+            - name: JAVA_TOOL_OPTIONS
+              value: -XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            initialDelaySeconds: 45
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 4
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sh", "-c", "sleep 10"]
+          resources:
+            requests:
+              cpu: 500m
+              memory: 768Mi
+            limits:
+              cpu: "2"
+              memory: 1536Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: secret-files
+              mountPath: /run/secrets
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: secret-files
+          secret:
+            secretName: repoguard-enterprise-files
+            defaultMode: 0440
+        - name: tmp
+          emptyDir:
+            sizeLimit: 128Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: repoguard-worker
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: repoguard-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: repoguard-worker
+        app.kubernetes.io/component: worker
+    spec:
+      serviceAccountName: repoguard
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 120
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: repoguard-worker
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: repoguard-worker
+      containers:
+        - name: worker
+          image: ghcr.io/replace-me/repoguard-backend@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: management
+              containerPort: 8081
+          envFrom:
+            - configMapRef:
+                name: repoguard-runtime
+            - secretRef:
+                name: repoguard-enterprise-env
+          env:
+            - name: REPOGUARD_RUNTIME_ROLE
+              value: worker
+            - name: REPOGUARD_API_INSTANCE_COUNT
+              value: "0"
+            - name: SPRING_FLYWAY_ENABLED
+              value: "false"
+            - name: SERVER_PORT
+              value: "8081"
+            - name: JAVA_TOOL_OPTIONS
+              value: -XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: management
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: management
+            initialDelaySeconds: 45
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 4
+          resources:
+            requests:
+              cpu: "1"
+              memory: 1Gi
+            limits:
+              cpu: "4"
+              memory: 3Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: secret-files
+              mountPath: /run/secrets
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: secret-files
+          secret:
+            secretName: repoguard-enterprise-files
+            defaultMode: 0440
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: repoguard-frontend
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: repoguard-frontend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: repoguard-frontend
+        app.kubernetes.io/component: frontend
+    spec:
+      serviceAccountName: repoguard
+      automountServiceAccountToken: false
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: repoguard-frontend
+      containers:
+        - name: frontend
+          image: ghcr.io/replace-me/repoguard-frontend@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 96Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 32Mi
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: repoguard
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: repoguard-api
+spec:
+  selector:
+    app.kubernetes.io/name: repoguard-api
+  ports:
+    - name: http
+      port: 8081
+      targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+spec:
+  selector:
+    app.kubernetes.io/name: repoguard-api
+  ports:
+    - name: http
+      port: 8081
+      targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: repoguard-frontend
+spec:
+  selector:
+    app.kubernetes.io/name: repoguard-frontend
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: repoguard
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 2m
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "10"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: ["repoguard.example.com"]
+      secretName: repoguard-ingress-tls
+  rules:
+    - host: repoguard.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: repoguard-frontend
+                port:
+                  name: http
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: repoguard-api
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: repoguard-api
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: repoguard-worker
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: repoguard-worker
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: repoguard-frontend
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: repoguard-frontend
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: repoguard-api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: repoguard-api
+  minReplicas: 3
+  maxReplicas: 12
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 65
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: repoguard-worker
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: repoguard-worker
+  minReplicas: 2
+  maxReplicas: 20
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 600
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: repoguard-default-deny-ingress
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress"]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: repoguard-allow-ingress-to-frontend
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: repoguard-frontend
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: repoguard-allow-frontend-to-api
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: repoguard-api
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: repoguard-frontend
+      ports:
+        - protocol: TCP
+          port: 8081

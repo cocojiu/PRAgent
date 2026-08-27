@@ -15,7 +15,6 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -99,7 +98,6 @@ public class ReviewTaskPublishCompensator {
         );
     }
 
-    @Scheduled(fixedDelayString = "${app.rabbit.review.publish-compensation-interval-ms:60000}")
     public void compensatePublishFailures() {
         LocalDateTime now = LocalDateTime.now();
         List<ReviewTask> tasks = compensationQuery.loadDueTasks(now);

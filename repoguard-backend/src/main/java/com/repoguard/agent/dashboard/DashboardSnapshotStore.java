@@ -1,5 +1,7 @@
 package com.repoguard.agent.dashboard;
 
+import com.repoguard.agent.tenancy.TenantContext;
+import com.repoguard.agent.tenancy.TenantScopedKey;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -16,9 +18,9 @@ public class DashboardSnapshotStore {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DashboardSnapshotStore.class);
 
-    private final Map<String, Object> snapshots = new ConcurrentHashMap<>();
-    private final Map<String, Object> loadingLocks = new ConcurrentHashMap<>();
-    private final Set<String> refreshingKeys = ConcurrentHashMap.newKeySet();
+    private final Map<TenantScopedKey, Object> snapshots = new ConcurrentHashMap<>();
+    private final Map<TenantScopedKey, Object> loadingLocks = new ConcurrentHashMap<>();
+    private final Set<TenantScopedKey> refreshingKeys = ConcurrentHashMap.newKeySet();
     private final Executor executor;
 
     public DashboardSnapshotStore(
@@ -28,34 +30,41 @@ public class DashboardSnapshotStore {
     }
 
     public <T> T getOrLoad(String key, Supplier<T> loader) {
-        T snapshot = snapshot(key);
+        TenantScopedKey scopedKey = TenantScopedKey.current(key);
+        T snapshot = snapshot(scopedKey);
         if (snapshot == null) {
-            return loadOnce(key, loader);
+            return loadOnce(scopedKey, loader);
         }
-        refreshAsync(key, loader);
+        refreshAsync(scopedKey, loader);
         return snapshot;
     }
 
     public void evict(String key) {
-        snapshots.remove(key);
-        loadingLocks.remove(key);
-        refreshingKeys.remove(key);
+        TenantScopedKey scopedKey = TenantScopedKey.current(key);
+        snapshots.remove(scopedKey);
+        loadingLocks.remove(scopedKey);
+        refreshingKeys.remove(scopedKey);
     }
 
     public void evictByPrefix(String prefix) {
-        snapshots.keySet().removeIf(key -> key.startsWith(prefix));
-        loadingLocks.keySet().removeIf(key -> key.startsWith(prefix));
-        refreshingKeys.removeIf(key -> key.startsWith(prefix));
+        long tenantId = TenantContext.currentTenantIdOrDefault();
+        snapshots.keySet().removeIf(key -> matchesPrefix(key, tenantId, prefix));
+        loadingLocks.keySet().removeIf(key -> matchesPrefix(key, tenantId, prefix));
+        refreshingKeys.removeIf(key -> matchesPrefix(key, tenantId, prefix));
     }
 
     public void executeAsync(String key, Runnable task) {
         Objects.requireNonNull(key, "key must not be null");
         Objects.requireNonNull(task, "task must not be null");
+        executeAsync(TenantScopedKey.current(key), task);
+    }
+
+    private void executeAsync(TenantScopedKey key, Runnable task) {
         if (!refreshingKeys.add(key)) {
             return;
         }
         try {
-            executor.execute(() -> {
+            executor.execute(TenantContext.wrap(() -> {
                 try {
                     task.run();
                 } catch (RuntimeException ex) {
@@ -63,7 +72,7 @@ public class DashboardSnapshotStore {
                 } finally {
                     refreshingKeys.remove(key);
                 }
-            });
+            }));
         } catch (RuntimeException ex) {
             refreshingKeys.remove(key);
             LOGGER.warn("Dashboard async task submission failed key={}", key, ex);
@@ -71,17 +80,17 @@ public class DashboardSnapshotStore {
     }
 
     @SuppressWarnings("unchecked")
-    private <T> T snapshot(String key) {
+    private <T> T snapshot(TenantScopedKey key) {
         return (T) snapshots.get(key);
     }
 
-    private <T> T loadAndStore(String key, Supplier<T> loader) {
+    private <T> T loadAndStore(TenantScopedKey key, Supplier<T> loader) {
         T value = loader.get();
         snapshots.put(key, value);
         return value;
     }
 
-    private <T> T loadOnce(String key, Supplier<T> loader) {
+    private <T> T loadOnce(TenantScopedKey key, Supplier<T> loader) {
         Object lock = loadingLocks.computeIfAbsent(key, ignored -> new Object());
         try {
             synchronized (lock) {
@@ -96,7 +105,13 @@ public class DashboardSnapshotStore {
         }
     }
 
-    private <T> void refreshAsync(String key, Supplier<T> loader) {
+    private <T> void refreshAsync(TenantScopedKey key, Supplier<T> loader) {
         executeAsync(key, () -> loadAndStore(key, loader));
+    }
+
+    private boolean matchesPrefix(TenantScopedKey key, long tenantId, String prefix) {
+        return key.belongsTo(tenantId)
+            && key.businessKey() instanceof String businessKey
+            && businessKey.startsWith(prefix);
     }
 }

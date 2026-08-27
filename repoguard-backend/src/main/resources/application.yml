@@ -121,7 +121,24 @@ repoguard:
     # Roles that do not own Flyway migrations refuse to start below this version.
     # Keep in sync with the highest version under db/migration; the production
     # readiness check enforces the match.
-    expected-version: ${REPOGUARD_SCHEMA_EXPECTED_VERSION:67}
+    expected-version: ${REPOGUARD_SCHEMA_EXPECTED_VERSION:70}
+  tenancy:
+    enabled: ${REPOGUARD_TENANCY_ENABLED:false}
+    header-name: ${REPOGUARD_TENANCY_HEADER_NAME:X-RepoGuard-Tenant}
+  scheduling:
+    lease-seconds: ${REPOGUARD_SCHEDULING_LEASE_SECONDS:900}
+  enterprise-oidc:
+    enabled: ${REPOGUARD_ENTERPRISE_OIDC_ENABLED:false}
+    issuer-uri: ${REPOGUARD_ENTERPRISE_OIDC_ISSUER_URI:}
+    audience: ${REPOGUARD_ENTERPRISE_OIDC_AUDIENCE:}
+    required-amr: ${REPOGUARD_ENTERPRISE_OIDC_REQUIRED_AMR:mfa}
+  github-app:
+    enabled: ${REPOGUARD_GITHUB_APP_ENABLED:false}
+    app-id: ${REPOGUARD_GITHUB_APP_APP_ID:}
+    private-key: ${REPOGUARD_GITHUB_APP_PRIVATE_KEY:}
+    allowed-installation-ids: ${REPOGUARD_GITHUB_APP_ALLOWED_INSTALLATION_IDS:}
+    token-refresh-skew-seconds: ${REPOGUARD_GITHUB_APP_TOKEN_REFRESH_SKEW_SECONDS:90}
+    api-version: ${REPOGUARD_GITHUB_APP_API_VERSION:2022-11-28}
   async:
     github-comment-threads: ${REPOGUARD_ASYNC_GITHUB_COMMENT_THREADS:2}
     github-comment-queue-capacity: ${REPOGUARD_ASYNC_GITHUB_COMMENT_QUEUE_CAPACITY:100}

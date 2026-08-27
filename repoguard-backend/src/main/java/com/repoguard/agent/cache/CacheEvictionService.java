@@ -4,6 +4,8 @@ import com.repoguard.agent.config.CacheNames;
 import com.repoguard.agent.dashboard.DashboardDailySnapshotService;
 import com.repoguard.agent.dashboard.DashboardSnapshotStore;
 import com.repoguard.agent.review.quality.ReviewQualityBaselineService;
+import com.repoguard.agent.tenancy.TenantContext;
+import com.repoguard.agent.tenancy.TenantScopedKey;
 import java.time.LocalDate;
 import java.util.Objects;
 import java.util.function.Supplier;
@@ -104,7 +106,7 @@ public class CacheEvictionService {
             );
         }
         submitQualityBaselineRefresh();
-        clear(CacheNames.REVIEW_TASK_LIST_SUMMARY);
+        clearTenant(CacheNames.REVIEW_TASK_LIST_SUMMARY);
         evictDashboardOverviewCompatibilityNow();
         evictDashboardSummary();
         evictDashboardReviewTrend();
@@ -148,7 +150,7 @@ public class CacheEvictionService {
     }
 
     private void evictDashboardRulesNow() {
-        clear(CacheNames.DASHBOARD_RULES);
+        clearTenant(CacheNames.DASHBOARD_RULES);
         evictSnapshot(CacheNames.DASHBOARD_RULES + ":rules");
     }
 
@@ -157,47 +159,57 @@ public class CacheEvictionService {
     }
 
     private void evictDashboardOverviewCompatibilityNow() {
-        clear(CacheNames.DASHBOARD_OVERVIEW);
+        clearTenant(CacheNames.DASHBOARD_OVERVIEW);
         evictSnapshotsByPrefix(CacheNames.DASHBOARD_OVERVIEW + ":");
     }
 
     public void evictGithubOpenPullRequests() {
-        afterCommitOrNow(() -> clear(CacheNames.GITHUB_OPEN_PULL_REQUESTS));
+        afterCommitOrNow(() -> clearTenant(CacheNames.GITHUB_OPEN_PULL_REQUESTS));
     }
 
     public void evictReviewRules() {
-        afterCommitOrNow(() -> clear(CacheNames.REVIEW_RULES));
+        afterCommitOrNow(() -> clearTenant(CacheNames.REVIEW_RULES));
     }
 
-    private void clear(String cacheName) {
+    private void clearTenant(String cacheName) {
         Cache cache = cacheManager.getCache(cacheName);
-        if (cache != null) {
-            cache.clear();
+        if (cache == null) {
+            return;
         }
+        Object nativeCache = cache.getNativeCache();
+        if (nativeCache instanceof com.github.benmanes.caffeine.cache.Cache<?, ?> caffeineCache) {
+            long tenantId = TenantContext.currentTenantIdOrDefault();
+            caffeineCache.asMap().keySet().stream()
+                .filter(key -> !(key instanceof TenantScopedKey scopedKey) || scopedKey.belongsTo(tenantId))
+                .toList()
+                .forEach(cache::evict);
+            return;
+        }
+        cache.clear();
     }
 
     private void evictDashboardSummary() {
-        clear(CacheNames.DASHBOARD_SUMMARY);
+        clearTenant(CacheNames.DASHBOARD_SUMMARY);
         evictSnapshot(CacheNames.DASHBOARD_SUMMARY + ":summary");
     }
 
     private void evictDashboardReviewTrend() {
-        clear(CacheNames.DASHBOARD_REVIEW_TREND);
+        clearTenant(CacheNames.DASHBOARD_REVIEW_TREND);
         evictSnapshot(CacheNames.DASHBOARD_REVIEW_TREND + ":reviewTrend");
     }
 
     private void evictDashboardRiskDistribution() {
-        clear(CacheNames.DASHBOARD_RISK_DISTRIBUTION);
+        clearTenant(CacheNames.DASHBOARD_RISK_DISTRIBUTION);
         evictSnapshot(CacheNames.DASHBOARD_RISK_DISTRIBUTION + ":riskDistribution");
     }
 
     private void evictDashboardHighRiskReviews() {
-        clear(CacheNames.DASHBOARD_HIGH_RISK_REVIEWS);
+        clearTenant(CacheNames.DASHBOARD_HIGH_RISK_REVIEWS);
         evictSnapshot(CacheNames.DASHBOARD_HIGH_RISK_REVIEWS + ":highRiskReviews");
     }
 
     private void evictDashboardLlmQuality() {
-        clear(CacheNames.DASHBOARD_LLM_QUALITY);
+        clearTenant(CacheNames.DASHBOARD_LLM_QUALITY);
         evictSnapshotsByPrefix(CacheNames.DASHBOARD_LLM_QUALITY + ":");
     }
 

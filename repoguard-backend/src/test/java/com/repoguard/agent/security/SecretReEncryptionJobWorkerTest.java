@@ -1,6 +1,7 @@
 package com.repoguard.agent.security;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -8,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.entity.SecretReEncryptionJob;
 import com.repoguard.agent.mapper.SecretReEncryptionJobMapper;
+import com.repoguard.agent.tenancy.TenantContext;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
@@ -27,19 +29,40 @@ class SecretReEncryptionJobWorkerTest {
 
     @Test
     void claimsAndProcessesOneDueJob() {
-        when(jobMapper.selectDueJob(any())).thenReturn(job(7L));
-        when(jobMapper.claim(any(), anyString(), any(), any())).thenReturn(1);
+        when(jobMapper.selectDueJob(anyLong(), any())).thenReturn(job(7L));
+        when(jobMapper.claim(any(), anyLong(), anyString(), any(), any())).thenReturn(1);
 
         worker.processDueJob();
 
+        verify(jobMapper).selectDueJob(Mockito.eq(TenantContext.DEFAULT_TENANT_ID), any());
+        verify(jobMapper).claim(
+            Mockito.eq(7L),
+            Mockito.eq(TenantContext.DEFAULT_TENANT_ID),
+            anyString(),
+            any(),
+            any()
+        );
         verify(batchProcessor).process(Mockito.eq(7L), anyString());
         verify(jobService, never()).markInfrastructureFailure(any(), anyString(), any());
     }
 
     @Test
+    void usesCurrentTenantForDueSelectionAndClaim() {
+        when(jobMapper.selectDueJob(anyLong(), any())).thenReturn(job(8L));
+        when(jobMapper.claim(any(), anyLong(), anyString(), any(), any())).thenReturn(1);
+
+        try (TenantContext.Scope _ = TenantContext.withTenant(23L)) {
+            worker.processDueJob();
+        }
+
+        verify(jobMapper).selectDueJob(Mockito.eq(23L), any());
+        verify(jobMapper).claim(Mockito.eq(8L), Mockito.eq(23L), anyString(), any(), any());
+    }
+
+    @Test
     void skipsProcessingWhenAnotherWorkerWinsTheClaim() {
-        when(jobMapper.selectDueJob(any())).thenReturn(job(7L));
-        when(jobMapper.claim(any(), anyString(), any(), any())).thenReturn(0);
+        when(jobMapper.selectDueJob(anyLong(), any())).thenReturn(job(7L));
+        when(jobMapper.claim(any(), anyLong(), anyString(), any(), any())).thenReturn(0);
 
         worker.processDueJob();
 
@@ -48,8 +71,8 @@ class SecretReEncryptionJobWorkerTest {
 
     @Test
     void recordsInfrastructureFailureWithoutLeakingTheExceptionMessage() {
-        when(jobMapper.selectDueJob(any())).thenReturn(job(7L));
-        when(jobMapper.claim(any(), anyString(), any(), any())).thenReturn(1);
+        when(jobMapper.selectDueJob(anyLong(), any())).thenReturn(job(7L));
+        when(jobMapper.claim(any(), anyLong(), anyString(), any(), any())).thenReturn(1);
         Mockito.doThrow(new IllegalStateException("sensitive database detail"))
             .when(batchProcessor)
             .process(Mockito.eq(7L), anyString());
@@ -66,8 +89,8 @@ class SecretReEncryptionJobWorkerTest {
 
     @Test
     void claimLossDoesNotConsumeARetryAttempt() {
-        when(jobMapper.selectDueJob(any())).thenReturn(job(7L));
-        when(jobMapper.claim(any(), anyString(), any(), any())).thenReturn(1);
+        when(jobMapper.selectDueJob(anyLong(), any())).thenReturn(job(7L));
+        when(jobMapper.claim(any(), anyLong(), anyString(), any(), any())).thenReturn(1);
         Mockito.doThrow(new SecretReEncryptionClaimLostException(7L))
             .when(batchProcessor)
             .process(Mockito.eq(7L), anyString());

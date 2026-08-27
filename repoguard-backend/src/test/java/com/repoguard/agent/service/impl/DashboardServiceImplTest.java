@@ -123,16 +123,18 @@ class DashboardServiceImplTest {
         assertThat(cacheable).isNotNull();
         assertThat(cacheable.sync()).isTrue();
         assertThat(cacheable.key())
-            .isEqualTo("T(com.repoguard.agent.dashboard.DashboardLlmTrendDays).normalize(#llmTrendDays)");
+            .isEqualTo(tenantKey(
+                "T(com.repoguard.agent.dashboard.DashboardLlmTrendDays).normalize(#llmTrendDays)"
+            ));
     }
 
     @Test
     void dashboardModuleMethodsUseSeparatedSynchronizedCaches() throws Exception {
-        assertCache("getSummary", CacheNames.DASHBOARD_SUMMARY, "'summary'");
-        assertCache("getReviewTrend", CacheNames.DASHBOARD_REVIEW_TREND, "'reviewTrend'");
-        assertCache("getRiskDistribution", CacheNames.DASHBOARD_RISK_DISTRIBUTION, "'riskDistribution'");
-        assertCache("getRules", CacheNames.DASHBOARD_RULES, "'rules'");
-        assertCache("getHighRiskReviews", CacheNames.DASHBOARD_HIGH_RISK_REVIEWS, "'highRiskReviews'");
+        assertCache("getSummary", CacheNames.DASHBOARD_SUMMARY, tenantKey("'summary'"));
+        assertCache("getReviewTrend", CacheNames.DASHBOARD_REVIEW_TREND, tenantKey("'reviewTrend'"));
+        assertCache("getRiskDistribution", CacheNames.DASHBOARD_RISK_DISTRIBUTION, tenantKey("'riskDistribution'"));
+        assertCache("getRules", CacheNames.DASHBOARD_RULES, tenantKey("'rules'"));
+        assertCache("getHighRiskReviews", CacheNames.DASHBOARD_HIGH_RISK_REVIEWS, tenantKey("'highRiskReviews'"));
 
         Cacheable llmQualityCache = DashboardServiceImpl.class
             .getMethod("getLlmQuality", Integer.class)
@@ -140,7 +142,9 @@ class DashboardServiceImplTest {
         assertThat(llmQualityCache.cacheNames()).containsExactly(CacheNames.DASHBOARD_LLM_QUALITY);
         assertThat(llmQualityCache.sync()).isTrue();
         assertThat(llmQualityCache.key())
-            .isEqualTo("T(com.repoguard.agent.dashboard.DashboardLlmTrendDays).normalize(#llmTrendDays)");
+            .isEqualTo(tenantKey(
+                "T(com.repoguard.agent.dashboard.DashboardLlmTrendDays).normalize(#llmTrendDays)"
+            ));
     }
 
     @Test
@@ -476,6 +480,10 @@ class DashboardServiceImplTest {
         assertThat(cacheable.cacheNames()).containsExactly(cacheName);
         assertThat(cacheable.sync()).isTrue();
         assertThat(cacheable.key()).isEqualTo(key);
+    }
+
+    private static String tenantKey(String businessKey) {
+        return "T(com.repoguard.agent.tenancy.TenantScopedKey).current(" + businessKey + ")";
     }
 
     private DashboardRiskLevelCount riskLevelCount(String riskLevel, Long total) {

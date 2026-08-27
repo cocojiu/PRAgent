@@ -18,6 +18,7 @@ public class AdminOperationAuditWebConfig implements WebMvcConfigurer {
         registry.addInterceptor(interceptor)
             .addPathPatterns(
                 "/api/v1/config/**",
+                "/api/v1/enterprise/**",
                 "/api/v1/notification-events/**",
                 "/api/v1/message-queue/**"
             )

@@ -31,7 +31,10 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
     }
 
     @Override
-    @Cacheable(cacheNames = CacheNames.REVIEW_RULES)
+    @Cacheable(
+        cacheNames = CacheNames.REVIEW_RULES,
+        key = "T(com.repoguard.agent.tenancy.TenantScopedKey).current('rules')"
+    )
     public ReviewRulesResponse getReviewRules() {
         return queryService.getReviewRules();
     }

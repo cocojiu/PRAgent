@@ -12,7 +12,8 @@ public interface SecretReEncryptionJobMapper extends BaseMapper<SecretReEncrypti
     @Select("""
         select *
         from secret_re_encryption_job
-        where (
+        where tenant_id = #{tenantId}
+          and (
             (
                 status in ('PENDING', 'RETRY_WAIT')
                 and (next_retry_at is null or next_retry_at <= #{now})
@@ -25,7 +26,10 @@ public interface SecretReEncryptionJobMapper extends BaseMapper<SecretReEncrypti
         order by id
         limit 1
         """)
-    SecretReEncryptionJob selectDueJob(@Param("now") LocalDateTime now);
+    SecretReEncryptionJob selectDueJob(
+        @Param("tenantId") long tenantId,
+        @Param("now") LocalDateTime now
+    );
 
     @Update("""
         update secret_re_encryption_job
@@ -36,6 +40,7 @@ public interface SecretReEncryptionJobMapper extends BaseMapper<SecretReEncrypti
             next_retry_at = null,
             updated_at = #{now}
         where id = #{jobId}
+          and tenant_id = #{tenantId}
           and (
               (
                   status in ('PENDING', 'RETRY_WAIT')
@@ -49,6 +54,7 @@ public interface SecretReEncryptionJobMapper extends BaseMapper<SecretReEncrypti
         """)
     int claim(
         @Param("jobId") Long jobId,
+        @Param("tenantId") long tenantId,
         @Param("ownerId") String ownerId,
         @Param("now") LocalDateTime now,
         @Param("leaseUntil") LocalDateTime leaseUntil

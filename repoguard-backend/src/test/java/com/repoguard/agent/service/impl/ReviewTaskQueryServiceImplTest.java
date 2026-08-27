@@ -308,7 +308,9 @@ class ReviewTaskQueryServiceImplTest {
         org.assertj.core.api.Assertions.assertThat(cacheable.cacheNames())
             .containsExactly(CacheNames.REVIEW_TASK_LIST_SUMMARY);
         org.assertj.core.api.Assertions.assertThat(cacheable.sync()).isTrue();
-        org.assertj.core.api.Assertions.assertThat(cacheable.key()).isEqualTo("#query.listSummaryCacheKey()");
+        org.assertj.core.api.Assertions.assertThat(cacheable.key()).isEqualTo(
+            "T(com.repoguard.agent.tenancy.TenantScopedKey).current(#query.listSummaryCacheKey())"
+        );
         org.assertj.core.api.Assertions.assertThat(
             new ReviewQuery(1, 1, " org/repo ", "failed", null, null, null, null).listSummaryCacheKey()
         ).isEqualTo(new ReviewQuery.ReviewListSummaryCacheKey(

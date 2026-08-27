@@ -1,6 +1,7 @@
 package com.repoguard.agent.retention;
 
 import com.repoguard.agent.mapper.OperationalDataRetentionMapper;
+import com.repoguard.agent.tenancy.TenantContext;
 import java.time.LocalDateTime;
 import java.util.function.IntSupplier;
 import org.springframework.stereotype.Component;
@@ -19,12 +20,19 @@ class OperationalDataRetentionBatchExecutor {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public int deleteAndAudit(String table, LocalDateTime cutoff, IntSupplier deletion) {
         int deleted = deletion.getAsInt();
-        mapper.insertAudit(table, cutoff, deleted, "SUCCESS", null);
+        mapper.insertAudit(TenantContext.currentTenantId(), table, cutoff, deleted, "SUCCESS", null);
         return deleted;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void recordFailure(String table, LocalDateTime cutoff, RuntimeException failure) {
-        mapper.insertAudit(table, cutoff, 0, "FAILED", failure.getClass().getSimpleName());
+        mapper.insertAudit(
+            TenantContext.currentTenantId(),
+            table,
+            cutoff,
+            0,
+            "FAILED",
+            failure.getClass().getSimpleName()
+        );
     }
 }

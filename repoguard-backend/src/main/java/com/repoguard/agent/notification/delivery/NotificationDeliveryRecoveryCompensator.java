@@ -12,12 +12,11 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
 @SchedulerRuntimeEnabled
-class NotificationDeliveryRecoveryCompensator {
+public class NotificationDeliveryRecoveryCompensator {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(NotificationDeliveryRecoveryCompensator.class);
 
@@ -51,7 +50,6 @@ class NotificationDeliveryRecoveryCompensator {
         this.clock = clock;
     }
 
-    @Scheduled(fixedDelayString = "${app.rabbit.notification.delivery-recovery-interval-ms:60000}")
     public void recoverExpiredClaims() {
         LocalDateTime now = LocalDateTime.now(clock);
         LocalDateTime expiredBefore = now.minusNanos(claimLeaseNanos());

@@ -1,6 +1,8 @@
 package com.repoguard.agent.review.task;
 
 import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.tenancy.TenantContext;
+import com.repoguard.agent.tenancy.TenantScopedKey;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -13,7 +15,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class ManualReviewIdempotencyCoordinator {
 
-    private final ConcurrentMap<String, CompletableFuture<ReviewTask>> inFlightManualCreates = new ConcurrentHashMap<>();
+    private final ConcurrentMap<TenantScopedKey, CompletableFuture<ReviewTask>> inFlightManualCreates =
+        new ConcurrentHashMap<>();
     private final ScheduledExecutorService cleanupExecutor;
 
     @Autowired
@@ -25,14 +28,14 @@ public class ManualReviewIdempotencyCoordinator {
     }
 
     public CompletableFuture<ReviewTask> registerOwner(String idempotencyKey, CompletableFuture<ReviewTask> ownerFuture) {
-        return inFlightManualCreates.putIfAbsent(idempotencyKey, ownerFuture);
+        return inFlightManualCreates.putIfAbsent(TenantScopedKey.current(idempotencyKey), ownerFuture);
     }
 
     public void remove(String idempotencyKey, CompletableFuture<ReviewTask> future) {
-        inFlightManualCreates.remove(idempotencyKey, future);
+        inFlightManualCreates.remove(TenantScopedKey.current(idempotencyKey), future);
     }
 
     public void scheduleRemove(String idempotencyKey, CompletableFuture<ReviewTask> future, long delay, TimeUnit unit) {
-        cleanupExecutor.schedule(() -> remove(idempotencyKey, future), delay, unit);
+        cleanupExecutor.schedule(TenantContext.wrap(() -> remove(idempotencyKey, future)), delay, unit);
     }
 }

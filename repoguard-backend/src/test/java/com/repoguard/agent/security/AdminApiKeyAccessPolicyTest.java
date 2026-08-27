@@ -19,6 +19,7 @@ class AdminApiKeyAccessPolicyTest {
             .extracting(endpoint -> endpoint.method() + " " + endpoint.pathPattern())
             .containsExactly(
                 "* /api/v1/config/**",
+                "* /api/v1/enterprise/**",
                 "* /api/v1/message-queue/**",
                 "* /api/v1/notification-events",
                 "* /api/v1/notification-events/**",

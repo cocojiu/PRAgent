@@ -3021,6 +3021,239 @@
         }
       }
     },
+    "/api/v1/enterprise/tenants" : {
+      "post" : {
+        "tags" : [ "EnterpriseTenant" ],
+        "operationId" : "enterpriseTenantControllerCreate",
+        "x-controller-operation" : "EnterpriseTenantController#create",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "EnterpriseTenantCreateRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/EnterpriseTenantCreateRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "EnterpriseTenantDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/EnterpriseTenantDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/enterprise/tenants/{tenantKey}/identities" : {
+      "put" : {
+        "tags" : [ "EnterpriseTenant" ],
+        "operationId" : "enterpriseTenantControllerPutIdentity",
+        "x-controller-operation" : "EnterpriseTenantController#putIdentity",
+        "parameters" : [ {
+          "name" : "tenantKey",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "EnterpriseIdentityBindingRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/EnterpriseIdentityBindingRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "Void",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "null"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/enterprise/tenants/{tenantKey}/memberships" : {
+      "put" : {
+        "tags" : [ "EnterpriseTenant" ],
+        "operationId" : "enterpriseTenantControllerPutMembership",
+        "x-controller-operation" : "EnterpriseTenantController#putMembership",
+        "parameters" : [ {
+          "name" : "tenantKey",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "EnterpriseTenantMembershipRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/EnterpriseTenantMembershipRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "Void",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "null"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/enterprise/tenants/{tenantKey}/repositories" : {
+      "put" : {
+        "tags" : [ "EnterpriseTenant" ],
+        "operationId" : "enterpriseTenantControllerPutRepository",
+        "x-controller-operation" : "EnterpriseTenantController#putRepository",
+        "parameters" : [ {
+          "name" : "tenantKey",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "EnterpriseTenantRepositoryRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/EnterpriseTenantRepositoryRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "Void",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "null"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/github/webhooks" : {
       "post" : {
         "tags" : [ "GithubWebhook" ],
@@ -6044,6 +6277,108 @@
           }
         },
         "required" : [ "executed", "cleanupBatchId", "retentionDays", "maxTasks", "candidateTasks", "selectedTasks", "deletedBatchItems", "deletedPublications", "deletedBatches", "deletedChangedFiles", "deletedTimelines", "deletedFindings", "deletedTasks" ]
+      },
+      "EnterpriseIdentityBindingRequest" : {
+        "type" : "object",
+        "x-java-type" : "EnterpriseIdentityBindingRequest",
+        "properties" : {
+          "userId" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          },
+          "issuer" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 512
+          },
+          "subject" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 255
+          }
+        },
+        "required" : [ "userId", "issuer", "subject" ]
+      },
+      "EnterpriseTenantCreateRequest" : {
+        "type" : "object",
+        "x-java-type" : "EnterpriseTenantCreateRequest",
+        "properties" : {
+          "tenantKey" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "^[a-z0-9][a-z0-9-]{1,62}$"
+          },
+          "displayName" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "initialAdminUserId" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        },
+        "required" : [ "tenantKey", "displayName", "initialAdminUserId" ]
+      },
+      "EnterpriseTenantDto" : {
+        "type" : "object",
+        "x-java-type" : "EnterpriseTenantDto",
+        "properties" : {
+          "tenantId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "tenantKey" : {
+            "type" : "string"
+          },
+          "displayName" : {
+            "type" : "string"
+          }
+        }
+      },
+      "EnterpriseTenantMembershipRequest" : {
+        "type" : "object",
+        "x-java-type" : "EnterpriseTenantMembershipRequest",
+        "properties" : {
+          "userId" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          },
+          "role" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "^(ADMIN|VIEWER)$"
+          },
+          "defaultTenant" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "userId", "role", "defaultTenant" ]
+      },
+      "EnterpriseTenantRepositoryRequest" : {
+        "type" : "object",
+        "x-java-type" : "EnterpriseTenantRepositoryRequest",
+        "properties" : {
+          "organization" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "repository" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "githubInstallationId" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        },
+        "required" : [ "organization", "repository", "githubInstallationId" ]
       },
       "FailedRuleStatDto" : {
         "type" : "object",

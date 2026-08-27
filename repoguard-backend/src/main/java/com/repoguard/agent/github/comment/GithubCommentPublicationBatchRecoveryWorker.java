@@ -7,12 +7,11 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
 @SchedulerRuntimeEnabled
-class GithubCommentPublicationBatchRecoveryWorker {
+public class GithubCommentPublicationBatchRecoveryWorker {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GithubCommentPublicationBatchRecoveryWorker.class);
     private static final long CLAIM_TIMEOUT_MS = 30 * 60 * 1000L;
@@ -31,7 +30,6 @@ class GithubCommentPublicationBatchRecoveryWorker {
         this.batchSize = Math.max(1, batchSize);
     }
 
-    @Scheduled(fixedDelayString = "${app.github.comment-publish.recovery-interval-ms:60000}")
     public void recoverPublishBatches() {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime runningExpiredBefore = now.minusNanos(CLAIM_TIMEOUT_MS * 1_000_000);

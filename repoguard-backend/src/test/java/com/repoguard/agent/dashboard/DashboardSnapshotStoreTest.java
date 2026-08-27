@@ -2,6 +2,9 @@ package com.repoguard.agent.dashboard;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.repoguard.agent.tenancy.TenantContext;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -80,6 +83,30 @@ class DashboardSnapshotStoreTest {
         })).isEqualTo("stale");
         assertThat(submissionCount).hasValue(2);
         assertThat(loadCount).hasValue(2);
+    }
+
+    @Test
+    void sameSnapshotKeyAndEvictionAreIsolatedByTenant() {
+        List<Runnable> refreshes = new ArrayList<>();
+        DashboardSnapshotStore store = new DashboardSnapshotStore(refreshes::add);
+
+        try (TenantContext.Scope _ = TenantContext.withTenant(2L)) {
+            assertThat(store.getOrLoad("dashboardSummary:summary", () -> "tenant-two"))
+                .isEqualTo("tenant-two");
+        }
+        try (TenantContext.Scope _ = TenantContext.withTenant(3L)) {
+            assertThat(store.getOrLoad("dashboardSummary:summary", () -> "tenant-three"))
+                .isEqualTo("tenant-three");
+        }
+        try (TenantContext.Scope _ = TenantContext.withTenant(2L)) {
+            store.evict("dashboardSummary:summary");
+            assertThat(store.getOrLoad("dashboardSummary:summary", () -> "tenant-two-refreshed"))
+                .isEqualTo("tenant-two-refreshed");
+        }
+        try (TenantContext.Scope _ = TenantContext.withTenant(3L)) {
+            assertThat(store.getOrLoad("dashboardSummary:summary", () -> "wrong-tenant"))
+                .isEqualTo("tenant-three");
+        }
     }
 
     private static void await(CountDownLatch latch) {

@@ -1,6 +1,7 @@
 package com.repoguard.agent.review.task;
 
 import com.repoguard.agent.observability.ReviewTaskLogContextValues;
+import com.repoguard.agent.tenancy.TenantContext;
 import java.time.LocalDateTime;
 
 public record ReviewTaskMessage(
@@ -11,8 +12,32 @@ public record ReviewTaskMessage(
     String commit,
     LocalDateTime queuedAt,
     String traceId,
-    Integer priority
+    Integer priority,
+    Long tenantId
 ) implements ReviewTaskLogContextValues {
+
+    public ReviewTaskMessage(
+        Long taskId,
+        String organization,
+        String repository,
+        Integer prNumber,
+        String commit,
+        LocalDateTime queuedAt,
+        String traceId,
+        Integer priority
+    ) {
+        this(
+            taskId,
+            organization,
+            repository,
+            prNumber,
+            commit,
+            queuedAt,
+            traceId,
+            priority,
+            TenantContext.currentTenantId()
+        );
+    }
 
     public ReviewTaskMessage(
         Long taskId,

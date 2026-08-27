@@ -9,7 +9,6 @@ import java.util.List;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -35,7 +34,6 @@ public class ReviewAttemptRetentionWorker {
         this.meterRegistry = Objects.requireNonNull(meterRegistry, "meterRegistry");
     }
 
-    @Scheduled(cron = "${repoguard.operational-data-retention.review-attempt-cron:0 45 3 * * *}")
     public void cleanup() {
         if (!properties.isEnabled()) {
             return;

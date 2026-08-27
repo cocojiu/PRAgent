@@ -31,8 +31,9 @@ public interface OperationalDataRetentionMapper {
     @Delete("delete from operational_data_cleanup_audit where id in (select id from (select id from operational_data_cleanup_audit where created_at < #{cutoff} order by created_at, id limit #{limit}) c)")
     int deleteCleanupAudits(@Param("cutoff") LocalDateTime cutoff, @Param("limit") int limit);
 
-    @Insert("insert into operational_data_cleanup_audit(table_name, cutoff_at, deleted_rows, status, failure_category, created_at) values(#{tableName}, #{cutoff}, #{deletedRows}, #{status}, #{failureCategory}, now())")
+    @Insert("insert into operational_data_cleanup_audit(tenant_id, table_name, cutoff_at, deleted_rows, status, failure_category, created_at) values(#{tenantId}, #{tableName}, #{cutoff}, #{deletedRows}, #{status}, #{failureCategory}, now())")
     int insertAudit(
+        @Param("tenantId") Long tenantId,
         @Param("tableName") String tableName,
         @Param("cutoff") LocalDateTime cutoff,
         @Param("deletedRows") int deletedRows,

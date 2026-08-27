@@ -5,6 +5,7 @@ import com.repoguard.agent.authentication.AuthenticatedPrincipal;
 import com.repoguard.agent.authentication.RequestAuthenticationAttributes;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.entity.UserAccount;
+import com.repoguard.agent.authentication.EnterpriseOidcAuthenticator;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -13,6 +14,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.util.Map;
+import java.util.Optional;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.cors.CorsUtils;
@@ -26,15 +28,26 @@ public class AuthTokenFilter extends OncePerRequestFilter {
     private final AuthTokenService authTokenService;
     private final AuthAccountCache authAccountCache;
     private final ObjectMapper objectMapper;
+    private final EnterpriseOidcAuthenticator enterpriseOidcAuthenticator;
+
+    public AuthTokenFilter(
+        AuthTokenService authTokenService,
+        AuthAccountCache authAccountCache,
+        ObjectMapper objectMapper,
+        EnterpriseOidcAuthenticator enterpriseOidcAuthenticator
+    ) {
+        this.authTokenService = authTokenService;
+        this.authAccountCache = authAccountCache;
+        this.objectMapper = objectMapper;
+        this.enterpriseOidcAuthenticator = enterpriseOidcAuthenticator;
+    }
 
     public AuthTokenFilter(
         AuthTokenService authTokenService,
         AuthAccountCache authAccountCache,
         ObjectMapper objectMapper
     ) {
-        this.authTokenService = authTokenService;
-        this.authAccountCache = authAccountCache;
-        this.objectMapper = objectMapper;
+        this(authTokenService, authAccountCache, objectMapper, null);
     }
 
     @Override
@@ -58,26 +71,31 @@ public class AuthTokenFilter extends OncePerRequestFilter {
             return;
         }
         String token = header.substring("Bearer ".length()).trim();
-        var authenticatedUser = authTokenService.verify(token);
+        Optional<AuthenticatedPrincipal> authenticatedUser = authTokenService.verify(token);
+        if (authenticatedUser.isEmpty() && enterpriseOidcAuthenticator != null) {
+            authenticatedUser = enterpriseOidcAuthenticator.authenticate(token);
+        }
         if (authenticatedUser.isEmpty()) {
             writeUnauthorized(response, "Authentication token is invalid or expired");
             return;
         }
-        UserAccount currentUser = authAccountCache.findById(authenticatedUser.get().id());
+        AuthenticatedPrincipal verifiedPrincipal = authenticatedUser.get();
+        UserAccount currentUser = authAccountCache.findById(verifiedPrincipal.id());
         if (currentUser == null || !STATUS_ACTIVE.equals(currentUser.getStatus())) {
             writeUnauthorized(response, "Authentication token is invalid or expired");
             return;
         }
-        if (safeSessionVersion(currentUser) != authenticatedUser.get().sessionVersion()) {
+        if (safeSessionVersion(currentUser) != verifiedPrincipal.sessionVersion()) {
             writeUnauthorized(response, "Authentication token is invalid or expired");
             return;
         }
         request.setAttribute(RequestAuthenticationAttributes.AUTHENTICATED_PRINCIPAL, new AuthenticatedPrincipal(
             currentUser.getId(),
             currentUser.getUsername(),
-            currentUser.getRole(),
-            authenticatedUser.get().expiresAt(),
-            safeSessionVersion(currentUser)
+            verifiedPrincipal.tenantId() == null ? currentUser.getRole() : verifiedPrincipal.role(),
+            verifiedPrincipal.expiresAt(),
+            safeSessionVersion(currentUser),
+            verifiedPrincipal.tenantId()
         ));
         filterChain.doFilter(request, response);
     }

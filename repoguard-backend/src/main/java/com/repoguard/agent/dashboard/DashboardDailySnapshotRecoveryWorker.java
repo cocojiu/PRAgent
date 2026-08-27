@@ -4,7 +4,6 @@ import com.repoguard.agent.config.SchedulerRuntimeEnabled;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -20,7 +19,6 @@ public class DashboardDailySnapshotRecoveryWorker {
         this.snapshotService = Objects.requireNonNull(snapshotService, "snapshotService must not be null");
     }
 
-    @Scheduled(fixedDelayString = "${repoguard.dashboard.snapshot-recovery-interval-ms:60000}")
     public void recoverDirtySnapshots() {
         try {
             int refreshed = snapshotService.refreshDirtySnapshots(RECOVERY_BATCH_SIZE);
@@ -32,7 +30,6 @@ public class DashboardDailySnapshotRecoveryWorker {
         }
     }
 
-    @Scheduled(cron = "${repoguard.dashboard.snapshot-reconciliation-cron:0 15 3 * * *}")
     public void reconcileCurrentWindows() {
         try {
             snapshotService.refreshCurrentWindows();
