@@ -105,14 +105,14 @@ public class TenantQuotaService {
                    tenant.tenant_key,
                    quota.quota_version,
                    quota.max_daily_reviews,
-                   coalesce(usage.review_count, 0) as used_reviews,
+                   coalesce(usage_row.review_count, 0) as used_reviews,
                    ? as usage_date,
                    quota.updated_at
               from tenant
               join tenant_quota_config quota on quota.tenant_id = tenant.id
-              left join tenant_quota_usage usage
-                on usage.tenant_id = tenant.id
-               and usage.usage_date = ?
+              left join tenant_quota_usage usage_row
+                on usage_row.tenant_id = tenant.id
+               and usage_row.usage_date = ?
              where tenant.tenant_key = ?
             """,
             QUOTA_ROW_MAPPER,
