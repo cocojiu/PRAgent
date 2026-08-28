@@ -133,10 +133,21 @@ jobs:
             echo "ENV_GRAFANA_ADMIN_PASSWORD_PRESENT=false"
           fi
 
-          if docker compose --env-file .env -f docker-compose.prod.yml config --services >"${production_config_stdout}" 2>"${production_config_stderr}"; then
-            echo "PRODUCTION_COMPOSE_CONFIG_OK=true"
-            echo "PRODUCTION_COMPOSE_SERVICES=$(paste -sd, - < "${production_config_stdout}")"
+          running_backend_image="$(docker inspect --format '{{.Config.Image}}' repoguard-backend 2>/dev/null || true)"
+          running_frontend_image="$(docker inspect --format '{{.Config.Image}}' repoguard-frontend 2>/dev/null || true)"
+          if [ -n "${running_backend_image}" ] && [ -n "${running_frontend_image}" ]; then
+            echo "PRODUCTION_COMPOSE_IMAGE_SOURCE=running_containers"
+            if BACKEND_IMAGE="${running_backend_image}" \
+              FRONTEND_IMAGE="${running_frontend_image}" \
+              docker compose --env-file .env -f docker-compose.prod.yml config --services \
+                >"${production_config_stdout}" 2>"${production_config_stderr}"; then
+              echo "PRODUCTION_COMPOSE_CONFIG_OK=true"
+              echo "PRODUCTION_COMPOSE_SERVICES=$(paste -sd, - < "${production_config_stdout}")"
+            else
+              echo "PRODUCTION_COMPOSE_CONFIG_OK=false"
+            fi
           else
+            echo "PRODUCTION_COMPOSE_IMAGE_SOURCE=missing_running_container"
             echo "PRODUCTION_COMPOSE_CONFIG_OK=false"
           fi
 
