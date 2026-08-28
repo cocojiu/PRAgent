@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.mapper.ReviewExecutionAttemptMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.LocalDateTime;
@@ -19,6 +20,56 @@ class ReviewTaskClaimServiceTest {
     private final ReviewTaskMapper reviewTaskMapper = org.mockito.Mockito.mock(ReviewTaskMapper.class);
     private final ReviewTaskClaimService claimService =
         new ReviewTaskClaimService(reviewTaskMapper, new ReviewTaskStateMachine());
+
+    @Test
+    void productionClaimUsesAtomicCurrentGenerationFence() {
+        ReviewExecutionAttemptMapper attemptMapper = org.mockito.Mockito.mock(ReviewExecutionAttemptMapper.class);
+        ReviewTaskClaimService fenced = new ReviewTaskClaimService(
+            reviewTaskMapper,
+            new ReviewTaskStateMachine(),
+            attemptMapper
+        );
+        ReviewTask task = new ReviewTask();
+        task.setId(42L);
+        LocalDateTime startedAt = LocalDateTime.parse("2026-08-15T04:00:00");
+        when(reviewTaskMapper.claimCurrentReview(42L, startedAt, "claim-1")).thenReturn(1);
+
+        assertThat(fenced.claimReviewing(task, startedAt, "claim-1")).isTrue();
+
+        verify(reviewTaskMapper).claimCurrentReview(42L, startedAt, "claim-1");
+    }
+
+    @Test
+    void recoveryMarksOwnedRunningAttemptAbandoned() {
+        ReviewExecutionAttemptMapper attemptMapper = org.mockito.Mockito.mock(ReviewExecutionAttemptMapper.class);
+        ReviewTaskClaimService fenced = new ReviewTaskClaimService(
+            reviewTaskMapper,
+            new ReviewTaskStateMachine(),
+            attemptMapper
+        );
+        ReviewTask task = new ReviewTask();
+        task.setId(42L);
+        task.setCurrentAttemptId(101L);
+        task.setReviewClaimedBy("claim-1");
+        task.setReviewClaimedAt(LocalDateTime.parse("2026-08-15T03:00:00"));
+        when(reviewTaskMapper.update(any())).thenReturn(1);
+        LocalDateTime recoveredAt = LocalDateTime.parse("2026-08-15T04:00:00");
+
+        assertThat(fenced.markRequeuePendingIfClaimOwned(
+            task,
+            recoveredAt,
+            LocalDateTime.parse("2026-08-15T03:30:00"),
+            "expired"
+        )).isTrue();
+
+        verify(attemptMapper).abandonRunningAttempt(
+            101L,
+            42L,
+            "claim-1",
+            "EXECUTION_LEASE_EXPIRED",
+            recoveredAt
+        );
+    }
 
     @Test
     void releasesReviewClaimFromTaskSnapshot() {

@@ -55,6 +55,10 @@ public class RepoGuardMetrics {
         reviewMetrics.executionStageDuration(duration, stage, result);
     }
 
+    public void reviewExecutionAttempt(String status) {
+        reviewMetrics.executionAttempt(status);
+    }
+
     public void reviewTaskFailed(RuntimeException ex) {
         reviewMetrics.taskFailed(ex);
     }

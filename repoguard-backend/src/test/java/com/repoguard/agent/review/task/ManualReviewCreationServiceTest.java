@@ -28,10 +28,67 @@ import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.AbstractPlatformTransactionManager;
 import org.springframework.transaction.support.DefaultTransactionStatus;
 import org.springframework.transaction.support.TransactionTemplate;
+import java.time.LocalDateTime;
 
 class ManualReviewCreationServiceTest {
 
     private static final String COMMIT_SHA = "0123456789abcdef0123456789abcdef01234567";
+
+    @Test
+    void staleWebhookIsPersistedAsSupersededAndNeverPublished() {
+        ReviewTaskMapper taskMapper = org.mockito.Mockito.mock(ReviewTaskMapper.class);
+        ReviewTimelineAppender timelineAppender = org.mockito.Mockito.mock(ReviewTimelineAppender.class);
+        ReviewTaskAfterCommitPublisher afterCommitPublisher = org.mockito.Mockito.mock(ReviewTaskAfterCommitPublisher.class);
+        ReviewPullRequestGenerationCoordinator generationCoordinator =
+            org.mockito.Mockito.mock(ReviewPullRequestGenerationCoordinator.class);
+        when(taskMapper.selectOne(any())).thenReturn(null);
+        org.mockito.Mockito.doAnswer(invocation -> {
+            ReviewTask task = invocation.getArgument(0);
+            task.setId(7002L);
+            return 1;
+        }).when(taskMapper).insertManualReview(any(ReviewTask.class));
+        when(generationCoordinator.advance(any(), any(), any(), any(), any(), any())).thenReturn(
+            new ReviewPullRequestGenerationCoordinator.GenerationAdvanceResult(
+                5L,
+                false,
+                "89abcdef0123456789abcdef0123456789abcdef"
+            )
+        );
+        ManualReviewCreationService service = new ManualReviewCreationService(
+            taskMapper,
+            timelineAppender,
+            org.mockito.Mockito.mock(RepoGuardMetrics.class),
+            org.mockito.Mockito.mock(CacheEvictionService.class),
+            new ReviewTaskStateMachine(),
+            new TransactionTemplate(new RecordingTransactionManager()),
+            new ManualReviewIdempotencyCoordinator(org.mockito.Mockito.mock(ScheduledExecutorService.class)),
+            afterCommitPublisher,
+            org.mockito.Mockito.mock(ReviewRepositoryDimensionService.class),
+            generationCoordinator
+        );
+
+        ManualReviewResponse response = service.triggerWebhookReview(
+            new ManualReviewRequest(
+                "org",
+                "repo",
+                7,
+                "stale",
+                COMMIT_SHA,
+                "main",
+                "github_webhook"
+            ),
+            LocalDateTime.parse("2026-08-15T02:00:00")
+        );
+
+        org.mockito.ArgumentCaptor<ReviewTask> taskCaptor = org.mockito.ArgumentCaptor.forClass(ReviewTask.class);
+        verify(taskMapper).insertManualReview(taskCaptor.capture());
+        assertThat(taskCaptor.getValue().getStatus()).isEqualTo("SUPERSEDED");
+        assertThat(taskCaptor.getValue().getAssessmentStatus()).isEqualTo("SUPERSEDED");
+        assertThat(response.status()).isEqualTo("superseded");
+        org.mockito.Mockito.verifyNoInteractions(afterCommitPublisher);
+        org.mockito.Mockito.verify(generationCoordinator, org.mockito.Mockito.never())
+            .supersedeOlderPending(any(), any(), any(), any(), any(), any());
+    }
 
     @Test
     void constructorRejectsMissingMetrics() {

@@ -3,13 +3,14 @@ package com.repoguard.agent.retention;
 import com.repoguard.agent.config.OperationalDataRetentionProperties;
 import com.repoguard.agent.config.SchedulerRuntimeEnabled;
 import com.repoguard.agent.mapper.OperationalDataRetentionMapper;
+import com.repoguard.agent.tenancy.ScheduledJobLeaseContext;
+import com.repoguard.agent.tenancy.TenantContext;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.LocalDateTime;
 import java.util.function.Function;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -43,8 +44,12 @@ public class OperationalDataRetentionWorker {
         this(mapper, properties, meterRegistry, new OperationalDataRetentionBatchExecutor(mapper));
     }
 
-    @Scheduled(cron = "${repoguard.operational-data-retention.cron:0 30 3 * * *}")
     public void cleanup() {
+        cleanupGlobalData();
+        cleanupTenantData();
+    }
+
+    public void cleanupGlobalData() {
         if (!properties.isEnabled()) {
             return;
         }
@@ -53,10 +58,22 @@ public class OperationalDataRetentionWorker {
         clean("user_login_audit", properties.getLoginAuditDays(), cutoff -> mapper.deleteLoginAudits(cutoff, limit));
         clean("user_operation_audit", properties.getOperationAuditDays(), cutoff -> mapper.deleteUserOperationAudits(cutoff, limit));
         clean("admin_operation_audit", properties.getOperationAuditDays(), cutoff -> mapper.deleteAdminOperationAudits(cutoff, limit));
+        clean("operational_data_cleanup_audit", properties.getOperationAuditDays(), cutoff -> mapper.deleteCleanupAudits(cutoff, limit));
+    }
+
+    public void cleanupTenantData() {
+        if (!properties.isEnabled()) {
+            return;
+        }
+        int limit = properties.normalizedBatchSize();
         clean("system_setting_log", properties.getSystemSettingLogDays(), cutoff -> mapper.deleteSystemSettingLogs(cutoff, limit));
         clean("notification_delivery_log", properties.getNotificationLogDays(), cutoff -> mapper.deleteNotificationDeliveries(cutoff, limit));
         clean("notification_event", properties.getNotificationLogDays(), cutoff -> mapper.deleteNotificationEvents(cutoff, limit));
-        clean("operational_data_cleanup_audit", properties.getOperationAuditDays(), cutoff -> mapper.deleteCleanupAudits(cutoff, limit));
+        clean(
+            "tenant_quota_usage",
+            properties.getTenantQuotaUsageDays(),
+            cutoff -> mapper.deleteTenantQuotaUsage(TenantContext.currentTenantIdOrDefault(), cutoff, limit)
+        );
     }
 
     private void clean(String table, int retentionDays, Function<LocalDateTime, Integer> delete) {
@@ -64,6 +81,7 @@ public class OperationalDataRetentionWorker {
         int limit = properties.normalizedBatchSize();
         int maxBatches = properties.normalizedMaxBatchesPerRun();
         for (int batch = 0; batch < maxBatches; batch++) {
+            ScheduledJobLeaseContext.assertHeld();
             try {
                 int deleted = batchExecutor.deleteAndAudit(table, cutoff, () -> delete.apply(cutoff));
                 meterRegistry.counter("repoguard.operational.retention.deleted", "table", table).increment(deleted);

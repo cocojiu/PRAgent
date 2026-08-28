@@ -4,8 +4,11 @@ import com.repoguard.agent.config.CacheNames;
 import com.repoguard.agent.dashboard.DashboardDailySnapshotService;
 import com.repoguard.agent.dashboard.DashboardSnapshotStore;
 import com.repoguard.agent.review.quality.ReviewQualityBaselineService;
+import com.repoguard.agent.tenancy.TenantContext;
+import com.repoguard.agent.tenancy.TenantScopedKey;
 import java.time.LocalDate;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,14 +27,27 @@ public class CacheEvictionService {
     private static final String REVIEW_ACTIVITY_REFRESH_KEY = "maintenance:daily-review-activity";
     private static final String FEEDBACK_QUALITY_REFRESH_KEY = "maintenance:daily-feedback-quality";
     private static final String QUALITY_BASELINE_REFRESH_KEY = "maintenance:review-quality-baseline";
+    private static final Set<String> TENANT_CACHE_NAMES = Set.of(
+        CacheNames.DASHBOARD_OVERVIEW,
+        CacheNames.DASHBOARD_SUMMARY,
+        CacheNames.DASHBOARD_REVIEW_TREND,
+        CacheNames.DASHBOARD_RISK_DISTRIBUTION,
+        CacheNames.DASHBOARD_RULES,
+        CacheNames.DASHBOARD_HIGH_RISK_REVIEWS,
+        CacheNames.DASHBOARD_LLM_QUALITY,
+        CacheNames.REVIEW_TASK_LIST_SUMMARY,
+        CacheNames.GITHUB_OPEN_PULL_REQUESTS,
+        CacheNames.REVIEW_RULES
+    );
 
     private final CacheManager cacheManager;
     private final Supplier<DashboardDailySnapshotService> dashboardSnapshotServiceSupplier;
     private final Supplier<DashboardSnapshotStore> dashboardSnapshotStoreSupplier;
     private final Supplier<ReviewQualityBaselineService> qualityBaselineServiceSupplier;
+    private final Supplier<ClusterCacheInvalidationPublisher> clusterInvalidationPublisherSupplier;
 
     public CacheEvictionService(CacheManager cacheManager) {
-        this(cacheManager, () -> null, () -> null, () -> null);
+        this(cacheManager, () -> null, () -> null, () -> null, () -> null);
     }
 
     @Autowired
@@ -39,13 +55,15 @@ public class CacheEvictionService {
         CacheManager cacheManager,
         ObjectProvider<DashboardDailySnapshotService> dashboardSnapshotServiceProvider,
         ObjectProvider<DashboardSnapshotStore> dashboardSnapshotStoreProvider,
-        ObjectProvider<ReviewQualityBaselineService> qualityBaselineServiceProvider
+        ObjectProvider<ReviewQualityBaselineService> qualityBaselineServiceProvider,
+        ObjectProvider<ClusterCacheInvalidationPublisher> clusterInvalidationPublisherProvider
     ) {
         this(
             cacheManager,
             dashboardSnapshotServiceProvider::getIfAvailable,
             dashboardSnapshotStoreProvider::getIfAvailable,
-            qualityBaselineServiceProvider::getIfAvailable
+            qualityBaselineServiceProvider::getIfAvailable,
+            clusterInvalidationPublisherProvider::getIfAvailable
         );
     }
 
@@ -54,7 +72,7 @@ public class CacheEvictionService {
         Supplier<DashboardDailySnapshotService> dashboardSnapshotServiceSupplier,
         Supplier<DashboardSnapshotStore> dashboardSnapshotStoreSupplier
     ) {
-        this(cacheManager, dashboardSnapshotServiceSupplier, dashboardSnapshotStoreSupplier, () -> null);
+        this(cacheManager, dashboardSnapshotServiceSupplier, dashboardSnapshotStoreSupplier, () -> null, () -> null);
     }
 
     public CacheEvictionService(
@@ -62,6 +80,22 @@ public class CacheEvictionService {
         Supplier<DashboardDailySnapshotService> dashboardSnapshotServiceSupplier,
         Supplier<DashboardSnapshotStore> dashboardSnapshotStoreSupplier,
         Supplier<ReviewQualityBaselineService> qualityBaselineServiceSupplier
+    ) {
+        this(
+            cacheManager,
+            dashboardSnapshotServiceSupplier,
+            dashboardSnapshotStoreSupplier,
+            qualityBaselineServiceSupplier,
+            () -> null
+        );
+    }
+
+    CacheEvictionService(
+        CacheManager cacheManager,
+        Supplier<DashboardDailySnapshotService> dashboardSnapshotServiceSupplier,
+        Supplier<DashboardSnapshotStore> dashboardSnapshotStoreSupplier,
+        Supplier<ReviewQualityBaselineService> qualityBaselineServiceSupplier,
+        Supplier<ClusterCacheInvalidationPublisher> clusterInvalidationPublisherSupplier
     ) {
         this.cacheManager = Objects.requireNonNull(cacheManager, "cacheManager must not be null");
         this.dashboardSnapshotServiceSupplier =
@@ -72,6 +106,10 @@ public class CacheEvictionService {
             qualityBaselineServiceSupplier,
             "qualityBaselineServiceSupplier must not be null"
         );
+        this.clusterInvalidationPublisherSupplier = Objects.requireNonNull(
+            clusterInvalidationPublisherSupplier,
+            "clusterInvalidationPublisherSupplier must not be null"
+        );
     }
 
     public void evictDashboardOverview() {
@@ -79,10 +117,12 @@ public class CacheEvictionService {
     }
 
     public void evictDashboardReviewActivity() {
+        long tenantId = TenantContext.currentTenantIdOrDefault();
         DashboardDailySnapshotService snapshotService = dashboardSnapshotServiceSupplier.get();
         LocalDate latestReviewDate = snapshotService == null ? null : snapshotService.latestReviewDate();
         if (latestReviewDate == null) {
             markQualityBaselineDirty();
+            publishClusterInvalidation(tenantId, ClusterCacheInvalidationType.DASHBOARD_REVIEW_ACTIVITY, null);
             afterCommitOrNow(() -> evictDashboardReviewActivityNow(null));
             return;
         }
@@ -90,9 +130,15 @@ public class CacheEvictionService {
     }
 
     public void evictDashboardReviewActivity(LocalDate statDate) {
+        long tenantId = TenantContext.currentTenantIdOrDefault();
         LocalDate normalizedStatDate = Objects.requireNonNull(statDate, "statDate must not be null");
         markDashboardSnapshotDirty(service -> service.markReviewActivityDirty(normalizedStatDate));
         markQualityBaselineDirty();
+        publishClusterInvalidation(
+            tenantId,
+            ClusterCacheInvalidationType.DASHBOARD_REVIEW_ACTIVITY,
+            normalizedStatDate
+        );
         afterCommitOrNow(() -> evictDashboardReviewActivityNow(normalizedStatDate));
     }
 
@@ -104,7 +150,7 @@ public class CacheEvictionService {
             );
         }
         submitQualityBaselineRefresh();
-        clear(CacheNames.REVIEW_TASK_LIST_SUMMARY);
+        clearTenant(CacheNames.REVIEW_TASK_LIST_SUMMARY);
         evictDashboardOverviewCompatibilityNow();
         evictDashboardSummary();
         evictDashboardReviewTrend();
@@ -115,10 +161,12 @@ public class CacheEvictionService {
     }
 
     public void evictDashboardFeedbackQuality() {
+        long tenantId = TenantContext.currentTenantIdOrDefault();
         DashboardDailySnapshotService snapshotService = dashboardSnapshotServiceSupplier.get();
         LocalDate latestReviewDate = snapshotService == null ? null : snapshotService.latestReviewDate();
         if (latestReviewDate == null) {
             markQualityBaselineDirty();
+            publishClusterInvalidation(tenantId, ClusterCacheInvalidationType.DASHBOARD_FEEDBACK_QUALITY, null);
             afterCommitOrNow(() -> evictDashboardFeedbackQualityNow(null));
             return;
         }
@@ -126,9 +174,15 @@ public class CacheEvictionService {
     }
 
     public void evictDashboardFeedbackQuality(LocalDate statDate) {
+        long tenantId = TenantContext.currentTenantIdOrDefault();
         LocalDate normalizedStatDate = Objects.requireNonNull(statDate, "statDate must not be null");
         markDashboardSnapshotDirty(service -> service.markLlmQualityDirty(normalizedStatDate));
         markQualityBaselineDirty();
+        publishClusterInvalidation(
+            tenantId,
+            ClusterCacheInvalidationType.DASHBOARD_FEEDBACK_QUALITY,
+            normalizedStatDate
+        );
         afterCommitOrNow(() -> evictDashboardFeedbackQualityNow(normalizedStatDate));
     }
 
@@ -144,60 +198,100 @@ public class CacheEvictionService {
     }
 
     public void evictDashboardRules() {
+        publishClusterInvalidation(
+            TenantContext.currentTenantIdOrDefault(),
+            ClusterCacheInvalidationType.DASHBOARD_RULES,
+            null
+        );
         afterCommitOrNow(this::evictDashboardRulesNow);
     }
 
     private void evictDashboardRulesNow() {
-        clear(CacheNames.DASHBOARD_RULES);
+        clearTenant(CacheNames.DASHBOARD_RULES);
         evictSnapshot(CacheNames.DASHBOARD_RULES + ":rules");
     }
 
     public void evictDashboardOverviewCompatibility() {
+        publishClusterInvalidation(
+            TenantContext.currentTenantIdOrDefault(),
+            ClusterCacheInvalidationType.DASHBOARD_OVERVIEW,
+            null
+        );
         afterCommitOrNow(this::evictDashboardOverviewCompatibilityNow);
     }
 
     private void evictDashboardOverviewCompatibilityNow() {
-        clear(CacheNames.DASHBOARD_OVERVIEW);
+        clearTenant(CacheNames.DASHBOARD_OVERVIEW);
         evictSnapshotsByPrefix(CacheNames.DASHBOARD_OVERVIEW + ":");
     }
 
     public void evictGithubOpenPullRequests() {
-        afterCommitOrNow(() -> clear(CacheNames.GITHUB_OPEN_PULL_REQUESTS));
+        publishClusterInvalidation(
+            TenantContext.currentTenantIdOrDefault(),
+            ClusterCacheInvalidationType.GITHUB_OPEN_PULL_REQUESTS,
+            null
+        );
+        afterCommitOrNow(() -> clearTenant(CacheNames.GITHUB_OPEN_PULL_REQUESTS));
     }
 
     public void evictReviewRules() {
-        afterCommitOrNow(() -> clear(CacheNames.REVIEW_RULES));
+        publishClusterInvalidation(
+            TenantContext.currentTenantIdOrDefault(),
+            ClusterCacheInvalidationType.REVIEW_RULES,
+            null
+        );
+        afterCommitOrNow(() -> clearTenant(CacheNames.REVIEW_RULES));
     }
 
-    private void clear(String cacheName) {
-        Cache cache = cacheManager.getCache(cacheName);
-        if (cache != null) {
-            cache.clear();
+    void evictTenantLocal(long tenantId) {
+        try (TenantContext.Scope _ = TenantContext.withTenant(tenantId)) {
+            TENANT_CACHE_NAMES.forEach(this::clearTenant);
+            DashboardSnapshotStore snapshotStore = dashboardSnapshotStoreSupplier.get();
+            if (snapshotStore != null) {
+                snapshotStore.evictByPrefix("");
+            }
         }
     }
 
+    private void clearTenant(String cacheName) {
+        Cache cache = cacheManager.getCache(cacheName);
+        if (cache == null) {
+            return;
+        }
+        Object nativeCache = cache.getNativeCache();
+        if (nativeCache instanceof com.github.benmanes.caffeine.cache.Cache<?, ?> caffeineCache) {
+            long tenantId = TenantContext.currentTenantIdOrDefault();
+            caffeineCache.asMap().keySet().stream()
+                .filter(key -> !(key instanceof TenantScopedKey scopedKey) || scopedKey.belongsTo(tenantId))
+                .toList()
+                .forEach(cache::evict);
+            return;
+        }
+        cache.clear();
+    }
+
     private void evictDashboardSummary() {
-        clear(CacheNames.DASHBOARD_SUMMARY);
+        clearTenant(CacheNames.DASHBOARD_SUMMARY);
         evictSnapshot(CacheNames.DASHBOARD_SUMMARY + ":summary");
     }
 
     private void evictDashboardReviewTrend() {
-        clear(CacheNames.DASHBOARD_REVIEW_TREND);
+        clearTenant(CacheNames.DASHBOARD_REVIEW_TREND);
         evictSnapshot(CacheNames.DASHBOARD_REVIEW_TREND + ":reviewTrend");
     }
 
     private void evictDashboardRiskDistribution() {
-        clear(CacheNames.DASHBOARD_RISK_DISTRIBUTION);
+        clearTenant(CacheNames.DASHBOARD_RISK_DISTRIBUTION);
         evictSnapshot(CacheNames.DASHBOARD_RISK_DISTRIBUTION + ":riskDistribution");
     }
 
     private void evictDashboardHighRiskReviews() {
-        clear(CacheNames.DASHBOARD_HIGH_RISK_REVIEWS);
+        clearTenant(CacheNames.DASHBOARD_HIGH_RISK_REVIEWS);
         evictSnapshot(CacheNames.DASHBOARD_HIGH_RISK_REVIEWS + ":highRiskReviews");
     }
 
     private void evictDashboardLlmQuality() {
-        clear(CacheNames.DASHBOARD_LLM_QUALITY);
+        clearTenant(CacheNames.DASHBOARD_LLM_QUALITY);
         evictSnapshotsByPrefix(CacheNames.DASHBOARD_LLM_QUALITY + ":");
     }
 
@@ -282,6 +376,17 @@ public class CacheEvictionService {
         DashboardDailySnapshotService snapshotService = dashboardSnapshotServiceSupplier.get();
         if (snapshotService != null) {
             dirtyMarker.accept(snapshotService);
+        }
+    }
+
+    private void publishClusterInvalidation(
+        long tenantId,
+        ClusterCacheInvalidationType type,
+        LocalDate statDate
+    ) {
+        ClusterCacheInvalidationPublisher publisher = clusterInvalidationPublisherSupplier.get();
+        if (publisher != null) {
+            publisher.publish(tenantId, type, statDate);
         }
     }
 }

@@ -1,6 +1,7 @@
 package com.repoguard.agent.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.repoguard.agent.authentication.EnterpriseOidcAuthenticator;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -13,10 +14,16 @@ public class AuthTokenFilterConfig {
     public FilterRegistrationBean<AuthTokenFilter> authTokenFilterRegistration(
         AuthTokenService authTokenService,
         AuthAccountCache authAccountCache,
-        ObjectMapper objectMapper
+        ObjectMapper objectMapper,
+        EnterpriseOidcAuthenticator enterpriseOidcAuthenticator
     ) {
         FilterRegistrationBean<AuthTokenFilter> registration = new FilterRegistrationBean<>();
-        registration.setFilter(new AuthTokenFilter(authTokenService, authAccountCache, objectMapper));
+        registration.setFilter(new AuthTokenFilter(
+            authTokenService,
+            authAccountCache,
+            objectMapper,
+            enterpriseOidcAuthenticator
+        ));
         registration.addUrlPatterns("/api/v1/*");
         registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 10);
         return registration;

@@ -21,6 +21,7 @@
         <java.version>25</java.version>
         <mybatis-plus.version>3.5.17</mybatis-plus.version>
         <netty.version>4.2.16.Final</netty.version>
+        <rabbit-amqp-client.version>5.33.1</rabbit-amqp-client.version>
         <resilience4j.version>2.4.0</resilience4j.version>
         <jacoco.agent.argLine></jacoco.agent.argLine>
     </properties>
@@ -53,6 +54,10 @@
         <dependency>
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-crypto</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-oauth2-jose</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

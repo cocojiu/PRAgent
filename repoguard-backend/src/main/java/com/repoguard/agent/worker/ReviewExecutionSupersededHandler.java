@@ -4,6 +4,7 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.github.GithubPullRequestHeadChangedException;
 import java.time.LocalDateTime;
 import java.util.Objects;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -13,6 +14,25 @@ class ReviewExecutionSupersededHandler {
     private final ReviewExecutionTimelineRecorder timelineRecorder;
     private final ReviewExecutionMetricsRecorder metricsRecorder;
     private final ReviewExecutionCacheInvalidator cacheInvalidator;
+    private final ReviewHeadMismatchRecoveryService headMismatchRecoveryService;
+
+    @Autowired
+    ReviewExecutionSupersededHandler(
+        ReviewExecutionTaskTerminalWriter taskTerminalWriter,
+        ReviewExecutionTimelineRecorder timelineRecorder,
+        ReviewExecutionMetricsRecorder metricsRecorder,
+        ReviewExecutionCacheInvalidator cacheInvalidator,
+        ReviewHeadMismatchRecoveryService headMismatchRecoveryService
+    ) {
+        this.taskTerminalWriter = Objects.requireNonNull(taskTerminalWriter, "taskTerminalWriter");
+        this.timelineRecorder = Objects.requireNonNull(timelineRecorder, "timelineRecorder");
+        this.metricsRecorder = Objects.requireNonNull(metricsRecorder, "metricsRecorder");
+        this.cacheInvalidator = Objects.requireNonNull(cacheInvalidator, "cacheInvalidator");
+        this.headMismatchRecoveryService = Objects.requireNonNull(
+            headMismatchRecoveryService,
+            "headMismatchRecoveryService"
+        );
+    }
 
     ReviewExecutionSupersededHandler(
         ReviewExecutionTaskTerminalWriter taskTerminalWriter,
@@ -24,6 +44,7 @@ class ReviewExecutionSupersededHandler {
         this.timelineRecorder = Objects.requireNonNull(timelineRecorder, "timelineRecorder");
         this.metricsRecorder = Objects.requireNonNull(metricsRecorder, "metricsRecorder");
         this.cacheInvalidator = Objects.requireNonNull(cacheInvalidator, "cacheInvalidator");
+        this.headMismatchRecoveryService = null;
     }
 
     boolean applySuperseded(
@@ -40,6 +61,9 @@ class ReviewExecutionSupersededHandler {
         timelineRecorder.reviewSuperseded(task, ex, taskWrite.supersededAt());
         metricsRecorder.recordSuperseded(startedAt, taskWrite.supersededAt());
         cacheInvalidator.reviewTaskChanged(task);
+        if (headMismatchRecoveryService != null) {
+            headMismatchRecoveryService.recover(task, ex, taskWrite.supersededAt());
+        }
         return true;
     }
 }

@@ -45,6 +45,7 @@ public class GithubCommentPreviewDataLoader {
         Map<String, ChangedFile> changedFileByPath = changedFileMapper.selectList(
             new LambdaQueryWrapper<ChangedFile>()
                 .eq(ChangedFile::getTaskId, taskId)
+                .eq(ChangedFile::getCurrentAttempt, true)
                 .orderByAsc(ChangedFile::getId)
         ).stream().collect(Collectors.toMap(
             ChangedFile::getFilePath,
@@ -55,6 +56,7 @@ public class GithubCommentPreviewDataLoader {
         List<ReviewFinding> findings = reviewFindingMapper.selectList(
             new LambdaQueryWrapper<ReviewFinding>()
                 .eq(ReviewFinding::getTaskId, taskId)
+                .eq(ReviewFinding::getCurrentAttempt, true)
                 .orderByAsc(ReviewFinding::getId)
         );
         List<ReviewFinding> actionableFindings = findings.stream()
@@ -137,6 +139,7 @@ public class GithubCommentPreviewDataLoader {
         List<ChangedFile> files = changedFileMapper.selectList(
             new LambdaQueryWrapper<ChangedFile>()
                 .eq(ChangedFile::getTaskId, taskId)
+                .eq(ChangedFile::getCurrentAttempt, true)
                 .in(ChangedFile::getFilePath, paths)
                 .orderByAsc(ChangedFile::getId)
         );
@@ -160,7 +163,9 @@ public class GithubCommentPreviewDataLoader {
 
     private long countChangedFiles(Long taskId) {
         Long total = changedFileMapper.selectCount(
-            new LambdaQueryWrapper<ChangedFile>().eq(ChangedFile::getTaskId, taskId)
+            new LambdaQueryWrapper<ChangedFile>()
+                .eq(ChangedFile::getTaskId, taskId)
+                .eq(ChangedFile::getCurrentAttempt, true)
         );
         return total == null ? 0L : total;
     }
@@ -169,6 +174,7 @@ public class GithubCommentPreviewDataLoader {
         Long total = reviewFindingMapper.selectCount(
             new LambdaQueryWrapper<ReviewFinding>()
                 .eq(ReviewFinding::getTaskId, taskId)
+                .eq(ReviewFinding::getCurrentAttempt, true)
                 .eq(ReviewFinding::getCategory, "MISSING_TEST")
         );
         return total == null ? 0L : total;

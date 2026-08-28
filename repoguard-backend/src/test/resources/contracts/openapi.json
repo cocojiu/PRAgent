@@ -3021,6 +3021,543 @@
         }
       }
     },
+    "/api/v1/enterprise/tenants" : {
+      "get" : {
+        "tags" : [ "EnterpriseTenant" ],
+        "operationId" : "enterpriseTenantControllerList",
+        "x-controller-operation" : "EnterpriseTenantController#list",
+        "parameters" : [ {
+          "name" : "page",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "default" : 1
+          }
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 100,
+            "default" : 20
+          }
+        }, {
+          "name" : "status",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "PageResponse<EnterpriseTenantDto>",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "object",
+                      "x-java-type" : "PageResponse<EnterpriseTenantDto>",
+                      "properties" : {
+                        "items" : {
+                          "type" : "array",
+                          "items" : {
+                            "$ref" : "#/components/schemas/EnterpriseTenantDto"
+                          }
+                        },
+                        "total" : {
+                          "type" : "integer",
+                          "format" : "int64"
+                        },
+                        "nextCursor" : {
+                          "type" : "string"
+                        },
+                        "hasMore" : {
+                          "type" : "boolean"
+                        }
+                      },
+                      "required" : [ "total", "hasMore" ]
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post" : {
+        "tags" : [ "EnterpriseTenant" ],
+        "operationId" : "enterpriseTenantControllerCreate",
+        "x-controller-operation" : "EnterpriseTenantController#create",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "EnterpriseTenantCreateRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/EnterpriseTenantCreateRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "EnterpriseTenantDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/EnterpriseTenantDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/enterprise/tenants/{tenantKey}" : {
+      "get" : {
+        "tags" : [ "EnterpriseTenant" ],
+        "operationId" : "enterpriseTenantControllerGet",
+        "x-controller-operation" : "EnterpriseTenantController#get",
+        "parameters" : [ {
+          "name" : "tenantKey",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "EnterpriseTenantDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/EnterpriseTenantDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/enterprise/tenants/{tenantKey}/identities" : {
+      "put" : {
+        "tags" : [ "EnterpriseTenant" ],
+        "operationId" : "enterpriseTenantControllerPutIdentity",
+        "x-controller-operation" : "EnterpriseTenantController#putIdentity",
+        "parameters" : [ {
+          "name" : "tenantKey",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "EnterpriseIdentityBindingRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/EnterpriseIdentityBindingRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "Void",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "null"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/enterprise/tenants/{tenantKey}/memberships" : {
+      "put" : {
+        "tags" : [ "EnterpriseTenant" ],
+        "operationId" : "enterpriseTenantControllerPutMembership",
+        "x-controller-operation" : "EnterpriseTenantController#putMembership",
+        "parameters" : [ {
+          "name" : "tenantKey",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "EnterpriseTenantMembershipRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/EnterpriseTenantMembershipRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "Void",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "null"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/enterprise/tenants/{tenantKey}/quota" : {
+      "get" : {
+        "tags" : [ "EnterpriseTenantQuota" ],
+        "operationId" : "enterpriseTenantQuotaControllerGet",
+        "x-controller-operation" : "EnterpriseTenantQuotaController#get",
+        "parameters" : [ {
+          "name" : "tenantKey",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "EnterpriseTenantQuotaDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/EnterpriseTenantQuotaDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "put" : {
+        "tags" : [ "EnterpriseTenantQuota" ],
+        "operationId" : "enterpriseTenantQuotaControllerUpdate",
+        "x-controller-operation" : "EnterpriseTenantQuotaController#update",
+        "parameters" : [ {
+          "name" : "tenantKey",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "EnterpriseTenantQuotaRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/EnterpriseTenantQuotaRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "EnterpriseTenantQuotaDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/EnterpriseTenantQuotaDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/enterprise/tenants/{tenantKey}/repositories" : {
+      "put" : {
+        "tags" : [ "EnterpriseTenant" ],
+        "operationId" : "enterpriseTenantControllerPutRepository",
+        "x-controller-operation" : "EnterpriseTenantController#putRepository",
+        "parameters" : [ {
+          "name" : "tenantKey",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "EnterpriseTenantRepositoryRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/EnterpriseTenantRepositoryRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "Void",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "null"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/enterprise/tenants/{tenantKey}/status" : {
+      "put" : {
+        "tags" : [ "EnterpriseTenant" ],
+        "operationId" : "enterpriseTenantControllerUpdateStatus",
+        "x-controller-operation" : "EnterpriseTenantController#updateStatus",
+        "parameters" : [ {
+          "name" : "tenantKey",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "EnterpriseTenantStatusRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/EnterpriseTenantStatusRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "EnterpriseTenantDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/EnterpriseTenantDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/github/webhooks" : {
       "post" : {
         "tags" : [ "GithubWebhook" ],
@@ -4749,6 +5286,141 @@
         }
       }
     },
+    "/api/v1/reviews/{taskId}/attempts" : {
+      "get" : {
+        "tags" : [ "ReviewExecutionAttempt" ],
+        "operationId" : "reviewExecutionAttemptControllerList",
+        "x-controller-operation" : "ReviewExecutionAttemptController#list",
+        "parameters" : [ {
+          "name" : "taskId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "List<ReviewExecutionAttemptDto>",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "array",
+                      "items" : {
+                        "$ref" : "#/components/schemas/ReviewExecutionAttemptDto"
+                      }
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reviews/{taskId}/attempts/{attemptId}" : {
+      "get" : {
+        "tags" : [ "ReviewExecutionAttempt" ],
+        "operationId" : "reviewExecutionAttemptControllerGetResult",
+        "x-controller-operation" : "ReviewExecutionAttemptController#getResult",
+        "parameters" : [ {
+          "name" : "taskId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        }, {
+          "name" : "attemptId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        }, {
+          "name" : "page",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "default" : 1
+          }
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 100,
+            "default" : 50
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ReviewExecutionAttemptResultDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ReviewExecutionAttemptResultDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/system/health/summary" : {
       "get" : {
         "tags" : [ "SystemHealth" ],
@@ -5909,6 +6581,208 @@
           }
         },
         "required" : [ "executed", "cleanupBatchId", "retentionDays", "maxTasks", "candidateTasks", "selectedTasks", "deletedBatchItems", "deletedPublications", "deletedBatches", "deletedChangedFiles", "deletedTimelines", "deletedFindings", "deletedTasks" ]
+      },
+      "EnterpriseIdentityBindingRequest" : {
+        "type" : "object",
+        "x-java-type" : "EnterpriseIdentityBindingRequest",
+        "properties" : {
+          "userId" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          },
+          "issuer" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 512
+          },
+          "subject" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 255
+          }
+        },
+        "required" : [ "userId", "issuer", "subject" ]
+      },
+      "EnterpriseTenantCreateRequest" : {
+        "type" : "object",
+        "x-java-type" : "EnterpriseTenantCreateRequest",
+        "properties" : {
+          "tenantKey" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "^[a-z0-9][a-z0-9-]{1,62}$"
+          },
+          "displayName" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "initialAdminUserId" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        },
+        "required" : [ "tenantKey", "displayName", "initialAdminUserId" ]
+      },
+      "EnterpriseTenantDto" : {
+        "type" : "object",
+        "x-java-type" : "EnterpriseTenantDto",
+        "properties" : {
+          "tenantId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "tenantKey" : {
+            "type" : "string"
+          },
+          "displayName" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "statusVersion" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "statusReason" : {
+            "type" : "string"
+          },
+          "statusChangedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "updatedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "EnterpriseTenantMembershipRequest" : {
+        "type" : "object",
+        "x-java-type" : "EnterpriseTenantMembershipRequest",
+        "properties" : {
+          "userId" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          },
+          "role" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "^(ADMIN|VIEWER)$"
+          },
+          "defaultTenant" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "userId", "role", "defaultTenant" ]
+      },
+      "EnterpriseTenantQuotaDto" : {
+        "type" : "object",
+        "x-java-type" : "EnterpriseTenantQuotaDto",
+        "properties" : {
+          "tenantId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "tenantKey" : {
+            "type" : "string"
+          },
+          "quotaVersion" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "maxDailyReviews" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "usedReviews" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "usageDate" : {
+            "type" : "object",
+            "x-java-type" : "LocalDate"
+          },
+          "updatedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "EnterpriseTenantQuotaRequest" : {
+        "type" : "object",
+        "x-java-type" : "EnterpriseTenantQuotaRequest",
+        "properties" : {
+          "expectedVersion" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          },
+          "maxDailyReviews" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 1000000
+          }
+        },
+        "required" : [ "expectedVersion", "maxDailyReviews" ]
+      },
+      "EnterpriseTenantRepositoryRequest" : {
+        "type" : "object",
+        "x-java-type" : "EnterpriseTenantRepositoryRequest",
+        "properties" : {
+          "organization" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "repository" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "githubInstallationId" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        },
+        "required" : [ "organization", "repository", "githubInstallationId" ]
+      },
+      "EnterpriseTenantStatusRequest" : {
+        "type" : "object",
+        "x-java-type" : "EnterpriseTenantStatusRequest",
+        "properties" : {
+          "expectedStatus" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "ACTIVE|SUSPENDED"
+          },
+          "targetStatus" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "ACTIVE|SUSPENDED"
+          },
+          "expectedVersion" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          },
+          "reason" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 512
+          }
+        },
+        "required" : [ "expectedStatus", "targetStatus", "expectedVersion", "reason" ]
       },
       "FailedRuleStatDto" : {
         "type" : "object",
@@ -7733,6 +8607,171 @@
           }
         },
         "required" : [ "enforcementMode", "expectedSnapshotId" ]
+      },
+      "ReviewExecutionAttemptDto" : {
+        "type" : "object",
+        "x-java-type" : "ReviewExecutionAttemptDto",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "attemptNo" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "generation" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "commitSha" : {
+            "type" : "string"
+          },
+          "inputFingerprint" : {
+            "type" : "string"
+          },
+          "workerId" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "failureCategory" : {
+            "type" : "string"
+          },
+          "budgetExhaustedStage" : {
+            "type" : "string"
+          },
+          "policyVersion" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "promptVersion" : {
+            "type" : "string"
+          },
+          "contextVersion" : {
+            "type" : "string"
+          },
+          "schemaVersion" : {
+            "type" : "string"
+          },
+          "verifierVersion" : {
+            "type" : "string"
+          },
+          "aggregationVersion" : {
+            "type" : "string"
+          },
+          "diffFetchMs" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "reviewMs" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "persistMs" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "totalMs" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "promptTokens" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "completionTokens" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "totalTokens" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "estimatedCost" : {
+            "type" : "number"
+          },
+          "queuedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "startedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "finishedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "payloadPurgedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "current" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "current" ]
+      },
+      "ReviewExecutionAttemptResultDto" : {
+        "type" : "object",
+        "x-java-type" : "ReviewExecutionAttemptResultDto",
+        "properties" : {
+          "attempt" : {
+            "$ref" : "#/components/schemas/ReviewExecutionAttemptDto"
+          },
+          "changedFiles" : {
+            "type" : "object",
+            "x-java-type" : "PageResponse<ReviewAttemptChangedFileDto>",
+            "properties" : {
+              "items" : {
+                "type" : "array",
+                "items" : {
+                  "$ref" : "#/components/schemas/ReviewAttemptChangedFileDto"
+                }
+              },
+              "total" : {
+                "type" : "integer",
+                "format" : "int64"
+              },
+              "nextCursor" : {
+                "type" : "string"
+              },
+              "hasMore" : {
+                "type" : "boolean"
+              }
+            },
+            "required" : [ "total", "hasMore" ]
+          },
+          "findings" : {
+            "type" : "object",
+            "x-java-type" : "PageResponse<ReviewAttemptFindingDto>",
+            "properties" : {
+              "items" : {
+                "type" : "array",
+                "items" : {
+                  "$ref" : "#/components/schemas/ReviewAttemptFindingDto"
+                }
+              },
+              "total" : {
+                "type" : "integer",
+                "format" : "int64"
+              },
+              "nextCursor" : {
+                "type" : "string"
+              },
+              "hasMore" : {
+                "type" : "boolean"
+              }
+            },
+            "required" : [ "total", "hasMore" ]
+          }
+        }
       },
       "ReviewFindingDto" : {
         "type" : "object",

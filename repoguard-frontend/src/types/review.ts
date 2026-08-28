@@ -1,4 +1,4 @@
-import type { RiskLevel } from "./shared";
+import type { PageResponse, RiskLevel } from "./shared";
 
 export type ReviewStatus =
   | "completed"
@@ -296,6 +296,72 @@ export interface ChangedFile {
   changeType: "A" | "M" | "D" | "ADD" | "MODIFY" | "DELETE" | "RENAMED";
   additions: number;
   deletions: number;
+}
+
+export interface ReviewExecutionAttempt {
+  id: number;
+  taskId: number;
+  attemptNo: number;
+  generation: number;
+  commitSha?: string;
+  inputFingerprint?: string;
+  workerId?: string;
+  status: string;
+  failureCategory?: string;
+  budgetExhaustedStage?: string;
+  policyVersion?: number;
+  promptVersion?: string;
+  contextVersion?: string;
+  schemaVersion?: string;
+  verifierVersion?: string;
+  aggregationVersion?: string;
+  diffFetchMs?: number;
+  reviewMs?: number;
+  persistMs?: number;
+  totalMs?: number;
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  estimatedCost?: number;
+  queuedAt?: string;
+  startedAt?: string;
+  finishedAt?: string;
+  payloadPurgedAt?: string;
+  current: boolean;
+}
+
+export interface ReviewAttemptChangedFile {
+  id: number;
+  path: string;
+  changeType: string;
+  additions: number;
+  deletions: number;
+}
+
+export interface ReviewAttemptFinding {
+  id: number;
+  category: string;
+  severity: string;
+  source?: string;
+  ruleId?: string;
+  file?: string;
+  line?: number;
+  message: string;
+  recommendation?: string;
+  confidence?: string;
+  blocking?: boolean;
+  feedbackStatus?: string;
+  promptVersion?: string;
+  contextVersion?: string;
+  schemaVersion?: string;
+  verifierVersion?: string;
+  aggregationVersion?: string;
+}
+
+export interface ReviewExecutionAttemptResult {
+  attempt: ReviewExecutionAttempt;
+  changedFiles: PageResponse<ReviewAttemptChangedFile>;
+  findings: PageResponse<ReviewAttemptFinding>;
 }
 
 export interface PrRiskProfile {

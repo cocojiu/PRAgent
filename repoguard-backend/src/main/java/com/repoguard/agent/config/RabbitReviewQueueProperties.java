@@ -7,9 +7,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "app.rabbit.review")
 public class RabbitReviewQueueProperties implements RabbitPublishProperties, RabbitPublishCompensationProperties {
 
-    private String exchange = "repoguard.review.exchange.v2";
-    private String queue = "repoguard.review.queue.v2";
-    private String routingKey = "repoguard.review.created.v2";
+    private String exchange = "repoguard.review.exchange.v3";
+    private String queue = "repoguard.review.queue.v3";
+    private String routingKey = "repoguard.review.created.v3";
     private String deadLetterExchange = "repoguard.review.dlx";
     private String deadLetterQueue = "repoguard.review.dlq";
     private String deadLetterRoutingKey = "repoguard.review.dead";

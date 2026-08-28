@@ -4,7 +4,6 @@ import com.repoguard.agent.config.SchedulerRuntimeEnabled;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -19,7 +18,6 @@ public class ReviewQualityBaselineRecoveryWorker {
         this.baselineService = Objects.requireNonNull(baselineService, "baselineService");
     }
 
-    @Scheduled(fixedDelayString = "${repoguard.review.quality-baseline-recovery-interval-ms:60000}")
     public void recoverDirtySnapshot() {
         try {
             if (baselineService.refreshIfDirty()) {
@@ -30,7 +28,6 @@ public class ReviewQualityBaselineRecoveryWorker {
         }
     }
 
-    @Scheduled(cron = "${repoguard.review.quality-baseline-reconciliation-cron:0 20 3 * * *}")
     public void reconcileSnapshot() {
         try {
             baselineService.reconcile();

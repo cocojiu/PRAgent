@@ -62,6 +62,7 @@ public interface DashboardMapper {
         from review_finding f
         join review_task t on t.id = f.task_id
         where f.category = 'FINDING'
+          and f.current_attempt = 1
           and t.created_at >= #{startDate}
         group by coalesce(f.rule_id, 'LLM')
         """)
@@ -76,7 +77,7 @@ public interface DashboardMapper {
             t.created_at as createdAt,
             t.status as status
         from review_task t
-        left join review_finding f on f.task_id = t.id and f.category = 'FINDING'
+        left join review_finding f on f.task_id = t.id and f.category = 'FINDING' and f.current_attempt = 1
         where t.risk_level_norm in ('HIGH', 'CRITICAL')
           and t.assessment_status = 'COMPLETE'
           and t.created_at >= #{startDate}
@@ -161,7 +162,7 @@ public interface DashboardMapper {
                     when f.feedback_status_norm = 'FALSE_POSITIVE'
                     then 1 else 0 end) as falsePositiveFeedbackCount
             from review_task t
-            join review_finding f on f.task_id = t.id and f.category = 'FINDING'
+            join review_finding f on f.task_id = t.id and f.category = 'FINDING' and f.current_attempt = 1
             where t.llm_status_norm <> ''
               and t.llm_status_norm <> 'pending'
               and t.created_at >= #{startDate}
@@ -211,7 +212,7 @@ public interface DashboardMapper {
                     when f.feedback_status_norm = 'FALSE_POSITIVE'
                     then 1 else 0 end) as falsePositiveFeedbackCount
             from review_task t
-            join review_finding f on f.task_id = t.id and f.category = 'FINDING'
+            join review_finding f on f.task_id = t.id and f.category = 'FINDING' and f.current_attempt = 1
             where t.llm_status_norm <> ''
               and t.llm_status_norm <> 'pending'
               and t.created_at >= #{startDate}

@@ -184,6 +184,9 @@ npm run dev
 - `REPOGUARD_API_INSTANCE_COUNT`
 - `REPOGUARD_RATE_LIMIT_STORE`
 - `REPOGUARD_REVIEW_WORKER_CONCURRENCY`
+- `WORKER_CPU_LIMIT`
+- `BACKEND_MEM_LIMIT`
+- `WORKER_MEM_LIMIT`
 
 敏感配置要求：
 
@@ -197,7 +200,15 @@ npm run dev
 - `REPOGUARD_DEPLOYMENT_MODE` 只接受 `monolith`、`split`。`monolith` 必须搭配 `combined`；`split` 的 API 容器必须使用 `api`，Worker 容器固定使用 `worker`。配置冲突会在 Spring 启动或生产部署拉取镜像前失败。
 - `REPOGUARD_RATE_LIMIT_STORE` 默认为 `local`，此时 API/combined 角色仍要求 `REPOGUARD_API_INSTANCE_COUNT=1`。横向扩展 API 前必须改为 `database`：认证、管理 API Key 失败和 Webhook 的固定窗口会由 MySQL 原子计数，并以认证密钥 HMAC 后的桶键存储；限流阈值是跨实例总限额，不需要按实例数调低。Dashboard 聚合使用数据库日快照和持久化脏版本，手工评审最终幂等由数据库唯一键保障。
 - 当 `REPOGUARD_API_INSTANCE_COUNT>1` 时，认证账户状态不使用进程内 `AuthAccountCache`，每次认证从 MySQL 读取账号状态和 `session_version`；密码修改、账号禁用或注销会话后，其他 API 实例会立即拒绝旧 access token。单实例仍使用 5 秒进程内缓存，并依靠事务提交后的失效回调缩短状态生效延迟。
-- Worker 执行链路具备 RabbitMQ、数据库 CAS、领取标识和租约保护，可由编排平台扩展多个实例；当前生产 Compose 仍固定为单个 Worker 服务。所有 `@Scheduled` 入口由 Scheduler 能力契约保护，避免与普通消息消费者的装配边界混淆。
+- 单机生产模板默认启用 `COMPOSE_PROFILES=worker-split`：API 容器使用 `api` 角色，Worker 容器使用 `worker` 角色，两者运行在同一服务器并共享 MySQL/RabbitMQ。这样不能消除主机单点，但能避免大 PR 的 CPU/内存压力直接拖垮 HTTP API。
+- 单机生产模板将 `REPOGUARD_REVIEW_WORKER_CONCURRENCY` 设为 1，容器默认限制为 `WORKER_CPU_LIMIT=1.0`；单任务 LLM 分块、线程池和 bulkhead 并发默认均为 2。不要在 2C4G 主机上提高这些值，调整前必须同时验证 API P99、Worker RSS/GC、RabbitMQ oldest age 和 MySQL 延迟。
+- Worker 执行链路具备 RabbitMQ、数据库 CAS、领取标识和租约保护；所有 `@Scheduled` 入口由 Scheduler 能力契约保护，避免与普通消息消费者的装配边界混淆。当前固定容器名和单机资源预算不支持直接使用 `--scale`。
+- Webhook 任务以 `organization/repository/PR` 维护最新 head generation，并以 GitHub `pull_request.updated_at`（统一转 UTC）拒绝乱序旧事件；新 commit 到达后，同一 PR 的旧 `QUEUED/PUBLISH_FAILED/REQUEUE_PENDING` 任务会被合并为 `SUPERSEDED`，Worker 领取时还会用 generation + commit 做数据库栅栏。Worker 获取 diff 前后都会读取 GitHub 权威 head；发现不一致时会终止旧 Attempt、校正本地 head 并确保当前 commit 进入补偿发布链路，因此旧消息不会继续调用 LLM，漏序 Webhook 也不会永久漏审。手工触发任务不参与该合并。
+- 每次实际执行都会创建不可变的 `review_execution_attempt`。文件和 Finding 按 attempt 追加写入，仅通过 `current_attempt` 切换当前结果，不再删除重试历史；`GET /api/v1/reviews/{taskId}/attempts` 列出执行，`GET /api/v1/reviews/{taskId}/attempts/{attemptId}` 查询该次文件、Finding、版本、token、成本和分阶段耗时。
+- 完整执行硬预算默认 600 秒，LLM 子流水线预算默认 480 秒，并预留 30 秒数据库持久化窗口；每个事务按单调剩余预算动态设置 Spring/MyBatis 查询超时，MySQL 另有 10 秒锁等待、30 秒查询/Socket 上限。超时会保存已取得的文件/Finding并标记 `PARTIAL`，不会把不完整结果伪装成成功或无限重试。租约回收会把旧 attempt 标记为 `ABANDONED`，下一次执行创建新 attempt。
+- RabbitMQ review v3 队列启用 0–10 优先级：手工触发/人工重试为 8，Webhook 为 4，恢复补偿为 3；prefetch 和 Worker 并发仍为 1。超过 300 个文件或 15000 行变更的 PR 自动降级为确定性规则评审并标记 `PARTIAL`，防止单个超大 PR 长时间占用单机 LLM 容量。
+- 非当前 Attempt 的文件/Finding 默认保留 90 天，之后批量清理并记录 `payload_purged_at`；Attempt 版本、阶段耗时、失败分类等元数据默认保留 180 天。当前 Attempt、运行中 Attempt，以及已被 GitHub 评论发布记录引用的 Attempt 不参与提前清理，完整任务仍服从原任务保留策略。
+- 单机 API/Worker 的 Hikari 连接池分别默认最多 8/4 个连接、最少空闲 2/1 个；相对 MySQL `max_connections=60` 保留了迁移、备份和人工运维余量。不要把两边的最大值独立拉满。
 - 旧 `REPOGUARD_API_ENABLED`、`REPOGUARD_WORKER_ENABLED` 仅保留迁移兼容；新部署应改用单一角色变量。生产部署脚本会根据 Compose 服务集合推导并验证 `monolith/split`。
 
 ## 镜像发布与回滚
@@ -303,9 +314,10 @@ BACKEND_IMAGE='<目标后端镜像>' FRONTEND_IMAGE='<目标前端镜像>' \
 
 ### MySQL 恢复
 
-- 日常使用 `Production MySQL Backup` workflow；只有加密、SHA-256 校验、隔离恢复和逐表检查全部成功的备份才可作为恢复点。
+- 日常使用 `Production MySQL Backup` workflow；只有加密、SHA-256 校验、隔离恢复、逐表检查和待发布 Flyway SQL 演练全部成功的备份才可作为恢复点。
 - 恢复前记录目标镜像 tag、备份文件和校验文件 SHA-256，停止业务写入；先在 `--network none` 的临时 MySQL 容器和临时卷中恢复验证，禁止直接把未验证 SQL 导入生产卷。
-- 生产恢复必须在独立维护窗口执行，保留原卷只读快照或可回切副本；恢复后校验表集合、精确行数、`CHECK TABLE`、Flyway 版本和外部 `/actuator/health`，最后再恢复流量。
+- 生产恢复必须在独立维护窗口执行，保留原卷只读快照或可回切副本；恢复后校验表集合、精确行数、`CHECK TABLE`、Flyway 版本和外部 `/actuator/health/readiness`，最后再恢复流量。
+- `Production MySQL Binlog Archive` 每小时强制切换一个 binlog，将尚未确认离站的已关闭 ROW binlog 加密并保存为 14 天 Artifact，Artifact 上传成功后才推进服务器确认水位。点时间恢复只能对名称匹配 `repoguard-mysql-pitr-*` 的隔离容器运行 `scripts/restore-prod-mysql-pitr.sh`，先导入带 `--source-data=2` 坐标的全量备份，再回放 binlog 到指定 UTC 秒。
 
 ### RabbitMQ 堆积与出箱补偿
 
@@ -321,21 +333,22 @@ Grafana 只绑定服务器 `127.0.0.1:3000`，应用 Nginx/Caddy 不提供 `/gra
 ssh -N -L 3000:127.0.0.1:3000 <deploy-user>@<production-host>
 ```
 
-本机打开 `http://127.0.0.1:3000`。不得把 Grafana 端口改为 `0.0.0.0`；确需 Web 入口时必须先增加 SSO 或 IP allowlist，并单独评审拓扑。
+本机打开 `http://127.0.0.1:3000`。预置的 `RepoGuard Review Observability` 仪表盘统一查询 API 与 Worker 容器日志，可通过 `taskId`、`traceId` 和 `operation` 关联完整评审链路。不得把 Grafana 端口改为 `0.0.0.0`；确需 Web 入口时必须先增加 SSO 或 IP allowlist，并单独评审拓扑。
 
-默认部署仍使用 `REPOGUARD_API_INSTANCE_COUNT=1` 和本地限流。由外部编排平台横向扩展 API 时，必须启用数据库共享限流并把实例总数写入 `REPOGUARD_API_INSTANCE_COUNT`；当前 Compose 使用固定 `container_name`，不得直接使用 `--scale`。吞吐不足时先观测数据库连接、共享限流写入、RabbitMQ 未确认消息、LLM bulkhead 和内存，再小步调整容量；多 Worker 实例同样需要先移除固定名称并验证日志采集规则和容量预算。
+默认部署使用一个 API 容器、一个 Worker 容器、`REPOGUARD_API_INSTANCE_COUNT=1` 和本地限流。当前 Compose 使用固定 `container_name`，不得直接使用 `--scale`。吞吐不足时先观测数据库连接、RabbitMQ 未确认消息、LLM bulkhead、API P99 和内存，再小步调整容量；只有迁移到多服务器后，才进入数据库共享限流、多实例日志采集和多 Worker 容量验证。
 
 ## 生产数据库备份
 
-生产 MySQL 逻辑备份通过 GitHub Actions 的 `Production MySQL Backup` workflow 执行：每天北京时间 03:30（UTC 19:30）自动运行，也可手动触发。工作流复用 production environment 的 SSH 部署凭据，把受限备份与轮换脚本上传到服务器后运行；数据库密码只在 MySQL 容器内部通过 `MYSQL_PWD` 使用，备份加密密码只通过 SSH 标准输入传递，两者均不会写入命令参数或日志。定时运行强制执行隔离恢复验证；手动关闭恢复验证时不会执行保留策略。
+生产 MySQL 逻辑备份通过 GitHub Actions 的 `Production MySQL Backup` workflow 执行：每 6 小时运行一次，也可手动触发。工作流复用 production environment 的 SSH 部署凭据，把受限备份与轮换脚本上传到服务器后运行；数据库密码只在 MySQL 容器内部通过 `MYSQL_PWD` 使用，备份加密密码只通过 SSH 标准输入传递，两者均不会写入命令参数或日志。定时运行强制执行隔离恢复验证；手动关闭恢复验证时不会执行保留策略。
 
-- 备份以 `--single-transaction --quick --routines --triggers --events` 创建一致性逻辑快照，经 gzip 压缩后使用 AES-256-CBC、PBKDF2-SHA-256 和 200000 次迭代加密。
-- 加密文件和独立 SHA-256 校验文件保存到服务器 `/opt/repoguard/backups/mysql/`，目录权限为 `0700`；工作流不上传业务数据到 GitHub Artifact。
-- 默认在无网络、限制 CPU/内存的临时 MySQL 容器和专用临时卷中恢复，校验源库与恢复库的表数量及表名集合，逐表执行 `CHECK TABLE`，并记录加密文件与解密逻辑转储的 SHA-256 指纹和恢复库精确行数。
+- 备份以 `--single-transaction --quick --routines --triggers --events --source-data=2` 创建带 binlog 坐标的一致性逻辑快照，经 gzip 压缩后使用 AES-256-CBC、PBKDF2-SHA-256 和 200000 次迭代加密。
+- 加密文件和独立 SHA-256 校验文件先保存到服务器 `/opt/repoguard/backups/mysql/`，目录权限为 `0700`；隔离恢复通过后，工作流会精确下载本次密文及校验文件、再次校验 SHA-256，并保存为保留 30 天的 GitHub Actions Artifact。这样即使唯一服务器和本地备份同时损坏，仍有服务器外恢复点；Artifact 中只有已加密密文，没有明文 SQL。
+- 默认在无网络、限制 CPU/内存的临时 MySQL 容器和专用临时卷中恢复，校验源库与恢复库的表数量及表名集合，逐表执行 `CHECK TABLE`，随后按版本顺序对恢复副本执行仓库中高于生产版本的 Flyway SQL，记录迁移起止版本、数量和耗时；生产数据库不执行演练 SQL。
 - 临时容器、临时卷和中间文件在成功或失败时均按固定名称前缀清理；生产数据库只读，不创建演练 schema。
 - 日常备份仅在新备份加密校验、隔离恢复和生产外部健康检查均成功后执行保留策略；轮换前会校验根目录全部日常备份与 `.sha256` 文件一一对应且内容一致，按 UTC 文件名倒序保留最近 7 份。`/opt/repoguard/backups/mysql/legacy/` 被固定排除，不参与自动删除；轮换后再次检查备份数量、当前备份 SHA-256 和生产健康。
 - 历史明文备份通过 `Production MySQL Legacy Backup Migration` workflow 处理：先以 `inventory` 只读盘点顶层 `.sql` 的路径、大小、修改时间和 SHA-256，并区分空文件与可迁移备份；再以 `encrypt` 仅对非空文件在 `/opt/repoguard/backups/mysql/legacy/` 创建加密副本，并校验密文 SHA-256 与解密后源文件 SHA-256 完全一致。该流程不删除明文；删除必须在核对精确清单后单独确认。
 - 不要直接轮换 `REPOGUARD_BACKUP_ENCRYPTION_PASSWORD`。轮换前必须先重新加密仍需保留的历史备份，并在密码管理器中保存恢复密钥副本。
+- MySQL 已开启 `performance_schema`。维护窗口前可执行 `bash scripts/report-prod-mysql-index-usage.sh` 读取索引使用量与可见性；V66 仅把被规范化索引替代的 3 个旧 Dashboard 索引设为 `INVISIBLE`。至少连续观察 7 天且替代索引均可见、旧索引读取为 0 后，可在维护窗口设置 `CONFIRM_DROP_LEGACY_DASHBOARD_INDEXES=drop-after-observation` 并运行 `scripts/drop-retired-prod-mysql-indexes.sh`；否则脚本拒绝删除。
 
 ## API 入口
 
@@ -343,12 +356,12 @@ ssh -N -L 3000:127.0.0.1:3000 <deploy-user>@<production-host>
 
 - `/api/v1/auth/**`：注册、登录、刷新、当前用户、登出。
 - `/api/v1/dashboard/**`：总览统计、趋势、风险分布、通知摘要。
-- `/api/v1/reviews/**`：审查任务列表、详情、手动触发、重试、评论预览与回写。
+- `/api/v1/reviews/**`：审查任务列表、详情、手动触发、重试、执行 Attempt 历史与结果、评论预览与回写。
 - `/api/v1/github/webhooks`：GitHub `pull_request` webhook 自动触发审查任务。
 - `/api/v1/config/**`：系统设置、集成配置、连接测试、密钥重加密。
 - `/api/v1/message-queue/**`：RabbitMQ 健康、异常任务、重新入队。
 - `/api/v1/users/**`：用户管理。
-- `/actuator/health`、`/actuator/info`、`/actuator/metrics`：健康检查和指标。
+- `/actuator/health/liveness`：仅判断进程是否可自行恢复，不依赖 MySQL/RabbitMQ；`/actuator/health/readiness`：同时检查应用就绪状态、MySQL 与 RabbitMQ，用于容器、发布、备份和外部流量门禁；`/actuator/health` 保留为聚合诊断端点。`/actuator/info`、`/actuator/metrics`、`/actuator/prometheus` 提供版本与指标。
 
 API 响应通常使用统一 `ApiResponse` 包装。业务错误优先使用稳定 `ErrorCode`。
 
@@ -383,13 +396,13 @@ $env:REPOGUARD_LOG_PATH = "../logs/backend"
 Grafana 的 Explore 页面选择 `Loki` 数据源后，可以用这些查询：
 
 ```logql
-{service="repoguard-backend"}
-{service="repoguard-backend"} |= "ERROR"
-{container="repoguard-backend"}
-{container="repoguard-backend"} |= "traceId=<X-Trace-Id>"
-{container="repoguard-backend"} |= "operation=review_execute"
-{container="repoguard-backend"} |= "operation=github_diff_fetch"
-{container="repoguard-backend"} |= "failureCategory="
+{service=~"backend(-worker)?"}
+{service=~"backend(-worker)?"} |= "ERROR"
+{container=~"repoguard-backend(-worker)?"}
+{container=~"repoguard-backend(-worker)?"} |= "traceId=<X-Trace-Id>"
+{container=~"repoguard-backend(-worker)?"} |= "operation=review_execute"
+{container=~"repoguard-backend(-worker)?"} |= "operation=github_diff_fetch"
+{container=~"repoguard-backend(-worker)?"} |= "failureCategory="
 ```
 
 也可以打开 Grafana Dashboard：
@@ -442,3 +455,76 @@ RepoGuard / RepoGuard Review Observability
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](./LICENSE) for details.
+
+## 企业生产上线（P0）
+
+企业部署基线位于 `deploy/kubernetes/`，使用外部托管 MySQL 8 和 RabbitMQ，API、Worker、前端分别扩容。清单默认启用租户隔离、数据库限流、关闭自助注册，并要求容器以非 root、只读根文件系统和 `restricted` Pod Security 运行。部署前必须将清单中的三个零值镜像 digest 替换为发布流水线生成的真实 digest，并将示例域名和 TLS Secret 改为企业域名。
+
+### 上线顺序
+
+1. 创建两份启用 Versioning 与 Object Lock 的主/异地对象存储桶，分别绑定独立 KMS Key ARN；先手工运行 `Production MySQL Backup`，确认恢复演练、V75 迁移演练和双目标 COMPLIANCE 对象校验全部成功。
+2. 在预发布数据库执行 V1–V75。V68 创建租户、成员、仓库和企业身份表，将历史业务数据回填到不可变默认租户 `id=1`；V69 进一步租户化密钥重加密作业/明细和后台清理审计；V70 创建带过期接管能力的全局/逐租户定时作业租约表；V71 为租约增加单调 fencing token；V72 创建每租户单行、单调递增的缓存版本表；V73 为租户增加受约束的暂停/恢复状态、单调状态版本、原因和变更时间；V74 创建每租户每日审查配额配置和用量表，并为历史租户回填默认每日 1000 次额度；V75 为通知 outbox 持久化 traceId，确保补偿发布和异步消费日志可关联。配额用量默认保留 90 天，由逐租户保留任务按批清理并写入操作审计，可通过 `REPOGUARD_TENANT_QUOTA_USAGE_RETENTION_DAYS` 调整。Worker 每 60 秒用数据库时钟续期，只有当前 owner 与 token 能续期或释放；租约上下文随有界执行器传播并引用计数，失租后中断在途线程且禁止进入后续批次。缓存变更与租户版本在同一写事务内原子提交，每个 API/Worker 副本以 1 秒间隔分页扫描版本；发现新租户或版本变化时只清理该租户的全部本地业务缓存和仪表盘快照，不依赖可能乱序的自增事件游标，也不会产生无界事件日志。迁移必须按项目真实 Flyway SQL mode 在 MySQL 8.0 从空库完整演练。
+3. 创建 Kubernetes Secret 后执行 `kubectl apply -k deploy/kubernetes`。API 副本通过 Flyway schema history 锁串行迁移；Worker 固定设置 `SPRING_FLYWAY_ENABLED=false`，且 schema version guard 要求数据库达到 V75。生产默认租约 900 秒、心跳 60 秒；心跳间隔必须小于租约时长。缓存失效轮询器必须在每个副本启用，不得接入全局定时租约，否则其他副本会保留陈旧的本地缓存。清单同时启用 API/Worker/前端 startupProbe，避免 Flyway、JVM 或静态资源冷启动被 liveness 误重启；Worker 滚动更新保持 `maxUnavailable=0`，命名空间通过 ResourceQuota/LimitRange 限制总资源，并默认拒绝出站流量，仅放行 DNS、HTTPS、MySQL 和 RabbitMQ 端口。
+4. 等待 `repoguard-api`、`repoguard-worker` 和 `repoguard-frontend` 全部 Ready，再验证登录、OIDC、Webhook、人工审查、消息消费和 GitHub 回写。前端镜像固定访问集群内 `backend:8081` Service。
+5. 最后启用 HPA 告警和定时备份。完整加密备份每 6 小时执行一次；关闭的 binlog 每小时归档一次，只有主/异地对象都通过 KMS、SHA-256、Object Lock 和回读校验后才更新远端确认点。
+
+V68–V75 没有自动 down migration。创建第二个租户之前，可用旧应用版本配合默认租户数据回滚；V72 的版本表、V74 的配额表和 V75 的通知 trace 字段可被旧版本安全忽略，但回滚期间只能依赖原有本地缓存 TTL，且不得继续创建需要配额校验的新审查。V73 之后的旧二进制不理解暂停语义，禁止用于回滚；只能先停止写入并从上线前已验证备份恢复。
+
+### Kubernetes Secret 契约
+
+`repoguard-enterprise-env` 至少提供以下环境变量：
+
+- `SPRING_DATASOURCE_URL`、`SPRING_DATASOURCE_USERNAME`、`SPRING_DATASOURCE_PASSWORD`
+- `SPRING_RABBITMQ_HOST`、`SPRING_RABBITMQ_PORT`、`SPRING_RABBITMQ_USERNAME`、`SPRING_RABBITMQ_PASSWORD`
+- `APP_CORS_ALLOWED_ORIGINS`
+- `REPOGUARD_ENTERPRISE_OIDC_ISSUER_URI`、`REPOGUARD_ENTERPRISE_OIDC_AUDIENCE`
+- `REPOGUARD_GITHUB_APP_APP_ID`、`REPOGUARD_GITHUB_APP_ALLOWED_INSTALLATION_IDS`
+- `REPOGUARD_GITHUB_WEBHOOK_ALLOWED_REPOSITORIES`、`REPOGUARD_GITHUB_WEBHOOK_ALLOWED_HEAD_BRANCHES`
+- `REPOGUARD_SECURITY_ENCRYPTION_KEY_ID`、`REPOGUARD_AUTH_TOKEN_SECRET_ID`
+
+`repoguard-enterprise-files` 通过 Spring configtree 挂载到 `/run/secrets`，键名必须使用完整属性名：
+
+- `repoguard.security.encryption-key`
+- `repoguard.security.encryption-salt`
+- `repoguard.auth.token-secret`
+- `app.security.admin-api-key.key`
+- `app.github.webhook.secret`
+- `repoguard.github-app.private-key`
+
+私钥使用 PKCS#8 或 PKCS#1 RSA PEM。OIDC issuer 必须为 HTTPS，token 必须包含配置的 audience 和默认 `amr=mfa`；身份不会按邮箱自动创建，必须由平台管理员预先绑定 issuer 与 subject。
+
+### 平台租户控制面
+
+平台租户 API 只接受内置管理员 API Key 形成的 `id=0 / admin-api-key` 主体；普通租户的 ADMIN 角色不能调用。入口如下：
+
+- `POST /api/v1/enterprise/tenants`：创建租户、初始管理员和租户本地默认配置。
+- `GET /api/v1/enterprise/tenants`：按页列出租户，可按 `ACTIVE/SUSPENDED` 状态筛选。
+- `GET /api/v1/enterprise/tenants/{tenantKey}`：读取状态版本和最近一次状态变更原因。
+- `PUT /api/v1/enterprise/tenants/{tenantKey}/status`：使用期望状态和版本做乐观并发的软暂停或恢复；默认租户 `id=1` 不可暂停。
+- `PUT /api/v1/enterprise/tenants/{tenantKey}/memberships`：添加或更新成员角色和默认租户。
+- `PUT /api/v1/enterprise/tenants/{tenantKey}/repositories`：唯一绑定 GitHub 仓库与 App installation。
+- `PUT /api/v1/enterprise/tenants/{tenantKey}/identities`：绑定 OIDC issuer、subject 与本地用户。
+- `GET /api/v1/enterprise/tenants/{tenantKey}/quota`：读取每日审查额度、当日已用量和配置版本。
+- `PUT /api/v1/enterprise/tenants/{tenantKey}/quota`：使用期望配置版本更新每日审查额度；额度耗尽时新审查返回 429，已入队任务不重复计数。
+
+业务请求的租户只能来自已验证 OIDC 身份、成员关系、签名 Webhook 的仓库映射或可信消息；`X-RepoGuard-Tenant` 仅能在当前用户已有成员关系中切换，不能直接指定任意租户。暂停会阻断新的业务请求、Webhook、租户定时批次以及审查/通知消息消费，并在同一事务推进租户缓存版本；已经开始的外部调用可能完成，暂停期间被消费者拒绝的旧消息进入既有 DLQ，恢复后必须按运维流程重放。所有控制面变更继续由企业管理审计拦截器记录，平台不提供硬删除租户。
+
+### 不可变备份变量
+
+GitHub `production` Environment 需要现有部署 SSH Secret、`REPOGUARD_BACKUP_ENCRYPTION_PASSWORD`，以及以下 OIDC/Object Storage 变量或 Secret：
+
+- `REPOGUARD_BACKUP_ROLE_ARN`
+- `REPOGUARD_BACKUP_BUCKET`、`REPOGUARD_BACKUP_REGION`、`REPOGUARD_BACKUP_KMS_KEY_ID`
+- `REPOGUARD_BACKUP_REPLICA_BUCKET`、`REPOGUARD_BACKUP_REPLICA_REGION`、`REPOGUARD_BACKUP_REPLICA_KMS_KEY_ID`
+- 可选 `REPOGUARD_BACKUP_ENDPOINT`、`REPOGUARD_BACKUP_REPLICA_ENDPOINT`
+- 可选 `REPOGUARD_BACKUP_OBJECT_LOCK_DAYS`，允许 30–3650 天，默认 30 天
+
+KMS Key 必须提供完整 ARN，主目标与异地目标必须不同。工作流使用 GitHub OIDC 获取短期凭据，不保存长期云访问密钥；脚本不会接受非 HTTPS 自定义 endpoint，也不会上传未通过本地 SHA-256 校验或文件名/对象键白名单的文件。
+
+### 企业验收门槛
+
+- 使用 JDK 25 执行 `cd repoguard-backend && ./mvnw verify`。
+- 执行 `cd repoguard-frontend && npm run build`。
+- 执行 `scripts/production-readiness-check.ps1`，确认 schema 默认版本与最高迁移一致。
+- 手工触发完整备份和 binlog 工作流，确认主/异地对象 URI、COMPLIANCE 保留期与恢复演练结果。
+- 在两个租户中使用同名 PR、规则配置和通知事件做隔离验收，并确认租户管理员无法访问平台控制面。

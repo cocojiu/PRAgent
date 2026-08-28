@@ -6,13 +6,23 @@ import com.repoguard.agent.entity.ChangedFile;
 import java.util.List;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 public interface ChangedFileMapper extends BaseMapper<ChangedFile> {
 
+    @Update("""
+        update changed_file
+        set current_attempt = 0
+        where task_id = #{taskId}
+          and current_attempt = 1
+        """)
+    int markCurrentAttemptHistorical(Long taskId);
+
     @Select("""
         select *
-        from changed_file
+        from changed_file force index (idx_changed_file_current_attempt)
         where task_id = #{taskId}
+          and current_attempt = 1
         order by (coalesce(additions, 0) + coalesce(deletions, 0)) desc, id asc
         limit #{limit}
         """)
@@ -21,12 +31,14 @@ public interface ChangedFileMapper extends BaseMapper<ChangedFile> {
     @Select("""
         <script>
         select file.*
-        from changed_file file force index (idx_changed_file_task)
+        from changed_file file force index (idx_changed_file_current_attempt)
         where file.task_id = #{taskId}
+          and file.current_attempt = 1
           and exists (
               select 1
-              from review_finding finding force index (idx_review_finding_task_category_file)
+              from review_finding finding force index (idx_review_finding_current_category_file)
               where finding.task_id = file.task_id
+                and finding.current_attempt = 1
                 and finding.category = 'FINDING'
                 and finding.file_path = file.file_path
           )
@@ -38,12 +50,14 @@ public interface ChangedFileMapper extends BaseMapper<ChangedFile> {
     @Select("""
         <script>
         select file.*
-        from changed_file file force index (idx_changed_file_task)
+        from changed_file file force index (idx_changed_file_current_attempt)
         where file.task_id = #{taskId}
+          and file.current_attempt = 1
           and not exists (
               select 1
-              from review_finding finding force index (idx_review_finding_task_category_file)
+              from review_finding finding force index (idx_review_finding_current_category_file)
               where finding.task_id = file.task_id
+                and finding.current_attempt = 1
                 and finding.category = 'FINDING'
                 and finding.file_path = file.file_path
           )

@@ -33,6 +33,11 @@ class ProductionConfigurationContractTest {
         "REPOGUARD_GITHUB_DIFF_MAX_TOTAL_BYTES",
         "REPOGUARD_GITHUB_DIFF_MAX_PATCH_BYTES",
         "REPOGUARD_GITHUB_DIFF_TOTAL_TIMEOUT_MS",
+        "REPOGUARD_REVIEW_WORKER_CONCURRENCY",
+        "REPOGUARD_REVIEW_WORKER_MAX_CONCURRENCY",
+        "REPOGUARD_RABBIT_LISTENER_CONCURRENCY",
+        "REPOGUARD_RABBIT_LISTENER_MAX_CONCURRENCY",
+        "REPOGUARD_REVIEW_EXECUTION_BUDGET_MS",
         "REPOGUARD_REVIEW_PIPELINE_BUDGET_MS",
         "REPOGUARD_REVIEW_PIPELINE_MAX_TOTAL_CHUNKS",
         "REPOGUARD_REVIEW_PIPELINE_MAX_IN_FLIGHT_CHUNKS",
@@ -155,7 +160,9 @@ class ProductionConfigurationContractTest {
             "SPRING_FLYWAY_ENABLED",
             "REPOGUARD_RUNTIME_ROLE",
             "REPOGUARD_API_INSTANCE_COUNT",
-            "REPOGUARD_AUTH_REGISTRATION_ENABLED"
+            "REPOGUARD_AUTH_REGISTRATION_ENABLED",
+            "SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE",
+            "SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE"
         );
 
         assertThat(backendEnvironment).containsKeys(SHARED_CAPACITY_AND_SECURITY_KEYS.toArray(String[]::new));
@@ -172,6 +179,10 @@ class ProductionConfigurationContractTest {
                     .isEqualTo(backendEnvironment.get(key));
             }
         }
+        assertThat(backendEnvironment.get("SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE"))
+            .isEqualTo("${API_DB_MAX_POOL_SIZE:-8}");
+        assertThat(workerEnvironment.get("SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE"))
+            .isEqualTo("${WORKER_DB_MAX_POOL_SIZE:-4}");
         assertThat(service(production, "backend").get("secrets"))
             .isEqualTo(service(production, "backend-worker").get("secrets"));
         assertThat(read(root.resolve("docker-compose.prod.yml")))
@@ -195,6 +206,73 @@ class ProductionConfigurationContractTest {
             .allSatisfy(key -> assertThat(application + runtimeContract)
                 .as("application consumer for Compose key %s", key)
                 .contains(key));
+    }
+
+    @Test
+    void singleHostProductionDefaultsToSplitRolesAndBoundedWorkerCapacity() throws IOException {
+        Path root = findRepositoryRoot();
+        Map<String, Object> production = yaml(root.resolve("docker-compose.prod.yml"));
+        Map<String, Object> mysql = service(production, "mysql");
+        Map<String, Object> rabbitmq = service(production, "rabbitmq");
+        Map<String, Object> backend = service(production, "backend");
+        Map<String, Object> worker = service(production, "backend-worker");
+        Map<String, Object> backendEnvironment = environment(production, "backend");
+        Map<String, Object> workerEnvironment = environment(production, "backend-worker");
+        String template = read(root.resolve(".env.prod.example"));
+        String deploy = read(root.resolve("scripts/deploy-prod.sh"));
+        String application = read(root.resolve("repoguard-backend/src/main/resources/application.yml"));
+
+        assertThat(template)
+            .contains("COMPOSE_PROFILES=worker-split")
+            .contains("REPOGUARD_RUNTIME_ROLE=api")
+            .contains("REPOGUARD_DEPLOYMENT_MODE=split")
+            .contains("REPOGUARD_API_INSTANCE_COUNT=1")
+            .contains("REPOGUARD_REVIEW_WORKER_CONCURRENCY=1")
+            .contains("REPOGUARD_REVIEW_WORKER_MAX_CONCURRENCY=1")
+            .contains("REPOGUARD_RABBIT_LISTENER_CONCURRENCY=1")
+            .contains("REPOGUARD_RABBIT_LISTENER_MAX_CONCURRENCY=1")
+            .contains("REPOGUARD_REVIEW_PIPELINE_MAX_IN_FLIGHT_CHUNKS=2")
+            .contains("REPOGUARD_ASYNC_LLM_CHUNK_THREADS=2")
+            .contains("REPOGUARD_LLM_BULKHEAD_MAX_CONCURRENT_CALLS=2")
+            .contains("REPOGUARD_SCHEDULER_POOL_SIZE=2");
+        assertThat(deploy)
+            .contains("COMPOSE_PROFILES=\"${COMPOSE_PROFILES:-worker-split}\"")
+            .contains("validate_split_runtime_mode")
+            .contains("validate_split_runtime_mode\nvalidate_production_data_routing");
+
+        assertThat(mysql)
+            .containsEntry("mem_limit", "${MYSQL_MEM_LIMIT:-640m}")
+            .containsEntry("cpu_shares", "${MYSQL_CPU_SHARES:-768}");
+        assertThat(rabbitmq)
+            .containsEntry("mem_limit", "${RABBITMQ_MEM_LIMIT:-256m}")
+            .containsEntry("cpu_shares", "${RABBITMQ_CPU_SHARES:-512}");
+        assertThat(backend)
+            .containsEntry("mem_limit", "${BACKEND_MEM_LIMIT:-448m}")
+            .containsEntry("cpu_shares", "${BACKEND_CPU_SHARES:-1024}");
+        assertThat(backendEnvironment)
+            .containsEntry("JAVA_TOOL_OPTIONS", "${JAVA_TOOL_OPTIONS:--XX:MaxRAMPercentage=60 -XX:+UseSerialGC}");
+        assertThat(worker)
+            .containsEntry("mem_limit", "${WORKER_MEM_LIMIT:-704m}")
+            .containsEntry("cpus", "${WORKER_CPU_LIMIT:-1.0}")
+            .containsEntry("cpu_shares", "${WORKER_CPU_SHARES:-512}");
+        assertThat(stringList(worker.get("profiles"))).containsExactly("worker-split");
+        assertThat(workerEnvironment)
+            .containsEntry("JAVA_TOOL_OPTIONS", "${WORKER_JAVA_TOOL_OPTIONS:--XX:MaxRAMPercentage=65 -XX:+UseSerialGC}")
+            .containsEntry("REPOGUARD_RUNTIME_ROLE", "worker")
+            .containsEntry("REPOGUARD_API_INSTANCE_COUNT", 0);
+        assertThat(backendEnvironment)
+            .containsEntry("REPOGUARD_REVIEW_WORKER_CONCURRENCY", "${REPOGUARD_REVIEW_WORKER_CONCURRENCY:-1}")
+            .containsEntry("REPOGUARD_REVIEW_WORKER_MAX_CONCURRENCY", "${REPOGUARD_REVIEW_WORKER_MAX_CONCURRENCY:-1}")
+            .containsEntry("REPOGUARD_RABBIT_LISTENER_CONCURRENCY", "${REPOGUARD_RABBIT_LISTENER_CONCURRENCY:-1}")
+            .containsEntry("REPOGUARD_RABBIT_LISTENER_MAX_CONCURRENCY", "${REPOGUARD_RABBIT_LISTENER_MAX_CONCURRENCY:-1}")
+            .containsEntry("REPOGUARD_REVIEW_PIPELINE_MAX_IN_FLIGHT_CHUNKS", "${REPOGUARD_REVIEW_PIPELINE_MAX_IN_FLIGHT_CHUNKS:-2}")
+            .containsEntry("REPOGUARD_ASYNC_LLM_CHUNK_THREADS", "${REPOGUARD_ASYNC_LLM_CHUNK_THREADS:-2}")
+            .containsEntry("REPOGUARD_LLM_BULKHEAD_MAX_CONCURRENT_CALLS", "${REPOGUARD_LLM_BULKHEAD_MAX_CONCURRENT_CALLS:-2}");
+        assertThat(application)
+            .contains("size: ${REPOGUARD_SCHEDULER_POOL_SIZE:2}")
+            .contains("max-in-flight-chunks: ${REPOGUARD_REVIEW_PIPELINE_MAX_IN_FLIGHT_CHUNKS:2}")
+            .contains("llm-chunk-threads: ${REPOGUARD_ASYNC_LLM_CHUNK_THREADS:2}")
+            .contains("bulkhead-max-concurrent-calls: ${REPOGUARD_LLM_BULKHEAD_MAX_CONCURRENT_CALLS:2}");
     }
 
     @Test
@@ -262,7 +340,7 @@ class ProductionConfigurationContractTest {
         Map<String, Object> smoke = yaml(root.resolve("docker-compose.smoke.yml"));
         assertThat(environment(smoke, "backend").get("SPRING_DATASOURCE_URL").toString())
             .contains("rewriteBatchedStatements=true");
-        Map<String, Object> ip = yaml(root.resolve("docker-compose.ip.yml"));
+        Map<String, Object> ip = yaml(root.resolve("docker-compose.prod.yml"));
         assertThat(environment(ip, "backend").get("SPRING_DATASOURCE_URL").toString())
             .contains("rewriteBatchedStatements=true");
         assertThat(read(root.resolve("repoguard-backend/src/main/resources/application-dev.yml")))
@@ -286,7 +364,7 @@ class ProductionConfigurationContractTest {
             )
         );
         Map<String, Object> production = yaml(root.resolve("docker-compose.prod.yml"));
-        Map<String, Object> ip = yaml(root.resolve("docker-compose.ip.yml"));
+        Map<String, Object> ip = yaml(root.resolve("docker-compose.prod.yml"));
         Map<String, Object> smoke = yaml(root.resolve("docker-compose.smoke.yml"));
         String template = read(root.resolve(".env.prod.example"));
         String key = "REPOGUARD_GITHUB_WEBHOOK_ALLOWED_HEAD_BRANCHES";
@@ -433,6 +511,71 @@ class ProductionConfigurationContractTest {
     }
 
     @Test
+    void productionHealthProbesSeparateLivenessFromDependencyReadiness() throws IOException {
+        Path root = findRepositoryRoot();
+        String application = read(root.resolve("repoguard-backend/src/main/resources/application.yml"));
+        Map<String, Object> production = yaml(root.resolve("docker-compose.prod.yml"));
+        Map<String, Object> ipDeployment = yaml(root.resolve("docker-compose.prod.yml"));
+        Map<String, Object> smoke = yaml(root.resolve("docker-compose.smoke.yml"));
+
+        assertThat(application)
+            .contains("show-details: never")
+            .contains("readiness:\n          include: readinessState,db,rabbit");
+        for (String serviceName : List.of("backend", "backend-worker")) {
+            assertThat(stringList(map(service(production, serviceName).get("healthcheck")).get("test")).toString())
+                .contains("/actuator/health/readiness");
+        }
+        assertThat(stringList(map(service(ipDeployment, "backend").get("healthcheck")).get("test")).toString())
+            .contains("/actuator/health/readiness");
+        assertThat(stringList(map(service(smoke, "backend").get("healthcheck")).get("test")).toString())
+            .contains("/actuator/health/readiness");
+
+        assertThat(read(root.resolve("Caddyfile")))
+            .contains("@health path /healthz")
+            .doesNotContain("/actuator/health");
+        assertThat(read(root.resolve("repoguard-frontend/nginx.ip.conf")))
+            .contains("location /actuator/health")
+            .contains("location ~ ^/actuator/(?!health(?:/|$))");
+        assertThat(read(root.resolve(".env.prod.example")))
+            .contains("HEALTH_URL=http://127.0.0.1/actuator/health/readiness");
+        assertThat(read(root.resolve("scripts/deploy-prod.sh")))
+            .contains("HEALTH_URL=\"${HEALTH_URL:-http://127.0.0.1/actuator/health/readiness}\"");
+        assertThat(read(root.resolve(".github/workflows/release-images.yml")))
+            .contains("${HEALTH_URL:-http://127.0.0.1/actuator/health/readiness}");
+
+        String observation = read(root.resolve(".github/workflows/production-observation.yml"));
+        assertThat(observation)
+            .contains(
+                "probe_endpoint \"liveness\" \"/actuator/health/liveness\" \"200\" \"health_up\" \"dynamic\"",
+                "probe_endpoint \"readiness\" \"/actuator/health/readiness\" \"200\" \"health_up\" \"dynamic\""
+            )
+            .doesNotContain("probe_endpoint \"health\" \"/actuator/health\"");
+    }
+
+    @Test
+    void observabilityLogsCoverApiAndWorkerAcrossCollectionInventoryAndDashboard() throws IOException {
+        Path root = findRepositoryRoot();
+        String alloy = read(root.resolve("config/observability/alloy/config.alloy"));
+        String inventory = read(root.resolve(".github/workflows/production-observability-inventory.yml"));
+        String dashboard = read(
+            root.resolve(
+                "config/observability/grafana/provisioning/dashboards/repoguard-review-observability.json"
+            )
+        );
+
+        assertThat(alloy)
+            .contains("/(repoguard-backend|repoguard-backend-worker|repoguard-frontend|repoguard-caddy)");
+        assertThat(inventory)
+            .contains("LOKI_BACKEND_CONTAINER_LABEL_OK")
+            .contains("LOKI_WORKER_CONTAINER_LABEL_OK")
+            .contains("repoguard-backend-worker");
+        assertThat(dashboard)
+            .contains("Filter API and worker logs")
+            .contains("{container=~\\\"repoguard-backend(-worker)?\\\"}")
+            .doesNotContain("{container=\\\"repoguard-backend\\\"}");
+    }
+
+    @Test
     void prometheusEndpointAndRegistryAreEnabledWithoutEmbeddingCredentials() throws IOException {
         Path root = findRepositoryRoot();
         String application = read(
@@ -476,7 +619,7 @@ class ProductionConfigurationContractTest {
         ));
 
         assertThat(application)
-            .contains("size: ${REPOGUARD_SCHEDULER_POOL_SIZE:4}")
+            .contains("size: ${REPOGUARD_SCHEDULER_POOL_SIZE:2}")
             .contains("notification-publish-threads: ${REPOGUARD_ASYNC_NOTIFICATION_PUBLISH_THREADS:2}")
             .contains("recovery-threads: ${REPOGUARD_ASYNC_RECOVERY_THREADS:3}");
         for (String source : List.of(
@@ -497,7 +640,7 @@ class ProductionConfigurationContractTest {
     void applicationContainersAreHealthCheckedAndLeastPrivilege() throws IOException {
         Path root = findRepositoryRoot();
         Map<String, Object> production = yaml(root.resolve("docker-compose.prod.yml"));
-        Map<String, Object> ipDeployment = yaml(root.resolve("docker-compose.ip.yml"));
+        Map<String, Object> ipDeployment = yaml(root.resolve("docker-compose.prod.yml"));
 
         for (String serviceName : List.of("backend", "backend-worker", "frontend", "caddy")) {
             assertLeastPrivilegeApplicationContainer(production, serviceName);

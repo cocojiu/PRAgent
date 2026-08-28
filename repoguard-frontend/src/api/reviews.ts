@@ -45,6 +45,15 @@ export const fetchReviewTimeline = (
   params?: { limit?: number }
 ) => apiRequest("fetchReviewTimeline", { id, ...params });
 
+export const fetchReviewExecutionAttempts = (taskId: number) =>
+  apiRequest("fetchReviewExecutionAttempts", { taskId });
+
+export const fetchReviewExecutionAttemptResult = (
+  taskId: number,
+  attemptId: number,
+  params?: { page?: number; pageSize?: number }
+) => apiRequest("fetchReviewExecutionAttemptResult", { taskId, attemptId, ...params });
+
 export const fetchReviewRepositories = () =>
   apiRequest("fetchReviewRepositories", undefined);
 

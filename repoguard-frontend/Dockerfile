@@ -1,5 +1,9 @@
 FROM nginxinc/nginx-unprivileged:1.31.3-alpine-slim@sha256:d9fa63891743a11eb56ca1b22d8cc227491df183ca3da2cf1bf2c6e010bf19a5
 
+USER root
+RUN apk upgrade --no-cache libcrypto3 libssl3
+USER 101
+
 ARG OCI_VERSION
 ARG OCI_REVISION
 

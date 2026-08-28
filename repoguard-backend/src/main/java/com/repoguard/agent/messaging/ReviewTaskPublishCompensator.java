@@ -8,6 +8,7 @@ import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.review.task.ReviewTaskMessage;
 import com.repoguard.agent.review.task.ReviewTaskPublisher;
 import com.repoguard.agent.timeline.ReviewTimelineStatus;
+import com.repoguard.agent.tenancy.ScheduledJobLeaseContext;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
@@ -15,7 +16,6 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -99,11 +99,11 @@ public class ReviewTaskPublishCompensator {
         );
     }
 
-    @Scheduled(fixedDelayString = "${app.rabbit.review.publish-compensation-interval-ms:60000}")
     public void compensatePublishFailures() {
         LocalDateTime now = LocalDateTime.now();
         List<ReviewTask> tasks = compensationQuery.loadDueTasks(now);
         for (ReviewTask task : tasks) {
+            ScheduledJobLeaseContext.assertHeld();
             if (!recoveryWorkDispatcher.submit(
                 "review_publish_compensation",
                 () -> compensate(task)
@@ -245,7 +245,8 @@ public class ReviewTaskPublishCompensator {
             task.getPrNumber(),
             task.getCommitSha(),
             queuedAt,
-            LogContext.currentTraceId()
+            LogContext.currentTraceId(),
+            "GITHUB_WEBHOOK".equalsIgnoreCase(task.getTriggerSource()) ? 4 : 8
         );
     }
 

@@ -4,7 +4,7 @@
   "tags": ["repoguard", "logs", "review"],
   "timezone": "browser",
   "schemaVersion": 40,
-  "version": 1,
+  "version": 2,
   "refresh": "10s",
   "time": {
     "from": "now-6h",
@@ -76,7 +76,7 @@
       "id": 1,
       "type": "logs",
       "title": "Review Chain Logs",
-      "description": "Filter by taskId, traceId, and operation. Empty taskId/traceId values match all structured RepoGuard backend logs.",
+      "description": "Filter API and worker logs by taskId, traceId, and operation. Empty taskId/traceId values match all structured RepoGuard backend logs.",
       "datasource": {
         "type": "loki",
         "uid": "loki"
@@ -103,7 +103,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{container=\"repoguard-backend\"} |= \"taskId=$taskId\" |= \"traceId=$traceId\" |= \"$operation\"",
+          "expr": "{container=~\"repoguard-backend(-worker)?\"} |= \"taskId=$taskId\" |= \"traceId=$traceId\" |= \"$operation\"",
           "refId": "A"
         }
       ]
@@ -135,7 +135,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{container=\"repoguard-backend\"} |= \"failureCategory=\"",
+          "expr": "{container=~\"repoguard-backend(-worker)?\"} |= \"failureCategory=\"",
           "refId": "A"
         }
       ]
@@ -167,7 +167,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{container=\"repoguard-backend\"} |= \"ERROR\"",
+          "expr": "{container=~\"repoguard-backend(-worker)?\"} |= \"ERROR\"",
           "refId": "A"
         }
       ]
@@ -199,7 +199,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{container=\"repoguard-backend\"} |~ \"operation=rabbit_(publish|consume)\"",
+          "expr": "{container=~\"repoguard-backend(-worker)?\"} |~ \"operation=rabbit_(publish|consume)\"",
           "refId": "A"
         }
       ]
@@ -231,7 +231,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{container=\"repoguard-backend\"} |= \"operation=github_diff_fetch\"",
+          "expr": "{container=~\"repoguard-backend(-worker)?\"} |= \"operation=github_diff_fetch\"",
           "refId": "A"
         }
       ]
@@ -263,7 +263,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{container=\"repoguard-backend\"} |= \"operation=review_execute\"",
+          "expr": "{container=~\"repoguard-backend(-worker)?\"} |= \"operation=review_execute\"",
           "refId": "A"
         }
       ]

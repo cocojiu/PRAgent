@@ -18,9 +18,9 @@ class RabbitMqConfigTest {
     void defaultsUseVersionedReviewTopology() {
         RabbitReviewQueueProperties properties = new RabbitReviewQueueProperties();
 
-        assertThat(properties.getExchange()).isEqualTo("repoguard.review.exchange.v2");
-        assertThat(properties.getQueue()).isEqualTo("repoguard.review.queue.v2");
-        assertThat(properties.getRoutingKey()).isEqualTo("repoguard.review.created.v2");
+        assertThat(properties.getExchange()).isEqualTo("repoguard.review.exchange.v3");
+        assertThat(properties.getQueue()).isEqualTo("repoguard.review.queue.v3");
+        assertThat(properties.getRoutingKey()).isEqualTo("repoguard.review.created.v3");
         assertThat(properties.getPublishConfirmTimeoutMs()).isEqualTo(5000);
         assertThat(properties.getPublishCompensationMaxAttempts()).isEqualTo(10);
         assertThat(properties.getPublishCompensationIntervalMs()).isEqualTo(60000);
@@ -39,7 +39,8 @@ class RabbitMqConfigTest {
         assertThat(queue.isDurable()).isTrue();
         assertThat(queue.getArguments())
             .containsEntry("x-dead-letter-exchange", "test.review.dlx")
-            .containsEntry("x-dead-letter-routing-key", "test.review.dead");
+            .containsEntry("x-dead-letter-routing-key", "test.review.dead")
+            .containsEntry("x-max-priority", 10);
     }
 
     @Test

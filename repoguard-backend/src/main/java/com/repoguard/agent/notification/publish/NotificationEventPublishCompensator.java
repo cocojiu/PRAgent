@@ -7,13 +7,13 @@ import com.repoguard.agent.messaging.RabbitPublishCompensationMetricsRecorder;
 import com.repoguard.agent.messaging.RabbitPublishCompensationOutcome;
 import com.repoguard.agent.messaging.RabbitPublishFailurePhase;
 import com.repoguard.agent.notification.outbox.NotificationPublishCompensationQuery;
+import com.repoguard.agent.tenancy.ScheduledJobLeaseContext;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -58,11 +58,11 @@ public class NotificationEventPublishCompensator {
         );
     }
 
-    @Scheduled(fixedDelayString = "${app.rabbit.notification.publish-compensation-interval-ms:60000}")
     public void compensate() {
         LocalDateTime now = LocalDateTime.now();
         List<NotificationEvent> events = compensationQuery.loadDueEvents(now);
         for (NotificationEvent event : events) {
+            ScheduledJobLeaseContext.assertHeld();
             if (!recoveryWorkDispatcher.submit(
                 "notification_publish_compensation",
                 () -> compensate(event)

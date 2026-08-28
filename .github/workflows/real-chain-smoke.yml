@@ -86,7 +86,7 @@ jobs:
         shell: bash
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
-        run: curl -fsS "http://${DEPLOY_HOST}/actuator/health"
+        run: curl -fsS "http://${DEPLOY_HOST}/actuator/health/readiness"
 
       - name: Verify remote isolated smoke assets
         shell: bash
@@ -567,7 +567,7 @@ jobs:
         shell: bash
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
-        run: curl -fsS "http://${DEPLOY_HOST}/actuator/health"
+        run: curl -fsS "http://${DEPLOY_HOST}/actuator/health/readiness"
 
       - name: Upload sanitized OBSERVE smoke summary
         if: always()

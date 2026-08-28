@@ -56,6 +56,7 @@ class NotificationEventPublishCoordinatorTest {
     @Test
     void publishesMessageAndMarksEventPublishedImmediatelyWithoutTransaction() {
         NotificationEvent event = event();
+        event.setTraceId("trace-outbox-99");
         when(eventMapper.update(any())).thenReturn(1);
 
         coordinator.publishAfterCommit(event);
@@ -65,6 +66,7 @@ class NotificationEventPublishCoordinatorTest {
         verify(publisher).publishOnce(messageCaptor.capture());
         assertThat(messageCaptor.getValue().eventId()).isEqualTo(99L);
         assertThat(messageCaptor.getValue().eventKey()).isEqualTo("REVIEW_COMPLETED:42");
+        assertThat(messageCaptor.getValue().traceId()).isEqualTo("trace-outbox-99");
         verify(eventMapper, org.mockito.Mockito.times(2)).update(any());
         assertThat(event.getStatus()).isEqualTo(NotificationEventStatus.PUBLISHED.code());
     }

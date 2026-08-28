@@ -47,7 +47,7 @@ class GithubWebhookControllerTest {
 
     @Test
     void pullRequestOpenedCreatesReviewTaskFromWebhookPayload() throws Exception {
-        when(reviewService.triggerManualReview(any())).thenReturn(
+        when(reviewService.triggerWebhookReview(any(), any())).thenReturn(
             new ManualReviewResponse(88L, "queued", "Review task queued", false, "github_webhook", "github_webhook")
         );
 
@@ -71,7 +71,7 @@ class GithubWebhookControllerTest {
             .andExpect(jsonPath("$.data.action").value("opened"));
 
         ArgumentCaptor<ManualReviewRequest> captor = ArgumentCaptor.forClass(ManualReviewRequest.class);
-        verify(reviewService).triggerManualReview(captor.capture());
+        verify(reviewService).triggerWebhookReview(captor.capture(), any());
         ManualReviewRequest request = captor.getValue();
         org.assertj.core.api.Assertions.assertThat(request.organization()).isEqualTo("repo-guard-demo");
         org.assertj.core.api.Assertions.assertThat(request.repository()).isEqualTo("spring-boot-demo");
@@ -84,7 +84,7 @@ class GithubWebhookControllerTest {
 
     @Test
     void pullRequestSynchronizeKeepsQueuedResponseContractForExistingTask() throws Exception {
-        when(reviewService.triggerManualReview(any())).thenReturn(
+        when(reviewService.triggerWebhookReview(any(), any())).thenReturn(
             new ManualReviewResponse(99L, "queued", "Existing review task reused", true, "github_webhook", "github_webhook")
         );
 
@@ -313,6 +313,7 @@ class GithubWebhookControllerTest {
                 "number": 512,
                 "title": "Add auto review",
                 "draft": %s,
+                "updated_at": "2026-08-15T03:00:00Z",
                 "head": {
                   "ref": "%s",
                   "sha": "%s"

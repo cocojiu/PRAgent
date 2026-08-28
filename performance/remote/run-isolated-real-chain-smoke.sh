@@ -103,7 +103,7 @@ compose() {
 
 wait_for_backend() {
   for _ in $(seq 1 90); do
-    if curl -fsS "http://127.0.0.1:${smoke_port}/actuator/health" | grep -q '"status":"UP"'; then
+    if curl -fsS "http://127.0.0.1:${smoke_port}/actuator/health/readiness" | grep -q '"status":"UP"'; then
       return 0
     fi
     sleep 5

@@ -15,6 +15,7 @@ public class ReviewTask {
     private String repository;
     private String organization;
     private String commitSha;
+    private Long generation;
     private String branchName;
     private String status;
     private String riskLevel;
@@ -27,6 +28,7 @@ public class ReviewTask {
     private String publishClaimedBy;
     private LocalDateTime reviewClaimedAt;
     private String reviewClaimedBy;
+    private Long currentAttemptId;
     private String llmStatus;
     private String llmProvider;
     private String llmModel;
@@ -99,6 +101,14 @@ public class ReviewTask {
 
     public void setCommitSha(String commitSha) {
         this.commitSha = commitSha;
+    }
+
+    public Long getGeneration() {
+        return generation;
+    }
+
+    public void setGeneration(Long generation) {
+        this.generation = generation;
     }
 
     public String getBranchName() {
@@ -195,6 +205,14 @@ public class ReviewTask {
 
     public void setReviewClaimedBy(String reviewClaimedBy) {
         this.reviewClaimedBy = reviewClaimedBy;
+    }
+
+    public Long getCurrentAttemptId() {
+        return currentAttemptId;
+    }
+
+    public void setCurrentAttemptId(Long currentAttemptId) {
+        this.currentAttemptId = currentAttemptId;
     }
 
     public String getLlmStatus() {

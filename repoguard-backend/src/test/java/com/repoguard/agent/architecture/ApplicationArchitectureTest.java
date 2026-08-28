@@ -548,13 +548,21 @@ class ApplicationArchitectureTest {
         List<String> sourcePaths = SOURCES.stream()
             .map(SourceUnit::path)
             .toList();
+        SourceUnit creationService = SOURCES.stream()
+            .filter(source -> source.path().equals(
+                "com/repoguard/agent/review/task/ManualReviewCreationService.java"
+            ))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("ManualReviewCreationService source was not discovered"));
 
         assertThat(sourcePaths)
             .contains(
                 "com/repoguard/agent/review/ReviewRepositoryDimensionService.java",
                 "com/repoguard/agent/review/task/ManualReviewCleanupExecutorConfig.java",
+                "com/repoguard/agent/review/task/ManualReviewCreationGate.java",
                 "com/repoguard/agent/review/task/ManualReviewCreationService.java",
-                "com/repoguard/agent/review/task/ManualReviewIdempotencyCoordinator.java"
+                "com/repoguard/agent/review/task/ManualReviewIdempotencyCoordinator.java",
+                "com/repoguard/agent/review/task/ReviewTaskCreationAssembler.java"
             )
             .doesNotContain(
                 "com/repoguard/agent/service/impl/ReviewRepositoryDimensionService.java",
@@ -562,6 +570,33 @@ class ApplicationArchitectureTest {
                 "com/repoguard/agent/service/impl/ManualReviewCreationService.java",
                 "com/repoguard/agent/service/impl/ManualReviewIdempotencyCoordinator.java"
             );
+        assertThat(creationService.sourceText())
+            .contains("ManualReviewCreationGate", "ReviewTaskCreationAssembler");
+        assertThat(creationService.sourceText().lines().count())
+            .as("ManualReviewCreationService line-count baseline may only move down")
+            .isLessThanOrEqualTo(360);
+    }
+
+    @Test
+    void reviewExecutionWorkflowDelegatesReviewAndTerminalResponsibilities() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+        SourceUnit workflow = SOURCES.stream()
+            .filter(source -> source.path().equals("com/repoguard/agent/worker/ReviewExecutionWorkflow.java"))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("ReviewExecutionWorkflow source was not discovered"));
+
+        assertThat(sourcePaths).contains(
+            "com/repoguard/agent/worker/ReviewExecutionReviewProcessor.java",
+            "com/repoguard/agent/worker/ReviewExecutionTerminalCoordinator.java"
+        );
+        assertThat(workflow.sourceText())
+            .contains("ReviewExecutionReviewProcessor", "ReviewExecutionTerminalCoordinator")
+            .doesNotContain("private boolean failReview(", "private ReviewResult review(");
+        assertThat(workflow.sourceText().lines().count())
+            .as("ReviewExecutionWorkflow line-count baseline may only move down")
+            .isLessThanOrEqualTo(220);
     }
 
     @Test
@@ -655,11 +690,24 @@ class ApplicationArchitectureTest {
             .contains("metrics.llmFallback", "DEFERRED_RULE_REVIEW")
             .doesNotContain("RuleBasedPullRequestReviewer", "ruleBasedReviewer.review");
         assertThat(pipeline.sourceText())
-            .contains("ReviewResult ruleReview = ruleBasedReviewer.review(context.diff())");
+            .contains("ReviewResult ruleReview = ruleBasedReviewer.review(", "context.deadline()");
         assertThat(resultAggregator.sourceText()).contains("ReviewResult.completed(", "record ChunkAggregation");
         assertThat(aggregator.sourceText())
             .contains("LlmChunkReviewFallbackHandler", "LlmChunkReviewResultAggregator")
             .doesNotContain("metrics.llmFallback(", "ReviewResult.completed(", "record ChunkAggregation");
+    }
+
+    @Test
+    void executionAttemptLifecycleLivesInItsOwnReviewModule() {
+        List<String> executionSources = SOURCES.stream()
+            .filter(source -> source.packageName().startsWith(BASE_PACKAGE + ".review.execution"))
+            .map(SourceUnit::path)
+            .toList();
+
+        assertThat(executionSources)
+            .anyMatch(path -> path.endsWith("review/execution/ReviewExecutionAttemptLifecycle.java"))
+            .anyMatch(path -> path.endsWith("review/execution/ReviewExecutionAttemptQueryService.java"))
+            .anyMatch(path -> path.endsWith("review/execution/ReviewExecutionBudgetProperties.java"));
     }
 
     @Test

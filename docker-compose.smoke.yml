@@ -12,6 +12,13 @@ services:
       - --collation-server=utf8mb4_unicode_ci
       - --innodb-buffer-pool-size=256M
       - --max-connections=60
+      - --innodb-lock-wait-timeout=10
+      - --max-execution-time=30000
+      - --server-id=1
+      - --log-bin=mysql-bin
+      - --binlog-format=ROW
+      - --sync-binlog=1
+      - --binlog-expire-logs-seconds=604800
       - --performance-schema=OFF
     volumes:
       - mysql_data:/var/lib/mysql
@@ -49,9 +56,13 @@ services:
       SPRING_PROFILES_ACTIVE: prod
       SERVER_PORT: 8081
       JAVA_TOOL_OPTIONS: ${SMOKE_JAVA_TOOL_OPTIONS:--XX:MaxRAMPercentage=70 -XX:+UseSerialGC}
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${SMOKE_MYSQL_DATABASE:-repoguard}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${SMOKE_MYSQL_DATABASE:-repoguard}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true&connectTimeout=3000&socketTimeout=30000
       SPRING_DATASOURCE_USERNAME: ${SMOKE_MYSQL_USER:-repoguard}
       SPRING_DATASOURCE_PASSWORD: ${SMOKE_MYSQL_PASSWORD}
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: 6
+      SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: 1
+      SPRING_DATASOURCE_HIKARI_CONNECTION_TIMEOUT_MS: 3000
+      SPRING_DATASOURCE_HIKARI_VALIDATION_TIMEOUT_MS: 2500
       SPRING_RABBITMQ_HOST: rabbitmq
       SPRING_RABBITMQ_PORT: 5672
       SPRING_RABBITMQ_USERNAME: ${SMOKE_RABBITMQ_USER:-repoguard}
@@ -81,23 +92,24 @@ services:
       REPOGUARD_GITHUB_WEBHOOK_REQUIRE_SIGNATURE: true
       REPOGUARD_GITHUB_WEBHOOK_IGNORE_DRAFT: true
       REPOGUARD_REVIEW_WORKER_CONCURRENCY: 1
-      REPOGUARD_REVIEW_PIPELINE_BUDGET_MS: 600000
+      REPOGUARD_REVIEW_EXECUTION_BUDGET_MS: 600000
+      REPOGUARD_REVIEW_PIPELINE_BUDGET_MS: 480000
       REPOGUARD_REVIEW_PIPELINE_MAX_TOTAL_CHUNKS: 64
-      REPOGUARD_REVIEW_PIPELINE_MAX_IN_FLIGHT_CHUNKS: 3
-      REPOGUARD_ASYNC_LLM_CHUNK_THREADS: 3
+      REPOGUARD_REVIEW_PIPELINE_MAX_IN_FLIGHT_CHUNKS: 2
+      REPOGUARD_ASYNC_LLM_CHUNK_THREADS: 2
       REPOGUARD_ASYNC_LLM_CHUNK_QUEUE_CAPACITY: 100
       REPOGUARD_ASYNC_NOTIFICATION_PUBLISH_THREADS: 2
       REPOGUARD_ASYNC_NOTIFICATION_PUBLISH_QUEUE_CAPACITY: 100
       REPOGUARD_ASYNC_RECOVERY_THREADS: 3
       REPOGUARD_ASYNC_RECOVERY_QUEUE_CAPACITY: 100
-      REPOGUARD_SCHEDULER_POOL_SIZE: 4
+      REPOGUARD_SCHEDULER_POOL_SIZE: 2
       REPOGUARD_SCHEDULER_SHUTDOWN_WAIT: 10s
-      REPOGUARD_LLM_BULKHEAD_MAX_CONCURRENT_CALLS: 4
+      REPOGUARD_LLM_BULKHEAD_MAX_CONCURRENT_CALLS: 2
       REPOGUARD_LLM_BULKHEAD_MAX_WAIT_MILLIS: 250
     ports:
       - "127.0.0.1:${SMOKE_BACKEND_PORT}:8081"
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8081/actuator/health | grep -q 'UP'"]
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8081/actuator/health/readiness | grep -q 'UP'"]
       interval: 10s
       timeout: 5s
       retries: 30

@@ -38,7 +38,8 @@ public class DashboardServiceImpl implements DashboardService {
     @Override
     @Cacheable(
         cacheNames = CacheNames.DASHBOARD_OVERVIEW,
-        key = "T(com.repoguard.agent.dashboard.DashboardLlmTrendDays).normalize(#llmTrendDays)",
+        key = "T(com.repoguard.agent.tenancy.TenantScopedKey).current("
+            + "T(com.repoguard.agent.dashboard.DashboardLlmTrendDays).normalize(#llmTrendDays))",
         sync = true
     )
     public DashboardOverviewResponse getOverview(Integer llmTrendDays) {
@@ -58,31 +59,51 @@ public class DashboardServiceImpl implements DashboardService {
     }
 
     @Override
-    @Cacheable(cacheNames = CacheNames.DASHBOARD_SUMMARY, key = "'summary'", sync = true)
+    @Cacheable(
+        cacheNames = CacheNames.DASHBOARD_SUMMARY,
+        key = "T(com.repoguard.agent.tenancy.TenantScopedKey).current('summary')",
+        sync = true
+    )
     public List<DashboardMetricDto> getSummary() {
         return overviewFacade.getSummary();
     }
 
     @Override
-    @Cacheable(cacheNames = CacheNames.DASHBOARD_REVIEW_TREND, key = "'reviewTrend'", sync = true)
+    @Cacheable(
+        cacheNames = CacheNames.DASHBOARD_REVIEW_TREND,
+        key = "T(com.repoguard.agent.tenancy.TenantScopedKey).current('reviewTrend')",
+        sync = true
+    )
     public List<ReviewTrendPointDto> getReviewTrend() {
         return overviewFacade.getReviewTrend();
     }
 
     @Override
-    @Cacheable(cacheNames = CacheNames.DASHBOARD_RISK_DISTRIBUTION, key = "'riskDistribution'", sync = true)
+    @Cacheable(
+        cacheNames = CacheNames.DASHBOARD_RISK_DISTRIBUTION,
+        key = "T(com.repoguard.agent.tenancy.TenantScopedKey).current('riskDistribution')",
+        sync = true
+    )
     public List<ChartSliceDto> getRiskDistribution() {
         return overviewFacade.getRiskDistribution();
     }
 
     @Override
-    @Cacheable(cacheNames = CacheNames.DASHBOARD_RULES, key = "'rules'", sync = true)
+    @Cacheable(
+        cacheNames = CacheNames.DASHBOARD_RULES,
+        key = "T(com.repoguard.agent.tenancy.TenantScopedKey).current('rules')",
+        sync = true
+    )
     public DashboardRulesResponse getRules() {
         return overviewFacade.getRules();
     }
 
     @Override
-    @Cacheable(cacheNames = CacheNames.DASHBOARD_HIGH_RISK_REVIEWS, key = "'highRiskReviews'", sync = true)
+    @Cacheable(
+        cacheNames = CacheNames.DASHBOARD_HIGH_RISK_REVIEWS,
+        key = "T(com.repoguard.agent.tenancy.TenantScopedKey).current('highRiskReviews')",
+        sync = true
+    )
     public List<HighRiskReviewDto> getHighRiskReviews() {
         return overviewFacade.getHighRiskReviews();
     }
@@ -90,7 +111,8 @@ public class DashboardServiceImpl implements DashboardService {
     @Override
     @Cacheable(
         cacheNames = CacheNames.DASHBOARD_LLM_QUALITY,
-        key = "T(com.repoguard.agent.dashboard.DashboardLlmTrendDays).normalize(#llmTrendDays)",
+        key = "T(com.repoguard.agent.tenancy.TenantScopedKey).current("
+            + "T(com.repoguard.agent.dashboard.DashboardLlmTrendDays).normalize(#llmTrendDays))",
         sync = true
     )
     public DashboardLlmQualityResponse getLlmQuality(Integer llmTrendDays) {

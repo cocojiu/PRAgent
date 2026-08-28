@@ -4,7 +4,7 @@ set -eu
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
 COMPOSE_ADDITIONAL_FILES="${COMPOSE_ADDITIONAL_FILES:-}"
 ENV_FILE="${ENV_FILE:-.env}"
-HEALTH_URL="${HEALTH_URL:-http://127.0.0.1/actuator/health}"
+HEALTH_URL="${HEALTH_URL:-http://127.0.0.1/actuator/health/readiness}"
 BACKEND_SERVICE="${BACKEND_SERVICE:-backend}"
 COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-}"
 LEGACY_COMPOSE_FILE="${LEGACY_COMPOSE_FILE:-}"
@@ -122,6 +122,11 @@ fi
 if [ -z "${COMPOSE_PROFILES:-}" ]; then
   COMPOSE_PROFILES="$(read_env_value COMPOSE_PROFILES)"
 fi
+
+# Production defaults to logical API/Worker isolation even on a single host.
+# An existing environment that still declares combined/monolith is rejected by
+# validate_split_runtime_mode before any image pull or service mutation.
+COMPOSE_PROFILES="${COMPOSE_PROFILES:-worker-split}"
 
 export COMPOSE_PROJECT_NAME
 export COMPOSE_PROFILES
@@ -742,6 +747,14 @@ rollback_deployment() {
 
   BACKEND_IMAGE="$previous_backend_image"
   export BACKEND_IMAGE
+  # Candidate releases use the priority-capable v3 review topology. A previous
+  # backend declares the original v2 queue without x-max-priority, so force its
+  # matching topology during image rollback instead of letting it redeclare v3
+  # with incompatible arguments.
+  REPOGUARD_REVIEW_EXCHANGE="repoguard.review.exchange.v2"
+  REPOGUARD_REVIEW_QUEUE="repoguard.review.queue.v2"
+  REPOGUARD_REVIEW_ROUTING_KEY="repoguard.review.created.v2"
+  export REPOGUARD_REVIEW_EXCHANGE REPOGUARD_REVIEW_QUEUE REPOGUARD_REVIEW_ROUTING_KEY
   if has_compose_service backend-worker; then
     compose stop backend-worker >/dev/null 2>&1 || true
   fi

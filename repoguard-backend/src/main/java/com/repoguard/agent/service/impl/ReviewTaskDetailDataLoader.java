@@ -139,6 +139,7 @@ public class ReviewTaskDetailDataLoader {
                 pageRequest,
                 new LambdaQueryWrapper<ChangedFile>()
                     .eq(ChangedFile::getTaskId, taskId)
+                    .eq(ChangedFile::getCurrentAttempt, true)
                     .orderByAsc(ChangedFile::getId)
             );
         }
@@ -156,6 +157,7 @@ public class ReviewTaskDetailDataLoader {
     ) {
         LambdaQueryWrapper<ReviewFinding> wrapper = new LambdaQueryWrapper<ReviewFinding>()
             .eq(ReviewFinding::getTaskId, taskId)
+            .eq(ReviewFinding::getCurrentAttempt, true)
             .eq(ReviewFinding::getCategory, CATEGORY_FINDING)
             .orderByAsc(ReviewFinding::getId);
 
@@ -185,6 +187,7 @@ public class ReviewTaskDetailDataLoader {
     private LambdaQueryWrapper<ReviewFinding> missingTestPageQuery(Long taskId) {
         return new LambdaQueryWrapper<ReviewFinding>()
             .eq(ReviewFinding::getTaskId, taskId)
+            .eq(ReviewFinding::getCurrentAttempt, true)
             .eq(ReviewFinding::getCategory, CATEGORY_MISSING_TEST)
             .orderByAsc(ReviewFinding::getId);
     }

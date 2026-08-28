@@ -40,6 +40,8 @@ import type {
   PageResponse,
   ReviewCalibrationQueue,
   ReviewEnforcementModeRequest,
+  ReviewExecutionAttempt,
+  ReviewExecutionAttemptResult,
   ReviewFinding,
   ReviewPolicyConfig,
   ReviewPolicyConfigRequest,
@@ -359,6 +361,20 @@ export type GeneratedOpenApiOperationMap = {
     query: never;
     body: FindingFeedbackRequest;
     response: FindingFeedbackResponse;
+  };
+  "reviewExecutionAttemptControllerGetResult": {
+    method: "GET";
+    pathParams: { attemptId: number; taskId: number };
+    query: { page?: number; pageSize?: number };
+    body: never;
+    response: ReviewExecutionAttemptResult;
+  };
+  "reviewExecutionAttemptControllerList": {
+    method: "GET";
+    pathParams: { taskId: number };
+    query: never;
+    body: never;
+    response: ReviewExecutionAttempt[];
   };
   "systemConfigControllerCreateReviewRule": {
     method: "POST";
@@ -961,6 +977,22 @@ export const generatedOpenApiOperations = {
     queryParamNames: [],
     hasRequestBody: true,
     requestBodyRequired: true
+  },
+  "reviewExecutionAttemptControllerGetResult": {
+    method: "GET",
+    path: "/api/v1/reviews/{taskId}/attempts/{attemptId}",
+    pathParamNames: ["attemptId", "taskId"],
+    queryParamNames: ["page", "pageSize"],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "reviewExecutionAttemptControllerList": {
+    method: "GET",
+    path: "/api/v1/reviews/{taskId}/attempts",
+    pathParamNames: ["taskId"],
+    queryParamNames: [],
+    hasRequestBody: false,
+    requestBodyRequired: false
   },
   "systemConfigControllerCreateReviewRule": {
     method: "POST",

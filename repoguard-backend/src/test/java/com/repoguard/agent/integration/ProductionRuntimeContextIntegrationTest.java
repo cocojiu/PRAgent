@@ -9,6 +9,9 @@ import com.repoguard.agent.controller.ReviewController;
 import com.repoguard.agent.dto.AuthLogoutRequest;
 import com.repoguard.agent.dto.AuthPasswordChangeRequest;
 import com.repoguard.agent.dto.AuthRefreshRequest;
+import com.repoguard.agent.dto.EnterpriseTenantStatusRequest;
+import com.repoguard.agent.dto.EnterpriseTenantQuotaDto;
+import com.repoguard.agent.dto.EnterpriseTenantQuotaRequest;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ReviewCalibrationQueueMapper;
 import com.repoguard.agent.mapper.ReviewQualityBaselineMapper;
@@ -22,6 +25,8 @@ import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.security.PasswordHashService;
 import com.repoguard.agent.security.DatabaseRateLimitWindowStore;
 import com.repoguard.agent.service.AuthService;
+import com.repoguard.agent.tenancy.EnterpriseTenantAdminService;
+import com.repoguard.agent.tenancy.TenantQuotaService;
 import com.repoguard.agent.security.AuthTokenFilter;
 import com.repoguard.agent.review.task.ReviewTaskTransitionStore;
 import com.repoguard.agent.review.quality.ReviewQualityBaseline;
@@ -33,6 +38,11 @@ import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.servlet.ServletException;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -146,16 +156,18 @@ class ProductionRuntimeContextIntegrationTest {
     }
 
     @Test
-    void apiOnlyContextRunsAllMigrationsAndExcludesWorkers() {
+    void apiOnlyContextRunsAllMigrationsAndExcludesWorkers() throws Exception {
         try (ConfigurableApplicationContext context = start("api")) {
             assertThat(context.getBeansOfType(ReviewController.class)).hasSize(1);
             assertThat(context.getBeansOfType(ReviewTaskWorker.class)).isEmpty();
             assertProductionInfrastructure(context);
+            assertTenantLifecycleCompareAndSet(context);
+            assertTenantQuotaCompareAndSet(context);
         }
     }
 
     @Test
-    void workerOnlyContextRunsAllMigrationsAndExcludesApiControllers() {
+    void workerOnlyContextRunsAllMigrationsAndExcludesApiControllers() throws Exception {
         try (ConfigurableApplicationContext context = start("worker")) {
             assertThat(context.getBeansOfType(ReviewController.class)).isEmpty();
             assertThat(context.getBeansOfType(ReviewTaskWorker.class)).hasSize(1);
@@ -695,6 +707,100 @@ class ProductionRuntimeContextIntegrationTest {
         }
     }
 
+    private void assertTenantLifecycleCompareAndSet(ConfigurableApplicationContext context) {
+        JdbcTemplate jdbcTemplate = context.getBean(JdbcTemplate.class);
+        EnterpriseTenantAdminService service = context.getBean(EnterpriseTenantAdminService.class);
+        String tenantKey = "integration-lifecycle-" + Long.toUnsignedString(System.nanoTime());
+        jdbcTemplate.update(
+            "insert into tenant (tenant_key, display_name, status) values (?, ?, 'ACTIVE')",
+            tenantKey,
+            "Integration Lifecycle"
+        );
+        Long tenantId = jdbcTemplate.queryForObject(
+            "select id from tenant where tenant_key = ?",
+            Long.class,
+            tenantKey
+        );
+        try {
+            var suspended = service.updateStatus(
+                tenantKey,
+                new EnterpriseTenantStatusRequest(
+                    "ACTIVE",
+                    "SUSPENDED",
+                    1L,
+                    "integration lifecycle validation"
+                )
+            );
+
+            assertThat(suspended.tenantId()).isEqualTo(tenantId);
+            assertThat(suspended.status()).isEqualTo("SUSPENDED");
+            assertThat(suspended.statusVersion()).isEqualTo(2L);
+            assertThat(jdbcTemplate.queryForObject(
+                "select cache_version from tenant_cache_version where tenant_id = ?",
+                Long.class,
+                tenantId
+            )).isEqualTo(1L);
+            assertThatThrownBy(() -> service.updateStatus(
+                tenantKey,
+                new EnterpriseTenantStatusRequest(
+                    "ACTIVE",
+                    "SUSPENDED",
+                    1L,
+                    "stale lifecycle validation"
+                )
+            )).isInstanceOf(BusinessException.class);
+        } finally {
+            jdbcTemplate.update("delete from tenant where id = ?", tenantId);
+        }
+    }
+
+    private void assertTenantQuotaCompareAndSet(ConfigurableApplicationContext context) {
+        JdbcTemplate jdbcTemplate = context.getBean(JdbcTemplate.class);
+        TenantQuotaService service = context.getBean(TenantQuotaService.class);
+        String tenantKey = "integration-quota-" + Long.toUnsignedString(System.nanoTime());
+        jdbcTemplate.update(
+            "insert into tenant (tenant_key, display_name, status) values (?, ?, 'ACTIVE')",
+            tenantKey,
+            "Integration Quota"
+        );
+        Long tenantId = jdbcTemplate.queryForObject(
+            "select id from tenant where tenant_key = ?",
+            Long.class,
+            tenantKey
+        );
+        jdbcTemplate.update(
+            "insert into tenant_quota_config (tenant_id, quota_version, max_daily_reviews) values (?, 1, 3)",
+            tenantId
+        );
+        try {
+            EnterpriseTenantQuotaDto initial = service.get(tenantKey);
+            assertThat(initial.tenantId()).isEqualTo(tenantId);
+            assertThat(initial.quotaVersion()).isEqualTo(1L);
+            assertThat(initial.maxDailyReviews()).isEqualTo(3);
+            assertThat(initial.usedReviews()).isZero();
+
+            service.reserveReview(tenantId);
+            service.reserveReview(tenantId);
+            assertThat(service.get(tenantKey).usedReviews()).isEqualTo(2);
+
+            EnterpriseTenantQuotaDto updated = service.update(
+                tenantKey,
+                new EnterpriseTenantQuotaRequest(1L, 5)
+            );
+            assertThat(updated.quotaVersion()).isEqualTo(2L);
+            assertThat(updated.maxDailyReviews()).isEqualTo(5);
+            assertThat(updated.usedReviews()).isEqualTo(2);
+            assertThatThrownBy(() -> service.update(
+                tenantKey,
+                new EnterpriseTenantQuotaRequest(1L, 6)
+            )).isInstanceOf(BusinessException.class);
+        } finally {
+            jdbcTemplate.update("delete from tenant_quota_usage where tenant_id = ?", tenantId);
+            jdbcTemplate.update("delete from tenant_quota_config where tenant_id = ?", tenantId);
+            jdbcTemplate.update("delete from tenant where id = ?", tenantId);
+        }
+    }
+
     @Test
     void reviewQualitySqlHasFixedScaleExplainAndLatencyEvidence() throws NoSuchMethodException {
         try (ConfigurableApplicationContext context = start("api")) {
@@ -1071,6 +1177,7 @@ class ProductionRuntimeContextIntegrationTest {
             QUALITY_EXPLAIN_TASK_COUNT * QUALITY_EXPLAIN_FINDINGS_PER_TASK
         );
         for (Long taskId : taskIds) {
+            Long attemptId = ensureExecutionAttemptFixture(jdbcTemplate, taskId);
             for (int index = 0; index < QUALITY_EXPLAIN_FINDINGS_PER_TASK; index++) {
                 int duplicatePattern = index % 10;
                 String extension = switch (duplicatePattern % 4) {
@@ -1087,6 +1194,7 @@ class ProductionRuntimeContextIntegrationTest {
                 };
                 findingArguments.add(new Object[] {
                     taskId,
+                    attemptId,
                     "FINDING",
                     duplicatePattern % 3 == 0 ? "HIGH" : "LOW",
                     "RULE",
@@ -1103,10 +1211,10 @@ class ProductionRuntimeContextIntegrationTest {
         }
         jdbcTemplate.batchUpdate("""
             insert into review_finding (
-                task_id, category, severity, source, rule_id, file_path,
+                task_id, attempt_id, category, severity, source, rule_id, file_path,
                 line_number, message, recommendation, feedback_status,
                 anchor_type, is_blocking
-            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, findingArguments);
     }
 
@@ -1263,14 +1371,16 @@ class ProductionRuntimeContextIntegrationTest {
         String feedbackStatus,
         String message
     ) {
+        Long attemptId = ensureExecutionAttemptFixture(jdbcTemplate, taskId);
         jdbcTemplate.update("""
             insert into review_finding (
-                task_id, category, severity, source, rule_id, file_path,
+                task_id, attempt_id, category, severity, source, rule_id, file_path,
                 line_number, message, recommendation, feedback_status, anchor_type
-            ) values (?, 'FINDING', ?, 'RULE', ?, 'src/main/java/example/Quality.java',
+            ) values (?, ?, 'FINDING', ?, 'RULE', ?, 'src/main/java/example/Quality.java',
                       ?, ?, 'quality baseline recommendation', ?, ?)
             """,
             taskId,
+            attemptId,
             severity,
             ruleId,
             lineNumber,
@@ -1438,6 +1548,40 @@ class ProductionRuntimeContextIntegrationTest {
         );
     }
 
+    private Long ensureExecutionAttemptFixture(JdbcTemplate jdbcTemplate, Long taskId) {
+        jdbcTemplate.update("""
+            insert into review_execution_attempt (
+                task_id, attempt_no, generation, commit_sha, input_fingerprint,
+                claim_id, worker_id, status, diff_fetch_ms, review_ms, persist_ms,
+                total_ms, queued_at, started_at, finished_at, created_at
+            )
+            select
+                task.id, 1, task.generation, task.commit_sha,
+                sha2(concat_ws('|', task.organization, task.repository, task.pr_number,
+                    task.commit_sha, task.generation), 256),
+                'integration-fixture', 'integration-test', 'COMPLETED',
+                0, 0, 0, 0, task.created_at, coalesce(task.started_at, task.created_at),
+                coalesce(task.finished_at, task.created_at), task.created_at
+            from review_task task
+            where task.id = ?
+              and not exists (
+                  select 1 from review_execution_attempt attempt where attempt.task_id = task.id
+              )
+            """, taskId);
+        jdbcTemplate.update("""
+            update review_task task
+            join review_execution_attempt attempt
+              on attempt.task_id = task.id and attempt.attempt_no = 1
+            set task.current_attempt_id = attempt.id
+            where task.id = ? and task.current_attempt_id is null
+            """, taskId);
+        return jdbcTemplate.queryForObject(
+            "select current_attempt_id from review_task where id = ?",
+            Long.class,
+            taskId
+        );
+    }
+
     private long percentile(List<Long> sortedValues, double percentile) {
         int index = Math.max(0, (int) Math.ceil(sortedValues.size() * percentile) - 1);
         return sortedValues.get(index);
@@ -1490,12 +1634,31 @@ class ProductionRuntimeContextIntegrationTest {
         }
     }
 
-    private void assertProductionInfrastructure(ConfigurableApplicationContext context) {
+    private void assertProductionInfrastructure(ConfigurableApplicationContext context)
+        throws IOException, InterruptedException {
         WebServerApplicationContext webContext = (WebServerApplicationContext) context;
-        assertThat(webContext.getWebServer().getPort()).isPositive();
+        int port = webContext.getWebServer().getPort();
+        assertThat(port).isPositive();
         assertThat(context.getBean(JdbcTemplate.class).queryForObject("select 1", Integer.class)).isEqualTo(1);
         Boolean rabbitOpen = context.getBean(RabbitTemplate.class).execute(channel -> channel.isOpen());
         assertThat(rabbitOpen).isTrue();
+
+        HttpClient client = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(5))
+            .build();
+        for (String probe : List.of("liveness", "readiness")) {
+            HttpResponse<String> response = client.send(
+                HttpRequest.newBuilder(
+                    URI.create("http://127.0.0.1:" + port + "/actuator/health/" + probe)
+                )
+                    .timeout(Duration.ofSeconds(10))
+                    .GET()
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            );
+            assertThat(response.statusCode()).as(probe + " HTTP status").isEqualTo(200);
+            assertThat(response.body()).as(probe + " response").contains("\"status\":\"UP\"");
+        }
 
         Logger rootLogger = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
         assertThat(rootLogger.getAppender("CONSOLE")).isNotNull();

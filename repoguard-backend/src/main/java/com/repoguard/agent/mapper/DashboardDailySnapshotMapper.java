@@ -179,6 +179,7 @@ public interface DashboardDailySnapshotMapper {
         from review_finding f
         join review_task t on t.id = f.task_id
         where f.category = 'FINDING'
+          and f.current_attempt = 1
           and t.created_date = #{statDate}
         group by t.created_date, coalesce(f.rule_id, 'LLM')
         """)
@@ -271,7 +272,7 @@ public interface DashboardDailySnapshotMapper {
                     when f.feedback_status_norm = 'FALSE_POSITIVE'
                     then 1 else 0 end) as false_positive_feedback_count
             from review_task t
-            join review_finding f on f.task_id = t.id and f.category = 'FINDING'
+            join review_finding f on f.task_id = t.id and f.category = 'FINDING' and f.current_attempt = 1
             where t.llm_status_norm <> ''
               and t.llm_status_norm <> 'pending'
               and t.created_date = #{statDate}

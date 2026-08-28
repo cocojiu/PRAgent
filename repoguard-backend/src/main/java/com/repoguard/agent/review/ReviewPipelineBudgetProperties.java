@@ -13,7 +13,7 @@ public class ReviewPipelineBudgetProperties {
      * {@code app.rabbit.review.review-execution-timeout-ms}; see
      * ReviewTimeoutLayeringValidator.
      */
-    private long budgetMs = 600000;
+    private long budgetMs = 480000;
     private int maxTotalChunks = 64;
     private int maxInFlightChunks = 3;
 

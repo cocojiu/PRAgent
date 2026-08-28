@@ -121,6 +121,27 @@ class ProductionDeploymentContractTest {
     }
 
     @Test
+    void releaseKeepsAcrImagesCompatibleAndPublishesExternalAttestations() throws IOException {
+        String workflow = read(repositoryRoot().resolve(".github/workflows/release-images.yml"));
+
+        assertThat(workflow)
+            .contains(
+                "attestations: write",
+                "id-token: write",
+                "sbom: false",
+                "provenance: false",
+                "name: Generate backend SBOM",
+                "name: Generate frontend SBOM",
+                "anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610",
+                "actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8",
+                "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6",
+                "subject-digest: ${{ steps.backend_image.outputs.digest }}",
+                "subject-digest: ${{ steps.frontend_image.outputs.digest }}"
+            )
+            .doesNotContain("sbom: true", "provenance: mode=max");
+    }
+
+    @Test
     void deployPreflightsBeforeMutationAndRollbackRestoresAssetsFirst() throws IOException {
         String script = read(repositoryRoot().resolve("scripts/deploy-prod.sh"));
 
@@ -274,6 +295,36 @@ class ProductionDeploymentContractTest {
             .contains("mysql_root_password=\"$(cat \"$MYSQL_ROOT_PASSWORD_FILE\")\"")
             .contains("MYSQL_PWD=\"$mysql_root_password\"")
             .doesNotContain("MYSQL_PWD=\"$MYSQL_ROOT_PASSWORD\"");
+    }
+
+    @Test
+    void verifiedEncryptedBackupIsDurableInTwoImmutableTargetsBeforeLocalRetention() throws IOException {
+        Path root = repositoryRoot();
+        String workflow = read(root.resolve(".github/workflows/production-mysql-backup.yml"));
+        String binlogWorkflow = read(root.resolve(".github/workflows/production-mysql-binlog-archive.yml"));
+        String uploader = read(root.resolve("scripts/upload-immutable-backup-object.sh"));
+
+        assertThat(workflow)
+            .contains(
+                "cron: '30 */6 * * *'",
+                "permissions:",
+                "id-token: write",
+                "aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c",
+                "Copy verified encrypted backup off host",
+                "Persist to immutable primary and replica storage",
+                "steps.object_storage.outputs.verified == 'true'"
+            )
+            .doesNotContain("actions/upload-artifact@");
+        assertThat(workflow.indexOf("Persist to immutable primary and replica storage"))
+            .isLessThan(workflow.indexOf("Apply local seven-backup retention"));
+        assertThat(binlogWorkflow.indexOf("Persist to immutable primary and replica storage"))
+            .isLessThan(binlogWorkflow.indexOf("Acknowledge durable PITR archive"));
+        assertThat(uploader).contains(
+            "--server-side-encryption aws:kms",
+            "--object-lock-mode COMPLIANCE",
+            "REPOGUARD_BACKUP_REPLICA_BUCKET",
+            "IMMUTABLE_REPLICATION_VERIFIED=true"
+        );
     }
 
     private int rabbitConsumerTimeout() throws IOException {

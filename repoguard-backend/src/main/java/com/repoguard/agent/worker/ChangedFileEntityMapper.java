@@ -8,8 +8,14 @@ import org.springframework.stereotype.Component;
 class ChangedFileEntityMapper {
 
     ChangedFile toEntity(Long taskId, PullRequestChangedFile file) {
+        return toEntity(taskId, null, file);
+    }
+
+    ChangedFile toEntity(Long taskId, Long attemptId, PullRequestChangedFile file) {
         ChangedFile changedFile = new ChangedFile();
         changedFile.setTaskId(taskId);
+        changedFile.setAttemptId(attemptId);
+        changedFile.setCurrentAttempt(true);
         changedFile.setFilePath(file.filename());
         changedFile.setChangeType(normalizeChangeType(file.status()));
         changedFile.setAdditions(normalizeLineCount(file.additions()));

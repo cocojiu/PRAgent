@@ -1,8 +1,6 @@
 package com.repoguard.agent.github;
 
 import com.repoguard.agent.config.CacheNames;
-import com.repoguard.agent.github.GithubIntegrationProvider;
-import com.repoguard.agent.github.GithubIntegrationSettings;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.external.ExternalCallResilience;
 import com.repoguard.agent.external.OutboundEndpointPolicy;
@@ -103,7 +101,10 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
     }
 
     @Override
-    @Cacheable(cacheNames = CacheNames.GITHUB_OPEN_PULL_REQUESTS)
+    @Cacheable(
+        cacheNames = CacheNames.GITHUB_OPEN_PULL_REQUESTS,
+        key = "T(com.repoguard.agent.tenancy.TenantScopedKey).current('openPullRequests')"
+    )
     public List<GithubPullRequestSummary> listOpenPullRequests() {
         GithubIntegrationSettings settings = loadGithubSettings();
         GithubRepositoryRef repositoryRef = configuredRepository(settings);
@@ -129,7 +130,7 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
 
     @Override
     public String fetchPullRequestHeadSha(ReviewTask task) {
-        GithubIntegrationSettings settings = loadGithubSettings();
+        GithubIntegrationSettings settings = loadGithubSettings(task);
         GithubRepositoryRef repositoryRef = repositoryForTask(task, settings);
         String baseUrl = baseUrl(settings);
         return healthReporter.recordReadOperation(
@@ -148,7 +149,7 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
 
     @Override
     public PullRequestDiff fetchPullRequestDiff(ReviewTask task) {
-        GithubIntegrationSettings settings = loadGithubSettings();
+        GithubIntegrationSettings settings = loadGithubSettings(task);
         GithubRepositoryRef repositoryRef = repositoryForTask(task, settings);
         String owner = repositoryRef.owner();
         String repository = repositoryRef.repository();
@@ -156,7 +157,7 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
         String expectedHeadSha = requiredTaskCommitSha(task);
 
         return healthReporter.recordReadOperation(settings, "fetch_pull_request_diff", () -> {
-            String headBeforeFetch = headReader.fetchHeadSha(
+            GithubPullRequestHeadReader.GithubPullRequestHeadSnapshot headBeforeFetch = headReader.fetchHead(
                 settings,
                 baseUrl,
                 owner,
@@ -174,7 +175,7 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
                 expectedHeadSha,
                 resilience
             );
-            String headAfterFetch = headReader.fetchHeadSha(
+            GithubPullRequestHeadReader.GithubPullRequestHeadSnapshot headAfterFetch = headReader.fetchHead(
                 settings,
                 baseUrl,
                 owner,
@@ -195,8 +196,11 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
     }
 
     @Override
-    public List<GithubReviewCommentResult> publishPullRequestComments(ReviewTask task, List<GithubReviewCommentDraft> drafts) {
-        GithubIntegrationSettings settings = loadGithubSettings();
+    public List<GithubReviewCommentResult> publishPullRequestComments(
+        ReviewTask task,
+        List<GithubReviewCommentDraft> drafts
+    ) {
+        GithubIntegrationSettings settings = loadGithubSettings(task);
         String owner = choose(task.getOrganization(), settings.defaultOwner());
         String repository = choose(task.getRepository(), settings.defaultRepo());
         if (!StringUtils.hasText(owner) || !StringUtils.hasText(repository)) {
@@ -215,6 +219,15 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
 
     private GithubIntegrationSettings loadGithubSettings() {
         return githubIntegrationProvider.getSettings();
+    }
+
+    private GithubIntegrationSettings loadGithubSettings(ReviewTask task) {
+        Objects.requireNonNull(task, "task");
+        GithubIntegrationSettings settings = githubIntegrationProvider.getSettingsForRepository(
+            task.getOrganization(),
+            task.getRepository()
+        );
+        return settings == null ? loadGithubSettings() : settings;
     }
 
     private GithubRepositoryRef configuredRepository(GithubIntegrationSettings settings) {
@@ -243,14 +256,23 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
         return task.getCommitSha().trim();
     }
 
-    private void ensureExpectedHead(String expectedHeadSha, String currentHeadSha) {
-        if (!expectedHeadSha.equalsIgnoreCase(currentHeadSha)) {
-            throw new GithubPullRequestHeadChangedException(expectedHeadSha, currentHeadSha);
+    private void ensureExpectedHead(
+        String expectedHeadSha,
+        GithubPullRequestHeadReader.GithubPullRequestHeadSnapshot currentHead
+    ) {
+        if (!expectedHeadSha.equalsIgnoreCase(currentHead.sha())) {
+            throw new GithubPullRequestHeadChangedException(
+                expectedHeadSha,
+                currentHead.sha(),
+                currentHead.updatedAt()
+            );
         }
     }
 
     private String baseUrl(GithubIntegrationSettings settings) {
-        String baseUrl = StringUtils.hasText(settings.baseUrl()) ? settings.baseUrl().trim() : DEFAULT_GITHUB_BASE_URL;
+        String baseUrl = StringUtils.hasText(settings.baseUrl())
+            ? settings.baseUrl().trim()
+            : DEFAULT_GITHUB_BASE_URL;
         if (endpointPolicy != null) {
             endpointPolicy.validate(OutboundEndpointType.GITHUB, baseUrl);
         }

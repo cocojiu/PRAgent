@@ -1,0 +1,177 @@
+name: Production MySQL Binlog Archive
+
+on:
+  schedule:
+    - cron: '12 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: production-mysql-binlog-archive
+  cancel-in-progress: false
+
+jobs:
+  archive:
+    name: Encrypted PITR archive to immutable primary and replica storage
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Acquire short-lived backup credentials
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: ${{ secrets.REPOGUARD_BACKUP_ROLE_ARN || vars.REPOGUARD_BACKUP_ROLE_ARN }}
+          role-session-name: repoguard-binlog-${{ github.run_id }}-${{ github.run_attempt }}
+          aws-region: ${{ secrets.REPOGUARD_BACKUP_REGION || vars.REPOGUARD_BACKUP_REGION }}
+          mask-aws-account-id: true
+
+      - name: Prepare SSH
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "${DEPLOY_HOST}" && test -n "${DEPLOY_SSH_KEY}"
+          [[ "${DEPLOY_PORT:-22}" =~ ^[0-9]+$ ]]
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${DEPLOY_SSH_KEY}" >~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          for attempt in 1 2 3 4 5; do
+            if ssh-keyscan -T 30 -p "${DEPLOY_PORT:-22}" "${DEPLOY_HOST}" >>~/.ssh/known_hosts 2>ssh-keyscan.err; then
+              break
+            fi
+            sleep $((attempt * 10))
+          done
+          test -s ~/.ssh/known_hosts
+
+      - name: Archive closed binary logs
+        id: archive
+        shell: bash
+        env:
+          BACKUP_ENCRYPTION_PASSWORD: ${{ secrets.REPOGUARD_BACKUP_ENCRYPTION_PASSWORD }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          test -n "${BACKUP_ENCRYPTION_PASSWORD}"
+          [[ "${DEPLOY_USER}" =~ ^[A-Za-z0-9_.-]+$ ]]
+          [[ "${DEPLOY_PATH}" == /opt/repoguard || "${DEPLOY_PATH}" == /opt/repoguard/* ]]
+          echo "::add-mask::${BACKUP_ENCRYPTION_PASSWORD}"
+          ssh_args=(-i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}")
+          scp_args=(-i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}")
+          ssh "${ssh_args[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "install -m 700 -d '${DEPLOY_PATH}/scripts' '/opt/repoguard/backups/mysql-binlog'"
+          scp "${scp_args[@]}" scripts/archive-prod-mysql-binlogs.sh \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/scripts/archive-prod-mysql-binlogs.sh"
+          ssh "${ssh_args[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "chmod 0700 '${DEPLOY_PATH}/scripts/archive-prod-mysql-binlogs.sh'"
+
+          result="${RUNNER_TEMP}/binlog-result.txt"
+          printf '%s\n' "${BACKUP_ENCRYPTION_PASSWORD}" \
+            | ssh "${ssh_args[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+                "cd '${DEPLOY_PATH}' && bash scripts/archive-prod-mysql-binlogs.sh --password-stdin" \
+            | tee "${result}"
+
+          empty="$(awk -F= '$1 == "BINLOG_ARCHIVE_EMPTY" {print $2}' "${result}")"
+          [[ "${empty}" == "true" || "${empty}" == "false" ]]
+          echo "empty=${empty}" >>"${GITHUB_OUTPUT}"
+          if [[ "${empty}" == "true" ]]; then
+            exit 0
+          fi
+
+          path="$(awk -F= '$1 == "BINLOG_ARCHIVE_PATH" {print $2}' "${result}")"
+          sha256="$(awk -F= '$1 == "BINLOG_ARCHIVE_SHA256" {print $2}' "${result}")"
+          last="$(awk -F= '$1 == "BINLOG_LAST_FILE" {print $2}' "${result}")"
+          name="${path##*/}"
+          [[ "${path}" == "/opt/repoguard/backups/mysql-binlog/${name}" ]]
+          [[ "${name}" =~ ^repoguard-binlog-[0-9]{6}-[0-9]{6}-[0-9]{8}T[0-9]{6}Z\.tar\.gz\.enc$ ]]
+          [[ "${sha256}" =~ ^[0-9a-f]{64}$ && "${last}" =~ ^mysql-bin\.[0-9]{6}$ ]]
+
+          directory="${RUNNER_TEMP}/mysql-binlog-offsite"
+          install -m 700 -d "${directory}"
+          scp "${scp_args[@]}" \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:${path}" \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:${path}.sha256" \
+            "${directory}/"
+          [[ "$(awk 'NR == 1 {print $1}' "${directory}/${name}.sha256")" == "${sha256}" ]]
+          (cd "${directory}" && sha256sum --check --status "${name}.sha256")
+          chmod 600 "${directory}/${name}" "${directory}/${name}.sha256"
+          {
+            echo "directory=${directory}"
+            echo "last=${last}"
+            echo "name=${name}"
+            echo "sha256=${sha256}"
+          } >>"${GITHUB_OUTPUT}"
+
+      - name: Persist to immutable primary and replica storage
+        id: object_storage
+        if: ${{ steps.archive.outputs.empty == 'false' }}
+        shell: bash
+        env:
+          ARCHIVE_DIRECTORY: ${{ steps.archive.outputs.directory }}
+          ARCHIVE_NAME: ${{ steps.archive.outputs.name }}
+          ARCHIVE_SHA256: ${{ steps.archive.outputs.sha256 }}
+          REPOGUARD_BACKUP_BUCKET: ${{ secrets.REPOGUARD_BACKUP_BUCKET || vars.REPOGUARD_BACKUP_BUCKET }}
+          REPOGUARD_BACKUP_REGION: ${{ secrets.REPOGUARD_BACKUP_REGION || vars.REPOGUARD_BACKUP_REGION }}
+          REPOGUARD_BACKUP_KMS_KEY_ID: ${{ secrets.REPOGUARD_BACKUP_KMS_KEY_ID || vars.REPOGUARD_BACKUP_KMS_KEY_ID }}
+          REPOGUARD_BACKUP_ENDPOINT: ${{ secrets.REPOGUARD_BACKUP_ENDPOINT || vars.REPOGUARD_BACKUP_ENDPOINT }}
+          REPOGUARD_BACKUP_REPLICA_BUCKET: ${{ secrets.REPOGUARD_BACKUP_REPLICA_BUCKET || vars.REPOGUARD_BACKUP_REPLICA_BUCKET }}
+          REPOGUARD_BACKUP_REPLICA_REGION: ${{ secrets.REPOGUARD_BACKUP_REPLICA_REGION || vars.REPOGUARD_BACKUP_REPLICA_REGION }}
+          REPOGUARD_BACKUP_REPLICA_KMS_KEY_ID: ${{ secrets.REPOGUARD_BACKUP_REPLICA_KMS_KEY_ID || vars.REPOGUARD_BACKUP_REPLICA_KMS_KEY_ID }}
+          REPOGUARD_BACKUP_REPLICA_ENDPOINT: ${{ secrets.REPOGUARD_BACKUP_REPLICA_ENDPOINT || vars.REPOGUARD_BACKUP_REPLICA_ENDPOINT }}
+          REPOGUARD_BACKUP_OBJECT_LOCK_DAYS: ${{ vars.REPOGUARD_BACKUP_OBJECT_LOCK_DAYS }}
+        run: |
+          set -euo pipefail
+          timestamp="${ARCHIVE_NAME##*-}"
+          object_key="repoguard/mysql-binlog/${timestamp:0:4}/${timestamp:4:2}/${timestamp:6:2}/${ARCHIVE_NAME}"
+          result="${RUNNER_TEMP}/binlog-object-storage-result.txt"
+          bash scripts/upload-immutable-backup-object.sh \
+            "${ARCHIVE_DIRECTORY}/${ARCHIVE_NAME}" "${object_key}" "${ARCHIVE_SHA256}" \
+            | tee "${result}"
+          [[ "$(awk -F= '$1 == "IMMUTABLE_REPLICATION_VERIFIED" {print $2}' "${result}")" == "true" ]]
+          {
+            echo "verified=true"
+            echo "primary_uri=$(awk -F= '$1 == "PRIMARY_OBJECT_URI" {print $2}' "${result}")"
+            echo "replica_uri=$(awk -F= '$1 == "REPLICA_OBJECT_URI" {print $2}' "${result}")"
+          } >>"${GITHUB_OUTPUT}"
+
+      - name: Acknowledge durable PITR archive
+        id: acknowledge
+        if: ${{ steps.object_storage.outputs.verified == 'true' }}
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
+          LAST_BINLOG: ${{ steps.archive.outputs.last }}
+        run: |
+          set -euo pipefail
+          [[ "${LAST_BINLOG}" =~ ^mysql-bin\.[0-9]{6}$ ]]
+          ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "cd '${DEPLOY_PATH}' && bash scripts/archive-prod-mysql-binlogs.sh --ack '${LAST_BINLOG}'"
+          echo "completed=true" >>"${GITHUB_OUTPUT}"
+
+      - name: Summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Production MySQL binary log archive"
+            echo "- No closed binlog pending: \`${{ steps.archive.outputs.empty }}\`"
+            echo "- Archive: \`${{ steps.archive.outputs.name }}\`"
+            echo "- Last durable binlog: \`${{ steps.archive.outputs.last }}\`"
+            echo "- Primary immutable object: \`${{ steps.object_storage.outputs.primary_uri }}\`"
+            echo "- Replica immutable object: \`${{ steps.object_storage.outputs.replica_uri }}\`"
+            echo "- Off-host acknowledgment: \`${{ steps.acknowledge.outputs.completed }}\`"
+          } >>"${GITHUB_STEP_SUMMARY}"

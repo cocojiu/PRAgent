@@ -5,6 +5,9 @@ import com.repoguard.agent.config.WorkerRuntimeEnabled;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.notification.NotificationEventMessage;
 import com.repoguard.agent.notification.NotificationMessage;
+import com.repoguard.agent.observability.LogContext;
+import com.repoguard.agent.tenancy.TenantContext;
+import com.repoguard.agent.tenancy.TenantRuntimeGuard;
 import java.io.IOException;
 import java.util.Objects;
 import java.util.Optional;
@@ -12,6 +15,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.support.AmqpHeaders;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
 
@@ -29,6 +34,55 @@ public class NotificationDeliveryWorker {
     private final NotificationDeliveryWorkerMetricsRecorder metricsRecorder;
     private final NotificationDeliveryFailureClassifier failureClassifier;
     private final NotificationDeliveryLogContextFormatter logContextFormatter;
+    private JdbcTemplate jdbcTemplate;
+    private TenantRuntimeGuard tenantRuntimeGuard;
+
+    @Autowired
+    public NotificationDeliveryWorker(
+        NotificationDeliveryClaimService deliveryClaimService,
+        NotificationEventPayloadParser payloadParser,
+        NotificationBindingBatchDeliveryService bindingBatchDeliveryService,
+        NotificationDeliveryCompletionService deliveryCompletionService,
+        NotificationDeliveryWorkerMetricsRecorder metricsRecorder,
+        NotificationDeliveryFailureClassifier failureClassifier,
+        NotificationDeliveryLogContextFormatter logContextFormatter,
+        JdbcTemplate jdbcTemplate,
+        TenantRuntimeGuard tenantRuntimeGuard
+    ) {
+        this(
+            deliveryClaimService,
+            payloadParser,
+            bindingBatchDeliveryService,
+            deliveryCompletionService,
+            metricsRecorder,
+            failureClassifier,
+            logContextFormatter
+        );
+        this.jdbcTemplate = Objects.requireNonNull(jdbcTemplate, "jdbcTemplate");
+        this.tenantRuntimeGuard = Objects.requireNonNull(tenantRuntimeGuard, "tenantRuntimeGuard");
+    }
+
+    public NotificationDeliveryWorker(
+        NotificationDeliveryClaimService deliveryClaimService,
+        NotificationEventPayloadParser payloadParser,
+        NotificationBindingBatchDeliveryService bindingBatchDeliveryService,
+        NotificationDeliveryCompletionService deliveryCompletionService,
+        NotificationDeliveryWorkerMetricsRecorder metricsRecorder,
+        NotificationDeliveryFailureClassifier failureClassifier,
+        NotificationDeliveryLogContextFormatter logContextFormatter,
+        JdbcTemplate jdbcTemplate
+    ) {
+        this(
+            deliveryClaimService,
+            payloadParser,
+            bindingBatchDeliveryService,
+            deliveryCompletionService,
+            metricsRecorder,
+            failureClassifier,
+            logContextFormatter
+        );
+        this.jdbcTemplate = Objects.requireNonNull(jdbcTemplate, "jdbcTemplate");
+    }
 
     public NotificationDeliveryWorker(
         NotificationDeliveryClaimService deliveryClaimService,
@@ -55,36 +109,62 @@ public class NotificationDeliveryWorker {
         @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag
     ) throws IOException {
         long startedAt = metricsRecorder.startedAt();
-        LOGGER.info(
-            "Rabbit notification message received eventId={} eventKey={} eventType={} taskId={} batchId={} operation=rabbit_consume result=received deliveryTag={}",
-            message.eventId(),
-            logContextFormatter.safePart(message.eventKey()),
-            logContextFormatter.safePart(message.eventType()),
-            message.taskId(),
-            message.batchId(),
-            deliveryTag
-        );
-        try {
-            deliver(message.eventId());
-        } catch (RuntimeException ex) {
-            rejectRuntimeFailure(message, channel, deliveryTag, startedAt, ex);
-            return;
-        } catch (Error error) {
-            rejectFatalFailure(message, channel, deliveryTag, startedAt, error);
-            throw error;
+        try (LogContext.TraceScope _ = LogContext.withTraceId(message.traceId())) {
+            try {
+                long tenantId = resolveTenantId(message);
+                if (tenantRuntimeGuard != null) {
+                    tenantRuntimeGuard.requireActive(tenantId);
+                }
+                try (TenantContext.Scope _ = TenantContext.withTenant(tenantId)) {
+                    LOGGER.info(
+                        "Rabbit notification message received eventId={} eventKey={} eventType={} taskId={} batchId={} operation=rabbit_consume result=received deliveryTag={}",
+                        message.eventId(),
+                        logContextFormatter.safePart(message.eventKey()),
+                        logContextFormatter.safePart(message.eventType()),
+                        message.taskId(),
+                        message.batchId(),
+                        deliveryTag
+                    );
+                    deliver(message.eventId());
+                }
+            } catch (RuntimeException ex) {
+                rejectRuntimeFailure(message, channel, deliveryTag, startedAt, ex);
+                return;
+            } catch (Error error) {
+                rejectFatalFailure(message, channel, deliveryTag, startedAt, error);
+                throw error;
+            }
+            channel.basicAck(deliveryTag, false);
+            metricsRecorder.recordConsumed(startedAt, "success");
+            LOGGER.info(
+                "Rabbit notification message consumed eventId={} eventKey={} eventType={} taskId={} batchId={} operation=rabbit_consume result=success durationMs={} deliveryTag={}",
+                message.eventId(),
+                logContextFormatter.safePart(message.eventKey()),
+                logContextFormatter.safePart(message.eventType()),
+                message.taskId(),
+                message.batchId(),
+                metricsRecorder.elapsedMillis(startedAt),
+                deliveryTag
+            );
         }
-        channel.basicAck(deliveryTag, false);
-        metricsRecorder.recordConsumed(startedAt, "success");
-        LOGGER.info(
-            "Rabbit notification message consumed eventId={} eventKey={} eventType={} taskId={} batchId={} operation=rabbit_consume result=success durationMs={} deliveryTag={}",
-            message.eventId(),
-            logContextFormatter.safePart(message.eventKey()),
-            logContextFormatter.safePart(message.eventType()),
-            message.taskId(),
-            message.batchId(),
-            metricsRecorder.elapsedMillis(startedAt),
-            deliveryTag
-        );
+    }
+
+    private long resolveTenantId(NotificationEventMessage message) {
+        Long tenantId = message.tenantId();
+        if (tenantId == null && jdbcTemplate != null) {
+            tenantId = jdbcTemplate.queryForObject(
+                "select tenant_id from notification_event where id = ?",
+                Long.class,
+                message.eventId()
+            );
+        }
+        if (tenantId == null) {
+            return TenantContext.DEFAULT_TENANT_ID;
+        }
+        if (tenantId < 1) {
+            throw new IllegalStateException("Notification tenant id must be positive");
+        }
+        return tenantId;
     }
 
     private void rejectRuntimeFailure(

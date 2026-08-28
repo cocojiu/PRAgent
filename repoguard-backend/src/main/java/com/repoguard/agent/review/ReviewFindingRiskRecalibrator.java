@@ -31,6 +31,7 @@ public class ReviewFindingRiskRecalibrator {
         List<ReviewFindingResult> effectiveFindings = reviewFindingMapper.selectList(
             new LambdaQueryWrapper<ReviewFinding>()
                 .eq(ReviewFinding::getTaskId, taskId)
+                .eq(ReviewFinding::getCurrentAttempt, true)
                 .eq(ReviewFinding::getCategory, "FINDING")
         ).stream()
             .filter(finding -> FindingFeedbackStatus.fromFinding(finding) != FindingFeedbackStatus.FALSE_POSITIVE)

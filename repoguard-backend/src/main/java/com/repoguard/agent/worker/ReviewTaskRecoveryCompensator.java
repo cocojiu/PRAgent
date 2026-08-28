@@ -10,6 +10,7 @@ import com.repoguard.agent.messaging.RabbitPublishFailurePhase;
 import com.repoguard.agent.messaging.RabbitPublishFailureMetricsRecorder;
 import com.repoguard.agent.review.task.ReviewTaskMessage;
 import com.repoguard.agent.review.task.ReviewTaskPublisher;
+import com.repoguard.agent.tenancy.ScheduledJobLeaseContext;
 import com.repoguard.agent.observability.LogContext;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -17,7 +18,6 @@ import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -86,12 +86,12 @@ public class ReviewTaskRecoveryCompensator {
         );
     }
 
-    @Scheduled(fixedDelayString = "${app.rabbit.review.review-recovery-interval-ms:60000}")
     public void recoverStuckTasks() {
         LocalDateTime now = clock.now();
         LocalDateTime expiredBefore = recoveryPolicy.expiredBefore(now);
         List<ReviewTask> tasks = recoveryStore.findExpiredReviewingTasks(expiredBefore, recoveryPolicy.batchSize());
         for (ReviewTask task : tasks) {
+            ScheduledJobLeaseContext.assertHeld();
             if (!recoveryWorkDispatcher.submit(
                 "review_execution_recovery",
                 () -> recover(task, now, expiredBefore)
@@ -172,7 +172,8 @@ public class ReviewTaskRecoveryCompensator {
             task.getPrNumber(),
             task.getCommitSha(),
             queuedAt,
-            LogContext.currentTraceId()
+            LogContext.currentTraceId(),
+            3
         );
     }
 

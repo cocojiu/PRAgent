@@ -65,7 +65,10 @@ public class FindingFeedbackServiceImpl implements FindingFeedbackService {
             throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + taskId);
         }
         ReviewFinding finding = reviewFindingMapper.selectById(findingId);
-        if (finding == null || !taskId.equals(finding.getTaskId()) || !"FINDING".equals(finding.getCategory())) {
+        if (finding == null
+            || !taskId.equals(finding.getTaskId())
+            || !"FINDING".equals(finding.getCategory())
+            || Boolean.FALSE.equals(finding.getCurrentAttempt())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Review finding not found: " + findingId);
         }
 

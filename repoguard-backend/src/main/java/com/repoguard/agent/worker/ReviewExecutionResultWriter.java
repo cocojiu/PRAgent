@@ -39,18 +39,29 @@ class ReviewExecutionResultWriter {
         LocalDateTime startedAt,
         String claimId
     ) {
+        return applyCompleted(task, diff, reviewResult, startedAt, claimId, null);
+    }
+
+    WriteResult applyCompleted(
+        ReviewTask task,
+        PullRequestDiff diff,
+        ReviewResult reviewResult,
+        LocalDateTime startedAt,
+        String claimId,
+        Long attemptId
+    ) {
         ReviewExecutionTaskTerminalWriter.CompletedTaskWrite taskWrite =
             taskTerminalWriter.applyCompleted(task, reviewResult, startedAt, claimId);
-        changedFileReplacementService.replace(task.getId(), diff);
+        changedFileReplacementService.replace(task.getId(), attemptId, diff);
         timelineRecorder.diffFetched(task, taskWrite.finishedAt());
-        int findingCount = findingReplacementService.replace(task.getId(), reviewResult);
+        int findingCount = findingReplacementService.replace(task.getId(), attemptId, reviewResult);
         timelineRecorder.reviewGenerated(task, reviewResult, taskWrite.finishedAt());
         timelineRecorder.reviewTerminal(task, taskWrite.humanReviewRequired(), taskWrite.finishedAt());
         metricsRecorder.recordCompleted(reviewResult, startedAt, taskWrite.finishedAt());
         cacheInvalidator.reviewTaskChanged(task);
-        return new WriteResult(findingCount, taskWrite.humanReviewRequired());
+        return new WriteResult(findingCount, taskWrite.humanReviewRequired(), taskWrite.finishedAt());
     }
 
-    record WriteResult(int findingCount, boolean humanReviewRequired) {
+    record WriteResult(int findingCount, boolean humanReviewRequired, LocalDateTime finishedAt) {
     }
 }

@@ -23,6 +23,9 @@ GET /api/v1/dashboard/review-trend query=[] body=- bodyRequired=false
 GET /api/v1/dashboard/risk-distribution query=[] body=- bodyRequired=false
 GET /api/v1/dashboard/rules query=[] body=- bodyRequired=false
 GET /api/v1/dashboard/summary query=[] body=- bodyRequired=false
+GET /api/v1/enterprise/tenants query=[page, pageSize, status] body=- bodyRequired=false
+GET /api/v1/enterprise/tenants/{tenantKey} query=[] body=- bodyRequired=false
+GET /api/v1/enterprise/tenants/{tenantKey}/quota query=[] body=- bodyRequired=false
 GET /api/v1/message-queue/health query=[] body=- bodyRequired=false
 GET /api/v1/notification-deliveries query=[page, pageSize, status, taskId] body=- bodyRequired=false
 GET /api/v1/notification-events query=[page, pageSize, status, taskId] body=- bodyRequired=false
@@ -39,6 +42,8 @@ GET /api/v1/reviews/{id}/github-comments/publications query=[page, pageSize, sta
 GET /api/v1/reviews/{id}/missing-tests query=[page, pageSize] body=- bodyRequired=false
 GET /api/v1/reviews/{id}/status query=[] body=- bodyRequired=false
 GET /api/v1/reviews/{id}/timeline query=[limit] body=- bodyRequired=false
+GET /api/v1/reviews/{taskId}/attempts query=[] body=- bodyRequired=false
+GET /api/v1/reviews/{taskId}/attempts/{attemptId} query=[page, pageSize] body=- bodyRequired=false
 GET /api/v1/system/health/summary query=[] body=- bodyRequired=false
 GET /api/v1/users query=[page, pageSize, role, status, keyword] body=- bodyRequired=false
 GET /api/v1/users/audits query=[page, pageSize] body=- bodyRequired=false
@@ -61,6 +66,7 @@ POST /api/v1/config/review-strategy/versions/{snapshotId}/rollback query=[] body
 POST /api/v1/config/secrets/re-encryption query=[] body=SecretReEncryptionRequest bodyRequired=true
 POST /api/v1/config/secrets/re-encryption/jobs/{jobId}/pause query=[] body=- bodyRequired=false
 POST /api/v1/config/secrets/re-encryption/jobs/{jobId}/resume query=[] body=- bodyRequired=false
+POST /api/v1/enterprise/tenants query=[] body=EnterpriseTenantCreateRequest bodyRequired=true
 POST /api/v1/github/webhooks query=[] body=byte[] bodyRequired=true
 POST /api/v1/message-queue/tasks/{taskId}/requeue query=[] body=- bodyRequired=false
 POST /api/v1/notification-events/{id}/retry query=[] body=- bodyRequired=false
@@ -81,5 +87,10 @@ PUT /api/v1/config/review-rules/{id} query=[expectedPolicyVersion] body=ReviewRu
 PUT /api/v1/config/review-rules/{id}/status query=[] body=ReviewRuleStatusRequest bodyRequired=true
 PUT /api/v1/config/review-strategy/enforcement query=[] body=ReviewEnforcementModeRequest bodyRequired=true
 PUT /api/v1/config/system-settings query=[] body=SystemSettingsRequest bodyRequired=true
+PUT /api/v1/enterprise/tenants/{tenantKey}/identities query=[] body=EnterpriseIdentityBindingRequest bodyRequired=true
+PUT /api/v1/enterprise/tenants/{tenantKey}/memberships query=[] body=EnterpriseTenantMembershipRequest bodyRequired=true
+PUT /api/v1/enterprise/tenants/{tenantKey}/quota query=[] body=EnterpriseTenantQuotaRequest bodyRequired=true
+PUT /api/v1/enterprise/tenants/{tenantKey}/repositories query=[] body=EnterpriseTenantRepositoryRequest bodyRequired=true
+PUT /api/v1/enterprise/tenants/{tenantKey}/status query=[] body=EnterpriseTenantStatusRequest bodyRequired=true
 PUT /api/v1/users/{id}/role query=[] body=UserRoleUpdateRequest bodyRequired=true
 PUT /api/v1/users/{id}/status query=[] body=UserStatusUpdateRequest bodyRequired=true

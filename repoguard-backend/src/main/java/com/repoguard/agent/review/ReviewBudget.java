@@ -28,11 +28,28 @@ final class ReviewBudget {
 
     static ReviewBudget startingAt(long startedAtNanos, Duration budget, LongSupplier nanoClock) {
         Objects.requireNonNull(budget, "budget");
-        return new ReviewBudget(startedAtNanos + budget.toNanos(), nanoClock);
+        return new ReviewBudget(saturatingAdd(startedAtNanos, budget.toNanos()), nanoClock);
     }
 
     static ReviewBudget startingAt(long startedAtNanos, Duration budget) {
         return startingAt(startedAtNanos, budget, System::nanoTime);
+    }
+
+    static ReviewBudget boundedBy(
+        long startedAtNanos,
+        Duration pipelineBudget,
+        ReviewDeadline executionDeadline
+    ) {
+        Objects.requireNonNull(pipelineBudget, "pipelineBudget");
+        if (executionDeadline == null) {
+            return startingAt(startedAtNanos, pipelineBudget);
+        }
+        long pipelineNanos = pipelineBudget.toNanos();
+        long pipelineDeadline = saturatingAdd(startedAtNanos, pipelineNanos);
+        return new ReviewBudget(
+            Math.min(pipelineDeadline, executionDeadline.deadlineNanos()),
+            System::nanoTime
+        );
     }
 
     boolean exhausted() {
@@ -41,6 +58,22 @@ final class ReviewBudget {
 
     /** Remaining budget in nanoseconds, never negative. */
     long remainingNanos() {
-        return Math.max(0L, deadlineNanos - nanoClock.getAsLong());
+        if (deadlineNanos == Long.MAX_VALUE) {
+            return Long.MAX_VALUE;
+        }
+        long now = nanoClock.getAsLong();
+        if (now >= deadlineNanos) {
+            return 0L;
+        }
+        long remaining = deadlineNanos - now;
+        return remaining < 0L ? Long.MAX_VALUE : remaining;
+    }
+
+    private static long saturatingAdd(long left, long right) {
+        try {
+            return Math.addExact(left, right);
+        } catch (ArithmeticException ex) {
+            return Long.MAX_VALUE;
+        }
     }
 }

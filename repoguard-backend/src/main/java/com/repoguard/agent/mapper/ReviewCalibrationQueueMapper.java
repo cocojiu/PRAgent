@@ -24,6 +24,7 @@ public interface ReviewCalibrationQueueMapper {
             from review_finding finding
             join review_task task on task.id = finding.task_id
             where finding.category = 'FINDING'
+              and finding.current_attempt = 1
               and finding.severity_norm in ('high', 'critical')
               and upper(coalesce(nullif(trim(task.assessment_status), ''), 'PARTIAL')) = 'COMPLETE'
               and finding.rule_config_version = #{ruleConfigVersion}
@@ -128,6 +129,7 @@ public interface ReviewCalibrationQueueMapper {
             from review_finding finding
             join review_task task on task.id = finding.task_id
             where finding.category = 'FINDING'
+              and finding.current_attempt = 1
               and finding.severity_norm in ('high', 'critical')
               and upper(coalesce(nullif(trim(task.assessment_status), ''), 'PARTIAL')) = 'COMPLETE'
               and finding.rule_config_version = #{ruleConfigVersion}

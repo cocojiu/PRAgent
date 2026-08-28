@@ -82,4 +82,18 @@ class LogContextTest {
         assertThat(MDC.get(LogContext.TRACE_ID)).isEqualTo("previous-trace");
         MDC.clear();
     }
+
+    @Test
+    void traceScopeRestoresPreviousTraceIdAndIsIdempotent() {
+        MDC.put(LogContext.TRACE_ID, "previous-trace");
+
+        LogContext.TraceScope scope = LogContext.withTraceId("message-trace");
+        assertThat(MDC.get(LogContext.TRACE_ID)).isEqualTo("message-trace");
+
+        scope.close();
+        scope.close();
+
+        assertThat(MDC.get(LogContext.TRACE_ID)).isEqualTo("previous-trace");
+        MDC.clear();
+    }
 }

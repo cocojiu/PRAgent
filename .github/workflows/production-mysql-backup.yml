@@ -2,17 +2,18 @@ name: Production MySQL Backup
 
 on:
   schedule:
-    - cron: '30 19 * * *'
+    - cron: '30 */6 * * *'
   workflow_dispatch:
     inputs:
       verify_restore:
-        description: Restore into an isolated temporary MySQL container and verify row counts
+        description: Restore into an isolated MySQL container and rehearse pending migrations
         required: true
         default: true
         type: boolean
 
 permissions:
   contents: read
+  id-token: write
 
 concurrency:
   group: production-mysql-backup
@@ -20,15 +21,23 @@ concurrency:
 
 jobs:
   backup:
-    name: Encrypted backup and isolated restore verification
+    name: Verified encrypted backup to immutable primary and replica storage
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 60
     environment: production
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - name: Prepare SSH key
+      - name: Acquire short-lived backup credentials
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: ${{ secrets.REPOGUARD_BACKUP_ROLE_ARN || vars.REPOGUARD_BACKUP_ROLE_ARN }}
+          role-session-name: repoguard-mysql-${{ github.run_id }}-${{ github.run_attempt }}
+          aws-region: ${{ secrets.REPOGUARD_BACKUP_REGION || vars.REPOGUARD_BACKUP_REGION }}
+          mask-aws-account-id: true
+
+      - name: Prepare SSH
         shell: bash
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
@@ -36,31 +45,20 @@ jobs:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
         run: |
           set -euo pipefail
-          test -n "${DEPLOY_HOST}" || { echo "Missing DEPLOY_HOST secret or variable"; exit 1; }
-          test -n "${DEPLOY_SSH_KEY}" || { echo "Missing DEPLOY_SSH_KEY secret"; exit 1; }
-
-          deploy_port="${DEPLOY_PORT:-22}"
-          case "${deploy_port}" in
-            *[!0-9]* | "")
-              echo "DEPLOY_PORT must be a numeric TCP port." >&2
-              exit 1
-              ;;
-          esac
-
+          test -n "${DEPLOY_HOST}" && test -n "${DEPLOY_SSH_KEY}"
+          [[ "${DEPLOY_PORT:-22}" =~ ^[0-9]+$ ]]
           install -m 700 -d ~/.ssh
-          printf '%s\n' "${DEPLOY_SSH_KEY}" > ~/.ssh/deploy_key
+          printf '%s\n' "${DEPLOY_SSH_KEY}" >~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-
           for attempt in 1 2 3 4 5; do
-            if ssh-keyscan -T 30 -p "${deploy_port}" "${DEPLOY_HOST}" >> ~/.ssh/known_hosts 2>ssh-keyscan.err; then
+            if ssh-keyscan -T 30 -p "${DEPLOY_PORT:-22}" "${DEPLOY_HOST}" >>~/.ssh/known_hosts 2>ssh-keyscan.err; then
               break
             fi
-            echo "ssh-keyscan attempt ${attempt}/5 failed; retrying." >&2
             sleep $((attempt * 10))
           done
-          test -s ~/.ssh/known_hosts || { echo "ssh-keyscan returned no host keys."; exit 1; }
+          test -s ~/.ssh/known_hosts
 
-      - name: Upload backup operation
+      - name: Install backup operation
         shell: bash
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
@@ -69,41 +67,18 @@ jobs:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
         run: |
           set -euo pipefail
-          test -n "${DEPLOY_USER}" || { echo "Missing DEPLOY_USER secret or variable"; exit 1; }
-          test -n "${DEPLOY_PATH}" || { echo "Missing DEPLOY_PATH secret or variable"; exit 1; }
-          case "${DEPLOY_USER}" in
-            *[!A-Za-z0-9_.-]*)
-              echo "DEPLOY_USER contains unsupported characters." >&2
-              exit 1
-              ;;
-          esac
-          case "${DEPLOY_PATH}" in
-            *[!A-Za-z0-9_./-]*)
-              echo "DEPLOY_PATH contains unsupported characters." >&2
-              exit 1
-              ;;
-          esac
-          case "${DEPLOY_PATH}" in
-            /opt/repoguard | /opt/repoguard/*)
-              ;;
-            *)
-              echo "DEPLOY_PATH must stay under /opt/repoguard." >&2
-              exit 1
-              ;;
-          esac
-
-          ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "install -m 700 -d '${DEPLOY_PATH}/scripts' '/opt/repoguard/backups/mysql'"
-          scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" \
-            scripts/backup-prod-mysql.sh \
-            "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/scripts/backup-prod-mysql.sh"
-          scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" \
-            scripts/prune-prod-mysql-backups.sh \
-            "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/scripts/prune-prod-mysql-backups.sh"
-          ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "chmod 0700 \
-              '${DEPLOY_PATH}/scripts/backup-prod-mysql.sh' \
-              '${DEPLOY_PATH}/scripts/prune-prod-mysql-backups.sh'"
+          [[ "${DEPLOY_USER}" =~ ^[A-Za-z0-9_.-]+$ ]]
+          [[ "${DEPLOY_PATH}" == /opt/repoguard || "${DEPLOY_PATH}" == /opt/repoguard/* ]]
+          ssh_args=(-i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}")
+          scp_args=(-i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}")
+          ssh "${ssh_args[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "install -m 700 -d '${DEPLOY_PATH}/scripts' '${DEPLOY_PATH}/migration-rehearsal' '/opt/repoguard/backups/mysql' && find '${DEPLOY_PATH}/migration-rehearsal' -maxdepth 1 -type f -name 'V*__*.sql' -delete"
+          scp "${scp_args[@]}" scripts/backup-prod-mysql.sh scripts/prune-prod-mysql-backups.sh \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/scripts/"
+          scp "${scp_args[@]}" repoguard-backend/src/main/resources/db/migration/V*__*.sql \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/migration-rehearsal/"
+          ssh "${ssh_args[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "chmod 0700 '${DEPLOY_PATH}/scripts/backup-prod-mysql.sh' '${DEPLOY_PATH}/scripts/prune-prod-mysql-backups.sh'"
 
       - name: Create encrypted backup and verify restore
         id: backup
@@ -118,312 +93,134 @@ jobs:
           VERIFY_RESTORE_INPUT: ${{ inputs.verify_restore }}
         run: |
           set -euo pipefail
-          test -n "${BACKUP_ENCRYPTION_PASSWORD}" || {
-            echo "Missing REPOGUARD_BACKUP_ENCRYPTION_PASSWORD secret." >&2
-            exit 1
-          }
+          test -n "${BACKUP_ENCRYPTION_PASSWORD}"
           echo "::add-mask::${BACKUP_ENCRYPTION_PASSWORD}"
+          verify_restore="true"
+          if [[ "${EVENT_NAME}" == "workflow_dispatch" ]]; then
+            verify_restore="${VERIFY_RESTORE_INPUT}"
+          fi
+          [[ "${verify_restore}" == "true" || "${verify_restore}" == "false" ]]
 
-          case "${EVENT_NAME}" in
-            schedule)
-              verify_restore="true"
-              ;;
-            workflow_dispatch)
-              verify_restore="${VERIFY_RESTORE_INPUT}"
-              ;;
-            *)
-              echo "Unsupported workflow event: ${EVENT_NAME}" >&2
-              exit 1
-              ;;
-          esac
-
-          case "${verify_restore}" in
-            true | false)
-              ;;
-            *)
-              echo "verify_restore must resolve to true or false." >&2
-              exit 1
-              ;;
-          esac
-
-          result_file="${RUNNER_TEMP}/production-mysql-backup-result.txt"
+          result="${RUNNER_TEMP}/mysql-backup-result.txt"
           printf '%s\n' "${BACKUP_ENCRYPTION_PASSWORD}" \
             | ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-                "cd '${DEPLOY_PATH}' && \
-                 BACKUP_ROOT='/opt/repoguard/backups/mysql' \
-                 VERIFY_RESTORE='${verify_restore}' \
-                 bash scripts/backup-prod-mysql.sh --password-stdin" \
-            | tee "${result_file}"
+                "cd '${DEPLOY_PATH}' && BACKUP_ROOT='/opt/repoguard/backups/mysql' VERIFY_RESTORE='${verify_restore}' VERIFY_MIGRATIONS='${verify_restore}' MIGRATION_DIR='${DEPLOY_PATH}/migration-rehearsal' bash scripts/backup-prod-mysql.sh --password-stdin" \
+            | tee "${result}"
 
-          restore_verified="$(awk -F= '$1 == "RESTORE_VERIFIED" { print $2 }' "${result_file}")"
-          expected_restore="${verify_restore}"
-          if [[ "${expected_restore}" == "false" ]]; then
-            expected_restore="skipped"
-          fi
-          [[ "${restore_verified}" == "${expected_restore}" ]] || {
-            echo "Restore verification result was not the expected value." >&2
-            exit 1
-          }
+          expected="${verify_restore}"
+          [[ "${verify_restore}" == "true" ]] || expected="skipped"
+          restore_verified="$(awk -F= '$1 == "RESTORE_VERIFIED" {print $2}' "${result}")"
+          migration_rehearsal="$(awk -F= '$1 == "MIGRATION_REHEARSAL" {print $2}' "${result}")"
+          [[ "${restore_verified}" == "${expected}" && "${migration_rehearsal}" == "${expected}" ]]
 
-          backup_path="$(awk -F= '$1 == "BACKUP_PATH" { print $2 }' "${result_file}")"
-          backup_sha256="$(awk -F= '$1 == "BACKUP_SHA256" { print $2 }' "${result_file}")"
-          backup_basename="${backup_path##*/}"
-          [[ "${backup_path}" == "/opt/repoguard/backups/mysql/${backup_basename}" \
-            && "${backup_basename}" =~ ^repoguard-[0-9]{8}T[0-9]{6}Z\.sql\.gz\.enc$ ]] || {
-            echo "Backup path was outside the expected daily backup root." >&2
-            exit 1
-          }
-          [[ "${backup_sha256}" =~ ^[0-9a-f]{64}$ ]] || {
-            echo "Backup SHA-256 was not valid." >&2
-            exit 1
-          }
-
+          backup_path="$(awk -F= '$1 == "BACKUP_PATH" {print $2}' "${result}")"
+          backup_sha256="$(awk -F= '$1 == "BACKUP_SHA256" {print $2}' "${result}")"
+          backup_name="${backup_path##*/}"
+          [[ "${backup_path}" == "/opt/repoguard/backups/mysql/${backup_name}" ]]
+          [[ "${backup_name}" =~ ^repoguard-[0-9]{8}T[0-9]{6}Z\.sql\.gz\.enc$ ]]
+          [[ "${backup_sha256}" =~ ^[0-9a-f]{64}$ ]]
           {
-            echo "backup_path=${backup_path}"
-            echo "backup_sha256=${backup_sha256}"
+            echo "path=${backup_path}"
+            echo "name=${backup_name}"
+            echo "sha256=${backup_sha256}"
             echo "restore_verified=${restore_verified}"
           } >>"${GITHUB_OUTPUT}"
 
-      - name: Write sanitized backup summary
-        if: always()
+      - name: Copy verified encrypted backup off host
+        id: copy
         shell: bash
+        env:
+          BACKUP_PATH: ${{ steps.backup.outputs.path }}
+          BACKUP_NAME: ${{ steps.backup.outputs.name }}
+          BACKUP_SHA256: ${{ steps.backup.outputs.sha256 }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
         run: |
-          result_file="${RUNNER_TEMP}/production-mysql-backup-result.txt"
-          {
-            echo "## Production MySQL backup"
-            echo
-            echo "- Trigger: \`${{ github.event_name }}\`"
-            if [[ ! -s "${result_file}" ]]; then
-              echo "The backup operation did not produce a sanitized result."
-              exit 0
-            fi
+          set -euo pipefail
+          [[ "${BACKUP_PATH}" == "/opt/repoguard/backups/mysql/${BACKUP_NAME}" ]]
+          [[ "${BACKUP_NAME}" =~ ^repoguard-[0-9]{8}T[0-9]{6}Z\.sql\.gz\.enc$ ]]
+          [[ "${BACKUP_SHA256}" =~ ^[0-9a-f]{64}$ ]]
+          directory="${RUNNER_TEMP}/mysql-offsite"
+          install -m 700 -d "${directory}"
+          scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:${BACKUP_PATH}" \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:${BACKUP_PATH}.sha256" \
+            "${directory}/"
+          [[ "$(awk 'NR == 1 {print $1}' "${directory}/${BACKUP_NAME}.sha256")" == "${BACKUP_SHA256}" ]]
+          (cd "${directory}" && sha256sum --check --status "${BACKUP_NAME}.sha256")
+          chmod 600 "${directory}/${BACKUP_NAME}" "${directory}/${BACKUP_NAME}.sha256"
+          echo "directory=${directory}" >>"${GITHUB_OUTPUT}"
 
-            while IFS='=' read -r key value; do
-              case "${key}" in
-                BACKUP_TIMESTAMP_UTC)
-                  echo "- Timestamp (UTC): \`${value}\`"
-                  ;;
-                MYSQL_VERSION)
-                  echo "- MySQL: \`${value}\`"
-                  ;;
-                DATABASE_NAME)
-                  echo "- Database: \`${value}\`"
-                  ;;
-                TABLE_COUNT)
-                  echo "- Tables: \`${value}\`"
-                  ;;
-                EXACT_ROW_COUNT)
-                  echo "- Exact rows: \`${value}\`"
-                  ;;
-                SOURCE_SIZE_BYTES)
-                  echo "- Source bytes: \`${value}\`"
-                  ;;
-                BACKUP_BYTES)
-                  echo "- Encrypted backup bytes: \`${value}\`"
-                  ;;
-                BACKUP_PATH)
-                  echo "- Server path: \`${value}\`"
-                  ;;
-                BACKUP_SHA256)
-                  echo "- SHA-256: \`${value}\`"
-                  ;;
-                LOGICAL_DUMP_SHA256)
-                  echo "- Logical dump SHA-256: \`${value}\`"
-                  ;;
-                KEY_FINGERPRINT)
-                  echo "- Key fingerprint: \`${value}\`"
-                  ;;
-                LEGACY_PLAINTEXT_BACKUP_COUNT)
-                  echo "- Legacy plaintext backups detected: \`${value}\`"
-                  ;;
-                RESTORE_VERIFIED)
-                  echo "- Isolated restore verified: \`${value}\`"
-                  ;;
-              esac
-            done <"${result_file}"
-          } >>"${GITHUB_STEP_SUMMARY}"
+      - name: Persist to immutable primary and replica storage
+        id: object_storage
+        shell: bash
+        env:
+          BACKUP_DIRECTORY: ${{ steps.copy.outputs.directory }}
+          BACKUP_NAME: ${{ steps.backup.outputs.name }}
+          BACKUP_SHA256: ${{ steps.backup.outputs.sha256 }}
+          REPOGUARD_BACKUP_BUCKET: ${{ secrets.REPOGUARD_BACKUP_BUCKET || vars.REPOGUARD_BACKUP_BUCKET }}
+          REPOGUARD_BACKUP_REGION: ${{ secrets.REPOGUARD_BACKUP_REGION || vars.REPOGUARD_BACKUP_REGION }}
+          REPOGUARD_BACKUP_KMS_KEY_ID: ${{ secrets.REPOGUARD_BACKUP_KMS_KEY_ID || vars.REPOGUARD_BACKUP_KMS_KEY_ID }}
+          REPOGUARD_BACKUP_ENDPOINT: ${{ secrets.REPOGUARD_BACKUP_ENDPOINT || vars.REPOGUARD_BACKUP_ENDPOINT }}
+          REPOGUARD_BACKUP_REPLICA_BUCKET: ${{ secrets.REPOGUARD_BACKUP_REPLICA_BUCKET || vars.REPOGUARD_BACKUP_REPLICA_BUCKET }}
+          REPOGUARD_BACKUP_REPLICA_REGION: ${{ secrets.REPOGUARD_BACKUP_REPLICA_REGION || vars.REPOGUARD_BACKUP_REPLICA_REGION }}
+          REPOGUARD_BACKUP_REPLICA_KMS_KEY_ID: ${{ secrets.REPOGUARD_BACKUP_REPLICA_KMS_KEY_ID || vars.REPOGUARD_BACKUP_REPLICA_KMS_KEY_ID }}
+          REPOGUARD_BACKUP_REPLICA_ENDPOINT: ${{ secrets.REPOGUARD_BACKUP_REPLICA_ENDPOINT || vars.REPOGUARD_BACKUP_REPLICA_ENDPOINT }}
+          REPOGUARD_BACKUP_OBJECT_LOCK_DAYS: ${{ vars.REPOGUARD_BACKUP_OBJECT_LOCK_DAYS }}
+        run: |
+          set -euo pipefail
+          timestamp="${BACKUP_NAME#repoguard-}"
+          object_key="repoguard/mysql/${timestamp:0:4}/${timestamp:4:2}/${timestamp:6:2}/${BACKUP_NAME}"
+          result="${RUNNER_TEMP}/mysql-object-storage-result.txt"
+          bash scripts/upload-immutable-backup-object.sh \
+            "${BACKUP_DIRECTORY}/${BACKUP_NAME}" "${object_key}" "${BACKUP_SHA256}" \
+            | tee "${result}"
+          [[ "$(awk -F= '$1 == "IMMUTABLE_REPLICATION_VERIFIED" {print $2}' "${result}")" == "true" ]]
+          {
+            echo "verified=true"
+            echo "primary_uri=$(awk -F= '$1 == "PRIMARY_OBJECT_URI" {print $2}' "${result}")"
+            echo "replica_uri=$(awk -F= '$1 == "REPLICA_OBJECT_URI" {print $2}' "${result}")"
+          } >>"${GITHUB_OUTPUT}"
 
       - name: Verify production health before retention
-        if: always()
         shell: bash
         run: |
           set -euo pipefail
-          health="$(curl --fail --silent --show-error \
-            --retry 3 --retry-delay 3 --retry-all-errors \
-            --connect-timeout 8 --max-time 20 \
-            https://pragent.top/actuator/health)"
-          status="$(jq -r '.status // empty' <<<"${health}")"
-          [[ "${status}" == "UP" ]] || {
-            echo "Production health is not UP after backup operation." >&2
-            exit 1
-          }
+          health="$(curl --fail --silent --show-error --retry 3 --retry-all-errors --connect-timeout 8 --max-time 20 https://pragent.top/actuator/health/readiness)"
+          [[ "$(jq -r '.status // empty' <<<"${health}")" == "UP" ]]
 
-      - name: Apply verified seven-backup retention
+      - name: Apply local seven-backup retention
         id: retention
-        if: ${{ success() && steps.backup.outputs.restore_verified == 'true' }}
+        if: ${{ success() && steps.backup.outputs.restore_verified == 'true' && steps.object_storage.outputs.verified == 'true' }}
         shell: bash
         env:
-          CURRENT_BACKUP_PATH: ${{ steps.backup.outputs.backup_path }}
-          CURRENT_BACKUP_SHA256: ${{ steps.backup.outputs.backup_sha256 }}
+          CURRENT_BACKUP_PATH: ${{ steps.backup.outputs.path }}
+          CURRENT_BACKUP_SHA256: ${{ steps.backup.outputs.sha256 }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
         run: |
           set -euo pipefail
-          current_backup_basename="${CURRENT_BACKUP_PATH##*/}"
-          [[ "${CURRENT_BACKUP_PATH}" == "/opt/repoguard/backups/mysql/${current_backup_basename}" \
-            && "${current_backup_basename}" =~ ^repoguard-[0-9]{8}T[0-9]{6}Z\.sql\.gz\.enc$ ]] || {
-            echo "Current backup path was outside the expected daily backup root." >&2
-            exit 1
-          }
-          [[ "${CURRENT_BACKUP_SHA256}" =~ ^[0-9a-f]{64}$ ]] || {
-            echo "Current backup SHA-256 was not valid." >&2
-            exit 1
-          }
-
-          result_file="${RUNNER_TEMP}/production-mysql-retention-result.txt"
+          result="${RUNNER_TEMP}/mysql-retention-result.txt"
           ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "cd '${DEPLOY_PATH}' && \
-             CURRENT_BACKUP_PATH='${CURRENT_BACKUP_PATH}' \
-             CURRENT_BACKUP_SHA256='${CURRENT_BACKUP_SHA256}' \
-             bash scripts/prune-prod-mysql-backups.sh" \
-            | tee "${result_file}"
+            "cd '${DEPLOY_PATH}' && CURRENT_BACKUP_PATH='${CURRENT_BACKUP_PATH}' CURRENT_BACKUP_SHA256='${CURRENT_BACKUP_SHA256}' bash scripts/prune-prod-mysql-backups.sh" \
+            | tee "${result}"
+          [[ "$(awk -F= '$1 == "RETENTION_APPLIED" {print $2}' "${result}")" == "true" ]]
+          [[ "$(awk -F= '$1 == "RETENTION_COUNT" {print $2}' "${result}")" == "7" ]]
+          echo "applied=true" >>"${GITHUB_OUTPUT}"
 
-          retention_count="$(awk -F= '$1 == "RETENTION_COUNT" { print $2 }' "${result_file}")"
-          before_count="$(awk -F= '$1 == "BACKUP_COUNT_BEFORE" { print $2 }' "${result_file}")"
-          checksum_before="$(awk -F= '$1 == "CHECKSUM_COUNT_BEFORE" { print $2 }' "${result_file}")"
-          verified_count="$(awk -F= '$1 == "VERIFIED_BACKUP_COUNT" { print $2 }' "${result_file}")"
-          current_verified="$(awk -F= '$1 == "CURRENT_BACKUP_VERIFIED" { print $2 }' "${result_file}")"
-          legacy_excluded="$(awk -F= '$1 == "LEGACY_DIRECTORY_EXCLUDED" { print $2 }' "${result_file}")"
-          candidate_count="$(awk -F= '$1 == "RETENTION_DELETE_CANDIDATE_COUNT" { print $2 }' "${result_file}")"
-          deleted_count="$(awk -F= '$1 == "RETENTION_DELETED_COUNT" { print $2 }' "${result_file}")"
-          after_count="$(awk -F= '$1 == "BACKUP_COUNT_AFTER" { print $2 }' "${result_file}")"
-          checksum_after="$(awk -F= '$1 == "CHECKSUM_COUNT_AFTER" { print $2 }' "${result_file}")"
-          retention_applied="$(awk -F= '$1 == "RETENTION_APPLIED" { print $2 }' "${result_file}")"
-
-          for numeric_value in \
-            "${retention_count}" \
-            "${before_count}" \
-            "${checksum_before}" \
-            "${verified_count}" \
-            "${candidate_count}" \
-            "${deleted_count}" \
-            "${after_count}" \
-            "${checksum_after}"; do
-            [[ "${numeric_value}" =~ ^[0-9]+$ ]] || {
-              echo "Retention result contained a non-numeric count." >&2
-              exit 1
-            }
-          done
-
-          expected_after="${before_count}"
-          if (( expected_after > retention_count )); then
-            expected_after="${retention_count}"
-          fi
-          expected_deleted=$((before_count - expected_after))
-
-          [[ "${retention_count}" == "7" \
-            && "${checksum_before}" == "${before_count}" \
-            && "${verified_count}" == "${before_count}" \
-            && "${current_verified}" == "true" \
-            && "${legacy_excluded}" == "true" \
-            && "${candidate_count}" == "${expected_deleted}" \
-            && "${deleted_count}" == "${expected_deleted}" \
-            && "${after_count}" == "${expected_after}" \
-            && "${checksum_after}" == "${after_count}" \
-            && "${retention_applied}" == "true" ]] || {
-            echo "Retention result did not satisfy every invariant." >&2
-            exit 1
-          }
-
-          {
-            echo "deleted_count=${deleted_count}"
-            echo "backup_count_after=${after_count}"
-          } >>"${GITHUB_OUTPUT}"
-
-      - name: Write sanitized retention summary
+      - name: Summary
         if: always()
         shell: bash
-        env:
-          RESTORE_VERIFIED: ${{ steps.backup.outputs.restore_verified }}
         run: |
-          result_file="${RUNNER_TEMP}/production-mysql-retention-result.txt"
           {
-            echo
-            echo "## Production MySQL retention"
-            echo
-            if [[ ! -s "${result_file}" ]]; then
-              if [[ "${RESTORE_VERIFIED}" != "true" ]]; then
-                echo "Retention skipped because isolated restore verification was not completed."
-              else
-                echo "The retention operation did not produce a sanitized result."
-              fi
-              exit 0
-            fi
-
-            while IFS='=' read -r key value; do
-              case "${key}" in
-                RETENTION_TIMESTAMP_UTC)
-                  echo "- Timestamp (UTC): \`${value}\`"
-                  ;;
-                RETENTION_COUNT)
-                  echo "- Retention count: \`${value}\`"
-                  ;;
-                BACKUP_COUNT_BEFORE)
-                  echo "- Daily backups before retention: \`${value}\`"
-                  ;;
-                VERIFIED_BACKUP_COUNT)
-                  echo "- Daily backups checksum-verified: \`${value}\`"
-                  ;;
-                CURRENT_BACKUP_PATH)
-                  echo "- Current backup: \`${value}\`"
-                  ;;
-                CURRENT_BACKUP_SHA256)
-                  echo "- Current backup SHA-256: \`${value}\`"
-                  ;;
-                CURRENT_BACKUP_VERIFIED)
-                  echo "- Current backup verified: \`${value}\`"
-                  ;;
-                LEGACY_BACKUP_ROOT)
-                  echo "- Excluded legacy root: \`${value}\`"
-                  ;;
-                LEGACY_DIRECTORY_EXCLUDED)
-                  echo "- Legacy directory excluded: \`${value}\`"
-                  ;;
-                RETENTION_DELETE_CANDIDATE_COUNT)
-                  echo "- Delete candidates: \`${value}\`"
-                  ;;
-                RETENTION_DELETE_*_PATH)
-                  echo "- Deleted backup: \`${value}\`"
-                  ;;
-                RETENTION_DELETE_*_SHA256)
-                  echo "- Deleted backup SHA-256: \`${value}\`"
-                  ;;
-                RETENTION_DELETED_COUNT)
-                  echo "- Deleted backup count: \`${value}\`"
-                  ;;
-                BACKUP_COUNT_AFTER)
-                  echo "- Daily backups after retention: \`${value}\`"
-                  ;;
-                RETENTION_APPLIED)
-                  echo "- Retention applied: \`${value}\`"
-                  ;;
-              esac
-            done <"${result_file}"
+            echo "## Production MySQL backup"
+            echo "- Backup: \`${{ steps.backup.outputs.name }}\`"
+            echo "- SHA-256: \`${{ steps.backup.outputs.sha256 }}\`"
+            echo "- Restore and migration rehearsal: \`${{ steps.backup.outputs.restore_verified }}\`"
+            echo "- Primary immutable object: \`${{ steps.object_storage.outputs.primary_uri }}\`"
+            echo "- Replica immutable object: \`${{ steps.object_storage.outputs.replica_uri }}\`"
+            echo "- Local retention applied: \`${{ steps.retention.outputs.applied }}\`"
           } >>"${GITHUB_STEP_SUMMARY}"
-
-      - name: Verify production health after retention
-        if: ${{ always() && steps.backup.outputs.restore_verified == 'true' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          health="$(curl --fail --silent --show-error \
-            --retry 3 --retry-delay 3 --retry-all-errors \
-            --connect-timeout 8 --max-time 20 \
-            https://pragent.top/actuator/health)"
-          status="$(jq -r '.status // empty' <<<"${health}")"
-          [[ "${status}" == "UP" ]] || {
-            echo "Production health is not UP after backup retention." >&2
-            exit 1
-          }

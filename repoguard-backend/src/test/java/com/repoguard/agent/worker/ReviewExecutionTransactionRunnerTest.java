@@ -8,6 +8,8 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.repoguard.agent.review.ReviewDeadline;
+import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.CannotAcquireLockException;
@@ -63,5 +65,36 @@ class ReviewExecutionTransactionRunnerTest {
 
         verify(transactionManager, times(2)).rollback(transactionStatus);
         verify(transactionManager, never()).commit(transactionStatus);
+    }
+
+    @Test
+    void appliesCeilingOfRemainingDeadlineAsTransactionTimeout() {
+        PlatformTransactionManager transactionManager = org.mockito.Mockito.mock(PlatformTransactionManager.class);
+        TransactionStatus transactionStatus = org.mockito.Mockito.mock(TransactionStatus.class);
+        when(transactionManager.getTransaction(any(TransactionDefinition.class))).thenReturn(transactionStatus);
+        ReviewExecutionTransactionRunner runner = new ReviewExecutionTransactionRunner(transactionManager, 1);
+        ReviewDeadline deadline = ReviewDeadline.startingAt(0L, Duration.ofMillis(2_500), () -> 0L);
+
+        assertThat(runner.execute(deadline, "persist", () -> "done")).isEqualTo("done");
+
+        org.mockito.ArgumentCaptor<TransactionDefinition> definitionCaptor =
+            org.mockito.ArgumentCaptor.forClass(TransactionDefinition.class);
+        verify(transactionManager).getTransaction(definitionCaptor.capture());
+        assertThat(definitionCaptor.getValue().getTimeout()).isEqualTo(3);
+    }
+
+    @Test
+    void leavesTransactionTimeoutAtDefaultForUnlimitedDeadline() {
+        PlatformTransactionManager transactionManager = org.mockito.Mockito.mock(PlatformTransactionManager.class);
+        TransactionStatus transactionStatus = org.mockito.Mockito.mock(TransactionStatus.class);
+        when(transactionManager.getTransaction(any(TransactionDefinition.class))).thenReturn(transactionStatus);
+        ReviewExecutionTransactionRunner runner = new ReviewExecutionTransactionRunner(transactionManager, 1);
+
+        assertThat(runner.execute(ReviewDeadline.unlimited(), "persist", () -> "done")).isEqualTo("done");
+
+        org.mockito.ArgumentCaptor<TransactionDefinition> definitionCaptor =
+            org.mockito.ArgumentCaptor.forClass(TransactionDefinition.class);
+        verify(transactionManager).getTransaction(definitionCaptor.capture());
+        assertThat(definitionCaptor.getValue().getTimeout()).isEqualTo(TransactionDefinition.TIMEOUT_DEFAULT);
     }
 }

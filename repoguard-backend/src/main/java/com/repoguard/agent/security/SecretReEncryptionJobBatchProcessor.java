@@ -13,6 +13,7 @@ import com.repoguard.agent.mapper.NotificationChannelBindingMapper;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
 import com.repoguard.agent.mapper.SecretReEncryptionJobItemMapper;
 import com.repoguard.agent.mapper.SecretReEncryptionJobMapper;
+import com.repoguard.agent.tenancy.ScheduledJobLeaseContext;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -55,6 +56,7 @@ public class SecretReEncryptionJobBatchProcessor {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void process(Long jobId, String ownerId) {
+        ScheduledJobLeaseContext.assertHeld();
         SecretReEncryptionJob job = jobMapper.selectById(jobId);
         assertClaim(job, ownerId);
 
@@ -82,6 +84,7 @@ public class SecretReEncryptionJobBatchProcessor {
                 );
                 rowCount = rows.size();
                 for (IntegrationConfig row : rows) {
+                    ScheduledJobLeaseContext.assertHeld();
                     items.add(processIntegration(row, sourceCrypto, targetCrypto, isExecute(job)));
                     lastRecordId = row.getId();
                 }
@@ -95,6 +98,7 @@ public class SecretReEncryptionJobBatchProcessor {
                 );
                 rowCount = rows.size();
                 for (ReviewPolicyConfig row : rows) {
+                    ScheduledJobLeaseContext.assertHeld();
                     items.add(processReviewPolicy(row, sourceCrypto, targetCrypto, isExecute(job)));
                     lastRecordId = row.getId();
                 }
@@ -108,6 +112,7 @@ public class SecretReEncryptionJobBatchProcessor {
                 );
                 rowCount = rows.size();
                 for (NotificationChannelBinding row : rows) {
+                    ScheduledJobLeaseContext.assertHeld();
                     items.addAll(processNotificationBinding(row, sourceCrypto, targetCrypto, isExecute(job)));
                     lastRecordId = row.getId();
                 }

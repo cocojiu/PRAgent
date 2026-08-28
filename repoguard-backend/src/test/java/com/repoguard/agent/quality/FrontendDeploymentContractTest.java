@@ -20,20 +20,18 @@ class FrontendDeploymentContractTest {
     private static final Pattern DOCKER_EXPOSE_PORT = Pattern.compile("(?m)^EXPOSE\\s+(\\d+)\\s*$");
 
     @Test
-    void ipComposePublishesThePortUsedByFrontendImageAndNginx() throws IOException {
+    void ipComposeDelegatesToTheHardenedProductionModel() throws IOException {
         Path repositoryRoot = findRepositoryRoot();
-        Map<String, Object> compose = yaml(repositoryRoot.resolve("docker-compose.ip.yml"));
-        Map<String, Object> services = map(compose.get("services"));
-        Map<String, Object> frontend = map(services.get("frontend"));
-        List<String> publishedPorts = stringList(frontend.get("ports"));
-        String nginx = read(repositoryRoot.resolve("repoguard-frontend/nginx.ip.conf"));
-        String dockerfile = read(repositoryRoot.resolve("repoguard-frontend/Dockerfile"));
-        String listenPort = requiredGroup(NGINX_LISTEN_PORT, nginx, "frontend Nginx listen port");
-        String exposedPort = requiredGroup(DOCKER_EXPOSE_PORT, dockerfile, "frontend Docker exposed port");
+        String compatibility = read(repositoryRoot.resolve("docker-compose.ip.yml"));
+        Map<String, Object> production = yaml(repositoryRoot.resolve("docker-compose.prod.yml"));
+        Map<String, Object> services = map(production.get("services"));
 
-        assertThat(exposedPort).isEqualTo(listenPort);
-        assertThat(publishedPorts).containsExactly("80:" + listenPort);
-    }
+        assertThat(compatibility)
+            .contains("include:", "- path: ./docker-compose.prod.yml")
+            .doesNotContain("\nservices:");
+        assertThat(services.keySet())
+            .containsExactlyInAnyOrder("mysql", "rabbitmq", "backend", "backend-worker", "frontend", "caddy");
+      }
 
     @Test
     void nginxDoesNotExposeObservabilityServices() throws IOException {
@@ -51,12 +49,9 @@ class FrontendDeploymentContractTest {
         String nginx = read(repositoryRoot.resolve("repoguard-frontend/nginx.ip.conf"));
         Map<String, Object> production =
             yaml(repositoryRoot.resolve("docker-compose.prod.yml"));
-        Map<String, Object> ipDeployment =
-            yaml(repositoryRoot.resolve("docker-compose.ip.yml"));
+        String ipCompatibility = read(repositoryRoot.resolve("docker-compose.ip.yml"));
         Map<String, Object> productionFrontend =
             map(map(production.get("services")).get("frontend"));
-        Map<String, Object> ipFrontend =
-            map(map(ipDeployment.get("services")).get("frontend"));
 
         assertThat(dockerfile)
             .contains("COPY nginx.ip.conf /etc/nginx/conf.d/default.conf")
@@ -67,9 +62,9 @@ class FrontendDeploymentContractTest {
         assertThat(stringList(productionFrontend.get("tmpfs")))
             .containsExactly("/tmp:rw,noexec,nosuid,size=16m,mode=1777")
             .noneMatch(this::shadowsFrontendImageDirectory);
-        assertThat(stringList(ipFrontend.get("tmpfs")))
-            .containsExactly("/tmp:rw,noexec,nosuid,size=16m,mode=1777")
-            .noneMatch(this::shadowsFrontendImageDirectory);
+        assertThat(ipCompatibility)
+            .contains("include:", "- path: ./docker-compose.prod.yml")
+            .doesNotContain("\nservices:");
         assertThat(productionFrontend).doesNotContainKey("environment");
         assertThat(read(repositoryRoot.resolve("repoguard-frontend/nginx.conf")))
             .contains(
@@ -83,17 +78,18 @@ class FrontendDeploymentContractTest {
     }
 
     @Test
-    void productionCaddyOnlyProxiesPlainHttpHealthChecks() throws IOException {
+    void productionCaddyKeepsContainerHealthAndCanonicalFallbackOnPlainHttp() throws IOException {
         Path repositoryRoot = findRepositoryRoot();
         String caddyfile = read(repositoryRoot.resolve("Caddyfile"));
         String plainHttpCatchAll = requiredSiteBlock(caddyfile, ":80");
         String normalized = plainHttpCatchAll.replaceAll("\\s+", " ").trim();
 
-        assertThat(normalized).contains(
-            "@health path /actuator/health handle @health { reverse_proxy frontend:8080 } "
-                + "handle { respond \"HTTPS canonical host required\" 421 }"
-        );
-        assertThat(occurrences(plainHttpCatchAll, "reverse_proxy frontend:8080")).isEqualTo(1);
+        String healthHandler =
+            "@containerHealth path /healthz handle @containerHealth { respond \"ok\" 200 }";
+        String canonicalFallback = "handle { respond \"HTTPS canonical host required\" 421 }";
+        assertThat(normalized).contains(healthHandler, canonicalFallback);
+        assertThat(normalized.indexOf(healthHandler)).isLessThan(normalized.indexOf(canonicalFallback));
+        assertThat(plainHttpCatchAll).doesNotContain("/actuator", "reverse_proxy");
     }
 
     @Test
@@ -185,16 +181,17 @@ class FrontendDeploymentContractTest {
     }
 
     @Test
-    void applicationComposeStacksRotateContainerLogs() throws IOException {
+    void applicationComposeRotatesLogsAndCompatibilityEntryHasNoOverrides() throws IOException {
         Path repositoryRoot = findRepositoryRoot();
         Map<String, Object> prodServices = map(yaml(repositoryRoot.resolve("docker-compose.prod.yml")).get("services"));
-        Map<String, Object> ipServices = map(yaml(repositoryRoot.resolve("docker-compose.ip.yml")).get("services"));
+        String compatibility = read(repositoryRoot.resolve("docker-compose.ip.yml"));
 
         assertThat(prodServices.keySet())
             .containsExactlyInAnyOrder("mysql", "rabbitmq", "backend", "backend-worker", "frontend", "caddy");
-        assertThat(ipServices.keySet()).containsExactlyInAnyOrder("mysql", "rabbitmq", "backend", "frontend");
         prodServices.forEach((name, service) -> assertRotatedLogging(name, map(service)));
-        ipServices.forEach((name, service) -> assertRotatedLogging(name, map(service)));
+        assertThat(compatibility)
+            .contains("include:", "- path: ./docker-compose.prod.yml")
+            .doesNotContain("\nservices:", "\nvolumes:", "\nnetworks:");
     }
 
     @Test

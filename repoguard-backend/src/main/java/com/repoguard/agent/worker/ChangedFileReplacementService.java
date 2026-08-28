@@ -1,6 +1,5 @@
 package com.repoguard.agent.worker;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.review.PullRequestDiff;
 import com.repoguard.agent.mapper.ChangedFileMapper;
@@ -25,9 +24,12 @@ class ChangedFileReplacementService {
     }
 
     void replace(Long taskId, PullRequestDiff diff) {
-        changedFileMapper.delete(new LambdaQueryWrapper<ChangedFile>().eq(ChangedFile::getTaskId, taskId));
+        replace(taskId, null, diff);
+    }
+
+    void replace(Long taskId, Long attemptId, PullRequestDiff diff) {
         List<ChangedFile> entities = diff.files().stream()
-            .map(file -> changedFileEntityMapper.toEntity(taskId, file))
+            .map(file -> changedFileEntityMapper.toEntity(taskId, attemptId, file))
             .toList();
         batchInserter.insertAll(ChangedFileMapper.class, entities);
     }

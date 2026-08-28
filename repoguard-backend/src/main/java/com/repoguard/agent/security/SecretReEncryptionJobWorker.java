@@ -3,12 +3,12 @@ package com.repoguard.agent.security;
 import com.repoguard.agent.config.SchedulerRuntimeEnabled;
 import com.repoguard.agent.entity.SecretReEncryptionJob;
 import com.repoguard.agent.mapper.SecretReEncryptionJobMapper;
+import com.repoguard.agent.tenancy.TenantContext;
 import java.time.LocalDateTime;
 import java.util.Objects;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -34,17 +34,17 @@ public class SecretReEncryptionJobWorker {
         this.properties = Objects.requireNonNull(properties, "properties");
     }
 
-    @Scheduled(fixedDelayString = "${repoguard.security.re-encryption.poll-interval-ms}")
     public void processDueJob() {
         LocalDateTime now = LocalDateTime.now();
-        SecretReEncryptionJob dueJob = jobMapper.selectDueJob(now);
+        long tenantId = TenantContext.currentTenantIdOrDefault();
+        SecretReEncryptionJob dueJob = jobMapper.selectDueJob(tenantId, now);
         if (dueJob == null) {
             return;
         }
 
         String ownerId = "repoguard-secret-re-encryption-" + UUID.randomUUID();
         LocalDateTime leaseUntil = now.plusSeconds(properties.getLeaseSeconds());
-        if (jobMapper.claim(dueJob.getId(), ownerId, now, leaseUntil) != 1) {
+        if (jobMapper.claim(dueJob.getId(), tenantId, ownerId, now, leaseUntil) != 1) {
             return;
         }
 

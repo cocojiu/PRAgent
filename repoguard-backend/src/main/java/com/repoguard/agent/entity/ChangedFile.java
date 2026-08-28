@@ -9,6 +9,8 @@ public class ChangedFile {
     @TableId
     private Long id;
     private Long taskId;
+    private Long attemptId;
+    private Boolean currentAttempt;
     private String filePath;
     private String changeType;
     private Integer additions;
@@ -28,6 +30,22 @@ public class ChangedFile {
 
     public void setTaskId(Long taskId) {
         this.taskId = taskId;
+    }
+
+    public Long getAttemptId() {
+        return attemptId;
+    }
+
+    public void setAttemptId(Long attemptId) {
+        this.attemptId = attemptId;
+    }
+
+    public Boolean getCurrentAttempt() {
+        return currentAttempt;
+    }
+
+    public void setCurrentAttempt(Boolean currentAttempt) {
+        this.currentAttempt = currentAttempt;
     }
 
     public String getFilePath() {

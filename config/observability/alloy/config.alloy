@@ -24,7 +24,7 @@ discovery.relabel "repoguard" {
 
   rule {
     source_labels = ["__meta_docker_container_name"]
-    regex         = "/(repoguard-backend|repoguard-frontend|repoguard-caddy)"
+    regex         = "/(repoguard-backend|repoguard-backend-worker|repoguard-frontend|repoguard-caddy)"
     action        = "keep"
   }
 

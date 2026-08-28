@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -147,7 +148,10 @@ class GithubPullRequestClientImplTest {
             when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings(server.baseUrl()));
 
             assertThatThrownBy(() -> client.fetchPullRequestDiff(reviewTask()))
-                .isInstanceOf(GithubPullRequestHeadChangedException.class)
+                .isInstanceOfSatisfying(
+                    GithubPullRequestHeadChangedException.class,
+                    ex -> assertThat(ex.currentHeadUpdatedAt()).isEqualTo(LocalDateTime.of(2026, 8, 15, 3, 0))
+                )
                 .hasMessageContaining("expected=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
                 .hasMessageContaining("current=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
 
@@ -556,7 +560,8 @@ class GithubPullRequestClientImplTest {
             if ("GET".equals(exchange.getRequestMethod())
                 && "/repos/octocat/api/pulls/7".equals(uri.getPath())) {
                 headRequests.incrementAndGet();
-                body = "{\"head\":{\"sha\":\"" + headSha.get() + "\"}}";
+                body = "{\"head\":{\"sha\":\"" + headSha.get()
+                    + "\"},\"updated_at\":\"2026-08-15T03:00:00Z\"}";
             } else if ("/repos/octocat/api/pulls/7/files".equals(uri.getPath())) {
                 int failureStatus = filesFailureStatus.getAndSet(0);
                 if (failureStatus > 0) {

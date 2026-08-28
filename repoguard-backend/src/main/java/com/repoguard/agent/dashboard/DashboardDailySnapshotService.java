@@ -10,6 +10,7 @@ import com.repoguard.agent.dto.DashboardRuleHitCount;
 import com.repoguard.agent.mapper.DashboardDailySnapshotMapper;
 import com.repoguard.agent.mapper.DashboardMapper;
 import com.repoguard.agent.mapper.projection.DashboardProjections.SnapshotRefreshState;
+import com.repoguard.agent.tenancy.ScheduledJobLeaseContext;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Objects;
@@ -210,6 +211,7 @@ public class DashboardDailySnapshotService {
             return;
         }
         for (LocalDate statDate = startDate; !statDate.isAfter(endDate); statDate = statDate.plusDays(1)) {
+            ScheduledJobLeaseContext.assertHeld();
             refresher.accept(statDate);
         }
     }

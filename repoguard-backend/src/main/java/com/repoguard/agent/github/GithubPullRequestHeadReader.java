@@ -1,12 +1,15 @@
 package com.repoguard.agent.github;
 
-import com.repoguard.agent.github.GithubIntegrationSettings;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.repoguard.agent.external.ExternalCallResilience;
 import com.repoguard.agent.external.ExternalHttpJsonResponseReader;
 import com.repoguard.agent.external.ExternalHttpResponseProfile;
 import com.repoguard.agent.external.OutboundEndpointPolicy;
 import com.repoguard.agent.external.OutboundEndpointType;
 import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -59,6 +62,17 @@ public class GithubPullRequestHeadReader {
         Integer pullNumber,
         ExternalCallResilience resilience
     ) {
+        return fetchHead(settings, baseUrl, owner, repository, pullNumber, resilience).sha();
+    }
+
+    public GithubPullRequestHeadSnapshot fetchHead(
+        GithubIntegrationSettings settings,
+        String baseUrl,
+        String owner,
+        String repository,
+        Integer pullNumber,
+        ExternalCallResilience resilience
+    ) {
         Objects.requireNonNull(settings, "settings");
         Objects.requireNonNull(resilience, "resilience");
         String url = UriComponentsBuilder
@@ -77,7 +91,18 @@ public class GithubPullRequestHeadReader {
         if (!StringUtils.hasText(sha)) {
             throw new IllegalStateException("GitHub pull request head SHA is unavailable");
         }
-        return sha.trim();
+        if (!StringUtils.hasText(response.updatedAt())) {
+            throw new IllegalStateException("GitHub pull request updated_at is unavailable");
+        }
+        LocalDateTime updatedAt;
+        try {
+            updatedAt = OffsetDateTime.parse(response.updatedAt().trim())
+                .withOffsetSameInstant(ZoneOffset.UTC)
+                .toLocalDateTime();
+        } catch (RuntimeException ex) {
+            throw new IllegalStateException("GitHub pull request updated_at is invalid", ex);
+        }
+        return new GithubPullRequestHeadSnapshot(sha.trim(), updatedAt);
     }
 
     private GithubPullRequestResponse readJsonResponse(
@@ -99,9 +124,19 @@ public class GithubPullRequestHeadReader {
         }
     }
 
-    private record GithubPullRequestResponse(GithubPullRequestHead head) {
+    private record GithubPullRequestResponse(
+        GithubPullRequestHead head,
+        @JsonProperty("updated_at") String updatedAt
+    ) {
     }
 
     private record GithubPullRequestHead(String sha) {
+    }
+
+    public record GithubPullRequestHeadSnapshot(String sha, LocalDateTime updatedAt) {
+        public GithubPullRequestHeadSnapshot {
+            Objects.requireNonNull(sha, "sha");
+            Objects.requireNonNull(updatedAt, "updatedAt");
+        }
     }
 }

@@ -11,24 +11,159 @@ import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Options;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 public interface ReviewTaskMapper extends BaseMapper<ReviewTask> {
 
     @Insert("""
         insert into review_task (
-            pr_number, title, repository, organization, commit_sha, branch_name,
+            pr_number, title, repository, organization, commit_sha, generation, branch_name,
             status, risk_level, assessment_status, mq_retries, publish_attempts, llm_status, pr_url,
             source, trigger_source, human_review_required, human_review_status,
-            created_at, duration_seconds
+            created_at, finished_at, duration_seconds, llm_fallback_reason
         ) values (
-            #{prNumber}, #{title}, #{repository}, #{organization}, #{commitSha}, #{branchName},
+            #{prNumber}, #{title}, #{repository}, #{organization}, #{commitSha}, #{generation}, #{branchName},
             #{status}, #{riskLevel}, #{assessmentStatus}, #{mqRetries}, #{publishAttempts}, #{llmStatus}, #{prUrl},
             #{source}, #{triggerSource}, #{humanReviewRequired}, #{humanReviewStatus},
-            #{createdAt}, #{durationSeconds}
+            #{createdAt}, #{finishedAt}, #{durationSeconds}, #{llmFallbackReason}
         )
         """)
     @Options(useGeneratedKeys = true, keyProperty = "id")
     int insertManualReview(ReviewTask task);
+
+    @Update("""
+        update review_task
+        set status = 'SUPERSEDED',
+            risk_level = 'INFO',
+            assessment_status = 'SUPERSEDED',
+            llm_status = 'pending',
+            llm_fallback_reason = #{reason},
+            finished_at = #{supersededAt},
+            duration_seconds = greatest(
+                timestampdiff(second, coalesce(started_at, created_at), #{supersededAt}),
+                0
+            ),
+            publish_claimed_at = null,
+            publish_claimed_by = null,
+            review_claimed_at = null,
+            review_claimed_by = null
+        where organization = #{organization}
+          and repository = #{repository}
+          and pr_number = #{prNumber}
+          and generation < #{generation}
+          and upper(coalesce(nullif(trigger_source, ''), source, '')) = 'GITHUB_WEBHOOK'
+          and status in ('QUEUED', 'PUBLISH_FAILED', 'REQUEUE_PENDING')
+        """)
+    int supersedeOlderPendingTasks(
+        @Param("organization") String organization,
+        @Param("repository") String repository,
+        @Param("prNumber") Integer prNumber,
+        @Param("generation") Long generation,
+        @Param("supersededAt") LocalDateTime supersededAt,
+        @Param("reason") String reason
+    );
+
+    @Select("""
+        select id
+        from review_task
+        where organization = #{organization}
+          and repository = #{repository}
+          and pr_number = #{prNumber}
+          and generation < #{generation}
+          and upper(coalesce(nullif(trigger_source, ''), source, '')) = 'GITHUB_WEBHOOK'
+          and status = 'SUPERSEDED'
+          and finished_at = #{supersededAt}
+        order by id
+        """)
+    List<Long> selectTasksSupersededAtGeneration(
+        @Param("organization") String organization,
+        @Param("repository") String repository,
+        @Param("prNumber") Integer prNumber,
+        @Param("generation") Long generation,
+        @Param("supersededAt") LocalDateTime supersededAt
+    );
+
+    @Update("""
+        update review_task
+        set generation = #{generation},
+            status = 'PUBLISH_FAILED',
+            risk_level = 'INFO',
+            assessment_status = 'PARTIAL',
+            llm_status = 'pending',
+            llm_fallback_reason = null,
+            finished_at = null,
+            duration_seconds = 0,
+            next_publish_retry_at = #{recoveredAt},
+            last_publish_error = 'Pull request head mismatch recovery requires republish',
+            publish_claimed_at = null,
+            publish_claimed_by = null,
+            review_claimed_at = null,
+            review_claimed_by = null
+        where organization = #{organization}
+          and repository = #{repository}
+          and pr_number = #{prNumber}
+          and commit_sha = #{commitSha}
+          and upper(coalesce(nullif(trigger_source, ''), source, '')) = 'GITHUB_WEBHOOK'
+          and status in ('QUEUED', 'PUBLISH_FAILED', 'REQUEUE_PENDING', 'SUPERSEDED')
+        """)
+    int prepareCurrentHeadTaskForRepublish(
+        @Param("organization") String organization,
+        @Param("repository") String repository,
+        @Param("prNumber") Integer prNumber,
+        @Param("commitSha") String commitSha,
+        @Param("generation") Long generation,
+        @Param("recoveredAt") LocalDateTime recoveredAt
+    );
+
+    @Update("""
+        update review_task task
+        set task.status = 'REVIEWING',
+            task.started_at = #{startedAt},
+            task.review_claimed_at = #{startedAt},
+            task.review_claimed_by = #{claimId},
+            task.publish_claimed_at = null,
+            task.publish_claimed_by = null
+        where task.id = #{taskId}
+          and task.status = 'QUEUED'
+          and (
+              upper(coalesce(nullif(task.trigger_source, ''), task.source, '')) <> 'GITHUB_WEBHOOK'
+              or
+              not exists (
+                  select 1
+                  from review_pull_request_head head
+                  where head.organization = task.organization
+                    and head.repository = task.repository
+                    and head.pr_number = task.pr_number
+              )
+              or exists (
+                  select 1
+                  from review_pull_request_head head
+                  where head.organization = task.organization
+                    and head.repository = task.repository
+                    and head.pr_number = task.pr_number
+                    and head.generation = task.generation
+                    and head.latest_commit_sha = task.commit_sha
+              )
+          )
+        """)
+    int claimCurrentReview(
+        @Param("taskId") Long taskId,
+        @Param("startedAt") LocalDateTime startedAt,
+        @Param("claimId") String claimId
+    );
+
+    @Update("""
+        update review_task
+        set current_attempt_id = #{attemptId}
+        where id = #{taskId}
+          and status = 'REVIEWING'
+          and review_claimed_by = #{claimId}
+        """)
+    int attachCurrentAttempt(
+        @Param("taskId") Long taskId,
+        @Param("claimId") String claimId,
+        @Param("attemptId") Long attemptId
+    );
 
     @Select("""
         select

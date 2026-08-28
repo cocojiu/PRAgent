@@ -6,18 +6,18 @@ import com.repoguard.agent.config.SchedulerRuntimeEnabled;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.mapper.NotificationEventMapper;
 import com.repoguard.agent.notification.NotificationEventStatus;
+import com.repoguard.agent.tenancy.ScheduledJobLeaseContext;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
 @SchedulerRuntimeEnabled
-class NotificationDeliveryRecoveryCompensator {
+public class NotificationDeliveryRecoveryCompensator {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(NotificationDeliveryRecoveryCompensator.class);
 
@@ -51,7 +51,6 @@ class NotificationDeliveryRecoveryCompensator {
         this.clock = clock;
     }
 
-    @Scheduled(fixedDelayString = "${app.rabbit.notification.delivery-recovery-interval-ms:60000}")
     public void recoverExpiredClaims() {
         LocalDateTime now = LocalDateTime.now(clock);
         LocalDateTime expiredBefore = now.minusNanos(claimLeaseNanos());
@@ -64,6 +63,7 @@ class NotificationDeliveryRecoveryCompensator {
                 .last("limit " + recoveryBatchSize())
         );
         for (NotificationEvent event : expiredEvents) {
+            ScheduledJobLeaseContext.assertHeld();
             NotificationDeliveryFailureDecision decision = failurePolicy.decide(event);
             if (eventStateUpdater.recoverExpired(event, decision)) {
                 LOGGER.warn(

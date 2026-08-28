@@ -4,10 +4,12 @@
         format json
     }
     encode zstd gzip
+
     @health path /healthz
     handle @health {
         respond "ok" 200
     }
+
     handle {
         reverse_proxy frontend:8080
     }
@@ -18,14 +20,17 @@
         output stdout
         format json
     }
+
     @containerHealth path /healthz
     handle @containerHealth {
         respond "ok" 200
     }
-    @health path /actuator/health
-    handle @health {
-        reverse_proxy frontend:8080
+
+    @canonicalHost host {$REPOGUARD_FRONTEND_SERVER_NAME}
+    handle @canonicalHost {
+        redir https://{$REPOGUARD_FRONTEND_SERVER_NAME}{uri} permanent
     }
+
     handle {
         respond "HTTPS canonical host required" 421
     }

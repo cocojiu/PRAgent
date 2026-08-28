@@ -32,13 +32,28 @@ class RuntimeRoleBoundaryContractTest {
 
         assertThat(scheduledComponents).isNotEmpty();
         for (Class<?> component : scheduledComponents) {
-            assertThat(AnnotatedElementUtils.hasAnnotation(component, SchedulerRuntimeEnabled.class))
-                .as("scheduled component %s must declare Scheduler capability", component.getName())
+            boolean schedulerRuntime = AnnotatedElementUtils.hasAnnotation(
+                component,
+                SchedulerRuntimeEnabled.class
+            );
+            boolean replicaRuntime = AnnotatedElementUtils.hasAnnotation(
+                component,
+                ReplicaRuntimeEnabled.class
+            );
+            assertThat(schedulerRuntime ^ replicaRuntime)
+                .as(
+                    "scheduled component %s must declare exactly one Scheduler or per-replica capability",
+                    component.getName()
+                )
                 .isTrue();
             assertThat(AnnotatedElementUtils.hasAnnotation(component, WorkerRuntimeEnabled.class))
                 .as("scheduled component %s must not be coupled to the message-consumer capability", component.getName())
                 .isFalse();
         }
+        assertThat(scheduledComponents.stream()
+            .filter(component -> AnnotatedElementUtils.hasAnnotation(component, ReplicaRuntimeEnabled.class))
+            .map(Class::getName))
+            .containsExactly("com.repoguard.agent.cache.ClusterCacheInvalidationPoller");
 
         assertThat(listenerComponents).isNotEmpty();
         for (Class<?> component : listenerComponents) {

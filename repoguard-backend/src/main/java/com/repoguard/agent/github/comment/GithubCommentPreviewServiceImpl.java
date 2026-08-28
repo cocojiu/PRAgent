@@ -2,19 +2,20 @@ package com.repoguard.agent.github.comment;
 
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
-import com.repoguard.agent.github.GithubIntegrationProvider;
 import com.repoguard.agent.dto.GithubCommentPreviewResponse;
 import com.repoguard.agent.dto.PrRiskProfileDto;
 import com.repoguard.agent.dto.PrReviewSummaryDto;
 import com.repoguard.agent.dto.ReviewTaskListItem;
 import com.repoguard.agent.entity.GithubCommentPublication;
 import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.github.GithubIntegrationProvider;
+import com.repoguard.agent.github.GithubIntegrationSettings;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.review.PrReviewSummaryBuilder;
 import com.repoguard.agent.review.ReviewRiskProfileBuilder;
-import com.repoguard.agent.service.GithubCommentPreviewService;
 import com.repoguard.agent.review.task.ReviewFailureSummaryResolver.ReviewFailureSummary;
 import com.repoguard.agent.review.task.ReviewTaskListItemAssembler;
+import com.repoguard.agent.service.GithubCommentPreviewService;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -77,7 +78,11 @@ public class GithubCommentPreviewServiceImpl implements GithubCommentPreviewServ
     private GithubCommentPreviewResponse buildFullPreview(Long taskId, ReviewTask task) {
         var previewData = previewDataLoader.load(taskId);
         ReviewTaskListItem taskItem = listItemAssembler.assemble(task, NO_FAILURE_SUMMARY);
-        PrRiskProfileDto riskProfile = riskProfileBuilder.build(taskItem, previewData.findings(), previewData.changedFiles());
+        PrRiskProfileDto riskProfile = riskProfileBuilder.build(
+            taskItem,
+            previewData.findings(),
+            previewData.changedFiles()
+        );
         PrReviewSummaryDto prSummary = reviewSummaryBuilder.build(
             taskItem,
             previewData.findings(),
@@ -85,14 +90,11 @@ public class GithubCommentPreviewServiceImpl implements GithubCommentPreviewServ
             previewData.changedFiles(),
             riskProfile
         );
-        var publicationData = previewPublicationLoader.load(
-            taskId,
-            previewData.actionableFindings()
-        );
+        var publicationData = previewPublicationLoader.load(taskId, previewData.actionableFindings());
 
         return responseAssembler.assemble(
             task,
-            githubIntegrationProvider.getSettings(),
+            loadGithubSettings(task),
             previewData,
             prSummary,
             publicationData
@@ -159,7 +161,7 @@ public class GithubCommentPreviewServiceImpl implements GithubCommentPreviewServ
 
         return responseAssembler.assemblePaged(
             task,
-            githubIntegrationProvider.getSettings(),
+            loadGithubSettings(task),
             previewData,
             prSummary,
             publicationData,
@@ -173,6 +175,14 @@ public class GithubCommentPreviewServiceImpl implements GithubCommentPreviewServ
             safePageSize,
             commentableOnly
         );
+    }
+
+    private GithubIntegrationSettings loadGithubSettings(ReviewTask task) {
+        GithubIntegrationSettings settings = githubIntegrationProvider.getSettingsForRepository(
+            task.getOrganization(),
+            task.getRepository()
+        );
+        return settings == null ? githubIntegrationProvider.getSettings() : settings;
     }
 
     private boolean published(GithubCommentPublication publication) {

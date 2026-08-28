@@ -101,7 +101,7 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
     @Override
     @Cacheable(
         cacheNames = CacheNames.REVIEW_TASK_LIST_SUMMARY,
-        key = "#query.listSummaryCacheKey()",
+        key = "T(com.repoguard.agent.tenancy.TenantScopedKey).current(#query.listSummaryCacheKey())",
         sync = true
     )
     public ReviewTaskListSummary getReviewListSummary(ReviewQuery query) {

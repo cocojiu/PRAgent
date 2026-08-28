@@ -7,7 +7,15 @@ import com.repoguard.agent.dto.ManualReviewRequest;
 import com.repoguard.agent.dto.ManualReviewResponse;
 import com.repoguard.agent.review.ReviewTaskSource;
 import com.repoguard.agent.service.ReviewService;
+import com.repoguard.agent.tenancy.TenantContext;
+import com.repoguard.agent.tenancy.TenantRepositoryBinding;
+import com.repoguard.agent.tenancy.TenantRepositoryResolver;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeParseException;
 import java.util.Locale;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -16,10 +24,23 @@ public class GithubPullRequestWebhookService {
 
     private final GithubWebhookProperties properties;
     private final ReviewService reviewService;
+    private final TenantRepositoryResolver tenantRepositoryResolver;
+
+    @Autowired
+    public GithubPullRequestWebhookService(
+        GithubWebhookProperties properties,
+        ReviewService reviewService,
+        TenantRepositoryResolver tenantRepositoryResolver
+    ) {
+        this.properties = properties;
+        this.reviewService = reviewService;
+        this.tenantRepositoryResolver = tenantRepositoryResolver;
+    }
 
     public GithubPullRequestWebhookService(GithubWebhookProperties properties, ReviewService reviewService) {
         this.properties = properties;
         this.reviewService = reviewService;
+        this.tenantRepositoryResolver = null;
     }
 
     public GithubWebhookResponse handlePullRequest(JsonNode payload, String deliveryId) {
@@ -51,8 +72,10 @@ public class GithubPullRequestWebhookService {
         Integer prNumber = requiredInt(pullRequest, "number");
         String title = textOrNull(pullRequest, "title");
         String commit = requiredText(head, "sha");
+        LocalDateTime headUpdatedAt = requiredTimestamp(pullRequest, "updated_at");
+        Long installationId = optionalLong(payload.get("installation"), "id");
 
-        ManualReviewResponse response = reviewService.triggerManualReview(new ManualReviewRequest(
+        ManualReviewRequest request = new ManualReviewRequest(
             organization,
             repositoryName,
             prNumber,
@@ -60,7 +83,14 @@ public class GithubPullRequestWebhookService {
             commit,
             branch,
             ReviewTaskSource.GITHUB_WEBHOOK.dtoCode()
-        ));
+        );
+        ManualReviewResponse response = triggerInTenant(
+            request,
+            headUpdatedAt,
+            organization,
+            repositoryName,
+            installationId
+        );
         return new GithubWebhookResponse(
             response.status(),
             response.message(),
@@ -69,6 +99,26 @@ public class GithubPullRequestWebhookService {
             deliveryId,
             action
         );
+    }
+
+    private ManualReviewResponse triggerInTenant(
+        ManualReviewRequest request,
+        LocalDateTime headUpdatedAt,
+        String organization,
+        String repository,
+        Long installationId
+    ) {
+        if (tenantRepositoryResolver == null) {
+            return reviewService.triggerWebhookReview(request, headUpdatedAt);
+        }
+        TenantRepositoryBinding binding = tenantRepositoryResolver.resolve(
+            organization,
+            repository,
+            installationId
+        );
+        try (TenantContext.Scope _ = TenantContext.withTenant(binding.tenantId())) {
+            return reviewService.triggerWebhookReview(request, headUpdatedAt);
+        }
     }
 
     private boolean isAllowedAction(String action) {
@@ -133,6 +183,29 @@ public class GithubPullRequestWebhookService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "GitHub webhook payload is missing " + fieldName);
         }
         return value.asInt();
+    }
+
+    private Long optionalLong(JsonNode node, String fieldName) {
+        if (node == null || !node.isObject()) {
+            return null;
+        }
+        JsonNode value = node.get(fieldName);
+        if (value == null || value.isNull()) {
+            return null;
+        }
+        if (!value.canConvertToLong() || value.asLong() < 1) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "GitHub webhook payload has invalid " + fieldName);
+        }
+        return value.asLong();
+    }
+
+    private LocalDateTime requiredTimestamp(JsonNode node, String fieldName) {
+        String value = requiredText(node, fieldName);
+        try {
+            return OffsetDateTime.parse(value).withOffsetSameInstant(ZoneOffset.UTC).toLocalDateTime();
+        } catch (DateTimeParseException exception) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "GitHub webhook payload has invalid " + fieldName);
+        }
     }
 
     private String textOrNull(JsonNode node, String fieldName) {

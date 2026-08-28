@@ -50,6 +50,10 @@ class FrontendApiContractCatalogTest {
             .isEqualTo("PageResponse<ReviewTask>");
         assertThat(FrontendApiContractCatalog.normalizeJavaResponseType("List<DashboardMetricDto>"))
             .isEqualTo("DashboardMetric[]");
+        assertThat(FrontendApiContractCatalog.normalizeJavaResponseType("ChartSliceDto"))
+            .isEqualTo("ChartSlice");
+        assertThat(FrontendApiContractCatalog.normalizeJavaResponseType("FrontendPerformanceReportRequest"))
+            .isEqualTo("FrontendPerformanceReport");
         assertThat(FrontendApiContractCatalog.normalizeFrontendResponseType("Required<ChartSlice>[]"))
             .isEqualTo("ChartSlice[]");
         assertThat(FrontendApiContractCatalog.normalizeJavaResponseType("Void")).isEqualTo("void");

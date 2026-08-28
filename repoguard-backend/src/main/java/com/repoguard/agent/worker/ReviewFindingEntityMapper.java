@@ -16,10 +16,21 @@ class ReviewFindingEntityMapper {
     }
 
     ReviewFinding toEntity(Long taskId, ReviewFindingResult findingResult, ReviewResult reviewResult) {
+        return toEntity(taskId, null, findingResult, reviewResult);
+    }
+
+    ReviewFinding toEntity(
+        Long taskId,
+        Long attemptId,
+        ReviewFindingResult findingResult,
+        ReviewResult reviewResult
+    ) {
         ReviewFinding finding = new ReviewFinding();
         boolean llmFinding = sourceContains(findingResult.source(), "LLM");
         ReviewExecutionProvenance execution = reviewResult.executionProvenance();
         finding.setTaskId(taskId);
+        finding.setAttemptId(attemptId);
+        finding.setCurrentAttempt(true);
         finding.setCategory("FINDING");
         finding.setSeverity(findingResult.severity());
         finding.setSource(findingResult.source());

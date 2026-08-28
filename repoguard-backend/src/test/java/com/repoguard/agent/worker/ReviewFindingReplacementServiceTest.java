@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.never;
 
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
@@ -36,7 +37,7 @@ class ReviewFindingReplacementServiceTest {
     );
 
     @Test
-    void deletesExistingFindingsAndStoresMappedDeduplicatedFindings() {
+    void appendsAttemptOwnedDeduplicatedFindingsWithoutDeletingHistory() {
         when(sqlSessionFactory.openSession(ExecutorType.BATCH)).thenReturn(sqlSession);
         when(sqlSession.getMapper(ReviewFindingMapper.class)).thenReturn(reviewFindingMapper);
         ReviewFindingResult firstFinding = new ReviewFindingResult(
@@ -70,15 +71,16 @@ class ReviewFindingReplacementServiceTest {
             "HIGH",
             List.of(firstFinding, duplicateFinding, secondFinding)
         );
-        when(findingEntityMapper.toEntity(eq(42L), any(ReviewFindingResult.class), eq(reviewResult)))
-            .thenAnswer(invocation -> finding(invocation.getArgument(1, ReviewFindingResult.class).filePath()));
+        when(findingEntityMapper.toEntity(eq(42L), eq(101L), any(ReviewFindingResult.class), eq(reviewResult)))
+            .thenAnswer(invocation -> finding(invocation.getArgument(2, ReviewFindingResult.class).filePath()));
 
-        int count = service.replace(42L, reviewResult);
+        int count = service.replace(42L, 101L, reviewResult);
 
         assertThat(count).isEqualTo(2);
         ArgumentCaptor<ReviewFindingResult> findingResultCaptor = ArgumentCaptor.forClass(ReviewFindingResult.class);
         verify(findingEntityMapper, org.mockito.Mockito.times(2)).toEntity(
             eq(42L),
+            eq(101L),
             findingResultCaptor.capture(),
             eq(reviewResult)
         );
@@ -96,11 +98,11 @@ class ReviewFindingReplacementServiceTest {
         assertThat(mergedFinding.fixExample()).isEqualTo("Replace stdout / Use structured logger");
         assertThat(mergedFinding.reviewDimension()).contains("LLM").contains("PROJECT_RULE");
         InOrder inOrder = org.mockito.Mockito.inOrder(reviewFindingMapper, sqlSession);
-        inOrder.verify(reviewFindingMapper).delete(any());
         ArgumentCaptor<ReviewFinding> findingCaptor = ArgumentCaptor.forClass(ReviewFinding.class);
         inOrder.verify(reviewFindingMapper, org.mockito.Mockito.times(2)).insert(findingCaptor.capture());
         inOrder.verify(sqlSession).flushStatements();
         inOrder.verify(sqlSession).close();
+        verify(reviewFindingMapper, never()).delete(any());
         assertThat(findingCaptor.getAllValues()).extracting(ReviewFinding::getFilePath).containsExactly(
             "src/App.java",
             "src/Task.java"
@@ -108,11 +110,11 @@ class ReviewFindingReplacementServiceTest {
     }
 
     @Test
-    void deletesExistingFindingsWhenReviewHasNoFindings() {
-        int count = service.replace(42L, ReviewResult.completed("INFO", List.of()));
+    void emptyAttemptDoesNotDeleteHistory() {
+        int count = service.replace(42L, 101L, ReviewResult.completed("INFO", List.of()));
 
         assertThat(count).isZero();
-        verify(reviewFindingMapper).delete(any());
+        verify(reviewFindingMapper, never()).delete(any());
         verify(reviewFindingMapper, org.mockito.Mockito.never()).insert(any(ReviewFinding.class));
         org.mockito.Mockito.verifyNoInteractions(sqlSessionFactory);
     }

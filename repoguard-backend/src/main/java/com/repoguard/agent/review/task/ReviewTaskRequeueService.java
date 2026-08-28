@@ -109,7 +109,8 @@ public class ReviewTaskRequeueService {
                 task.getPrNumber(),
                 task.getCommitSha(),
                 queuedAt,
-                LogContext.currentTraceId()
+                LogContext.currentTraceId(),
+                8
             )
         );
     }

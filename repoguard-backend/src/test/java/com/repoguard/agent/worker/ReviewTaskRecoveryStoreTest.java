@@ -52,13 +52,13 @@ class ReviewTaskRecoveryStoreTest {
         ReviewTask task = stuckTask();
         LocalDateTime recoveredAt = LocalDateTime.parse("2026-07-05T00:40:00");
         LocalDateTime expiredBefore = recoveredAt.minusMinutes(30);
-        when(claimService.markRequeuePendingIfClaimOwned(task, expiredBefore, "expired"))
+        when(claimService.markRequeuePendingIfClaimOwned(task, recoveredAt, expiredBefore, "expired"))
             .thenReturn(true);
 
         boolean requeued = store.markRequeuePendingIfClaimOwned(task, recoveredAt, expiredBefore, "expired");
 
         assertThat(requeued).isTrue();
-        verify(claimService).markRequeuePendingIfClaimOwned(task, expiredBefore, "expired");
+        verify(claimService).markRequeuePendingIfClaimOwned(task, recoveredAt, expiredBefore, "expired");
     }
 
     @Test
@@ -95,13 +95,14 @@ class ReviewTaskRecoveryStoreTest {
     @Test
     void returnsFalseWhenClaimFenceLost() {
         ReviewTask task = stuckTask();
+        LocalDateTime recoveredAt = LocalDateTime.parse("2026-07-05T00:40:00");
         LocalDateTime expiredBefore = LocalDateTime.parse("2026-07-05T00:10:00");
-        when(claimService.markRequeuePendingIfClaimOwned(task, expiredBefore, "expired"))
+        when(claimService.markRequeuePendingIfClaimOwned(task, recoveredAt, expiredBefore, "expired"))
             .thenReturn(false);
 
         boolean requeued = store.markRequeuePendingIfClaimOwned(
             task,
-            LocalDateTime.parse("2026-07-05T00:40:00"),
+            recoveredAt,
             expiredBefore,
             "expired"
         );

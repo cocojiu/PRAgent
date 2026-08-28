@@ -44,6 +44,13 @@ public class ReviewMetricsRecorder {
         ).record(metrics.nonNegative(duration));
     }
 
+    void executionAttempt(String status) {
+        metrics.counter(
+            "repoguard.review.execution.attempt",
+            "status", metrics.normalize(status)
+        ).increment();
+    }
+
     void taskFailed(RuntimeException ex) {
         metrics.counter(
             "repoguard.review.task.failed",
