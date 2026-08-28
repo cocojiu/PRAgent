@@ -28,7 +28,10 @@
 
     @canonicalHost host {$REPOGUARD_FRONTEND_SERVER_NAME}
     handle @canonicalHost {
-        redir https://{$REPOGUARD_FRONTEND_SERVER_NAME}{uri} permanent
+        # REPOGUARD_FRONTEND_SERVER_NAME may contain multiple host names. Use
+        # the matched request host in the target so Caddy never tokenizes a
+        # space-separated host list as part of the redirection arguments.
+        redir https://{http.request.host}{uri} permanent
     }
 
     handle {

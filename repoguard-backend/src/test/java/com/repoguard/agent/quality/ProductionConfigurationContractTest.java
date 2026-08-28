@@ -537,11 +537,11 @@ class ProductionConfigurationContractTest {
             .contains("location /actuator/health")
             .contains("location ~ ^/actuator/(?!health(?:/|$))");
         assertThat(read(root.resolve(".env.prod.example")))
-            .contains("HEALTH_URL=http://127.0.0.1/actuator/health/readiness");
+            .contains("HEALTH_URL=http://127.0.0.1/healthz");
         assertThat(read(root.resolve("scripts/deploy-prod.sh")))
-            .contains("HEALTH_URL=\"${HEALTH_URL:-http://127.0.0.1/actuator/health/readiness}\"");
+            .contains("HEALTH_URL=\"${HEALTH_URL:-http://127.0.0.1/healthz}\"");
         assertThat(read(root.resolve(".github/workflows/release-images.yml")))
-            .contains("${HEALTH_URL:-http://127.0.0.1/actuator/health/readiness}");
+            .contains("${HEALTH_URL:-http://127.0.0.1/healthz}");
 
         String observation = read(root.resolve(".github/workflows/production-observation.yml"));
         assertThat(observation)
