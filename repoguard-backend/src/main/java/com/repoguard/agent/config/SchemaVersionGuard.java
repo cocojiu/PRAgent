@@ -1,6 +1,7 @@
 package com.repoguard.agent.config;
 
 import javax.sql.DataSource;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.InitializingBean;
@@ -27,6 +28,7 @@ public class SchemaVersionGuard implements InitializingBean {
     private final JdbcTemplate jdbcTemplate;
     private final int expectedVersion;
 
+    @Autowired
     public SchemaVersionGuard(DataSource dataSource, SchemaVersionProperties properties) {
         this(new JdbcTemplate(dataSource), properties.getExpectedVersion());
     }

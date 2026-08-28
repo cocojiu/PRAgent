@@ -361,7 +361,7 @@ app:
         rate-limit-for-period: ${REPOGUARD_LLM_RATE_LIMIT_FOR_PERIOD:10}
         rate-limit-refresh-millis: ${REPOGUARD_LLM_RATE_LIMIT_REFRESH_MILLIS:1000}
         rate-limit-timeout-millis: ${REPOGUARD_LLM_RATE_LIMIT_TIMEOUT_MILLIS:0}
-        bulkhead-max-concurrent-calls: ${REPOGUARD_LLM_BULKHEAD_MAX_CONCURRENT_CALLS:2}
+        bulkhead-max-concurrent-calls: ${REPOGUARD_LLM_BULKHEAD_MAX_CONCURRENT_CALLS:3}
         bulkhead-max-wait-millis: ${REPOGUARD_LLM_BULKHEAD_MAX_WAIT_MILLIS:250}
   rabbit:
     review:

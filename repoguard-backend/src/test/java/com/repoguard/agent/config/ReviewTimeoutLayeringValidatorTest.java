@@ -51,6 +51,22 @@ class ReviewTimeoutLayeringValidatorTest {
     }
 
     @Test
+    void rejectsExecutorEqualToBulkheadPermitCount() {
+        AsyncExecutorProperties async = new AsyncExecutorProperties();
+        async.setLlmChunkThreads(4);
+
+        assertThatThrownBy(() -> validator(
+            new ReviewPipelineBudgetProperties(),
+            new RabbitReviewQueueProperties(),
+            async,
+            new ExternalCallResilienceProperties()
+        ).afterPropertiesSet())
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("llm-chunk-threads=4", "bulkhead-max-concurrent-calls=4")
+            .hasMessageContaining("retain a permit");
+    }
+
+    @Test
     void rejectsZeroBulkheadWait() {
         ExternalCallResilienceProperties resilience = new ExternalCallResilienceProperties();
         resilience.getLlm().setBulkheadMaxWaitMillis(0);
