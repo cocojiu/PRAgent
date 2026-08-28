@@ -23,7 +23,8 @@ class ClusterCacheInvalidationMigrationTest {
 
         assertThat(migration)
             .contains("create table tenant_cache_version")
-            .contains("tenant_id bigint unsigned not null")
+            .contains("tenant_id bigint not null")
+            .doesNotContain("tenant_id bigint unsigned")
             .contains("cache_version bigint unsigned not null default 1")
             .contains("primary key (tenant_id)")
             .contains("foreign key (tenant_id) references tenant(id) on delete cascade")

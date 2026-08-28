@@ -1,5 +1,5 @@
 create table tenant_cache_version (
-    tenant_id bigint unsigned not null,
+    tenant_id bigint not null,
     cache_version bigint unsigned not null default 1,
     created_at datetime(6) not null default current_timestamp(6),
     updated_at datetime(6) not null default current_timestamp(6),
