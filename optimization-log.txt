@@ -8,7 +8,7 @@ remote-action: passed (Pull Request Quality #31309489898, Repository Governance 
 scope: 消除评审列表由客户端提交 cursorCreatedAt、cursorId、totalHint 的游标与总数控制。
 changes: 使用服务端返回的 nextCursor/hasMore；游标经 HMAC 签名并绑定规范化筛选条件与 pageSize；游标携带可信总数避免后续页重复 COUNT；非法或跨查询复用 cursor 返回 BAD_REQUEST；游标查询多取一条识别是否还有下一页。
 local-validation: ApplicationArchitectureTest、ApiContractTest、OpenApiPathsContractTest、OpenApiGeneratedClientContractTest、ReviewControllerTest、ReviewServiceImplTest、ReviewTaskListQueryBuilderTest、ReviewTaskQueryServiceImplTest、SpringBeanConstructorSelectionTest 定向验证通过，共 166 项；后端排除受工作区既有未暂存 Caddyfile 影响的 FrontendDeploymentContractTest 后通过 2271 项、跳过 7 项；前端 contracts 与任务列表测试通过，共 24 项；前端类型检查、Lint、生产构建通过。
-remote-action: pending
+remote-action: passed (Pull Request Quality #31313988147, Repository Governance #31313988151, Release Images #31313986491)
 
 2026-08-09 | item-03 | codebase-optimization-proposals
 scope: 基于 2026-08-09 当前后端、前端、数据库迁移、运行时配置和现有契约测试代码进行静态分析，形成下一阶段优化建议；本条仅记录建议，不代表已修改生产代码。
