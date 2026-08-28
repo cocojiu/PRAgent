@@ -20,6 +20,7 @@ import com.repoguard.agent.mapper.ChangedFileMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
+import com.repoguard.agent.mapper.TenantCatalogMapper;
 import com.repoguard.agent.review.task.ReviewTaskMessage;
 import com.repoguard.agent.service.NotificationDispatchService;
 import com.repoguard.agent.observability.RepoGuardMetrics;
@@ -29,6 +30,8 @@ import com.repoguard.agent.review.ReviewResult;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.review.RiskLevelRanker;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
+import com.repoguard.agent.tenancy.TenantInactiveException;
+import com.repoguard.agent.tenancy.TenantRuntimeGuard;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.apache.ibatis.session.ExecutorType;
@@ -37,6 +40,7 @@ import org.apache.ibatis.session.SqlSessionFactory;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.TransactionStatus;
@@ -66,6 +70,34 @@ class ReviewTaskExecutorImplTest {
         assertThatThrownBy(() -> new ReviewTaskExecutorImpl(reviewTaskMapper, null))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("workflow");
+    }
+
+    @Test
+    void suspendedTenantIsRejectedBeforeTaskIsLoaded() {
+        TenantCatalogMapper tenantCatalogMapper = org.mockito.Mockito.mock(TenantCatalogMapper.class);
+        ReviewExecutionWorkflow workflow = org.mockito.Mockito.mock(ReviewExecutionWorkflow.class);
+        ReviewTaskExecutorImpl guardedExecutor = new ReviewTaskExecutorImpl(
+            reviewTaskMapper,
+            workflow,
+            org.mockito.Mockito.mock(JdbcTemplate.class),
+            new TenantRuntimeGuard(tenantCatalogMapper)
+        );
+        ReviewTaskMessage tenantMessage = new ReviewTaskMessage(
+            42L,
+            "repo-guard-demo",
+            "spring-boot-demo",
+            512,
+            COMMIT_SHA,
+            LocalDateTime.parse("2026-06-05T18:00:00"),
+            null,
+            4,
+            8L
+        );
+
+        assertThatThrownBy(() -> guardedExecutor.execute(tenantMessage))
+            .isInstanceOf(TenantInactiveException.class);
+        verify(reviewTaskMapper, never()).selectById(42L);
+        verify(workflow, never()).execute(any(), any());
     }
 
     @Test

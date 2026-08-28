@@ -6,5 +6,6 @@ public enum ClusterCacheInvalidationType {
     DASHBOARD_RULES,
     DASHBOARD_OVERVIEW,
     GITHUB_OPEN_PULL_REQUESTS,
-    REVIEW_RULES
+    REVIEW_RULES,
+    TENANT_LIFECYCLE
 }

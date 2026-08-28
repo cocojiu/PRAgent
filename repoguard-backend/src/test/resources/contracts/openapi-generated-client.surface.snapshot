@@ -16,9 +16,12 @@ dashboardControllerGetSummary(): Promise<DashboardMetric[]>; // GET /api/v1/dash
 dataRetentionControllerCleanup(input?: { body?: DataRetentionCleanupRequest }): Promise<DataRetentionCleanupResponse>; // POST /api/v1/config/data-retention/cleanup
 dataRetentionControllerListCleanupAudits(input?: { query?: { backupReference?: string; mode?: string; page?: number; pageSize?: number; status?: string } }): Promise<PageResponse<DataRetentionCleanupAudit>>; // GET /api/v1/config/data-retention/cleanup-audits
 enterpriseTenantControllerCreate(input: { body: EnterpriseTenantCreateRequest }): Promise<EnterpriseTenant>; // POST /api/v1/enterprise/tenants
+enterpriseTenantControllerGet(input: { path: { tenantKey: string } }): Promise<EnterpriseTenant>; // GET /api/v1/enterprise/tenants/{tenantKey}
+enterpriseTenantControllerList(input?: { query?: { page?: number; pageSize?: number; status?: string } }): Promise<PageResponse<EnterpriseTenant>>; // GET /api/v1/enterprise/tenants
 enterpriseTenantControllerPutIdentity(input: { path: { tenantKey: string }; body: EnterpriseIdentityBindingRequest }): Promise<void>; // PUT /api/v1/enterprise/tenants/{tenantKey}/identities
 enterpriseTenantControllerPutMembership(input: { path: { tenantKey: string }; body: EnterpriseTenantMembershipRequest }): Promise<void>; // PUT /api/v1/enterprise/tenants/{tenantKey}/memberships
 enterpriseTenantControllerPutRepository(input: { path: { tenantKey: string }; body: EnterpriseTenantRepositoryRequest }): Promise<void>; // PUT /api/v1/enterprise/tenants/{tenantKey}/repositories
+enterpriseTenantControllerUpdateStatus(input: { path: { tenantKey: string }; body: EnterpriseTenantStatusRequest }): Promise<EnterpriseTenant>; // PUT /api/v1/enterprise/tenants/{tenantKey}/status
 frontendPerformanceControllerRecordPerformance(input: { body: FrontendPerformanceReport }): Promise<void>; // POST /api/v1/observability/frontend/performance
 githubWebhookControllerReceive(input: { body: Uint8Array }): Promise<GithubWebhookResponse>; // POST /api/v1/github/webhooks
 messageQueueHealthControllerGetHealth(): Promise<MessageQueueHealth>; // GET /api/v1/message-queue/health

@@ -1,6 +1,7 @@
 package com.repoguard.agent.notification.delivery;
 
 import com.repoguard.agent.external.ExternalFailureSignals;
+import com.repoguard.agent.tenancy.TenantInactiveException;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientResponseException;
@@ -9,6 +10,9 @@ import org.springframework.web.client.RestClientResponseException;
 public class NotificationDeliveryFailureClassifier {
 
     public String failureCategory(RuntimeException ex) {
+        if (ex instanceof TenantInactiveException) {
+            return "notification_tenant_inactive";
+        }
         if (ex instanceof RestClientResponseException responseException) {
             return httpFailureCategory(responseException.getStatusCode().value());
         }

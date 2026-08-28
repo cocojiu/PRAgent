@@ -9,6 +9,7 @@ import com.repoguard.agent.controller.ReviewController;
 import com.repoguard.agent.dto.AuthLogoutRequest;
 import com.repoguard.agent.dto.AuthPasswordChangeRequest;
 import com.repoguard.agent.dto.AuthRefreshRequest;
+import com.repoguard.agent.dto.EnterpriseTenantStatusRequest;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ReviewCalibrationQueueMapper;
 import com.repoguard.agent.mapper.ReviewQualityBaselineMapper;
@@ -22,6 +23,7 @@ import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.security.PasswordHashService;
 import com.repoguard.agent.security.DatabaseRateLimitWindowStore;
 import com.repoguard.agent.service.AuthService;
+import com.repoguard.agent.tenancy.EnterpriseTenantAdminService;
 import com.repoguard.agent.security.AuthTokenFilter;
 import com.repoguard.agent.review.task.ReviewTaskTransitionStore;
 import com.repoguard.agent.review.quality.ReviewQualityBaseline;
@@ -156,6 +158,7 @@ class ProductionRuntimeContextIntegrationTest {
             assertThat(context.getBeansOfType(ReviewController.class)).hasSize(1);
             assertThat(context.getBeansOfType(ReviewTaskWorker.class)).isEmpty();
             assertProductionInfrastructure(context);
+            assertTenantLifecycleCompareAndSet(context);
         }
     }
 
@@ -697,6 +700,53 @@ class ProductionRuntimeContextIntegrationTest {
                     baselineService.refreshIfDirty();
                 }
             }
+        }
+    }
+
+    private void assertTenantLifecycleCompareAndSet(ConfigurableApplicationContext context) {
+        JdbcTemplate jdbcTemplate = context.getBean(JdbcTemplate.class);
+        EnterpriseTenantAdminService service = context.getBean(EnterpriseTenantAdminService.class);
+        String tenantKey = "integration-lifecycle-" + Long.toUnsignedString(System.nanoTime());
+        jdbcTemplate.update(
+            "insert into tenant (tenant_key, display_name, status) values (?, ?, 'ACTIVE')",
+            tenantKey,
+            "Integration Lifecycle"
+        );
+        Long tenantId = jdbcTemplate.queryForObject(
+            "select id from tenant where tenant_key = ?",
+            Long.class,
+            tenantKey
+        );
+        try {
+            var suspended = service.updateStatus(
+                tenantKey,
+                new EnterpriseTenantStatusRequest(
+                    "ACTIVE",
+                    "SUSPENDED",
+                    1L,
+                    "integration lifecycle validation"
+                )
+            );
+
+            assertThat(suspended.tenantId()).isEqualTo(tenantId);
+            assertThat(suspended.status()).isEqualTo("SUSPENDED");
+            assertThat(suspended.statusVersion()).isEqualTo(2L);
+            assertThat(jdbcTemplate.queryForObject(
+                "select cache_version from tenant_cache_version where tenant_id = ?",
+                Long.class,
+                tenantId
+            )).isEqualTo(1L);
+            assertThatThrownBy(() -> service.updateStatus(
+                tenantKey,
+                new EnterpriseTenantStatusRequest(
+                    "ACTIVE",
+                    "SUSPENDED",
+                    1L,
+                    "stale lifecycle validation"
+                )
+            )).isInstanceOf(BusinessException.class);
+        } finally {
+            jdbcTemplate.update("delete from tenant where id = ?", tenantId);
         }
     }
 

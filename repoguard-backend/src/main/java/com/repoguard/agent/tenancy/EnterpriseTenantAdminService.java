@@ -1,5 +1,7 @@
 package com.repoguard.agent.tenancy;
 
+import com.repoguard.agent.cache.ClusterCacheInvalidationPublisher;
+import com.repoguard.agent.cache.ClusterCacheInvalidationType;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.dto.EnterpriseIdentityBindingRequest;
@@ -7,13 +9,22 @@ import com.repoguard.agent.dto.EnterpriseTenantCreateRequest;
 import com.repoguard.agent.dto.EnterpriseTenantDto;
 import com.repoguard.agent.dto.EnterpriseTenantMembershipRequest;
 import com.repoguard.agent.dto.EnterpriseTenantRepositoryRequest;
+import com.repoguard.agent.dto.EnterpriseTenantStatusRequest;
+import com.repoguard.agent.dto.PageResponse;
 import java.net.URI;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
+import java.sql.Timestamp;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Service;
@@ -23,10 +34,50 @@ import org.springframework.util.StringUtils;
 @Service
 public class EnterpriseTenantAdminService {
 
+    private static final long DEFAULT_TENANT_ID = 1L;
+    private static final RowMapper<EnterpriseTenantDto> TENANT_ROW_MAPPER = (resultSet, rowNum) ->
+        new EnterpriseTenantDto(
+            resultSet.getLong("id"),
+            resultSet.getString("tenant_key"),
+            resultSet.getString("display_name"),
+            resultSet.getString("status"),
+            resultSet.getLong("status_version"),
+            resultSet.getString("status_reason"),
+            localDateTime(resultSet.getTimestamp("status_changed_at")),
+            localDateTime(resultSet.getTimestamp("created_at")),
+            localDateTime(resultSet.getTimestamp("updated_at"))
+        );
+    private static final String TENANT_COLUMNS = """
+        select id, tenant_key, display_name, status, status_version, status_reason,
+               status_changed_at, created_at, updated_at
+          from tenant
+        """;
+
     private final JdbcTemplate jdbcTemplate;
+    private final ClusterCacheInvalidationPublisher cacheInvalidationPublisher;
+
+    @Autowired
+    public EnterpriseTenantAdminService(
+        JdbcTemplate jdbcTemplate,
+        ObjectProvider<ClusterCacheInvalidationPublisher> cacheInvalidationPublisherProvider
+    ) {
+        this(
+            jdbcTemplate,
+            Objects.requireNonNull(cacheInvalidationPublisherProvider, "cacheInvalidationPublisherProvider")
+                .getIfAvailable()
+        );
+    }
 
     public EnterpriseTenantAdminService(JdbcTemplate jdbcTemplate) {
+        this(jdbcTemplate, (ClusterCacheInvalidationPublisher) null);
+    }
+
+    EnterpriseTenantAdminService(
+        JdbcTemplate jdbcTemplate,
+        ClusterCacheInvalidationPublisher cacheInvalidationPublisher
+    ) {
         this.jdbcTemplate = Objects.requireNonNull(jdbcTemplate, "jdbcTemplate");
+        this.cacheInvalidationPublisher = cacheInvalidationPublisher;
     }
 
     @Transactional
@@ -52,7 +103,92 @@ public class EnterpriseTenantAdminService {
         long tenantId = key.longValue();
         addMembership(tenantId, request.initialAdminUserId(), "ADMIN", true);
         initializeTenantConfig(tenantId);
-        return new EnterpriseTenantDto(tenantId, request.tenantKey().trim(), request.displayName().trim());
+        return tenant(request.tenantKey());
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<EnterpriseTenantDto> list(int page, int pageSize, String status) {
+        String normalizedStatus = normalizeOptionalStatus(status);
+        long offset = Math.multiplyExact((long) page - 1L, pageSize);
+        Long total = jdbcTemplate.queryForObject(
+            "select count(*) from tenant where (? is null or status = ?)",
+            Long.class,
+            normalizedStatus,
+            normalizedStatus
+        );
+        List<EnterpriseTenantDto> tenants = jdbcTemplate.query(
+            TENANT_COLUMNS + """
+             where (? is null or status = ?)
+             order by id
+             limit ? offset ?
+            """,
+            TENANT_ROW_MAPPER,
+            normalizedStatus,
+            normalizedStatus,
+            pageSize,
+            offset
+        );
+        return new PageResponse<>(tenants, total == null ? 0L : total);
+    }
+
+    @Transactional(readOnly = true)
+    public EnterpriseTenantDto get(String tenantKey) {
+        return tenant(tenantKey);
+    }
+
+    @Transactional
+    public EnterpriseTenantDto updateStatus(
+        String tenantKey,
+        EnterpriseTenantStatusRequest request
+    ) {
+        EnterpriseTenantDto current = tenant(tenantKey);
+        String expectedStatus = normalizeStatus(request.expectedStatus());
+        String targetStatus = normalizeStatus(request.targetStatus());
+        if (!current.status().equals(expectedStatus)
+            || !current.statusVersion().equals(request.expectedVersion())) {
+            throw new BusinessException(
+                ErrorCode.CONFLICT,
+                "Tenant status changed; reload the tenant and retry"
+            );
+        }
+        if (expectedStatus.equals(targetStatus)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Target tenant status must be different");
+        }
+        if (current.tenantId() == DEFAULT_TENANT_ID && "SUSPENDED".equals(targetStatus)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Default tenant cannot be suspended");
+        }
+        int updated = jdbcTemplate.update(
+            """
+            update tenant
+               set status = ?,
+                   status_version = status_version + 1,
+                   status_reason = ?,
+                   status_changed_at = current_timestamp(6),
+                   updated_at = current_timestamp(6)
+             where id = ?
+               and status = ?
+               and status_version = ?
+            """,
+            targetStatus,
+            request.reason().trim(),
+            current.tenantId(),
+            expectedStatus,
+            request.expectedVersion()
+        );
+        if (updated != 1) {
+            throw new BusinessException(
+                ErrorCode.CONFLICT,
+                "Tenant status changed; reload the tenant and retry"
+            );
+        }
+        if (cacheInvalidationPublisher != null) {
+            cacheInvalidationPublisher.publish(
+                current.tenantId(),
+                ClusterCacheInvalidationType.TENANT_LIFECYCLE,
+                LocalDate.now()
+            );
+        }
+        return tenant(tenantKey);
     }
 
     @Transactional
@@ -176,6 +312,43 @@ public class EnterpriseTenantAdminService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Active tenant was not found");
         }
         return ids.getFirst();
+    }
+
+    private EnterpriseTenantDto tenant(String tenantKey) {
+        if (!StringUtils.hasText(tenantKey)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Tenant key is required");
+        }
+        List<EnterpriseTenantDto> tenants = jdbcTemplate.query(
+            TENANT_COLUMNS + " where tenant_key = ?",
+            TENANT_ROW_MAPPER,
+            tenantKey.trim()
+        );
+        if (tenants.size() != 1) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Tenant was not found");
+        }
+        return tenants.getFirst();
+    }
+
+    private String normalizeOptionalStatus(String status) {
+        if (!StringUtils.hasText(status)) {
+            return null;
+        }
+        return normalizeStatus(status);
+    }
+
+    private String normalizeStatus(String status) {
+        if (!StringUtils.hasText(status)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Tenant status is required");
+        }
+        String normalized = status.trim().toUpperCase(Locale.ROOT);
+        if (!"ACTIVE".equals(normalized) && !"SUSPENDED".equals(normalized)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Unsupported tenant status");
+        }
+        return normalized;
+    }
+
+    private static LocalDateTime localDateTime(Timestamp timestamp) {
+        return timestamp == null ? null : timestamp.toLocalDateTime();
     }
 
     private void validateIssuer(String issuer) {

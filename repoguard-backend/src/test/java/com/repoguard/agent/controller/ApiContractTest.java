@@ -329,11 +329,14 @@ class ApiContractTest {
     private Set<String> serverOnlyApiEndpointKeys() {
         return Set.of(
             "POST /api/v1/auth/refresh",
+            "GET /api/v1/enterprise/tenants",
+            "GET /api/v1/enterprise/tenants/{tenantKey}",
             "POST /api/v1/enterprise/tenants",
             "POST /api/v1/github/webhooks",
             "PUT /api/v1/enterprise/tenants/{tenantKey}/identities",
             "PUT /api/v1/enterprise/tenants/{tenantKey}/memberships",
-            "PUT /api/v1/enterprise/tenants/{tenantKey}/repositories"
+            "PUT /api/v1/enterprise/tenants/{tenantKey}/repositories",
+            "PUT /api/v1/enterprise/tenants/{tenantKey}/status"
         );
     }
 

@@ -4,6 +4,7 @@ import com.repoguard.agent.external.ExternalCallException;
 import com.repoguard.agent.external.ExternalFailureSignals;
 import com.repoguard.agent.github.GithubPullRequestHeadChangedException;
 import com.repoguard.agent.observability.ReviewFailureCategoryResolver;
+import com.repoguard.agent.tenancy.TenantInactiveException;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -17,6 +18,9 @@ public class ReviewExecutionFailureClassifier implements ReviewFailureCategoryRe
 
     @Override
     public String failureCategory(RuntimeException ex) {
+        if (ex instanceof TenantInactiveException) {
+            return "review_tenant_inactive";
+        }
         if (ex instanceof GithubPullRequestHeadChangedException) {
             return "review_superseded";
         }

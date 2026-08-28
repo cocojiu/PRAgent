@@ -23,6 +23,8 @@ GET /api/v1/dashboard/review-trend query=[] body=- bodyRequired=false
 GET /api/v1/dashboard/risk-distribution query=[] body=- bodyRequired=false
 GET /api/v1/dashboard/rules query=[] body=- bodyRequired=false
 GET /api/v1/dashboard/summary query=[] body=- bodyRequired=false
+GET /api/v1/enterprise/tenants query=[page, pageSize, status] body=- bodyRequired=false
+GET /api/v1/enterprise/tenants/{tenantKey} query=[] body=- bodyRequired=false
 GET /api/v1/message-queue/health query=[] body=- bodyRequired=false
 GET /api/v1/notification-deliveries query=[page, pageSize, status, taskId] body=- bodyRequired=false
 GET /api/v1/notification-events query=[page, pageSize, status, taskId] body=- bodyRequired=false
@@ -87,5 +89,6 @@ PUT /api/v1/config/system-settings query=[] body=SystemSettingsRequest bodyRequi
 PUT /api/v1/enterprise/tenants/{tenantKey}/identities query=[] body=EnterpriseIdentityBindingRequest bodyRequired=true
 PUT /api/v1/enterprise/tenants/{tenantKey}/memberships query=[] body=EnterpriseTenantMembershipRequest bodyRequired=true
 PUT /api/v1/enterprise/tenants/{tenantKey}/repositories query=[] body=EnterpriseTenantRepositoryRequest bodyRequired=true
+PUT /api/v1/enterprise/tenants/{tenantKey}/status query=[] body=EnterpriseTenantStatusRequest bodyRequired=true
 PUT /api/v1/users/{id}/role query=[] body=UserRoleUpdateRequest bodyRequired=true
 PUT /api/v1/users/{id}/status query=[] body=UserStatusUpdateRequest bodyRequired=true

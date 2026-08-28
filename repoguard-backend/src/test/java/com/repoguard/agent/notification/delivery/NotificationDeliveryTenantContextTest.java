@@ -10,7 +10,9 @@ import static org.mockito.Mockito.when;
 
 import com.rabbitmq.client.Channel;
 import com.repoguard.agent.notification.NotificationEventMessage;
+import com.repoguard.agent.mapper.TenantCatalogMapper;
 import com.repoguard.agent.tenancy.TenantContext;
+import com.repoguard.agent.tenancy.TenantRuntimeGuard;
 import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -75,6 +77,19 @@ class NotificationDeliveryTenantContextTest {
     }
 
     @Test
+    void suspendedTenantMessageIsRejectedBeforeDelivery() throws Exception {
+        when(metrics.startedAt()).thenReturn(4L);
+        TenantCatalogMapper tenantCatalogMapper = mock(TenantCatalogMapper.class);
+        TenantRuntimeGuard tenantRuntimeGuard = new TenantRuntimeGuard(tenantCatalogMapper);
+
+        worker(mock(JdbcTemplate.class), tenantRuntimeGuard).handle(message(23L), channel, 104L);
+
+        verify(channel).basicReject(104L, false);
+        verify(metrics).recordConsumed(4L, "rejected", "notification_tenant_inactive");
+        verify(claimService, never()).claim(11L);
+    }
+
+    @Test
     void compatibilityConstructorCapturesPublisherTenant() {
         NotificationEventMessage message;
         try (TenantContext.Scope _ = TenantContext.withTenant(44L)) {
@@ -105,6 +120,23 @@ class NotificationDeliveryTenantContextTest {
             new NotificationDeliveryFailureClassifier(),
             new NotificationDeliveryLogContextFormatter(),
             jdbcTemplate
+        );
+    }
+
+    private NotificationDeliveryWorker worker(
+        JdbcTemplate jdbcTemplate,
+        TenantRuntimeGuard tenantRuntimeGuard
+    ) {
+        return new NotificationDeliveryWorker(
+            claimService,
+            payloadParser,
+            deliveryService,
+            completionService,
+            metrics,
+            new NotificationDeliveryFailureClassifier(),
+            new NotificationDeliveryLogContextFormatter(),
+            jdbcTemplate,
+            tenantRuntimeGuard
         );
     }
 

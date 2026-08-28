@@ -462,13 +462,13 @@ This project is licensed under the MIT License. See [LICENSE](./LICENSE) for det
 
 ### 上线顺序
 
-1. 创建两份启用 Versioning 与 Object Lock 的主/异地对象存储桶，分别绑定独立 KMS Key ARN；先手工运行 `Production MySQL Backup`，确认恢复演练、V72 迁移演练和双目标 COMPLIANCE 对象校验全部成功。
-2. 在预发布数据库执行 V1–V72。V68 创建租户、成员、仓库和企业身份表，将历史业务数据回填到不可变默认租户 `id=1`；V69 进一步租户化密钥重加密作业/明细和后台清理审计；V70 创建带过期接管能力的全局/逐租户定时作业租约表；V71 为租约增加单调 fencing token；V72 创建每租户单行、单调递增的缓存版本表。Worker 每 60 秒用数据库时钟续期，只有当前 owner 与 token 能续期或释放；租约上下文随有界执行器传播并引用计数，失租后中断在途线程且禁止进入后续批次。缓存变更与租户版本在同一写事务内原子提交，每个 API/Worker 副本以 1 秒间隔分页扫描版本；发现新租户或版本变化时只清理该租户的全部本地业务缓存和仪表盘快照，不依赖可能乱序的自增事件游标，也不会产生无界事件日志。迁移必须按项目真实 Flyway SQL mode 在 MySQL 8.0 从空库完整演练。
-3. 创建 Kubernetes Secret 后执行 `kubectl apply -k deploy/kubernetes`。API 副本通过 Flyway schema history 锁串行迁移；Worker 固定设置 `SPRING_FLYWAY_ENABLED=false`，且 schema version guard 要求数据库达到 V72。生产默认租约 900 秒、心跳 60 秒；心跳间隔必须小于租约时长。缓存失效轮询器必须在每个副本启用，不得接入全局定时租约，否则其他副本会保留陈旧的本地缓存。
+1. 创建两份启用 Versioning 与 Object Lock 的主/异地对象存储桶，分别绑定独立 KMS Key ARN；先手工运行 `Production MySQL Backup`，确认恢复演练、V73 迁移演练和双目标 COMPLIANCE 对象校验全部成功。
+2. 在预发布数据库执行 V1–V73。V68 创建租户、成员、仓库和企业身份表，将历史业务数据回填到不可变默认租户 `id=1`；V69 进一步租户化密钥重加密作业/明细和后台清理审计；V70 创建带过期接管能力的全局/逐租户定时作业租约表；V71 为租约增加单调 fencing token；V72 创建每租户单行、单调递增的缓存版本表；V73 为租户增加受约束的暂停/恢复状态、单调状态版本、原因和变更时间。Worker 每 60 秒用数据库时钟续期，只有当前 owner 与 token 能续期或释放；租约上下文随有界执行器传播并引用计数，失租后中断在途线程且禁止进入后续批次。缓存变更与租户版本在同一写事务内原子提交，每个 API/Worker 副本以 1 秒间隔分页扫描版本；发现新租户或版本变化时只清理该租户的全部本地业务缓存和仪表盘快照，不依赖可能乱序的自增事件游标，也不会产生无界事件日志。迁移必须按项目真实 Flyway SQL mode 在 MySQL 8.0 从空库完整演练。
+3. 创建 Kubernetes Secret 后执行 `kubectl apply -k deploy/kubernetes`。API 副本通过 Flyway schema history 锁串行迁移；Worker 固定设置 `SPRING_FLYWAY_ENABLED=false`，且 schema version guard 要求数据库达到 V73。生产默认租约 900 秒、心跳 60 秒；心跳间隔必须小于租约时长。缓存失效轮询器必须在每个副本启用，不得接入全局定时租约，否则其他副本会保留陈旧的本地缓存。
 4. 等待 `repoguard-api`、`repoguard-worker` 和 `repoguard-frontend` 全部 Ready，再验证登录、OIDC、Webhook、人工审查、消息消费和 GitHub 回写。前端镜像固定访问集群内 `backend:8081` Service。
 5. 最后启用 HPA 告警和定时备份。完整加密备份每 6 小时执行一次；关闭的 binlog 每小时归档一次，只有主/异地对象都通过 KMS、SHA-256、Object Lock 和回读校验后才更新远端确认点。
 
-V68–V72 没有自动 down migration。创建第二个租户之前，可用旧应用版本配合默认租户数据回滚；V72 的版本表可被旧版本安全忽略，但回滚期间只能依赖原有本地缓存 TTL。一旦产生多租户数据，禁止直接回滚到不理解 `tenant_id`、定时租约或 fencing token 的二进制，只能先停止写入并从上线前已验证备份恢复。
+V68–V73 没有自动 down migration。创建第二个租户之前，可用旧应用版本配合默认租户数据回滚；V72 的版本表可被旧版本安全忽略，但回滚期间只能依赖原有本地缓存 TTL。V73 之后的旧二进制不理解暂停语义，禁止用于回滚；只能先停止写入并从上线前已验证备份恢复。
 
 ### Kubernetes Secret 契约
 
@@ -498,11 +498,14 @@ V68–V72 没有自动 down migration。创建第二个租户之前，可用旧�
 平台租户 API 只接受内置管理员 API Key 形成的 `id=0 / admin-api-key` 主体；普通租户的 ADMIN 角色不能调用。入口如下：
 
 - `POST /api/v1/enterprise/tenants`：创建租户、初始管理员和租户本地默认配置。
+- `GET /api/v1/enterprise/tenants`：按页列出租户，可按 `ACTIVE/SUSPENDED` 状态筛选。
+- `GET /api/v1/enterprise/tenants/{tenantKey}`：读取状态版本和最近一次状态变更原因。
+- `PUT /api/v1/enterprise/tenants/{tenantKey}/status`：使用期望状态和版本做乐观并发的软暂停或恢复；默认租户 `id=1` 不可暂停。
 - `PUT /api/v1/enterprise/tenants/{tenantKey}/memberships`：添加或更新成员角色和默认租户。
 - `PUT /api/v1/enterprise/tenants/{tenantKey}/repositories`：唯一绑定 GitHub 仓库与 App installation。
 - `PUT /api/v1/enterprise/tenants/{tenantKey}/identities`：绑定 OIDC issuer、subject 与本地用户。
 
-业务请求的租户只能来自已验证 OIDC 身份、成员关系、签名 Webhook 的仓库映射或可信消息；`X-RepoGuard-Tenant` 仅能在当前用户已有成员关系中切换，不能直接指定任意租户。
+业务请求的租户只能来自已验证 OIDC 身份、成员关系、签名 Webhook 的仓库映射或可信消息；`X-RepoGuard-Tenant` 仅能在当前用户已有成员关系中切换，不能直接指定任意租户。暂停会阻断新的业务请求、Webhook、租户定时批次以及审查/通知消息消费，并在同一事务推进租户缓存版本；已经开始的外部调用可能完成，暂停期间被消费者拒绝的旧消息进入既有 DLQ，恢复后必须按运维流程重放。所有控制面变更继续由企业管理审计拦截器记录，平台不提供硬删除租户。
 
 ### 不可变备份变量
 

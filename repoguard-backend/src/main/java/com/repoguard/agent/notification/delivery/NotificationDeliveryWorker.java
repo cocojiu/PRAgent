@@ -6,6 +6,7 @@ import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.notification.NotificationEventMessage;
 import com.repoguard.agent.notification.NotificationMessage;
 import com.repoguard.agent.tenancy.TenantContext;
+import com.repoguard.agent.tenancy.TenantRuntimeGuard;
 import java.io.IOException;
 import java.util.Objects;
 import java.util.Optional;
@@ -33,8 +34,33 @@ public class NotificationDeliveryWorker {
     private final NotificationDeliveryFailureClassifier failureClassifier;
     private final NotificationDeliveryLogContextFormatter logContextFormatter;
     private JdbcTemplate jdbcTemplate;
+    private TenantRuntimeGuard tenantRuntimeGuard;
 
     @Autowired
+    public NotificationDeliveryWorker(
+        NotificationDeliveryClaimService deliveryClaimService,
+        NotificationEventPayloadParser payloadParser,
+        NotificationBindingBatchDeliveryService bindingBatchDeliveryService,
+        NotificationDeliveryCompletionService deliveryCompletionService,
+        NotificationDeliveryWorkerMetricsRecorder metricsRecorder,
+        NotificationDeliveryFailureClassifier failureClassifier,
+        NotificationDeliveryLogContextFormatter logContextFormatter,
+        JdbcTemplate jdbcTemplate,
+        TenantRuntimeGuard tenantRuntimeGuard
+    ) {
+        this(
+            deliveryClaimService,
+            payloadParser,
+            bindingBatchDeliveryService,
+            deliveryCompletionService,
+            metricsRecorder,
+            failureClassifier,
+            logContextFormatter
+        );
+        this.jdbcTemplate = Objects.requireNonNull(jdbcTemplate, "jdbcTemplate");
+        this.tenantRuntimeGuard = Objects.requireNonNull(tenantRuntimeGuard, "tenantRuntimeGuard");
+    }
+
     public NotificationDeliveryWorker(
         NotificationDeliveryClaimService deliveryClaimService,
         NotificationEventPayloadParser payloadParser,
@@ -84,6 +110,9 @@ public class NotificationDeliveryWorker {
         long startedAt = metricsRecorder.startedAt();
         try {
             long tenantId = resolveTenantId(message);
+            if (tenantRuntimeGuard != null) {
+                tenantRuntimeGuard.requireActive(tenantId);
+            }
             try (TenantContext.Scope _ = TenantContext.withTenant(tenantId)) {
                 LOGGER.info(
                     "Rabbit notification message received eventId={} eventKey={} eventType={} taskId={} batchId={} operation=rabbit_consume result=received deliveryTag={}",
