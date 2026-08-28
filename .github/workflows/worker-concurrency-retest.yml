@@ -63,7 +63,7 @@ jobs:
           done
           test -s ~/.ssh/known_hosts || { echo "ssh-keyscan returned no host keys."; exit 1; }
 
-      - name: Verify remote retest assets
+      - name: Upload retest helpers
         shell: bash
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
@@ -74,18 +74,18 @@ jobs:
           test -n "${DEPLOY_PATH}" || { echo "Missing DEPLOY_PATH"; exit 1; }
           test -n "${DEPLOY_USER}" || { echo "Missing DEPLOY_USER"; exit 1; }
           ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "test -x '${DEPLOY_PATH}/performance/set-review-worker-concurrency.sh' || {
-               echo 'Missing executable remote helper: ${DEPLOY_PATH}/performance/set-review-worker-concurrency.sh' >&2
-               exit 1
-             }
-             test -x '${DEPLOY_PATH}/performance/verify-worker-comparison.sh' || {
-               echo 'Missing executable remote helper: ${DEPLOY_PATH}/performance/verify-worker-comparison.sh' >&2
-               exit 1
-             }
-             test -r '${DEPLOY_PATH}/performance/k6/review-burst-100.js' || {
-               echo 'Missing readable remote k6 script: ${DEPLOY_PATH}/performance/k6/review-burst-100.js' >&2
-               exit 1
-             }"
+            "mkdir -p '${DEPLOY_PATH}/performance/k6'"
+          scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" \
+            performance/remote/set-review-worker-concurrency.sh \
+            performance/remote/verify-worker-comparison.sh \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/performance/"
+          scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" \
+            performance/k6/review-burst-100.js \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/performance/k6/"
+          ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "chmod 0700 '${DEPLOY_PATH}/performance/set-review-worker-concurrency.sh' \
+                        '${DEPLOY_PATH}/performance/verify-worker-comparison.sh' \
+             && chmod 0644 '${DEPLOY_PATH}/performance/k6/review-burst-100.js'"
 
       - name: Switch Worker concurrency
         shell: bash
