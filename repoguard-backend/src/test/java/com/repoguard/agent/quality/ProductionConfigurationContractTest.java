@@ -568,7 +568,12 @@ class ProductionConfigurationContractTest {
         assertThat(inventory)
             .contains("LOKI_BACKEND_CONTAINER_LABEL_OK")
             .contains("LOKI_WORKER_CONTAINER_LABEL_OK")
-            .contains("repoguard-backend-worker");
+            .contains("repoguard-backend-worker")
+            .contains("running_backend_image=\"")
+            .contains("running_frontend_image=\"")
+            .contains("PRODUCTION_COMPOSE_IMAGE_SOURCE=running_containers")
+            .contains("BACKEND_IMAGE=\"${running_backend_image}\"")
+            .contains("FRONTEND_IMAGE=\"${running_frontend_image}\"");
         assertThat(dashboard)
             .contains("Filter API and worker logs")
             .contains("{container=~\\\"repoguard-backend(-worker)?\\\"}")
