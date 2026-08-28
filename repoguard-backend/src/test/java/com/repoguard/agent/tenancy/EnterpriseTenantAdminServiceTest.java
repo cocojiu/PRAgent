@@ -21,9 +21,12 @@ import com.repoguard.agent.dto.EnterpriseTenantRepositoryRequest;
 import com.repoguard.agent.dto.EnterpriseTenantDto;
 import com.repoguard.agent.dto.EnterpriseTenantStatusRequest;
 import com.repoguard.agent.dto.PageResponse;
+import java.sql.ResultSet;
+import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import org.springframework.beans.factory.ObjectProvider;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -165,6 +168,188 @@ class EnterpriseTenantAdminServiceTest {
         assertThat(result.items()).containsExactly(tenant);
         assertThat(result.total()).isEqualTo(1L);
         assertThat(result.hasMore()).isFalse();
+    }
+
+    @Test
+    void mapsTenantLifecycleColumnsAndNormalizesStatusFilter() throws Exception {
+        Timestamp changedAt = Timestamp.valueOf("2026-08-28 12:00:00");
+        when(jdbcTemplate.queryForObject(
+            anyString(),
+            eq(Long.class),
+            eq("SUSPENDED"),
+            eq("SUSPENDED")
+        )).thenReturn(1L);
+        when(jdbcTemplate.query(
+            org.mockito.ArgumentMatchers.contains("status_version"),
+            org.mockito.ArgumentMatchers.<RowMapper<EnterpriseTenantDto>>any(),
+            eq("SUSPENDED"),
+            eq("SUSPENDED"),
+            eq(20),
+            eq(0L)
+        )).thenAnswer(invocation -> {
+            RowMapper<EnterpriseTenantDto> mapper = invocation.getArgument(1);
+            ResultSet resultSet = mock(ResultSet.class);
+            when(resultSet.getLong("id")).thenReturn(8L);
+            when(resultSet.getString("tenant_key")).thenReturn("acme");
+            when(resultSet.getString("display_name")).thenReturn("Acme Corp");
+            when(resultSet.getString("status")).thenReturn("SUSPENDED");
+            when(resultSet.getLong("status_version")).thenReturn(4L);
+            when(resultSet.getString("status_reason")).thenReturn("maintenance");
+            when(resultSet.getTimestamp("status_changed_at")).thenReturn(changedAt);
+            when(resultSet.getTimestamp("created_at")).thenReturn(changedAt);
+            when(resultSet.getTimestamp("updated_at")).thenReturn(changedAt);
+            return List.of(mapper.mapRow(resultSet, 0));
+        });
+
+        PageResponse<EnterpriseTenantDto> result = service.list(1, 20, " suspended ");
+
+        assertThat(result.items()).singleElement().satisfies(tenant -> {
+            assertThat(tenant.tenantId()).isEqualTo(8L);
+            assertThat(tenant.status()).isEqualTo("SUSPENDED");
+            assertThat(tenant.statusVersion()).isEqualTo(4L);
+            assertThat(tenant.statusReason()).isEqualTo("maintenance");
+            assertThat(tenant.statusChangedAt()).isEqualTo(changedAt.toLocalDateTime());
+        });
+    }
+
+    @Test
+    void objectProviderConstructorUsesAvailableInvalidationPublisher() {
+        ClusterCacheInvalidationPublisher publisher = mock(ClusterCacheInvalidationPublisher.class);
+        @SuppressWarnings("unchecked")
+        ObjectProvider<ClusterCacheInvalidationPublisher> provider = mock(ObjectProvider.class);
+        when(provider.getIfAvailable()).thenReturn(publisher);
+
+        EnterpriseTenantAdminService providerService = new EnterpriseTenantAdminService(jdbcTemplate, provider);
+        int[] lookupCount = {0};
+        when(jdbcTemplate.query(
+            org.mockito.ArgumentMatchers.contains("status_version"),
+            org.mockito.ArgumentMatchers.<RowMapper<EnterpriseTenantDto>>any(),
+            eq("acme")
+        )).thenAnswer(invocation -> lookupCount[0]++ == 0
+            ? List.of(tenantDto(8L, "acme", "ACTIVE", 1L))
+            : List.of(tenantDto(8L, "acme", "SUSPENDED", 2L)));
+        when(jdbcTemplate.update(
+            org.mockito.ArgumentMatchers.contains("update tenant"),
+            eq("SUSPENDED"),
+            eq("maintenance"),
+            eq(8L),
+            eq("ACTIVE"),
+            eq(1L)
+        )).thenReturn(1);
+
+        providerService.updateStatus(
+            "acme",
+            new EnterpriseTenantStatusRequest("ACTIVE", "SUSPENDED", 1L, "maintenance")
+        );
+
+        verify(provider).getIfAvailable();
+        verify(publisher).publish(eq(8L), eq(ClusterCacheInvalidationType.TENANT_LIFECYCLE), any());
+    }
+
+    @Test
+    void mapsTenantIdQueryWhenUpsertingMembership() throws Exception {
+        when(jdbcTemplate.query(
+            org.mockito.ArgumentMatchers.contains("select id from tenant"),
+            org.mockito.ArgumentMatchers.<RowMapper<Long>>any(),
+            eq("acme")
+        )).thenAnswer(invocation -> {
+            RowMapper<Long> mapper = invocation.getArgument(1);
+            ResultSet resultSet = mock(ResultSet.class);
+            when(resultSet.getLong(1)).thenReturn(8L);
+            return List.of(mapper.mapRow(resultSet, 0));
+        });
+        when(jdbcTemplate.queryForObject(anyString(), eq(Integer.class), eq(12L))).thenReturn(1);
+
+        service.putMembership("acme", new EnterpriseTenantMembershipRequest(12L, "VIEWER", false));
+
+        verify(jdbcTemplate).update(
+            org.mockito.ArgumentMatchers.contains("insert into tenant_membership"),
+            eq(8L), eq(12L), eq("VIEWER"), eq(false)
+        );
+    }
+
+    @Test
+    void reactivatesSuspendedTenantWithoutOptionalPublisher() {
+        EnterpriseTenantDto suspended = tenantDto(8L, "acme", "SUSPENDED", 4L);
+        EnterpriseTenantDto active = tenantDto(8L, "acme", "ACTIVE", 5L);
+        when(jdbcTemplate.query(
+            org.mockito.ArgumentMatchers.contains("status_version"),
+            org.mockito.ArgumentMatchers.<RowMapper<EnterpriseTenantDto>>any(),
+            eq("acme")
+        )).thenReturn(List.of(suspended)).thenReturn(List.of(active));
+        when(jdbcTemplate.update(
+            org.mockito.ArgumentMatchers.contains("update tenant"),
+            eq("ACTIVE"), eq("reactivated"), eq(8L), eq("SUSPENDED"), eq(4L)
+        )).thenReturn(1);
+
+        EnterpriseTenantDto result = service.updateStatus(
+            "acme",
+            new EnterpriseTenantStatusRequest("SUSPENDED", "ACTIVE", 4L, "reactivated")
+        );
+
+        assertThat(result.status()).isEqualTo("ACTIVE");
+        assertThat(result.statusVersion()).isEqualTo(5L);
+    }
+
+    @Test
+    void rejectsInvalidStatusAndSameStatusTransitions() {
+        assertThatThrownBy(() -> service.list(1, 20, "paused"))
+            .isInstanceOfSatisfying(BusinessException.class, exception ->
+                assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.BAD_REQUEST)
+            );
+
+        tenant("acme", tenantDto(8L, "acme", "ACTIVE", 1L));
+        assertThatThrownBy(() -> service.updateStatus(
+            "acme",
+            new EnterpriseTenantStatusRequest("ACTIVE", "ACTIVE", 1L, "noop")
+        )).isInstanceOfSatisfying(BusinessException.class, exception ->
+            assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.BAD_REQUEST)
+        );
+    }
+
+    @Test
+    void mapsCompareAndSetFailureToConflict() {
+        tenant("acme", tenantDto(8L, "acme", "ACTIVE", 1L));
+        when(jdbcTemplate.update(
+            org.mockito.ArgumentMatchers.contains("update tenant"),
+            eq("SUSPENDED"), eq("maintenance"), eq(8L), eq("ACTIVE"), eq(1L)
+        )).thenReturn(0);
+
+        assertThatThrownBy(() -> service.updateStatus(
+            "acme",
+            new EnterpriseTenantStatusRequest("ACTIVE", "SUSPENDED", 1L, "maintenance")
+        )).isInstanceOfSatisfying(BusinessException.class, exception ->
+            assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.CONFLICT)
+        );
+    }
+
+    @Test
+    void rejectsMissingTenantAndMissingActiveTenant() {
+        when(jdbcTemplate.query(
+            org.mockito.ArgumentMatchers.contains("status_version"),
+            org.mockito.ArgumentMatchers.<RowMapper<EnterpriseTenantDto>>any(),
+            eq("missing")
+        )).thenReturn(List.of());
+        assertThatThrownBy(() -> service.get("missing"))
+            .isInstanceOfSatisfying(BusinessException.class, exception ->
+                assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.BAD_REQUEST)
+            );
+
+        assertThatThrownBy(() -> service.get(" "))
+            .isInstanceOfSatisfying(BusinessException.class, exception ->
+                assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.BAD_REQUEST)
+            );
+
+        when(jdbcTemplate.query(
+            org.mockito.ArgumentMatchers.contains("select id from tenant"),
+            org.mockito.ArgumentMatchers.<RowMapper<Long>>any(),
+            eq("inactive")
+        )).thenReturn(List.of());
+        assertThatThrownBy(() -> service.putMembership(
+            "inactive", new EnterpriseTenantMembershipRequest(12L, "VIEWER", false)
+        )).isInstanceOfSatisfying(BusinessException.class, exception ->
+            assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.BAD_REQUEST)
+        );
     }
 
     @Test

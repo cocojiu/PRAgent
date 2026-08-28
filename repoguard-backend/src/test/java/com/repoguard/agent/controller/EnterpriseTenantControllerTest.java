@@ -11,8 +11,11 @@ import com.repoguard.agent.authentication.AuthenticatedPrincipal;
 import com.repoguard.agent.authentication.RequestAuthenticationAttributes;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
+import com.repoguard.agent.dto.EnterpriseIdentityBindingRequest;
 import com.repoguard.agent.dto.EnterpriseTenantCreateRequest;
 import com.repoguard.agent.dto.EnterpriseTenantDto;
+import com.repoguard.agent.dto.EnterpriseTenantMembershipRequest;
+import com.repoguard.agent.dto.EnterpriseTenantRepositoryRequest;
 import com.repoguard.agent.dto.EnterpriseTenantStatusRequest;
 import com.repoguard.agent.dto.PageResponse;
 import java.util.List;
@@ -111,6 +114,51 @@ class EnterpriseTenantControllerTest {
 
         assertThat(response.data()).isEqualTo(tenant);
         verify(service).get("acme");
+    }
+
+    @Test
+    void platformAdminCanUpsertMembership() {
+        EnterpriseTenantMembershipRequest request =
+            new EnterpriseTenantMembershipRequest(12L, "VIEWER", true);
+
+        var response = controller.putMembership(
+            "acme",
+            request,
+            requestWithPrincipal(new AuthenticatedPrincipal(0L, "admin-api-key", "ADMIN", Long.MAX_VALUE))
+        );
+
+        assertThat(response.data()).isNull();
+        verify(service).putMembership("acme", request);
+    }
+
+    @Test
+    void platformAdminCanUpsertRepository() {
+        EnterpriseTenantRepositoryRequest request =
+            new EnterpriseTenantRepositoryRequest("openai", "repoguard", 77L);
+
+        var response = controller.putRepository(
+            "acme",
+            request,
+            requestWithPrincipal(new AuthenticatedPrincipal(0L, "admin-api-key", "ADMIN", Long.MAX_VALUE))
+        );
+
+        assertThat(response.data()).isNull();
+        verify(service).putRepository("acme", request);
+    }
+
+    @Test
+    void platformAdminCanUpsertIdentity() {
+        EnterpriseIdentityBindingRequest request =
+            new EnterpriseIdentityBindingRequest(12L, "https://identity.example.com", "subject");
+
+        var response = controller.putIdentity(
+            "acme",
+            request,
+            requestWithPrincipal(new AuthenticatedPrincipal(0L, "admin-api-key", "ADMIN", Long.MAX_VALUE))
+        );
+
+        assertThat(response.data()).isNull();
+        verify(service).putIdentity("acme", request);
     }
 
     private MockHttpServletRequest requestWithPrincipal(AuthenticatedPrincipal principal) {
