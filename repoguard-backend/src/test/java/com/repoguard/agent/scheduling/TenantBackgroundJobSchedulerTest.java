@@ -113,7 +113,7 @@ class TenantBackgroundJobSchedulerTest {
     }
 
     @Test
-    void scheduledAnnotationsExistOnlyOnTenantAwareEntrypoint() throws IOException {
+    void scheduledAnnotationsExistOnlyOnApprovedEntrypoints() throws IOException {
         Path mainJava = Path.of("src/main/java");
         List<Path> sourcesWithSchedules;
         long annotationCount;
@@ -127,8 +127,11 @@ class TenantBackgroundJobSchedulerTest {
 
         assertThat(sourcesWithSchedules)
             .extracting(path -> path.getFileName().toString())
-            .containsExactly("TenantBackgroundJobScheduler.java");
-        assertThat(annotationCount).isEqualTo(12L);
+            .containsExactlyInAnyOrder(
+                "ClusterCacheInvalidationPoller.java",
+                "TenantBackgroundJobScheduler.java"
+            );
+        assertThat(annotationCount).isEqualTo(13L);
     }
 
     private boolean containsScheduledAnnotation(Path path) {

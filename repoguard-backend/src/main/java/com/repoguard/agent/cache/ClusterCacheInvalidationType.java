@@ -1,0 +1,10 @@
+package com.repoguard.agent.cache;
+
+public enum ClusterCacheInvalidationType {
+    DASHBOARD_REVIEW_ACTIVITY,
+    DASHBOARD_FEEDBACK_QUALITY,
+    DASHBOARD_RULES,
+    DASHBOARD_OVERVIEW,
+    GITHUB_OPEN_PULL_REQUESTS,
+    REVIEW_RULES
+}

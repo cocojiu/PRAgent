@@ -33,7 +33,7 @@ class EnterpriseKubernetesDeploymentContractTest {
     }
 
     @Test
-    void runtimeUsesExternalSecretsV71AndInternalBackendAlias() throws IOException {
+    void runtimeUsesExternalSecretsV72AndInternalBackendAlias() throws IOException {
         List<Map<String, Object>> resources = resources();
         Map<String, Object> config = map(resource(resources, "ConfigMap", "repoguard-runtime").get("data"));
 
@@ -41,10 +41,14 @@ class EnterpriseKubernetesDeploymentContractTest {
             .containsEntry("REPOGUARD_TENANCY_ENABLED", "true")
             .containsEntry("REPOGUARD_ENTERPRISE_OIDC_ENABLED", "true")
             .containsEntry("REPOGUARD_GITHUB_APP_ENABLED", "true")
-            .containsEntry("REPOGUARD_SCHEMA_EXPECTED_VERSION", "71")
+            .containsEntry("REPOGUARD_SCHEMA_EXPECTED_VERSION", "72")
             .containsEntry("REPOGUARD_SCHEDULING_LEASE_SECONDS", "900")
             .containsEntry("REPOGUARD_SCHEDULING_HEARTBEAT_SECONDS", "60")
             .containsEntry("REPOGUARD_SCHEDULING_HEARTBEAT_THREADS", "2")
+            .containsEntry("REPOGUARD_CACHE_INVALIDATION_ENABLED", "true")
+            .containsEntry("REPOGUARD_CACHE_INVALIDATION_POLL_INTERVAL_MS", "1000")
+            .containsEntry("REPOGUARD_CACHE_INVALIDATION_BATCH_SIZE", "200")
+            .containsEntry("REPOGUARD_CACHE_INVALIDATION_MAX_BATCHES_PER_POLL", "10")
             .containsEntry("REPOGUARD_RATE_LIMIT_STORE", "database");
         assertThat(resources).noneMatch(resource -> "Secret".equals(resource.get("kind")));
 
