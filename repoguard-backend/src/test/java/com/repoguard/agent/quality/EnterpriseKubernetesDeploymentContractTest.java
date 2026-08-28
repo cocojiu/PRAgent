@@ -30,6 +30,10 @@ class EnterpriseKubernetesDeploymentContractTest {
             .hasSize(3);
         assertThat(resources.stream().filter(resource -> "HorizontalPodAutoscaler".equals(resource.get("kind"))))
             .hasSize(2);
+        assertThat(resourceNames(resources, "ResourceQuota"))
+            .containsExactly("repoguard-compute-budget");
+        assertThat(resourceNames(resources, "LimitRange"))
+            .containsExactly("repoguard-container-defaults");
     }
 
     @Test
@@ -58,9 +62,13 @@ class EnterpriseKubernetesDeploymentContractTest {
         assertThat(resourceNames(resources, "NetworkPolicy"))
             .containsExactlyInAnyOrder(
                 "repoguard-default-deny-ingress",
+                "repoguard-default-deny-egress",
                 "repoguard-allow-ingress-to-frontend",
                 "repoguard-allow-frontend-to-api"
             );
+        Map<String, Object> egressPolicy = resource(resources, "NetworkPolicy", "repoguard-default-deny-egress");
+        assertThat(list(map(egressPolicy.get("spec")).get("egress")).toString())
+            .contains("53", "443", "3306", "5671", "5672", "8081");
     }
 
     private void assertDeployment(
@@ -76,6 +84,9 @@ class EnterpriseKubernetesDeploymentContractTest {
         Map<String, Object> security = map(container.get("securityContext"));
 
         assertThat(spec.get("replicas")).isEqualTo(replicas);
+        assertThat(map(container.get("startupProbe")))
+            .containsEntry("periodSeconds", runtimeRole == null ? 5 : 10)
+            .containsEntry("failureThreshold", 30);
         assertThat(container.get("image").toString()).matches(".+@sha256:[0-9a-f]{64}");
         assertThat(security)
             .containsEntry("allowPrivilegeEscalation", false)
@@ -83,6 +94,11 @@ class EnterpriseKubernetesDeploymentContractTest {
             .containsEntry("runAsNonRoot", true);
         assertThat(stringList(map(security.get("capabilities")).get("drop"))).containsExactly("ALL");
         assertThat(podSpec.get("automountServiceAccountToken")).isEqualTo(false);
+
+        if ("worker".equals(runtimeRole)) {
+            Map<String, Object> rollingUpdate = map(map(spec.get("strategy")).get("rollingUpdate"));
+            assertThat(rollingUpdate.get("maxUnavailable")).isEqualTo(0);
+        }
 
         if (runtimeRole != null) {
             assertThat(environment(container, "REPOGUARD_RUNTIME_ROLE")).isEqualTo(runtimeRole);

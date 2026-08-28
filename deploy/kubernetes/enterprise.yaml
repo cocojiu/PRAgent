@@ -8,6 +8,35 @@ metadata:
     pod-security.kubernetes.io/warn: restricted
 ---
 apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: repoguard-compute-budget
+spec:
+  hard:
+    pods: "40"
+    requests.cpu: "32"
+    requests.memory: 32Gi
+    limits.cpu: "128"
+    limits.memory: 128Gi
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: repoguard-container-defaults
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: "1"
+        memory: 1Gi
+      defaultRequest:
+        cpu: 250m
+        memory: 256Mi
+      maxLimitRequestRatio:
+        cpu: "5"
+        memory: "4"
+---
+apiVersion: v1
 kind: ConfigMap
 metadata:
   name: repoguard-runtime
@@ -92,6 +121,13 @@ spec:
               value: "8081"
             - name: JAVA_TOOL_OPTIONS
               value: -XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
           readinessProbe:
             httpGet:
               path: /actuator/health/readiness
@@ -151,7 +187,7 @@ spec:
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      maxUnavailable: 1
+      maxUnavailable: 0
       maxSurge: 1
   selector:
     matchLabels:
@@ -201,6 +237,13 @@ spec:
               value: "8081"
             - name: JAVA_TOOL_OPTIONS
               value: -XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: management
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
           readinessProbe:
             httpGet:
               path: /actuator/health/readiness
@@ -283,6 +326,13 @@ spec:
           ports:
             - name: http
               containerPort: 8080
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 30
           readinessProbe:
             httpGet:
               path: /healthz
@@ -466,6 +516,40 @@ metadata:
 spec:
   podSelector: {}
   policyTypes: ["Ingress"]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: repoguard-default-deny-egress
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 3306
+        - protocol: TCP
+          port: 5671
+        - protocol: TCP
+          port: 5672
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: repoguard-api
+      ports:
+        - protocol: TCP
+          port: 8081
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
