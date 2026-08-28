@@ -129,11 +129,12 @@ public class ReviewTimeoutLayeringValidator implements InitializingBean {
                     + " must not exceed repoguard.async.llm-chunk-threads=" + llmChunkThreads
             );
         }
-        if (llmChunkThreads > llmBulkheadPermits) {
+        if (llmChunkThreads >= llmBulkheadPermits) {
             throw new IllegalStateException(
                 "repoguard.async.llm-chunk-threads=" + llmChunkThreads
-                    + " must not exceed app.external-call.resilience.llm.bulkhead-max-concurrent-calls="
+                    + " must stay below app.external-call.resilience.llm.bulkhead-max-concurrent-calls="
                     + llmBulkheadPermits
+                    + " so non-chunk LLM calls retain a permit"
             );
         }
         LOGGER.info(

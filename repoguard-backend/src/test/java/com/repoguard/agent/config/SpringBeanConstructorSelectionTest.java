@@ -60,6 +60,7 @@ class SpringBeanConstructorSelectionTest {
             AuthTokenService.class,
             DatabaseRateLimitWindowStore.class,
             SecretCryptoService.class,
+            SchemaVersionGuard.class,
             CacheEvictionService.class,
             DataRetentionServiceImpl.class,
             FindingFeedbackServiceImpl.class,

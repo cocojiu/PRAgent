@@ -233,7 +233,7 @@ class ProductionConfigurationContractTest {
             .contains("REPOGUARD_RABBIT_LISTENER_MAX_CONCURRENCY=1")
             .contains("REPOGUARD_REVIEW_PIPELINE_MAX_IN_FLIGHT_CHUNKS=2")
             .contains("REPOGUARD_ASYNC_LLM_CHUNK_THREADS=2")
-            .contains("REPOGUARD_LLM_BULKHEAD_MAX_CONCURRENT_CALLS=2")
+            .contains("REPOGUARD_LLM_BULKHEAD_MAX_CONCURRENT_CALLS=3")
             .contains("REPOGUARD_SCHEDULER_POOL_SIZE=2");
         assertThat(deploy)
             .contains("COMPOSE_PROFILES=\"${COMPOSE_PROFILES:-worker-split}\"")
@@ -267,12 +267,12 @@ class ProductionConfigurationContractTest {
             .containsEntry("REPOGUARD_RABBIT_LISTENER_MAX_CONCURRENCY", "${REPOGUARD_RABBIT_LISTENER_MAX_CONCURRENCY:-1}")
             .containsEntry("REPOGUARD_REVIEW_PIPELINE_MAX_IN_FLIGHT_CHUNKS", "${REPOGUARD_REVIEW_PIPELINE_MAX_IN_FLIGHT_CHUNKS:-2}")
             .containsEntry("REPOGUARD_ASYNC_LLM_CHUNK_THREADS", "${REPOGUARD_ASYNC_LLM_CHUNK_THREADS:-2}")
-            .containsEntry("REPOGUARD_LLM_BULKHEAD_MAX_CONCURRENT_CALLS", "${REPOGUARD_LLM_BULKHEAD_MAX_CONCURRENT_CALLS:-2}");
+            .containsEntry("REPOGUARD_LLM_BULKHEAD_MAX_CONCURRENT_CALLS", "${REPOGUARD_LLM_BULKHEAD_MAX_CONCURRENT_CALLS:-3}");
         assertThat(application)
             .contains("size: ${REPOGUARD_SCHEDULER_POOL_SIZE:2}")
             .contains("max-in-flight-chunks: ${REPOGUARD_REVIEW_PIPELINE_MAX_IN_FLIGHT_CHUNKS:2}")
             .contains("llm-chunk-threads: ${REPOGUARD_ASYNC_LLM_CHUNK_THREADS:2}")
-            .contains("bulkhead-max-concurrent-calls: ${REPOGUARD_LLM_BULKHEAD_MAX_CONCURRENT_CALLS:2}");
+            .contains("bulkhead-max-concurrent-calls: ${REPOGUARD_LLM_BULKHEAD_MAX_CONCURRENT_CALLS:3}");
     }
 
     @Test
