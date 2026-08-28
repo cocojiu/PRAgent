@@ -16,6 +16,8 @@ import com.repoguard.agent.review.task.ManualReviewCreationGate.Claim;
 import com.repoguard.agent.review.task.ReviewTaskCreationAssembler.CreationCommand;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import com.repoguard.agent.timeline.ReviewTimelineStatus;
+import com.repoguard.agent.tenancy.TenantContext;
+import com.repoguard.agent.tenancy.TenantQuotaService;
 import java.time.LocalDateTime;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,10 +26,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
-
 @Component
 public class ManualReviewCreationService {
-
     private final ReviewTaskMapper reviewTaskMapper;
     private final ReviewTimelineAppender reviewTimelineAppender;
     private final RepoGuardMetrics metrics;
@@ -38,8 +38,7 @@ public class ManualReviewCreationService {
     private final ReviewRepositoryDimensionService repositoryDimensionService;
     private final ReviewPullRequestGenerationCoordinator generationCoordinator;
     private final ReviewTaskCreationAssembler creationAssembler;
-
-    @Autowired
+    private final TenantQuotaService tenantQuotaService;
     public ManualReviewCreationService(
         ReviewTaskMapper reviewTaskMapper,
         ReviewTimelineAppender reviewTimelineAppender,
@@ -62,10 +61,38 @@ public class ManualReviewCreationService {
             reviewTaskAfterCommitPublisher,
             repositoryDimensionService,
             Objects.requireNonNull(generationCoordinator, "generationCoordinator"),
-            creationAssembler
+            creationAssembler,
+            null
         );
     }
-
+    @Autowired
+    public ManualReviewCreationService(
+        ReviewTaskMapper reviewTaskMapper,
+        ReviewTimelineAppender reviewTimelineAppender,
+        RepoGuardMetrics metrics,
+        CacheEvictionService cacheEvictionService,
+        PlatformTransactionManager transactionManager,
+        ManualReviewCreationGate creationGate,
+        ReviewTaskAfterCommitPublisher reviewTaskAfterCommitPublisher,
+        ReviewRepositoryDimensionService repositoryDimensionService,
+        ReviewPullRequestGenerationCoordinator generationCoordinator,
+        ReviewTaskCreationAssembler creationAssembler,
+        TenantQuotaService tenantQuotaService
+    ) {
+        this(
+            reviewTaskMapper,
+            reviewTimelineAppender,
+            metrics,
+            cacheEvictionService,
+            buildManualCreateTransactionTemplate(transactionManager),
+            creationGate,
+            reviewTaskAfterCommitPublisher,
+            repositoryDimensionService,
+            Objects.requireNonNull(generationCoordinator, "generationCoordinator"),
+            creationAssembler,
+            Objects.requireNonNull(tenantQuotaService, "tenantQuotaService")
+        );
+    }
     public ManualReviewCreationService(
         ReviewTaskMapper reviewTaskMapper,
         ReviewTimelineAppender reviewTimelineAppender,
@@ -87,10 +114,10 @@ public class ManualReviewCreationService {
             reviewTaskAfterCommitPublisher,
             repositoryDimensionService,
             null,
-            new ReviewTaskCreationAssembler(reviewTaskStateMachine)
+            new ReviewTaskCreationAssembler(reviewTaskStateMachine),
+            null
         );
     }
-
     ManualReviewCreationService(
         ReviewTaskMapper reviewTaskMapper,
         ReviewTimelineAppender reviewTimelineAppender,
@@ -112,10 +139,10 @@ public class ManualReviewCreationService {
             reviewTaskAfterCommitPublisher,
             repositoryDimensionService,
             null,
-            new ReviewTaskCreationAssembler(reviewTaskStateMachine)
+            new ReviewTaskCreationAssembler(reviewTaskStateMachine),
+            null
         );
     }
-
     ManualReviewCreationService(
         ReviewTaskMapper reviewTaskMapper,
         ReviewTimelineAppender reviewTimelineAppender,
@@ -138,10 +165,10 @@ public class ManualReviewCreationService {
             reviewTaskAfterCommitPublisher,
             repositoryDimensionService,
             generationCoordinator,
-            new ReviewTaskCreationAssembler(reviewTaskStateMachine)
+            new ReviewTaskCreationAssembler(reviewTaskStateMachine),
+            null
         );
     }
-
     private ManualReviewCreationService(
         ReviewTaskMapper reviewTaskMapper,
         ReviewTimelineAppender reviewTimelineAppender,
@@ -152,7 +179,8 @@ public class ManualReviewCreationService {
         ReviewTaskAfterCommitPublisher reviewTaskAfterCommitPublisher,
         ReviewRepositoryDimensionService repositoryDimensionService,
         ReviewPullRequestGenerationCoordinator generationCoordinator,
-        ReviewTaskCreationAssembler creationAssembler
+        ReviewTaskCreationAssembler creationAssembler,
+        TenantQuotaService tenantQuotaService
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.reviewTimelineAppender = reviewTimelineAppender;
@@ -170,34 +198,29 @@ public class ManualReviewCreationService {
         );
         this.generationCoordinator = generationCoordinator;
         this.creationAssembler = Objects.requireNonNull(creationAssembler, "creationAssembler");
+        this.tenantQuotaService = tenantQuotaService;
     }
-
     public ManualReviewResponse triggerManualReview(ManualReviewRequest request) {
         return triggerReview(request, null);
     }
-
     public ManualReviewResponse triggerWebhookReview(ManualReviewRequest request, LocalDateTime headUpdatedAt) {
         Objects.requireNonNull(headUpdatedAt, "headUpdatedAt");
         return triggerReview(request, headUpdatedAt);
     }
-
     private ManualReviewResponse triggerReview(ManualReviewRequest request, LocalDateTime headUpdatedAt) {
         CreationCommand command = creationAssembler.command(request, LocalDateTime.now());
         Claim claim = creationGate.claim(command.idempotencyKey());
         if (!claim.owner()) {
             return creationAssembler.reusedResponse(creationGate.awaitExisting(claim));
         }
-
         ReviewTask existingTask = findExistingManualTask(command);
         if (existingTask != null) {
             creationGate.completeImmediately(claim, existingTask);
             return creationAssembler.reusedResponse(existingTask);
         }
-
         ReviewTask task = creationAssembler.task(command);
         return executeManualCreateInTransaction(command, claim, headUpdatedAt, task);
     }
-
     private static TransactionTemplate buildManualCreateTransactionTemplate(PlatformTransactionManager transactionManager) {
         TransactionTemplate template = new TransactionTemplate(
             Objects.requireNonNull(transactionManager, "transactionManager")
@@ -205,7 +228,6 @@ public class ManualReviewCreationService {
         template.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
         return template;
     }
-
     private ManualReviewResponse executeManualCreateInTransaction(
         CreationCommand command,
         Claim claim,
@@ -219,11 +241,9 @@ public class ManualReviewCreationService {
             throw ex;
         }
     }
-
     private ManualReviewResponse executeManualCreateTransaction(ManualReviewCreation creation) {
         return manualCreateTransactionTemplate.execute(status -> creation.create());
     }
-
     private ManualReviewResponse doCreateManualReview(
         CreationCommand command,
         Claim claim,
@@ -248,7 +268,9 @@ public class ManualReviewCreationService {
             creationGate.completeAfterTransaction(claim, concurrentTask);
             return creationAssembler.reusedResponse(concurrentTask);
         }
-
+        if (tenantQuotaService != null) {
+            tenantQuotaService.reserveReview(TenantContext.currentTenantIdOrDefault());
+        }
         boolean staleWebhook = generationResult != null && !generationResult.accepted();
         supersedeOlderPending(command, task, staleWebhook);
         appendInitialTimeline(task, command.createdAt(), staleWebhook);
@@ -259,12 +281,10 @@ public class ManualReviewCreationService {
         if (staleWebhook) {
             return creationAssembler.staleWebhookResponse(task, command.source());
         }
-
         ReviewTaskMessage message = creationAssembler.message(task, command);
         boolean queued = reviewTaskAfterCommitPublisher.publishAfterCommit(task, message, command.createdAt());
         return creationAssembler.publishResponse(task, command.source(), queued);
     }
-
     private ReviewPullRequestGenerationCoordinator.GenerationAdvanceResult advanceGeneration(
         CreationCommand command,
         LocalDateTime headUpdatedAt,
@@ -290,7 +310,6 @@ public class ManualReviewCreationService {
         }
         return result;
     }
-
     private void supersedeOlderPending(CreationCommand command, ReviewTask task, boolean staleWebhook) {
         if (
             command.source() != ReviewTaskSource.GITHUB_WEBHOOK
@@ -308,7 +327,6 @@ public class ManualReviewCreationService {
             command.createdAt()
         );
     }
-
     private void appendInitialTimeline(ReviewTask task, LocalDateTime createdAt, boolean staleWebhook) {
         if (!staleWebhook) {
             reviewTimelineAppender.appendInitial(task.getId(), "Task queued", createdAt);
@@ -318,7 +336,6 @@ public class ManualReviewCreationService {
         reviewTimelineAppender.appendInitial(task.getId(), message, createdAt);
         reviewTimelineAppender.completeCurrentAndAppend(task.getId(), message, createdAt, ReviewTimelineStatus.DONE);
     }
-
     private ReviewTask findExistingManualTask(CreationCommand command) {
         return reviewTaskMapper.selectOne(
             new LambdaQueryWrapper<ReviewTask>()
@@ -329,11 +346,9 @@ public class ManualReviewCreationService {
                 .last("limit 1")
         );
     }
-
     private void evictDashboardReviewActivity(LocalDateTime taskCreatedAt) {
         cacheEvictionService.evictDashboardReviewActivity(taskCreatedAt.toLocalDate());
     }
-
     @FunctionalInterface
     private interface ManualReviewCreation {
         ManualReviewResponse create();

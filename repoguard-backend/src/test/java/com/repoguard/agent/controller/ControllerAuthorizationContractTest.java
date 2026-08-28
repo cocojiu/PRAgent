@@ -19,6 +19,7 @@ class ControllerAuthorizationContractTest {
     private static final Set<String> SENSITIVE_READ_ENDPOINTS = Set.of(
         "EnterpriseTenantController#get",
         "EnterpriseTenantController#list",
+        "EnterpriseTenantQuotaController#get",
         "SystemConfigController#getGithubIntegration",
         "SystemConfigController#getMysqlIntegration",
         "SystemConfigController#getRabbitMqIntegration",

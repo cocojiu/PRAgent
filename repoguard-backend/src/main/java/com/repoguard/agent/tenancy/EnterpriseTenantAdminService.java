@@ -424,5 +424,13 @@ public class EnterpriseTenantAdminService {
             """,
             tenantId
         );
+        jdbcTemplate.update(
+            """
+            insert into tenant_quota_config (tenant_id, quota_version, max_daily_reviews)
+            values (?, 1, ?)
+            """,
+            tenantId,
+            TenantQuotaService.defaultMaxDailyReviews()
+        );
     }
 }

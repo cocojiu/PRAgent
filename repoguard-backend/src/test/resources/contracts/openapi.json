@@ -3331,6 +3331,113 @@
         }
       }
     },
+    "/api/v1/enterprise/tenants/{tenantKey}/quota" : {
+      "get" : {
+        "tags" : [ "EnterpriseTenantQuota" ],
+        "operationId" : "enterpriseTenantQuotaControllerGet",
+        "x-controller-operation" : "EnterpriseTenantQuotaController#get",
+        "parameters" : [ {
+          "name" : "tenantKey",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "EnterpriseTenantQuotaDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/EnterpriseTenantQuotaDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "put" : {
+        "tags" : [ "EnterpriseTenantQuota" ],
+        "operationId" : "enterpriseTenantQuotaControllerUpdate",
+        "x-controller-operation" : "EnterpriseTenantQuotaController#update",
+        "parameters" : [ {
+          "name" : "tenantKey",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "EnterpriseTenantQuotaRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/EnterpriseTenantQuotaRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "EnterpriseTenantQuotaDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/EnterpriseTenantQuotaDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/enterprise/tenants/{tenantKey}/repositories" : {
       "put" : {
         "tags" : [ "EnterpriseTenant" ],
@@ -6576,6 +6683,57 @@
           }
         },
         "required" : [ "userId", "role", "defaultTenant" ]
+      },
+      "EnterpriseTenantQuotaDto" : {
+        "type" : "object",
+        "x-java-type" : "EnterpriseTenantQuotaDto",
+        "properties" : {
+          "tenantId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "tenantKey" : {
+            "type" : "string"
+          },
+          "quotaVersion" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "maxDailyReviews" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "usedReviews" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "usageDate" : {
+            "type" : "object",
+            "x-java-type" : "LocalDate"
+          },
+          "updatedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "EnterpriseTenantQuotaRequest" : {
+        "type" : "object",
+        "x-java-type" : "EnterpriseTenantQuotaRequest",
+        "properties" : {
+          "expectedVersion" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          },
+          "maxDailyReviews" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 1000000
+          }
+        },
+        "required" : [ "expectedVersion", "maxDailyReviews" ]
       },
       "EnterpriseTenantRepositoryRequest" : {
         "type" : "object",

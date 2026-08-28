@@ -10,6 +10,8 @@ import com.repoguard.agent.dto.AuthLogoutRequest;
 import com.repoguard.agent.dto.AuthPasswordChangeRequest;
 import com.repoguard.agent.dto.AuthRefreshRequest;
 import com.repoguard.agent.dto.EnterpriseTenantStatusRequest;
+import com.repoguard.agent.dto.EnterpriseTenantQuotaDto;
+import com.repoguard.agent.dto.EnterpriseTenantQuotaRequest;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ReviewCalibrationQueueMapper;
 import com.repoguard.agent.mapper.ReviewQualityBaselineMapper;
@@ -24,6 +26,7 @@ import com.repoguard.agent.security.PasswordHashService;
 import com.repoguard.agent.security.DatabaseRateLimitWindowStore;
 import com.repoguard.agent.service.AuthService;
 import com.repoguard.agent.tenancy.EnterpriseTenantAdminService;
+import com.repoguard.agent.tenancy.TenantQuotaService;
 import com.repoguard.agent.security.AuthTokenFilter;
 import com.repoguard.agent.review.task.ReviewTaskTransitionStore;
 import com.repoguard.agent.review.quality.ReviewQualityBaseline;
@@ -159,6 +162,7 @@ class ProductionRuntimeContextIntegrationTest {
             assertThat(context.getBeansOfType(ReviewTaskWorker.class)).isEmpty();
             assertProductionInfrastructure(context);
             assertTenantLifecycleCompareAndSet(context);
+            assertTenantQuotaCompareAndSet(context);
         }
     }
 
@@ -746,6 +750,53 @@ class ProductionRuntimeContextIntegrationTest {
                 )
             )).isInstanceOf(BusinessException.class);
         } finally {
+            jdbcTemplate.update("delete from tenant where id = ?", tenantId);
+        }
+    }
+
+    private void assertTenantQuotaCompareAndSet(ConfigurableApplicationContext context) {
+        JdbcTemplate jdbcTemplate = context.getBean(JdbcTemplate.class);
+        TenantQuotaService service = context.getBean(TenantQuotaService.class);
+        String tenantKey = "integration-quota-" + Long.toUnsignedString(System.nanoTime());
+        jdbcTemplate.update(
+            "insert into tenant (tenant_key, display_name, status) values (?, ?, 'ACTIVE')",
+            tenantKey,
+            "Integration Quota"
+        );
+        Long tenantId = jdbcTemplate.queryForObject(
+            "select id from tenant where tenant_key = ?",
+            Long.class,
+            tenantKey
+        );
+        jdbcTemplate.update(
+            "insert into tenant_quota_config (tenant_id, quota_version, max_daily_reviews) values (?, 1, 3)",
+            tenantId
+        );
+        try {
+            EnterpriseTenantQuotaDto initial = service.get(tenantKey);
+            assertThat(initial.tenantId()).isEqualTo(tenantId);
+            assertThat(initial.quotaVersion()).isEqualTo(1L);
+            assertThat(initial.maxDailyReviews()).isEqualTo(3);
+            assertThat(initial.usedReviews()).isZero();
+
+            service.reserveReview(tenantId);
+            service.reserveReview(tenantId);
+            assertThat(service.get(tenantKey).usedReviews()).isEqualTo(2);
+
+            EnterpriseTenantQuotaDto updated = service.update(
+                tenantKey,
+                new EnterpriseTenantQuotaRequest(1L, 5)
+            );
+            assertThat(updated.quotaVersion()).isEqualTo(2L);
+            assertThat(updated.maxDailyReviews()).isEqualTo(5);
+            assertThat(updated.usedReviews()).isEqualTo(2);
+            assertThatThrownBy(() -> service.update(
+                tenantKey,
+                new EnterpriseTenantQuotaRequest(1L, 6)
+            )).isInstanceOf(BusinessException.class);
+        } finally {
+            jdbcTemplate.update("delete from tenant_quota_usage where tenant_id = ?", tenantId);
+            jdbcTemplate.update("delete from tenant_quota_config where tenant_id = ?", tenantId);
             jdbcTemplate.update("delete from tenant where id = ?", tenantId);
         }
     }
