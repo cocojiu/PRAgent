@@ -176,6 +176,7 @@ repoguard:
     operation-audit-days: ${REPOGUARD_OPERATION_AUDIT_RETENTION_DAYS:365}
     system-setting-log-days: ${REPOGUARD_SYSTEM_SETTING_LOG_RETENTION_DAYS:365}
     notification-log-days: ${REPOGUARD_NOTIFICATION_LOG_RETENTION_DAYS:90}
+    tenant-quota-usage-days: ${REPOGUARD_TENANT_QUOTA_USAGE_RETENTION_DAYS:90}
     review-attempt-payload-days: ${REPOGUARD_REVIEW_ATTEMPT_PAYLOAD_RETENTION_DAYS:90}
     review-attempt-metadata-days: ${REPOGUARD_REVIEW_ATTEMPT_METADATA_RETENTION_DAYS:180}
   observability:

@@ -4,6 +4,7 @@ import com.repoguard.agent.config.OperationalDataRetentionProperties;
 import com.repoguard.agent.config.SchedulerRuntimeEnabled;
 import com.repoguard.agent.mapper.OperationalDataRetentionMapper;
 import com.repoguard.agent.tenancy.ScheduledJobLeaseContext;
+import com.repoguard.agent.tenancy.TenantContext;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.LocalDateTime;
 import java.util.function.Function;
@@ -68,6 +69,11 @@ public class OperationalDataRetentionWorker {
         clean("system_setting_log", properties.getSystemSettingLogDays(), cutoff -> mapper.deleteSystemSettingLogs(cutoff, limit));
         clean("notification_delivery_log", properties.getNotificationLogDays(), cutoff -> mapper.deleteNotificationDeliveries(cutoff, limit));
         clean("notification_event", properties.getNotificationLogDays(), cutoff -> mapper.deleteNotificationEvents(cutoff, limit));
+        clean(
+            "tenant_quota_usage",
+            properties.getTenantQuotaUsageDays(),
+            cutoff -> mapper.deleteTenantQuotaUsage(TenantContext.currentTenantIdOrDefault(), cutoff, limit)
+        );
     }
 
     private void clean(String table, int retentionDays, Function<LocalDateTime, Integer> delete) {

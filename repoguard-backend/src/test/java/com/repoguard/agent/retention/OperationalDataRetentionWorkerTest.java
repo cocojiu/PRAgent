@@ -37,6 +37,7 @@ class OperationalDataRetentionWorkerTest {
         verify(mapper).deleteSystemSettingLogs(any(), eq(37));
         verify(mapper).deleteNotificationDeliveries(any(), eq(37));
         verify(mapper).deleteNotificationEvents(any(), eq(37));
+        verify(mapper).deleteTenantQuotaUsage(eq(1L), any(), eq(37));
         verify(mapper).deleteCleanupAudits(any(), eq(37));
     }
 
@@ -50,7 +51,7 @@ class OperationalDataRetentionWorkerTest {
             new OperationalDataRetentionWorker(mapper, properties, meterRegistry).cleanupTenantData();
         }
 
-        verify(mapper, times(3)).insertAudit(eq(23L), anyString(), any(), eq(0), eq("SUCCESS"), isNull());
+        verify(mapper, times(4)).insertAudit(eq(23L), anyString(), any(), eq(0), eq("SUCCESS"), isNull());
         verify(mapper, never()).deleteRefreshTokens(any(), anyInt());
         verify(mapper, never()).deleteCleanupAudits(any(), anyInt());
         meterRegistry.close();

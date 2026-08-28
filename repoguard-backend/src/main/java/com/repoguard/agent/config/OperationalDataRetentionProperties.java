@@ -15,6 +15,7 @@ public class OperationalDataRetentionProperties {
     private int operationAuditDays = 365;
     private int systemSettingLogDays = 365;
     private int notificationLogDays = 90;
+    private int tenantQuotaUsageDays = 90;
     private int reviewAttemptPayloadDays = 90;
     private int reviewAttemptMetadataDays = 180;
 
@@ -34,6 +35,8 @@ public class OperationalDataRetentionProperties {
     public void setSystemSettingLogDays(int systemSettingLogDays) { this.systemSettingLogDays = systemSettingLogDays; }
     public int getNotificationLogDays() { return notificationLogDays; }
     public void setNotificationLogDays(int notificationLogDays) { this.notificationLogDays = notificationLogDays; }
+    public int getTenantQuotaUsageDays() { return tenantQuotaUsageDays; }
+    public void setTenantQuotaUsageDays(int tenantQuotaUsageDays) { this.tenantQuotaUsageDays = tenantQuotaUsageDays; }
     public int getReviewAttemptPayloadDays() { return reviewAttemptPayloadDays; }
     public void setReviewAttemptPayloadDays(int reviewAttemptPayloadDays) { this.reviewAttemptPayloadDays = reviewAttemptPayloadDays; }
     public int getReviewAttemptMetadataDays() { return reviewAttemptMetadataDays; }

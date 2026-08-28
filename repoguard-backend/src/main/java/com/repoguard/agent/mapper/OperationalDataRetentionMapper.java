@@ -28,6 +28,13 @@ public interface OperationalDataRetentionMapper {
     @Delete("delete from notification_event where id in (select id from (select e.id from notification_event e where e.created_at < #{cutoff} and not exists (select 1 from notification_delivery_log d where d.event_id = e.id) order by e.created_at, e.id limit #{limit}) c)")
     int deleteNotificationEvents(@Param("cutoff") LocalDateTime cutoff, @Param("limit") int limit);
 
+    @Delete("delete from tenant_quota_usage where tenant_id = #{tenantId} and usage_date < #{cutoff} order by usage_date limit #{limit}")
+    int deleteTenantQuotaUsage(
+        @Param("tenantId") long tenantId,
+        @Param("cutoff") LocalDateTime cutoff,
+        @Param("limit") int limit
+    );
+
     @Delete("delete from operational_data_cleanup_audit where id in (select id from (select id from operational_data_cleanup_audit where created_at < #{cutoff} order by created_at, id limit #{limit}) c)")
     int deleteCleanupAudits(@Param("cutoff") LocalDateTime cutoff, @Param("limit") int limit);
 
