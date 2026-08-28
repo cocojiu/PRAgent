@@ -571,9 +571,14 @@ class ProductionConfigurationContractTest {
             .contains("repoguard-backend-worker")
             .contains("running_backend_image=\"")
             .contains("running_frontend_image=\"")
+            .contains("running_cors_origins=\"")
+            .contains("running_frontend_server_name=\"")
             .contains("PRODUCTION_COMPOSE_IMAGE_SOURCE=running_containers")
+            .contains("PRODUCTION_COMPOSE_RUNTIME_SOURCE=running_containers")
             .contains("BACKEND_IMAGE=\"${running_backend_image}\"")
-            .contains("FRONTEND_IMAGE=\"${running_frontend_image}\"");
+            .contains("FRONTEND_IMAGE=\"${running_frontend_image}\"")
+            .contains("APP_CORS_ALLOWED_ORIGINS=\"${running_cors_origins}\"")
+            .contains("REPOGUARD_FRONTEND_SERVER_NAME=\"${running_frontend_server_name}\"");
         assertThat(dashboard)
             .contains("Filter API and worker logs")
             .contains("{container=~\\\"repoguard-backend(-worker)?\\\"}")

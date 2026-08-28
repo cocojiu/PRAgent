@@ -135,10 +135,20 @@ jobs:
 
           running_backend_image="$(docker inspect --format '{{.Config.Image}}' repoguard-backend 2>/dev/null || true)"
           running_frontend_image="$(docker inspect --format '{{.Config.Image}}' repoguard-frontend 2>/dev/null || true)"
-          if [ -n "${running_backend_image}" ] && [ -n "${running_frontend_image}" ]; then
+          running_backend_environment="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' repoguard-backend 2>/dev/null || true)"
+          running_caddy_environment="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' repoguard-caddy 2>/dev/null || true)"
+          running_cors_origins="$(printf '%s\n' "${running_backend_environment}" \
+            | sed -n 's/^APP_CORS_ALLOWED_ORIGINS=//p' | tail -n 1)"
+          running_frontend_server_name="$(printf '%s\n' "${running_caddy_environment}" \
+            | sed -n 's/^REPOGUARD_FRONTEND_SERVER_NAME=//p' | tail -n 1)"
+          if [ -n "${running_backend_image}" ] && [ -n "${running_frontend_image}" ] \
+            && [ -n "${running_cors_origins}" ] && [ -n "${running_frontend_server_name}" ]; then
             echo "PRODUCTION_COMPOSE_IMAGE_SOURCE=running_containers"
+            echo "PRODUCTION_COMPOSE_RUNTIME_SOURCE=running_containers"
             if BACKEND_IMAGE="${running_backend_image}" \
               FRONTEND_IMAGE="${running_frontend_image}" \
+              APP_CORS_ALLOWED_ORIGINS="${running_cors_origins}" \
+              REPOGUARD_FRONTEND_SERVER_NAME="${running_frontend_server_name}" \
               docker compose --env-file .env -f docker-compose.prod.yml config --services \
                 >"${production_config_stdout}" 2>"${production_config_stderr}"; then
               echo "PRODUCTION_COMPOSE_CONFIG_OK=true"
@@ -148,6 +158,7 @@ jobs:
             fi
           else
             echo "PRODUCTION_COMPOSE_IMAGE_SOURCE=missing_running_container"
+            echo "PRODUCTION_COMPOSE_RUNTIME_SOURCE=missing_running_container_or_runtime_env"
             echo "PRODUCTION_COMPOSE_CONFIG_OK=false"
           fi
 
