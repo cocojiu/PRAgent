@@ -10,6 +10,7 @@ import com.repoguard.agent.notification.outbox.NotificationOutboxEventStore;
 import com.repoguard.agent.notification.outbox.NotificationPublishCompensationQuery;
 import com.repoguard.agent.notification.outbox.NotificationPublishEventStateUpdater;
 import com.repoguard.agent.notification.outbox.NotificationPublishFailureDecision;
+import com.repoguard.agent.tenancy.TenantContext;
 import java.time.LocalDateTime;
 import java.util.Objects;
 import java.util.UUID;
@@ -141,7 +142,9 @@ public class NotificationEventPublishCoordinator {
             event.getEventKey(),
             event.getEventType(),
             event.getTaskId(),
-            event.getBatchId()
+            event.getBatchId(),
+            TenantContext.currentTenantId(),
+            event.getTraceId()
         );
     }
 

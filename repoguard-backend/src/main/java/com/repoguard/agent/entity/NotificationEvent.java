@@ -13,6 +13,7 @@ public class NotificationEvent {
     private String eventType;
     private Long taskId;
     private Long batchId;
+    private String traceId;
     private String payload;
     private String status;
     private Integer retryCount;
@@ -35,6 +36,8 @@ public class NotificationEvent {
     public void setTaskId(Long taskId) { this.taskId = taskId; }
     public Long getBatchId() { return batchId; }
     public void setBatchId(Long batchId) { this.batchId = batchId; }
+    public String getTraceId() { return traceId; }
+    public void setTraceId(String traceId) { this.traceId = traceId; }
     public String getPayload() { return payload; }
     public void setPayload(String payload) { this.payload = payload; }
     public String getStatus() { return status; }

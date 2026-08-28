@@ -15,6 +15,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.slf4j.MDC;
 import org.springframework.dao.DuplicateKeyException;
 
 class NotificationOutboxEventStoreTest {
@@ -56,6 +57,29 @@ class NotificationOutboxEventStoreTest {
         assertThat(inserted.getNextRetryAt()).isNotNull();
         assertThat(inserted.getCreatedAt()).isNotNull();
         assertThat(inserted.getUpdatedAt()).isNotNull();
+    }
+
+    @Test
+    void capturesTraceIdWhenCreatingPendingEvent() {
+        when(eventMapper.insert(any(NotificationEvent.class))).thenAnswer(invocation -> {
+            NotificationEvent event = invocation.getArgument(0);
+            event.setId(100L);
+            return 1;
+        });
+        MDC.put("traceId", "trace-outbox-42");
+
+        try {
+            NotificationEvent created = store.createPendingEvent(
+                NotificationEventType.REVIEW_COMPLETED.code(),
+                task(),
+                null,
+                payload("REVIEW_COMPLETED:42")
+            );
+
+            assertThat(created.getTraceId()).isEqualTo("trace-outbox-42");
+        } finally {
+            MDC.remove("traceId");
+        }
     }
 
     @Test

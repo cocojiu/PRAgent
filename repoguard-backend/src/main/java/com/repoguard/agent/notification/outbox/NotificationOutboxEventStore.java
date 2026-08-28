@@ -8,6 +8,7 @@ import com.repoguard.agent.mapper.NotificationEventMapper;
 import com.repoguard.agent.messaging.RabbitPublishClaim;
 import com.repoguard.agent.messaging.RabbitPublishClaimConditions;
 import com.repoguard.agent.notification.NotificationEventStatus;
+import com.repoguard.agent.observability.LogContext;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
@@ -35,6 +36,7 @@ public class NotificationOutboxEventStore {
         event.setEventType(eventType);
         event.setTaskId(task.getId());
         event.setBatchId(batchId);
+        event.setTraceId(truncateTraceId(LogContext.currentTraceId()));
         event.setPayload(payload.json());
         event.setStatus(NotificationEventStatus.PENDING.code());
         event.setRetryCount(0);
@@ -113,5 +115,12 @@ public class NotificationOutboxEventStore {
             NotificationEventStatus.PUBLISH_FAILED.code(),
             NotificationEventStatus.DELIVERY_FAILED.code()
         );
+    }
+
+    private String truncateTraceId(String traceId) {
+        if (traceId == null || traceId.isBlank()) {
+            return null;
+        }
+        return traceId.length() <= 128 ? traceId : traceId.substring(0, 128);
     }
 }

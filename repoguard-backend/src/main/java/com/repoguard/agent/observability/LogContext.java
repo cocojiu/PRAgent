@@ -45,6 +45,12 @@ public final class LogContext {
         return MDC.get(TRACE_ID);
     }
 
+    public static TraceScope withTraceId(String traceId) {
+        String previousTraceId = MDC.get(TRACE_ID);
+        putOrRemove(TRACE_ID, traceId);
+        return new TraceScope(previousTraceId);
+    }
+
     private static Scope put(String taskId, String prNumber, String repository, String traceId) {
         String previousTaskId = MDC.get(TASK_ID);
         String previousPrNumber = MDC.get(PR_NUMBER);
@@ -103,6 +109,25 @@ public final class LogContext {
             putOrRemove(TASK_ID, previousTaskId);
             putOrRemove(PR_NUMBER, previousPrNumber);
             putOrRemove(REPOSITORY, previousRepository);
+            putOrRemove(TRACE_ID, previousTraceId);
+        }
+    }
+
+    public static final class TraceScope implements AutoCloseable {
+
+        private final String previousTraceId;
+        private boolean closed;
+
+        private TraceScope(String previousTraceId) {
+            this.previousTraceId = previousTraceId;
+        }
+
+        @Override
+        public void close() {
+            if (closed) {
+                return;
+            }
+            closed = true;
             putOrRemove(TRACE_ID, previousTraceId);
         }
     }

@@ -5,6 +5,7 @@ import com.repoguard.agent.config.WorkerRuntimeEnabled;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.notification.NotificationEventMessage;
 import com.repoguard.agent.notification.NotificationMessage;
+import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.tenancy.TenantContext;
 import com.repoguard.agent.tenancy.TenantRuntimeGuard;
 import java.io.IOException;
@@ -108,42 +109,44 @@ public class NotificationDeliveryWorker {
         @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag
     ) throws IOException {
         long startedAt = metricsRecorder.startedAt();
-        try {
-            long tenantId = resolveTenantId(message);
-            if (tenantRuntimeGuard != null) {
-                tenantRuntimeGuard.requireActive(tenantId);
+        try (LogContext.TraceScope _ = LogContext.withTraceId(message.traceId())) {
+            try {
+                long tenantId = resolveTenantId(message);
+                if (tenantRuntimeGuard != null) {
+                    tenantRuntimeGuard.requireActive(tenantId);
+                }
+                try (TenantContext.Scope _ = TenantContext.withTenant(tenantId)) {
+                    LOGGER.info(
+                        "Rabbit notification message received eventId={} eventKey={} eventType={} taskId={} batchId={} operation=rabbit_consume result=received deliveryTag={}",
+                        message.eventId(),
+                        logContextFormatter.safePart(message.eventKey()),
+                        logContextFormatter.safePart(message.eventType()),
+                        message.taskId(),
+                        message.batchId(),
+                        deliveryTag
+                    );
+                    deliver(message.eventId());
+                }
+            } catch (RuntimeException ex) {
+                rejectRuntimeFailure(message, channel, deliveryTag, startedAt, ex);
+                return;
+            } catch (Error error) {
+                rejectFatalFailure(message, channel, deliveryTag, startedAt, error);
+                throw error;
             }
-            try (TenantContext.Scope _ = TenantContext.withTenant(tenantId)) {
-                LOGGER.info(
-                    "Rabbit notification message received eventId={} eventKey={} eventType={} taskId={} batchId={} operation=rabbit_consume result=received deliveryTag={}",
-                    message.eventId(),
-                    logContextFormatter.safePart(message.eventKey()),
-                    logContextFormatter.safePart(message.eventType()),
-                    message.taskId(),
-                    message.batchId(),
-                    deliveryTag
-                );
-                deliver(message.eventId());
-            }
-        } catch (RuntimeException ex) {
-            rejectRuntimeFailure(message, channel, deliveryTag, startedAt, ex);
-            return;
-        } catch (Error error) {
-            rejectFatalFailure(message, channel, deliveryTag, startedAt, error);
-            throw error;
+            channel.basicAck(deliveryTag, false);
+            metricsRecorder.recordConsumed(startedAt, "success");
+            LOGGER.info(
+                "Rabbit notification message consumed eventId={} eventKey={} eventType={} taskId={} batchId={} operation=rabbit_consume result=success durationMs={} deliveryTag={}",
+                message.eventId(),
+                logContextFormatter.safePart(message.eventKey()),
+                logContextFormatter.safePart(message.eventType()),
+                message.taskId(),
+                message.batchId(),
+                metricsRecorder.elapsedMillis(startedAt),
+                deliveryTag
+            );
         }
-        channel.basicAck(deliveryTag, false);
-        metricsRecorder.recordConsumed(startedAt, "success");
-        LOGGER.info(
-            "Rabbit notification message consumed eventId={} eventKey={} eventType={} taskId={} batchId={} operation=rabbit_consume result=success durationMs={} deliveryTag={}",
-            message.eventId(),
-            logContextFormatter.safePart(message.eventKey()),
-            logContextFormatter.safePart(message.eventType()),
-            message.taskId(),
-            message.batchId(),
-            metricsRecorder.elapsedMillis(startedAt),
-            deliveryTag
-        );
     }
 
     private long resolveTenantId(NotificationEventMessage message) {
