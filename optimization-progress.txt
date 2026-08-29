@@ -41,13 +41,13 @@
 远程验证：首次 Pull Request Quality #31336620285 发现集成测试默认与覆盖 instance-count 被合并为“1,2”，已在修复提交中消除重复参数；修复后 Pull Request Quality #31336781364（含真实 MySQL 共享计数）、Repository Governance #31336781384/#31336779315、Release Images #31336779322、Auto Create Pull Request #31336779365 均成功。
 
 2026-08-10 | 优化-07B | PRAgent-test 发布流水线去重
-状态：本地完成，远程流水线待检查
+状态：已完成
 变更：PRAgent-test push 的 Release Images 不再重复执行已由同 SHA Pull Request Quality 覆盖的后端测试和前端 lint/unit tests；Release 仍重新编译可发布 JAR、执行前端类型检查与生产构建、生产依赖审计、镜像构建/运行验证和漏洞扫描；main、master、标签及手动发布继续执行完整 verify 与前端 quality，避免降低正式发布门禁。
 本地验证：工作流 YAML 契约定向验证通过；后端发布工具链契约同时校验 PRAgent-test 去重分支和正式发布完整验证分支。
 远程验证：通过。Pull Request Quality #31337135186、Repository Governance #31337135187/#31337133416、Release Images #31337133417、Auto Create Pull Request #31337133410 均成功；Release Images 在 3 分 12 秒内完成，后端完整 verify 与前端 quality 分支按预期跳过，发布构建、审计、运行验证和镜像扫描保留。
 
 2026-08-10 | 优化-07C | 前端资源预算口径与超限定位
-状态：本地完成，远程流水线待检查
+状态：已完成
 变更：首屏资源预算明确标记为共享成本，并新增首屏请求数独立预算；总览路由预算明确标记为相对首屏的增量 JavaScript、CSS 与请求数，消除“critical”口径歧义；预算超限时输出对应 chunk/CSS/module 或请求资源清单，便于直接定位回归来源；最大异步 chunk 继续独立约束。
 本地验证：前端类型检查与生产构建通过；构建日志实测首屏共享 JavaScript 85.8 KiB、CSS 10.3 KiB、8 个请求，总览路由增量 JavaScript 10.6 KiB、CSS 2.2 KiB、12 个请求，最大异步 JavaScript chunk 113.5 KiB，均在独立预算内。
 远程验证：通过。Pull Request Quality #31337424953、Repository Governance #31337424951/#31337422535、Release Images #31337422526、Auto Create Pull Request #31337422536 均成功；远程前端质量门禁与生产资源预算构建均通过。
