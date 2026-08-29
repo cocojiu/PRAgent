@@ -134,6 +134,7 @@ public interface DashboardDailySnapshotMapper {
 
     @Insert("""
         insert into dashboard_review_daily_stat (
+            tenant_id,
             stat_date,
             task_count,
             high_risk_count,
@@ -145,6 +146,7 @@ public interface DashboardDailySnapshotMapper {
             duration_sample_count
         )
         select
+            tenant_id as tenant_id,
             created_date as stat_date,
             count(*) as task_count,
             sum(case when assessment_status = 'COMPLETE' and risk_bucket_norm = 'HIGH' then 1 else 0 end) as high_risk_count,
@@ -156,7 +158,7 @@ public interface DashboardDailySnapshotMapper {
             sum(case when finished_at is not null then 1 else 0 end) as duration_sample_count
         from review_task
         where created_date = #{statDate}
-        group by created_date
+        group by tenant_id, created_date
         """)
     int insertReviewDailyStatsForDate(@Param("statDate") LocalDate statDate);
 
@@ -168,11 +170,13 @@ public interface DashboardDailySnapshotMapper {
 
     @Insert("""
         insert into dashboard_rule_daily_stat (
+            tenant_id,
             stat_date,
             rule_id,
             total_count
         )
         select
+            t.tenant_id as tenant_id,
             t.created_date as stat_date,
             coalesce(f.rule_id, 'LLM') as rule_id,
             count(*) as total_count
@@ -181,7 +185,7 @@ public interface DashboardDailySnapshotMapper {
         where f.category = 'FINDING'
           and f.current_attempt = 1
           and t.created_date = #{statDate}
-        group by t.created_date, coalesce(f.rule_id, 'LLM')
+        group by t.tenant_id, t.created_date, coalesce(f.rule_id, 'LLM')
         """)
     int insertRuleDailyStatsForDate(@Param("statDate") LocalDate statDate);
 
@@ -193,6 +197,7 @@ public interface DashboardDailySnapshotMapper {
 
     @Insert("""
         insert into dashboard_llm_quality_daily_stat (
+            tenant_id,
             stat_date,
             model_label,
             repository_label,
@@ -211,6 +216,7 @@ public interface DashboardDailySnapshotMapper {
             false_positive_feedback_count
         )
         select
+            task_stats.tenant_id as tenant_id,
             task_stats.stat_date as stat_date,
             task_stats.model_label as model_label,
             task_stats.repository_label as repository_label,
@@ -229,6 +235,7 @@ public interface DashboardDailySnapshotMapper {
             coalesce(feedback_stats.false_positive_feedback_count, 0) as false_positive_feedback_count
         from (
             select
+                tenant_id as tenant_id,
                 created_date as stat_date,
                 llm_model_label as model_label,
                 repository_label as repository_label,
@@ -255,10 +262,11 @@ public interface DashboardDailySnapshotMapper {
             where llm_status_norm <> ''
               and llm_status_norm <> 'pending'
               and created_date = #{statDate}
-            group by created_date, llm_model_label, repository_label
+            group by tenant_id, created_date, llm_model_label, repository_label
         ) task_stats
         left join (
             select
+                t.tenant_id as tenant_id,
                 t.created_date as stat_date,
                 t.llm_model_label as model_label,
                 t.repository_label as repository_label,
@@ -276,8 +284,9 @@ public interface DashboardDailySnapshotMapper {
             where t.llm_status_norm <> ''
               and t.llm_status_norm <> 'pending'
               and t.created_date = #{statDate}
-            group by t.created_date, t.llm_model_label, t.repository_label
-        ) feedback_stats on feedback_stats.stat_date = task_stats.stat_date
+            group by t.tenant_id, t.created_date, t.llm_model_label, t.repository_label
+        ) feedback_stats on feedback_stats.tenant_id = task_stats.tenant_id
+            and feedback_stats.stat_date = task_stats.stat_date
             and feedback_stats.model_label = task_stats.model_label
             and feedback_stats.repository_label = task_stats.repository_label
         """)

@@ -60,19 +60,23 @@ class DashboardDailySnapshotMapperSqlContractTest {
         String ruleRefresh = insertSql("insertRuleDailyStatsForDate");
 
         assertThat(reviewRefresh)
-            .contains("insert into dashboard_review_daily_stat")
+            .contains("insert into dashboard_review_daily_stat ( tenant_id,")
             .contains("from review_task")
+            .contains("tenant_id as tenant_id")
             .contains("created_date as stat_date")
             .contains("where created_date = #{statdate}")
+            .contains("group by tenant_id, created_date")
             .contains("risk_bucket_norm")
             .contains("status_norm")
             .contains("assessment_status = 'complete'");
         assertThat(ruleRefresh)
-            .contains("insert into dashboard_rule_daily_stat")
+            .contains("insert into dashboard_rule_daily_stat ( tenant_id,")
             .contains("from review_finding f")
             .contains("join review_task t on t.id = f.task_id")
+            .contains("t.tenant_id as tenant_id")
             .contains("t.created_date as stat_date")
-            .contains("t.created_date = #{statdate}");
+            .contains("t.created_date = #{statdate}")
+            .contains("group by t.tenant_id, t.created_date");
     }
 
     @Test
@@ -80,7 +84,11 @@ class DashboardDailySnapshotMapperSqlContractTest {
         String sql = insertSql("insertLlmQualityDailyStatsForDate");
 
         assertThat(sql)
-            .contains("insert into dashboard_llm_quality_daily_stat")
+            .contains("insert into dashboard_llm_quality_daily_stat ( tenant_id,")
+            .contains("task_stats.tenant_id as tenant_id")
+            .contains("tenant_id as tenant_id, created_date as stat_date")
+            .contains("t.tenant_id as tenant_id")
+            .contains("feedback_stats.tenant_id = task_stats.tenant_id")
             .contains("llm_model_label as model_label")
             .contains("repository_label as repository_label")
             .contains("llm_status_norm <> ''")

@@ -144,3 +144,13 @@
 S3 门槛：生产 environment 当前没有 REPOGUARD_BACKUP_ROLE_ARN、主/异地 bucket、region、KMS 标识；Production MySQL Backup #33227393864 与 Binlog Archive #33222241248 均在获取 aws-region 前失败，未执行任何备份上传。配置真实标识前不得重跑。
 Worker 门槛：建议窗口为 2026-08-30 02:00–02:30（Asia/Shanghai）；第一轮 concurrency=2、task_count=12、start_pr_number=503000000，第二轮 concurrency=4、task_count=12、start_pr_number=503000100。执行前必须确认隔离库/vhost和磁盘门槛。
 可用性备注：Production Availability #33232519974 和手动重跑 #33238281618 的六个端点均从 GitHub Runner 连接超时（curl 28）；本地复测仍为健康 200/UP，自动告警 Issue #151 保持开放，需从外部网络/防火墙侧处理，非应用代码失败。
+
+2026-08-30 | 优化-16 补充验收 | 严格单机 Worker 并发与生产恢复闭环
+状态：已完成。P0 代码项、测试分支发布门禁、2 核单机隔离压测和生产恢复均已闭环；付费系统盘快照及主/异地 S3 按用户明确的“无付费服务、无其他服务器”约束取消，不宣称已具备异地容灾，继续保留单故障域风险。
+压测中修复：真实隔离运行发现 DashboardDailySnapshotMapper 的三条 INSERT ... SELECT 未显式写入并限定 tenant_id，全局租户拦截器追加条件后使规则快照联表出现 tenant_id 歧义；提交 59f87f83 为 review、rule、LLM quality 三类快照补齐目标租户列、租户分组和派生表租户联接，并强化 SQL 契约测试。
+代码验证：定向契约 11 项通过；后端完整 Maven 回归 2523 项通过、10 项跳过、0 失败、0 错误。测试镜像 backend-pragent-test-59f87f836784 的 OCI revision 为 59f87f836784673681639a5f0ba7ebe7046d3862，镜像摘要为 sha256:3d478bca252314583cb99c4d2bdba8c88d2267839af4ded000cc41ea36173606。
+远程验收：Repository Governance #33258103554、Pull Request Quality #33258103548、Auto Create Pull Request #33258097467、Repository Governance push #33258097462、Release Images #33258097459 均成功；PR #154 已纳入该修复和本条上线证据。
+隔离条件：生产六个 RepoGuard 容器停用后，在同一台 2 CPU、3583312 KiB 可用内存主机启动一次性 MySQL、RabbitMQ 和测试后端；数据库仅从备份导入临时卷并迁移到 schema 75，使用隔离 Compose project、卷、网络、数据库和 vhost，外部 GitHub/LLM 通过一次性 HTTPS 模拟器和 Java trustedCertEntry 信任库完成，不写生产数据库。
+正式压测：run_id=20260830020333。concurrency=2 时 12/12 COMPLETED，P95/P99/最大耗时均为 18 秒，峰值 CPU 157.86%、内存配额 47.84%；concurrency=4 时 12/12 COMPLETED，P95/P99/最大耗时均为 15 秒，峰值 CPU 167.40%、内存配额 47.74%。两轮均为 0 失败、0 未完成、0 重复 PR、0 ready/unacked、0 关键 SQL/数据完整性/OOM/执行器拒绝错误。
+生产恢复：正式压测返回 test_rc=0、restore_rc=0，六个生产容器全部 healthy，healthz=200，review/notification 队列 ready/unacked 均为 0 且消费者均为 1；生产 review_task 状态计数与压测前完全一致（APPROVED 2、CHANGES_REQUESTED 2、COMPLETED 84、FAILED 2、PENDING_HUMAN_REVIEW 86、REJECTED 87、SUPERSEDED 55），无压测容器、卷、网络、进程或工作目录残留。
+证据与备份：正式结果保存为 .deploy-runtime/production-backups/worker-pressure-20260830020333.txt，服务器与本机 SHA-256 均为 0559653231159069385831189a5b4d91d9b24255bd3015bf24035aa4a406f215；完整生产数据库、非敏感配置、敏感配置和分区信息已分别加密保存到本机 .deploy-runtime/production-backups，数据库密文 repoguard-prod-db-20260829-190602.sql.gz.enc 的 SHA-256 为 da050318c308a7cb2035de172c0e9453e4f3d6a85c5a676fc30be267be4e5913。上述目录被 Git 忽略；一次性 TLS 私钥与远端 /run 压测脚本已删除。
