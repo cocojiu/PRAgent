@@ -128,10 +128,19 @@
 真实 MySQL 证据：固定数据集 500 tasks/10000 findings；selectSummary P95/P99 为 0.22501/0.22501 ms，使用 idx_review_finding_category，聚合子查询使用临时表；selectGroups P95/P99 为 0.168303/0.168303 ms，使用 idx_review_finding_category，窗口排序与分组使用临时表并出现 filesort。两条 SQL 的 EXPLAIN ANALYZE 均记录实际 rows/time，事务回滚后测试组织数据为 0。
 
 2026-08-11 | 优化-16 | 大 PR 分块降级规则扫描收敛
-状态：第二阶段 CPU 热点修复本地完成，远程流水线与线上复测待执行
+状态：代码与远程流水线已完成；严格 2C4G 生产复测待隔离环境与安全窗口
 线上触发证据：2 核服务器处理 PR #134 的 164 个分块时，超过 LLM 总分块上限的分块仍逐个执行规则引擎；连续采样 backend CPU 为 95.64%-101.20%，load1 为 5.24-5.72。任务 109796 回到 QUEUED/PARTIAL，生产 review queue 积压 187 条且消费者为 0，按 2C4G 强制停止条件终止 5/10 RPS 测试。
 变更：分块失败、预算耗尽、执行器拒绝和总分块超限只记录降级指标与空结果标记；RuleMergeStage 继续对完整 diff 执行唯一一次规则扫描，保留完整规则覆盖、PARTIAL_FALLBACK、LLM token/成本和 finding 去重语义。移除 LlmChunkReviewAggregator 对 RuleBasedPullRequestReviewer 的冗余依赖，并增加架构棘轮与端到端回归，防止恢复逐分块规则扫描。线上首次滚动后进一步定位唯一一次完整规则扫描仍被 glob 正则回溯拖慢：改为线性 glob 匹配，每文件预计算适用规则并使用 10000 项有界 Caffeine 文件分类缓存；敏感字面量熵计算从每次遍历 65536 槽收敛为 ASCII 定长桶和稀疏扩展字符表。
 本地验证：定向回归通过；241 文件、14460 行新增代码的规则扫描回归在 10 秒预算内完成，RuleBasedPullRequestReviewerTest 全类 17 项耗时 1.901 秒。首次未优化版本的同一回归运行 79 秒仍未结束，JDK thread dump 定位在 ReviewFilePolicy 的 glob 正则回溯。第二阶段后端完整 verify 通过，2339 项通过、10 项跳过，JaCoCo 门禁和 JAR 构建通过；本机 JDK 26 跳过 Enforcer，并排除用户既有 Caddyfile 改动所影响的 FrontendDeploymentContractTest，精确 JDK 25 由远程 Actions 验证。
 远程验收：提交 ef8a44f6；Pull Request Quality #31477316354、Repository Governance #31477316358/#31477312520、Release Images #31477312530、Auto Create Pull Request #31477312540 均成功；精确 JDK 25、真实 MySQL/RabbitMQ、前端质量与构建、镜像运行和高危/严重漏洞门禁全部通过。新后端镜像标签为 backend-pragent-test-ef8a44f6e654。
 首次线上滚动：部署前已备份生产库至 /opt/repoguard/backups/repoguard_demo_before_d5d7aa0f_20260811-173508.sql.gz，仅滚动 backend 到 d5d7aa0f；健康与 revision 校验通过，消费者从 0 恢复为 1，ready 从 206 快速降至 12。随后任务 109798 对 241 文件、14412 additions 的完整规则扫描使 backend CPU 98.62%-104.22% 持续超过 14 分钟，确认第二个 CPU 热点并按强制停止条件中断任务；临时 API-only 尝试被 monolith 部署契约拒绝后已立即恢复 combined 且健康。
-下一步：提交并推送第二阶段修复，等待 JDK 25 与 Release Images 通过后仅滚动 backend；用当前 241 文件 PR 验证规则扫描时长、CPU、消费者和队列收敛。根分区仍仅余 8.9G，且当前使用生产库 repoguard_demo 与生产 vhost /repoguard，因此在磁盘大于 10G并切换 repoguard_test 与 /repoguard-test 前不执行 5/10 RPS。
+远程验收补充：第二阶段提交 ef8a44f6 的 Pull Request Quality #31477316354、Repository Governance #31477316358/#31477312520、Release Images #31477312530、Auto Create Pull Request #31477312540 均成功；后续规则扫描热点修复提交 1c86b55e 亦已进入 PRAgent-test 并通过同类代码门禁。
+外部复测门槛：严格 2C4G 241 文件生产压测仍未执行。当前主机根分区余量约 8.9G，且运行生产库 repoguard_demo 与生产 vhost /repoguard；取得超过 10G 可用空间并切换隔离库 repoguard_test、隔离 vhost /repoguard-test 后，才允许安排 5/10 RPS 和 Worker 并发对比。
+
+2026-08-29 | 生产部署与观测盘点验收
+状态：代码、发布门禁与 Compose 生产部署已完成；双目标备份和严格 Worker 压测待外部配置/隔离环境
+发布证据：PR #149 合并提交 f94f2708；手动部署运行 #33197356843 使用不可变镜像 backend-main-f94f2708a3b0、frontend-main-f94f2708a3b0，backend/worker/frontend 镜像 revision 均与 f94f2708 对齐，健康检查通过。
+观测证据：PR #150 合并提交 0e6e876a；主分支 Production Observability Inventory #33198662774 成功，PRODUCTION_COMPOSE_CONFIG_OK=true、Compose 服务为 rabbitmq/mysql/backend/frontend/caddy、旧观测容器为 0、Alloy/Grafana/Loki/socket-proxy 健康且 Docker 解析错误为 0。
+S3 门槛：生产 environment 当前没有 REPOGUARD_BACKUP_ROLE_ARN、主/异地 bucket、region、KMS 标识；Production MySQL Backup #33227393864 与 Binlog Archive #33222241248 均在获取 aws-region 前失败，未执行任何备份上传。配置真实标识前不得重跑。
+Worker 门槛：建议窗口为 2026-08-30 02:00–02:30（Asia/Shanghai）；第一轮 concurrency=2、task_count=12、start_pr_number=503000000，第二轮 concurrency=4、task_count=12、start_pr_number=503000100。执行前必须确认隔离库/vhost和磁盘门槛。
+可用性备注：Production Availability #33232519974 和手动重跑 #33238281618 的六个端点均从 GitHub Runner 连接超时（curl 28）；本地复测仍为健康 200/UP，自动告警 Issue #151 保持开放，需从外部网络/防火墙侧处理，非应用代码失败。
