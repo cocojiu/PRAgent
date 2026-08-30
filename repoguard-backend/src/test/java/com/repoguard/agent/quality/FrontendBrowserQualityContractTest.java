@@ -67,6 +67,24 @@ class FrontendBrowserQualityContractTest {
         );
     }
 
+    @Test
+    void browserSeedCoversTenantAndReviewWorkflowContracts() throws IOException {
+        String workflowSpec = read("repoguard-frontend/e2e/review-workflows.spec.ts");
+
+        assertThat(workflowSpec).contains(
+            "tenant login switch keeps list data isolated and rejects a cross-tenant deep link",
+            "manual review creation reuses the same commit instead of creating a duplicate",
+            "failed review retries once and surfaces polling backoff",
+            "human approval is single-submit and unlocks GitHub preview and publication",
+            "TENANT_RESOURCE_NOT_FOUND",
+            "missing CSRF header",
+            "/api/v1/reviews/manual",
+            "/human-review",
+            "/retry",
+            "/github-comments"
+        );
+    }
+
     private static String read(String relativePath) throws IOException {
         return Files.readString(repositoryRoot().resolve(relativePath), StandardCharsets.UTF_8);
     }
