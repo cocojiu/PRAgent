@@ -12,6 +12,29 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: false,
-    include: ["src/**/*.test.ts"]
+    include: ["src/**/*.test.ts"],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "json-summary", "html"],
+      reportsDirectory: "coverage",
+      include: [
+        "src/api/**/*.ts",
+        "src/stores/**/*.ts",
+        "src/router/**/*.ts",
+        "src/composables/**/*.ts",
+        "src/features/**/composables/**/*.ts"
+      ],
+      exclude: [
+        "src/**/*.test.ts",
+        "src/api/generatedOpenApi.ts",
+        "src/api/generatedOpenApiModels.ts"
+      ],
+      thresholds: {
+        statements: 64,
+        branches: 52,
+        functions: 55,
+        lines: 64
+      }
+    }
   }
 });

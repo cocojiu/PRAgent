@@ -13,6 +13,9 @@ target/
 logs/
 secrets/
 performance/
+coverage/
+playwright-report/
+test-results/
 .deploy/
 .deploy-runtime/
 releases/
