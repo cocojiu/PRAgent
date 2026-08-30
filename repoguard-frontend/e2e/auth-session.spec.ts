@@ -40,7 +40,7 @@ const installSeedApi = async (page: Page, role: SeedRole = "ADMIN") => {
 
     if (path === "/api/v1/auth/login") {
       await fulfillJson(route, {
-        accessToken: "browser-access-token",
+        accessToken: "test-browser-session-credential",
         tokenType: "Bearer",
         accessTokenExpiresInSeconds: 900,
         refreshTokenExpiresInSeconds: 604800,
@@ -65,7 +65,7 @@ const installSeedApi = async (page: Page, role: SeedRole = "ADMIN") => {
       refreshCount += 1;
       refreshCsrfHeader = request.headers()["x-repoguard-csrf"] ?? "";
       await fulfillJson(route, {
-        accessToken: "browser-refreshed-access-token",
+        accessToken: "test-browser-refreshed-credential",
         tokenType: "Bearer",
         accessTokenExpiresInSeconds: 900,
         refreshTokenExpiresInSeconds: 604800,
