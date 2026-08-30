@@ -484,6 +484,8 @@ V68–V77 没有自动 down migration。V77 已移除旧单列外键，不能通
 
 - 2026-08-30：P1-02 Kubernetes 出站网络隔离已完成代码与测试分支门禁，生产精确授权和集群连通验收待环境。实现提交 `feb00d08` 将全 namespace 的任意 443/3306/5671/5672 放行改为默认拒绝，并按工作负载拆分 CoreDNS、前端到 API、API/Worker 到 MySQL、RabbitMQ 和公网 HTTPS；数据库与消息队列同时要求 namespace/pod 标签，公网 HTTPS 显式排除私网、回环、链路本地、云元数据和保留地址。部署合约锁定每条放行必须具有目标和端口，并验证各工作负载不得获得额外能力。本地 `mvn verify` 共 2539 项测试通过（0 失败、0 错误、11 条件跳过），JaCoCo 与打包通过；Pull Request Quality Run `33311241655`、Release Images Run `33311239842`、Production Observability Image Security Run `33311241584`、Repository Governance Run `33311239860`/`33311241532` 和 Auto Create Pull Request Run `33311239951` 全部成功。标准 NetworkPolicy 不能表达 GitHub、LLM 和 OIDC 的域名白名单，当前公网 IPv4 443 规则只是阻断私网与元数据访问的过渡基线；生产必须补齐托管 MySQL/RabbitMQ 精确 CIDR，并通过 FQDN-aware CNI 或 egress gateway 收敛 SaaS 域名，完成允许/拒绝正反向探针后，才能将 P1-02 标记为完全完成。
 
+- 2026-08-31：P1-03 第一阶段“真实浏览器回归与前端覆盖门禁”已完成。实现提交 `b368c210` 引入 Playwright Chromium 生产构建回归、Vitest V8 覆盖率门禁和 Java 配置合约，修复提交 `c5544966` 将浏览器夹具凭据改为测试前缀，避免敏感信息启发式扫描误报；路由烟雾测试与真实浏览器端到端测试已分离。当前浏览器基线稳定覆盖安全深链登录、CSRF 与登出清理、整页刷新后的 Cookie 会话单次续期，以及普通成员访问管理页的 RBAC 拒绝；失败时保留 trace、截图和视频。前端 37 个测试文件共 147 项测试通过，覆盖率实测 statements 64.37%、branches 52.57%、functions 55.22%、lines 64.80%，门禁分别为 64%、52%、55%、64%；3 项 Chromium 用例通过。本地后端 `mvn verify` 共 2542 项测试通过（0 失败、0 错误、11 条件跳过），JaCoCo 与打包通过；修复提交对应 Pull Request Quality Run `33323263058`、Release Images Run `33323261165`、Production Observability Image Security Run `33323263072`、Repository Governance Run `33323261248`/`33323263061` 和 Auto Create Pull Request Run `33323261193` 全部成功。P1-03 尚未整体完成：第二阶段需接入隔离的真实后端、MySQL 与 RabbitMQ，补齐租户切换与越权反例、人工复核幂等、任务轮询失败重试及 GitHub 评论预览/发布场景。
+
 ### Kubernetes Secret 契约
 
 `repoguard-enterprise-env` 至少提供以下环境变量：
