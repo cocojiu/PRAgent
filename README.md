@@ -472,7 +472,7 @@ This project is licensed under the MIT License. See [LICENSE](./LICENSE) for det
 
 1. 创建两份启用 Versioning 与 Object Lock 的主/异地对象存储桶，分别绑定独立 KMS Key ARN；先手工运行 `Production MySQL Backup`，确认恢复演练、V77 迁移演练和双目标 COMPLIANCE 对象校验全部成功。
 2. 在预发布数据库执行 V1–V77。V68–V75 建立租户、租约、缓存版本、配额和通知 trace 基础；V76 expand 阶段补齐组合候选键和子表索引；V77 contract 阶段先逐关系统计脏数据并在任一异常时停止，再把 20 条父子关系切换为 `(tenant_id, id)` 组合外键。V77 必须在备份验证完成、API/Worker 停写的维护窗口执行；若诊断失败，保留 `flyway_v77_tenant_relation_violation` 计数，修复数据并执行 Flyway repair 后重试，不得删除业务数据绕过。迁移必须按项目真实 Flyway SQL mode 在 MySQL 8.0 从空库完整演练。
-3. 创建 Kubernetes Secret 后执行 `kubectl apply -k deploy/kubernetes`。API 副本通过 Flyway schema history 锁串行迁移；Worker 固定设置 `SPRING_FLYWAY_ENABLED=false`，且 schema version guard 要求数据库达到 V77。生产默认租约 900 秒、心跳 60 秒；心跳间隔必须小于租约时长。缓存失效轮询器必须在每个副本启用，不得接入全局定时租约，否则其他副本会保留陈旧的本地缓存。清单同时启用 API/Worker/前端 startupProbe，避免 Flyway、JVM 或静态资源冷启动被 liveness 误重启；Worker 滚动更新保持 `maxUnavailable=0`，命名空间通过 ResourceQuota/LimitRange 限制总资源，并默认拒绝出站流量，仅放行 DNS、HTTPS、MySQL 和 RabbitMQ 端口。
+3. 创建 Kubernetes Secret，并先按“工作负载出站网络契约”完成 CoreDNS、MySQL、RabbitMQ 与 GitHub/LLM 出站授权，再执行 `kubectl apply -k deploy/kubernetes`。API 副本通过 Flyway schema history 锁串行迁移；Worker 固定设置 `SPRING_FLYWAY_ENABLED=false`，且 schema version guard 要求数据库达到 V77。生产默认租约 900 秒、心跳 60 秒；心跳间隔必须小于租约时长。缓存失效轮询器必须在每个副本启用，不得接入全局定时租约，否则其他副本会保留陈旧的本地缓存。清单同时启用 API/Worker/前端 startupProbe，避免 Flyway、JVM 或静态资源冷启动被 liveness 误重启；Worker 滚动更新保持 `maxUnavailable=0`，命名空间通过 ResourceQuota/LimitRange 限制总资源。出站策略按 frontend、API、Worker 分离，任何放行规则都必须同时指定目标和端口。
 4. 等待 `repoguard-api`、`repoguard-worker` 和 `repoguard-frontend` 全部 Ready，再验证登录、OIDC、Webhook、人工审查、消息消费和 GitHub 回写。前端镜像固定访问集群内 `backend:8081` Service。
 5. 最后启用 HPA 告警和定时备份。完整加密备份每 6 小时执行一次；关闭的 binlog 每小时归档一次，只有主/异地对象都通过 KMS、SHA-256、Object Lock 和回读校验后才更新远端确认点。
 
@@ -504,6 +504,25 @@ V68–V77 没有自动 down migration。V77 已移除旧单列外键，不能通
 - `repoguard.github-app.private-key`
 
 私钥使用 PKCS#8 或 PKCS#1 RSA PEM。OIDC issuer 必须为 HTTPS，token 必须包含配置的 audience 和默认 `amr=mfa`；身份不会按邮箱自动创建，必须由平台管理员预先绑定 issuer 与 subject。
+
+### 工作负载出站网络契约
+
+`deploy/kubernetes/enterprise.yaml` 先对命名空间内全部 Pod 执行默认拒绝，再使用独立策略授权 DNS、frontend→API、API 依赖和 Worker 依赖。frontend 只能访问带 `app.kubernetes.io/name=repoguard-api` 标签的 Pod 的 8081 端口，不能直接访问公网、MySQL 或 RabbitMQ。DNS 仅允许访问 `kube-system` 中带 `k8s-app=kube-dns` 标签的 CoreDNS Pod；发行版使用不同标签或 NodeLocal DNS 时，必须在生产 overlay 中替换为经核验的 DNS 目标，禁止增加无 `to` 目标的 53 端口规则。
+
+集群内 MySQL 和 RabbitMQ 必须同时标记 namespace 与目标 Pod，避免只凭端口误放行同命名空间或其他命名空间的任意服务：
+
+```bash
+kubectl label namespace <mysql-namespace> networking.repoguard.io/mysql=true --overwrite
+kubectl label pod -n <mysql-namespace> <mysql-pod> networking.repoguard.io/mysql=true --overwrite
+kubectl label namespace <rabbitmq-namespace> networking.repoguard.io/rabbitmq=true --overwrite
+kubectl label pod -n <rabbitmq-namespace> <rabbitmq-pod> networking.repoguard.io/rabbitmq=true --overwrite
+```
+
+生产默认使用外部托管 MySQL/RabbitMQ 时，以上 Pod selector 不会匹配，属于有意的 fail-closed 行为。部署 overlay 必须把对应 peer 替换为经平台与数据库团队复核的最窄 CIDR，优先使用单地址 `/32`；不得使用 `0.0.0.0/0` 放行 3306、5671 或 5672。依赖地址变化必须先更新并验证 overlay，再切换服务端点。
+
+标准 Kubernetes NetworkPolicy 无法稳定表达 GitHub 和 LLM 域名。基础策略因此只允许 API/Worker 访问公网 IPv4 的 TCP 443，并显式排除 RFC1918、回环、链路本地、云元数据、基准测试、文档、组播和保留网段；这能阻止通过 HTTPS 访问集群私网与元数据服务，但仍不是最终的 SaaS 域名白名单。生产必须使用平台支持的 FQDN-aware CNI 或 egress gateway，把目标收敛到 `REPOGUARD_OUTBOUND_GITHUB_ALLOWED_HOSTS`、`REPOGUARD_OUTBOUND_LLM_ALLOWED_HOSTS` 和 OIDC issuer 的实际域名后，才能把 P1-02 标记为完成。若使用固定 SaaS CIDR，必须建立供应商地址变更监控和可审计的更新流程。
+
+上线验收至少从每类 Pod 执行正反向探测：frontend 可访问 `backend:8081` 但不能访问公网 443、MySQL 或 RabbitMQ；API/Worker 可访问获批数据库、消息队列和 SaaS 目标，但不能访问任意私网地址、`169.254.169.254` 或未批准的公网域名。先保存旧 NetworkPolicy 清单作为回滚工件；回滚只能恢复上一版已审批策略，不能临时删除 default-deny。
 
 ### 平台租户控制面
 

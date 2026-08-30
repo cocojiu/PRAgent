@@ -65,12 +65,54 @@ class EnterpriseKubernetesDeploymentContractTest {
             .containsExactlyInAnyOrder(
                 "repoguard-default-deny-ingress",
                 "repoguard-default-deny-egress",
+                "repoguard-allow-dns-egress",
+                "repoguard-allow-frontend-egress",
+                "repoguard-allow-api-egress",
+                "repoguard-allow-worker-egress",
                 "repoguard-allow-ingress-to-frontend",
                 "repoguard-allow-frontend-to-api"
             );
         Map<String, Object> egressPolicy = resource(resources, "NetworkPolicy", "repoguard-default-deny-egress");
-        assertThat(list(map(egressPolicy.get("spec")).get("egress")).toString())
-            .contains("53", "443", "3306", "5671", "5672", "8081");
+        assertThat(map(egressPolicy.get("spec")))
+            .containsEntry("policyTypes", List.of("Egress"))
+            .doesNotContainKey("egress");
+    }
+
+    @Test
+    void workloadEgressIsScopedByIdentityDestinationAndPort() throws IOException {
+        List<Map<String, Object>> resources = resources();
+
+        Map<String, Object> dns = networkPolicySpec(resources, "repoguard-allow-dns-egress");
+        assertThat(map(dns.get("podSelector"))).isEmpty();
+        assertThat(egressRules(dns)).singleElement().satisfies(rule -> {
+            assertThat(ports(rule)).containsExactlyInAnyOrder(53, 53);
+            Map<String, Object> peer = peers(rule).getFirst();
+            assertThat(matchLabels(peer, "namespaceSelector"))
+                .containsExactlyEntriesOf(Map.of("kubernetes.io/metadata.name", "kube-system"));
+            assertThat(matchLabels(peer, "podSelector"))
+                .containsExactlyEntriesOf(Map.of("k8s-app", "kube-dns"));
+        });
+
+        Map<String, Object> frontend = networkPolicySpec(resources, "repoguard-allow-frontend-egress");
+        assertWorkloadSelector(frontend, "repoguard-frontend");
+        assertThat(egressRules(frontend)).singleElement().satisfies(rule -> {
+            assertThat(ports(rule)).containsExactly(8081);
+            assertThat(matchLabels(peers(rule).getFirst(), "podSelector"))
+                .containsExactlyEntriesOf(Map.of("app.kubernetes.io/name", "repoguard-api"));
+            assertThat(peers(rule).getFirst()).doesNotContainKeys("namespaceSelector", "ipBlock");
+        });
+
+        assertBackendEgress(resources, "repoguard-allow-api-egress", "repoguard-api");
+        assertBackendEgress(resources, "repoguard-allow-worker-egress", "repoguard-worker");
+
+        resourceNames(resources, "NetworkPolicy").stream()
+            .filter(name -> name.contains("egress"))
+            .filter(name -> !"repoguard-default-deny-egress".equals(name))
+            .map(name -> networkPolicySpec(resources, name))
+            .flatMap(spec -> egressRules(spec).stream())
+            .forEach(rule -> assertThat(peers(rule))
+                .as("every egress allow rule must name a destination")
+                .isNotEmpty());
     }
 
     @Test
@@ -150,6 +192,85 @@ class EnterpriseKubernetesDeploymentContractTest {
             .findFirst()
             .orElseThrow(() -> new AssertionError("Missing secret-files volume"));
         assertThat(map(secretVolume.get("secret"))).containsEntry("defaultMode", 0440);
+    }
+
+    private void assertBackendEgress(
+        List<Map<String, Object>> resources,
+        String policyName,
+        String workloadName
+    ) {
+        Map<String, Object> spec = networkPolicySpec(resources, policyName);
+        assertWorkloadSelector(spec, workloadName);
+        List<Map<String, Object>> rules = egressRules(spec);
+        assertThat(rules).hasSize(3);
+
+        Map<String, Object> mysql = ruleForPort(rules, 3306);
+        assertThat(ports(mysql)).containsExactly(3306);
+        assertDependencyPeer(mysql, "networking.repoguard.io/mysql");
+
+        Map<String, Object> rabbitMq = ruleForPort(rules, 5671);
+        assertThat(ports(rabbitMq)).containsExactlyInAnyOrder(5671, 5672);
+        assertDependencyPeer(rabbitMq, "networking.repoguard.io/rabbitmq");
+
+        Map<String, Object> https = ruleForPort(rules, 443);
+        assertThat(ports(https)).containsExactly(443);
+        Map<String, Object> ipBlock = map(peers(https).getFirst().get("ipBlock"));
+        assertThat(ipBlock).containsEntry("cidr", "0.0.0.0/0");
+        assertThat(stringList(ipBlock.get("except")))
+            .contains(
+                "10.0.0.0/8",
+                "127.0.0.0/8",
+                "169.254.0.0/16",
+                "172.16.0.0/12",
+                "192.168.0.0/16"
+            );
+    }
+
+    private void assertWorkloadSelector(Map<String, Object> spec, String workloadName) {
+        assertThat(matchLabels(spec, "podSelector"))
+            .containsExactlyEntriesOf(Map.of("app.kubernetes.io/name", workloadName));
+    }
+
+    private void assertDependencyPeer(Map<String, Object> rule, String label) {
+        Map<String, Object> peer = peers(rule).getFirst();
+        assertThat(matchLabels(peer, "namespaceSelector"))
+            .containsExactlyEntriesOf(Map.of(label, "true"));
+        assertThat(matchLabels(peer, "podSelector"))
+            .containsExactlyEntriesOf(Map.of(label, "true"));
+        assertThat(peer).doesNotContainKey("ipBlock");
+    }
+
+    private Map<String, Object> networkPolicySpec(
+        List<Map<String, Object>> resources,
+        String name
+    ) {
+        return map(resource(resources, "NetworkPolicy", name).get("spec"));
+    }
+
+    private List<Map<String, Object>> egressRules(Map<String, Object> spec) {
+        return list(spec.get("egress")).stream().map(this::map).toList();
+    }
+
+    private List<Map<String, Object>> peers(Map<String, Object> rule) {
+        return list(rule.get("to")).stream().map(this::map).toList();
+    }
+
+    private List<Integer> ports(Map<String, Object> rule) {
+        return list(rule.get("ports")).stream()
+            .map(this::map)
+            .map(port -> (Integer) port.get("port"))
+            .toList();
+    }
+
+    private Map<String, Object> ruleForPort(List<Map<String, Object>> rules, int port) {
+        return rules.stream()
+            .filter(rule -> ports(rule).contains(port))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("Missing egress rule for TCP port " + port));
+    }
+
+    private Map<String, Object> matchLabels(Map<String, Object> parent, String selectorName) {
+        return map(map(parent.get(selectorName)).get("matchLabels"));
     }
 
     private Object environment(Map<String, Object> container, String name) {
