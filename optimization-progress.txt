@@ -161,3 +161,11 @@ Worker 门槛：建议窗口为 2026-08-30 02:00–02:30（Asia/Shanghai）；�
 本地验证：EnterpriseKubernetesDeploymentContractTest 3 项全部通过，git diff --check 通过；未改动用户已有 OpenAPI snapshot 和 .tmp 内容。
 剩余验收：推送 PRAgent-test 后检查 Pull Request Quality、Repository Governance、Release Images 与 Auto Create Pull Request；在与生产同类的 Kubernetes namespace 验证 API/Worker 进程 UID/GID、/run/secrets 文件 owner/mode、readiness/liveness、/tmp 可写和只读根文件系统。
 下一步：完成远程门禁后进入 P0-02，多租户模式下缺失 TenantContext 必须 fail-closed，并审计平台级全局作用域。
+
+2026-08-30 | 优化-18 | P0-02A 多租户 SQL 缺失上下文 fail-closed
+状态：代码、定向测试和本地完整回归已完成；测试分支 Actions 与真实 MySQL A/B 租户隔离待远程验收。
+变更：MyBatis 租户拦截器在多租户开启时不再因 TenantContext 缺失而忽略租户表，租户表 SQL 必须取得有效 tenant_id，否则抛出明确异常；非租户表和租户功能关闭场景保持原行为。新增短生命周期 PlatformTenantScope，禁止嵌套、禁止与普通租户上下文并存、要求在创建线程关闭，并记录开启/关闭审计日志；生产代码只有 TenantScheduledTaskRunner.runGlobal 白名单入口可以打开该作用域，异常路径也会自动清理。
+验证增强：新增 handler 正反例、平台作用域异常清理和生产调用点白名单契约；ProductionRuntimeContextIntegrationTest 在真实 MySQL 上启用多租户，验证无上下文访问 review_task 失败，并构造默认租户与第二租户任务验证 A 看不到 B、B 看不到 A，最终清理测试数据。
+本地验证：定向 26 项通过，其中真实 MySQL 条件化用例 11 项按环境门禁跳过但编译成功；后端完整 mvn verify 共 2532 项通过、11 项条件化集成跳过、0 失败、0 错误，JaCoCo 覆盖门禁和 JAR 构建通过；git diff --check 通过。
+边界：本批只关闭应用层静默 fail-open 并建立受控平台作用域；租户父子组合键/外键、存量脏数据探针和生产规模迁移验证仍按 P0-02B expand-contract 独立批次实施，不与本批安全逻辑混合。
+下一步：提交推送 PRAgent-test，等待 Pull Request Quality 的真实 MySQL/RabbitMQ 作业验证；若失败，按失败链路补齐遗漏上下文后重跑。远程全绿后进入 P0-02B 租户数据库组合约束。

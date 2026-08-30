@@ -26,6 +26,7 @@ import com.repoguard.agent.security.PasswordHashService;
 import com.repoguard.agent.security.DatabaseRateLimitWindowStore;
 import com.repoguard.agent.service.AuthService;
 import com.repoguard.agent.tenancy.EnterpriseTenantAdminService;
+import com.repoguard.agent.tenancy.TenantContext;
 import com.repoguard.agent.tenancy.TenantQuotaService;
 import com.repoguard.agent.security.AuthTokenFilter;
 import com.repoguard.agent.review.task.ReviewTaskTransitionStore;
@@ -163,6 +164,74 @@ class ProductionRuntimeContextIntegrationTest {
             assertProductionInfrastructure(context);
             assertTenantLifecycleCompareAndSet(context);
             assertTenantQuotaCompareAndSet(context);
+        }
+    }
+
+    @Test
+    void tenantMapperFailsClosedWithoutContextAndWorksWithExplicitTenant() {
+        try (ConfigurableApplicationContext context = start(
+            "api",
+            "--repoguard.tenancy.enabled=true"
+        )) {
+            ReviewTaskMapper mapper = context.getBean(ReviewTaskMapper.class);
+            JdbcTemplate jdbcTemplate = context.getBean(JdbcTemplate.class);
+            String suffix = Long.toUnsignedString(System.nanoTime());
+            String tenantKey = "integration-isolation-" + suffix;
+            String organization = "tenant-isolation-" + suffix;
+            jdbcTemplate.update(
+                "insert into tenant (tenant_key, display_name, status) values (?, ?, 'ACTIVE')",
+                tenantKey,
+                "Integration Isolation"
+            );
+            Long otherTenantId = jdbcTemplate.queryForObject(
+                "select id from tenant where tenant_key = ?",
+                Long.class,
+                tenantKey
+            );
+            Long defaultTenantTaskId = insertReviewTask(
+                jdbcTemplate,
+                organization,
+                9301,
+                "COMPLETED",
+                false,
+                "NOT_REQUIRED"
+            );
+            Long otherTenantTaskId = insertReviewTask(
+                jdbcTemplate,
+                organization,
+                9302,
+                "COMPLETED",
+                false,
+                "NOT_REQUIRED"
+            );
+            jdbcTemplate.update(
+                "update review_task set tenant_id = ? where id = ?",
+                otherTenantId,
+                otherTenantTaskId
+            );
+
+            try {
+                assertThatThrownBy(() -> mapper.selectById(defaultTenantTaskId))
+                    .hasRootCauseInstanceOf(IllegalStateException.class)
+                    .hasRootCauseMessage("Tenant-scoped SQL requires an active tenant context");
+
+                try (TenantContext.Scope _ = TenantContext.withTenant(TenantContext.DEFAULT_TENANT_ID)) {
+                    assertThat(mapper.selectById(defaultTenantTaskId)).isNotNull();
+                    assertThat(mapper.selectById(otherTenantTaskId)).isNull();
+                }
+                try (TenantContext.Scope _ = TenantContext.withTenant(otherTenantId)) {
+                    assertThat(mapper.selectById(defaultTenantTaskId)).isNull();
+                    assertThat(mapper.selectById(otherTenantTaskId)).isNotNull();
+                }
+            } finally {
+                assertThat(TenantContext.currentTenantId()).isNull();
+                jdbcTemplate.update(
+                    "delete from review_task where id in (?, ?)",
+                    defaultTenantTaskId,
+                    otherTenantTaskId
+                );
+                jdbcTemplate.update("delete from tenant where id = ?", otherTenantId);
+            }
         }
     }
 

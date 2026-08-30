@@ -79,7 +79,11 @@ public class TenantScheduledTaskRunner {
             LOGGER.debug("Global scheduled task skipped because lease is owned operation={}", normalizedOperation);
             return false;
         }
-        try (guard; ScheduledJobLeaseContext.Scope _ = ScheduledJobLeaseContext.withGuard(guard)) {
+        try (
+            guard;
+            ScheduledJobLeaseContext.Scope _ = ScheduledJobLeaseContext.withGuard(guard);
+            PlatformTenantScope _ = PlatformTenantScope.open(normalizedOperation)
+        ) {
             guard.assertHeld();
             requiredTask.run();
             guard.assertHeld();
