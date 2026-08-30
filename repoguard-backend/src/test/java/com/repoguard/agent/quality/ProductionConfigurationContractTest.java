@@ -741,6 +741,51 @@ class ProductionConfigurationContractTest {
         return map(service(compose, serviceName).get("environment"));
     }
 
+    @Test
+    void productionSshWorkflowsRequirePretrustedHostIdentity() throws IOException {
+        Path repositoryRoot = findRepositoryRoot();
+        String bootstrapAction = read(repositoryRoot.resolve(
+            ".github/actions/bootstrap-production-ssh/action.yml"
+        ));
+
+        assertThat(bootstrapAction)
+            .contains(
+                "Missing protected DEPLOY_KNOWN_HOSTS baseline.",
+                "Production SSH private key is invalid or encrypted.",
+                "DEPLOY_KNOWN_HOSTS has no entry for the expected production SSH target.",
+                "Production SSH port must be between 1 and 65535.",
+                "ssh-keygen -y -f ~/.ssh/deploy_key",
+                "ssh-keygen -l -f ~/.ssh/known_hosts",
+                "ssh-keygen -F \"${expected_host}\"",
+                "StrictHostKeyChecking yes",
+                "BatchMode yes"
+            )
+            .doesNotContain("ssh-keyscan", "StrictHostKeyChecking no");
+
+        List<String> productionSshWorkflows = List.of(
+            "production-mysql-binlog-archive.yml",
+            "production-mysql-backup.yml",
+            "production-mysql-legacy-backups.yml",
+            "production-observability-inventory.yml",
+            "production-observability-log-stack-upgrade.yml",
+            "production-observability-grafana-upgrade.yml",
+            "worker-concurrency-retest.yml",
+            "release-images.yml",
+            "real-chain-smoke.yml"
+        );
+
+        for (String workflowName : productionSshWorkflows) {
+            String workflow = read(repositoryRoot.resolve(".github/workflows").resolve(workflowName));
+            assertThat(workflow)
+                .as("production SSH contract for %s", workflowName)
+                .contains(
+                    "uses: ./.github/actions/bootstrap-production-ssh",
+                    "deploy-known-hosts: ${{ secrets.DEPLOY_KNOWN_HOSTS }}"
+                )
+                .doesNotContain("ssh-keyscan", "StrictHostKeyChecking no");
+        }
+    }
+
     private Path findRepositoryRoot() {
         Path current = Path.of("").toAbsolutePath();
         while (current != null) {

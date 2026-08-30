@@ -557,34 +557,12 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Prepare SSH key
-        shell: bash
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-        run: |
-          test -n "${DEPLOY_HOST}" || { echo "Missing DEPLOY_HOST secret or variable"; exit 1; }
-          test -n "${DEPLOY_SSH_KEY}" || { echo "Missing DEPLOY_SSH_KEY secret"; exit 1; }
-          deploy_port="${DEPLOY_PORT:-22}"
-          case "${deploy_port}" in
-            *[!0-9]*)
-              echo "DEPLOY_PORT must be a numeric TCP port." >&2
-              exit 1
-              ;;
-          esac
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "${DEPLOY_SSH_KEY}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          echo "Scanning SSH host key for deployment target..."
-          for attempt in 1 2 3 4 5; do
-            if ssh-keyscan -T 30 -p "${deploy_port}" "${DEPLOY_HOST}" >> ~/.ssh/known_hosts 2>ssh-keyscan.err; then
-              break
-            fi
-            echo "ssh-keyscan attempt ${attempt}/5 failed; retrying after $((attempt * 10)) seconds..." >&2
-            sed 's/^/ssh-keyscan: /' ssh-keyscan.err >&2
-            sleep $((attempt * 10))
-          done
-          test -s ~/.ssh/known_hosts || { echo "ssh-keyscan returned no host keys."; exit 1; }
+        uses: ./.github/actions/bootstrap-production-ssh
+        with:
+          deploy-host: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          deploy-port: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          deploy-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+          deploy-known-hosts: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
 
       - name: Upload deployment and smoke assets
         shell: bash

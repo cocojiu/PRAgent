@@ -230,6 +230,7 @@ RepoGuard 通过 GitHub `pull_request` webhook 自动创建审查任务。当前
 - `DEPLOY_PORT`
 - `DEPLOY_PATH`
 - `DEPLOY_SSH_KEY`
+- `DEPLOY_KNOWN_HOSTS`（必须配置在受保护的 production environment Secret 中；保存经离线核验的完整 OpenSSH `known_hosts` 行，非 22 端口使用 `[host]:port`）
 - `REPOGUARD_BACKUP_ENCRYPTION_PASSWORD`
 
 正常发布：
@@ -250,6 +251,13 @@ RepoGuard 通过 GitHub `pull_request` webhook 自动创建审查任务。当前
 5. 运行 workflow。
 
 填写 `deploy_existing_tag` 时，workflow 会跳过镜像构建，直接部署 ACR 中已有的 `backend-<tag>` 和 `frontend-<tag>` 镜像。部署脚本会校验实际运行容器镜像与目标镜像一致，并在健康检查失败时输出后端最近日志。
+
+### 生产 SSH 主机密钥基线与轮换
+
+- 所有生产部署、回滚、备份、可观测性升级、容量复测和真实链路任务统一通过仓库内 `bootstrap-production-ssh` action 安装 SSH 身份与主机基线。流水线禁止运行时执行 `ssh-keyscan`，并强制 `StrictHostKeyChecking=yes`、`BatchMode=yes`。
+- `DEPLOY_KNOWN_HOSTS` 必须从云控制台、主机带外管理面或另一条已认证通道取得并由两人复核，随后写入受保护的 production environment Secret。不得把首次网络连接返回的密钥直接作为信任根。
+- 空基线、无效私钥、无效主机密钥、端口越界，以及基线中缺少当前 `DEPLOY_HOST`/`DEPLOY_PORT` 的条目都会在发起网络连接前失败；修改目标主机或端口时必须同步完成独立基线审批。
+- 合法轮换采用重叠窗口：先核验并追加新旧两组主机密钥，记录变更单、复核人、来源指纹和生效时间；运行只读的 `Production Observability Inventory` 验证新基线；确认所有节点完成轮换且旧密钥窗口结束后，再经第二次复核移除旧行。每次变更均保留 GitHub environment Secret 审计记录和对应 workflow run，不允许用临时关闭严格校验的方式绕过。
 
 ## 生产运维 Runbook
 
