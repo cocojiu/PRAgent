@@ -470,7 +470,7 @@ This project is licensed under the MIT License. See [LICENSE](./LICENSE) for det
 
 V68–V77 没有自动 down migration。V77 已移除旧单列外键，不能通过部署旧二进制回滚；失败或上线后回退只能保持停写并从 V77 前已验证备份恢复。V77 每个 `ALTER TABLE` 原子，但跨表 DDL 不构成单一事务，因此禁止在线写入期间执行。
 
-- 2026-08-30：P0-02B V77 Contract 已进入实施验收。迁移增加 20 条关系的 fail-closed 脏数据诊断、3 个通知组合索引和 20 条租户组合外键；运行时租户过滤集合保持不变，真实 MySQL 门禁将数据库全部 `tenant_id` 表与拦截表及 8 个固定控制面豁免做严格相等校验，并负向验证跨租户子记录写入被数据库拒绝。
+- 2026-08-30：P0-02B V77 Contract 已完成。实现提交 `0b6086eb` 增加 20 条关系的 fail-closed 脏数据诊断、3 个通知组合索引和 20 条租户组合外键，验收修复提交 `3c590469` 为旧通知恢复测试补齐合法任务夹具并按 MySQL 元数据校准 `NO ACTION` 期望，未放松约束。运行时租户过滤集合保持不变；Pull Request Quality Run `33298298309` 已在 MySQL 8.0 从空库成功执行 V1–V77，11 项生产上下文测试验证全部外键、全部 `tenant_id` 表与拦截表及 8 个固定控制面豁免严格相等，并确认跨租户子记录写入被数据库拒绝。Repository Governance 两路、Auto Create Pull Request 与 Release Images Run `33298296803` 全部成功；本地 `mvn verify` 共 2537 项测试通过（0 失败、0 错误、11 条件跳过），JaCoCo 与打包通过。
 
 ### Kubernetes Secret 契约
 
