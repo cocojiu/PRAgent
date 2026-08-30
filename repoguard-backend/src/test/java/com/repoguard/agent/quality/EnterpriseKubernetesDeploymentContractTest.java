@@ -15,6 +15,8 @@ import org.yaml.snakeyaml.Yaml;
 
 class EnterpriseKubernetesDeploymentContractTest {
 
+    private static final int BACKEND_UID_GID = 10001;
+
     @Test
     void enterpriseWorkloadsAreReplicatedPinnedAndLeastPrivilege() throws IOException {
         List<Map<String, Object>> resources = resources();
@@ -71,6 +73,24 @@ class EnterpriseKubernetesDeploymentContractTest {
             .contains("53", "443", "3306", "5671", "5672", "8081");
     }
 
+    @Test
+    void backendImageAndPodsShareStableSecretReadableIdentity() throws IOException {
+        Path root = repositoryRoot();
+        String dockerfile = Files.readString(
+            root.resolve("repoguard-backend/Dockerfile"),
+            StandardCharsets.UTF_8
+        );
+
+        assertThat(dockerfile)
+            .contains("addgroup -S -g " + BACKEND_UID_GID + " repoguard")
+            .contains("adduser -S -D -H -u " + BACKEND_UID_GID + " -G repoguard repoguard")
+            .contains("USER " + BACKEND_UID_GID + ":" + BACKEND_UID_GID);
+
+        List<Map<String, Object>> resources = resources();
+        assertBackendPodIdentity(resources, "repoguard-api");
+        assertBackendPodIdentity(resources, "repoguard-worker");
+    }
+
     private void assertDeployment(
         List<Map<String, Object>> resources,
         String name,
@@ -107,6 +127,29 @@ class EnterpriseKubernetesDeploymentContractTest {
             assertThat(list(container.get("volumeMounts")).toString())
                 .contains("/run/secrets");
         }
+    }
+
+    private void assertBackendPodIdentity(
+        List<Map<String, Object>> resources,
+        String deploymentName
+    ) {
+        Map<String, Object> deployment = resource(resources, "Deployment", deploymentName);
+        Map<String, Object> podSpec = map(map(map(deployment.get("spec")).get("template")).get("spec"));
+        Map<String, Object> podSecurity = map(podSpec.get("securityContext"));
+
+        assertThat(podSecurity)
+            .containsEntry("runAsNonRoot", true)
+            .containsEntry("runAsUser", BACKEND_UID_GID)
+            .containsEntry("runAsGroup", BACKEND_UID_GID)
+            .containsEntry("fsGroup", BACKEND_UID_GID)
+            .containsEntry("fsGroupChangePolicy", "OnRootMismatch");
+
+        Map<String, Object> secretVolume = list(podSpec.get("volumes")).stream()
+            .map(this::map)
+            .filter(volume -> "secret-files".equals(volume.get("name")))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("Missing secret-files volume"));
+        assertThat(map(secretVolume.get("secret"))).containsEntry("defaultMode", 0440);
     }
 
     private Object environment(Map<String, Object> container, String name) {

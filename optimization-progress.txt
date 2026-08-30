@@ -154,3 +154,10 @@ Worker 门槛：建议窗口为 2026-08-30 02:00–02:30（Asia/Shanghai）；�
 正式压测：run_id=20260830020333。concurrency=2 时 12/12 COMPLETED，P95/P99/最大耗时均为 18 秒，峰值 CPU 157.86%、内存配额 47.84%；concurrency=4 时 12/12 COMPLETED，P95/P99/最大耗时均为 15 秒，峰值 CPU 167.40%、内存配额 47.74%。两轮均为 0 失败、0 未完成、0 重复 PR、0 ready/unacked、0 关键 SQL/数据完整性/OOM/执行器拒绝错误。
 生产恢复：正式压测返回 test_rc=0、restore_rc=0，六个生产容器全部 healthy，healthz=200，review/notification 队列 ready/unacked 均为 0 且消费者均为 1；生产 review_task 状态计数与压测前完全一致（APPROVED 2、CHANGES_REQUESTED 2、COMPLETED 84、FAILED 2、PENDING_HUMAN_REVIEW 86、REJECTED 87、SUPERSEDED 55），无压测容器、卷、网络、进程或工作目录残留。
 证据与备份：正式结果保存为 .deploy-runtime/production-backups/worker-pressure-20260830020333.txt，服务器与本机 SHA-256 均为 0559653231159069385831189a5b4d91d9b24255bd3015bf24035aa4a406f215；完整生产数据库、非敏感配置、敏感配置和分区信息已分别加密保存到本机 .deploy-runtime/production-backups，数据库密文 repoguard-prod-db-20260829-190602.sql.gz.enc 的 SHA-256 为 da050318c308a7cb2035de172c0e9453e4f3d6a85c5a676fc30be267be4e5913。上述目录被 Git 忽略；一次性 TLS 私钥与远端 /run 压测脚本已删除。
+
+2026-08-30 | 优化-17 | P0-01 Kubernetes Secret 非 root 读取身份收敛
+状态：代码与本地部署契约已完成；测试分支 Actions 和生产同类 Kubernetes 集群 Smoke 待验收。
+变更：后端镜像固定使用数值 UID/GID 10001:10001；API 与 Worker Pod 显式设置 runAsUser、runAsGroup、fsGroup 为 10001，并使用 OnRootMismatch 控制卷权限处理；Secret volume 继续保持 0440，容器继续保持 runAsNonRoot、只读根文件系统、禁止提权和 capabilities 全移除。现有部署契约新增镜像身份、Pod 身份和 Secret mode 一致性校验，防止 Dockerfile 与 Kubernetes 清单漂移。
+本地验证：EnterpriseKubernetesDeploymentContractTest 3 项全部通过，git diff --check 通过；未改动用户已有 OpenAPI snapshot 和 .tmp 内容。
+剩余验收：推送 PRAgent-test 后检查 Pull Request Quality、Repository Governance、Release Images 与 Auto Create Pull Request；在与生产同类的 Kubernetes namespace 验证 API/Worker 进程 UID/GID、/run/secrets 文件 owner/mode、readiness/liveness、/tmp 可写和只读根文件系统。
+下一步：完成远程门禁后进入 P0-02，多租户模式下缺失 TenantContext 必须 fail-closed，并审计平台级全局作用域。

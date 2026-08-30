@@ -86,6 +86,12 @@ spec:
     spec:
       serviceAccountName: repoguard
       automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
       terminationGracePeriodSeconds: 45
       topologySpreadConstraints:
         - maxSkew: 1
@@ -200,6 +206,12 @@ spec:
     spec:
       serviceAccountName: repoguard
       automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
       terminationGracePeriodSeconds: 120
       topologySpreadConstraints:
         - maxSkew: 1
