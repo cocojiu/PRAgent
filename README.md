@@ -480,6 +480,8 @@ V68–V77 没有自动 down migration。V77 已移除旧单列外键，不能通
 
 - 2026-08-30：P0-02B V77 Contract 已完成。实现提交 `0b6086eb` 增加 20 条关系的 fail-closed 脏数据诊断、3 个通知组合索引和 20 条租户组合外键，验收修复提交 `3c590469` 为旧通知恢复测试补齐合法任务夹具并按 MySQL 元数据校准 `NO ACTION` 期望，未放松约束。运行时租户过滤集合保持不变；Pull Request Quality Run `33298298309` 已在 MySQL 8.0 从空库成功执行 V1–V77，11 项生产上下文测试验证全部外键、全部 `tenant_id` 表与拦截表及 8 个固定控制面豁免严格相等，并确认跨租户子记录写入被数据库拒绝。Repository Governance 两路、Auto Create Pull Request 与 Release Images Run `33298296803` 全部成功；本地 `mvn verify` 共 2537 项测试通过（0 失败、0 错误、11 条件跳过），JaCoCo 与打包通过。
 
+- 2026-08-30：P1-01 生产 SSH 主机身份预置信任已完成代码门禁，生产环境激活待验收。实现提交 `06d20831` 新增统一 `bootstrap-production-ssh` action，把发布、回滚、备份、可观测性升级、容量复测和真实链路共 9 个工作流从运行时 `ssh-keyscan` 切换为受保护的 `DEPLOY_KNOWN_HOSTS` 离线基线；空基线、无效/加密私钥、无效主机密钥、端口越界和目标主机不匹配均在联网前 fail-closed，并固定启用严格主机校验与非交互模式。Java 合约测试锁定全部工作流不得回退动态信任或关闭严格校验，README 已记录双人复核及新旧密钥重叠轮换流程。本地 `mvn verify` 共 2538 项测试通过（0 失败、0 错误、11 条件跳过），JaCoCo 与打包通过；Pull Request Quality Run `33308963232`、Release Images Run `33308961932`、Production Observability Image Security Run `33308963201`、两路 Repository Governance 与 Auto Create Pull Request 全部成功。仓库级和 production environment Secret 清单均确认尚未配置 `DEPLOY_KNOWN_HOSTS`，因此生产 SSH 作业会按设计拒绝运行；必须先由带外可信渠道取得并复核完整主机公钥，配置 Secret 后运行只读 Inventory，才能将 P1-01 标记为完成。
+
 ### Kubernetes Secret 契约
 
 `repoguard-enterprise-env` 至少提供以下环境变量：
