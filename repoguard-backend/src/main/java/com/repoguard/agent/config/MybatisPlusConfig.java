@@ -50,6 +50,10 @@ public class MybatisPlusConfig {
         "system_settings_config"
     );
 
+    public static Set<String> tenantTables() {
+        return TENANT_TABLES;
+    }
+
     @Bean
     public MybatisPlusInterceptor mybatisPlusInterceptor(TenantProperties tenantProperties) {
         MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();

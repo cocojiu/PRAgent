@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.repoguard.agent.RepoGuardApplication;
 import com.repoguard.agent.common.BusinessException;
+import com.repoguard.agent.config.MybatisPlusConfig;
 import com.repoguard.agent.controller.ReviewController;
 import com.repoguard.agent.dto.AuthLogoutRequest;
 import com.repoguard.agent.dto.AuthPasswordChangeRequest;
@@ -49,6 +50,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -69,6 +72,7 @@ import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.DirectExchange;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
@@ -162,7 +166,8 @@ class ProductionRuntimeContextIntegrationTest {
             assertThat(context.getBeansOfType(ReviewController.class)).hasSize(1);
             assertThat(context.getBeansOfType(ReviewTaskWorker.class)).isEmpty();
             assertProductionInfrastructure(context);
-            assertTenantRelationshipExpansion(context);
+            assertTenantRelationshipContract(context);
+            assertTenantTableRegistry(context);
             assertTenantLifecycleCompareAndSet(context);
             assertTenantQuotaCompareAndSet(context);
         }
@@ -224,6 +229,13 @@ class ProductionRuntimeContextIntegrationTest {
                     assertThat(mapper.selectById(defaultTenantTaskId)).isNull();
                     assertThat(mapper.selectById(otherTenantTaskId)).isNotNull();
                 }
+                assertThatThrownBy(() -> jdbcTemplate.update(
+                    "insert into review_timeline "
+                        + "(tenant_id, task_id, label, event_time, status, sort_order) "
+                        + "values (?, ?, 'cross-tenant', now(), 'COMPLETED', 1)",
+                    otherTenantId,
+                    defaultTenantTaskId
+                )).isInstanceOf(DataIntegrityViolationException.class);
             } finally {
                 assertThat(TenantContext.currentTenantId()).isNull();
                 jdbcTemplate.update(
@@ -1735,7 +1747,7 @@ class ProductionRuntimeContextIntegrationTest {
         assertThat(rootLogger.getAppender("ROLLING_FILE")).isNull();
     }
 
-    private void assertTenantRelationshipExpansion(ConfigurableApplicationContext context) {
+    private void assertTenantRelationshipContract(ConfigurableApplicationContext context) {
         JdbcTemplate jdbcTemplate = context.getBean(JdbcTemplate.class);
         List<IndexExpectation> indexes = List.of(
             new IndexExpectation("review_task", "uk_review_task_tenant_id", "tenant_id,id", true),
@@ -1877,6 +1889,24 @@ class ProductionRuntimeContextIntegrationTest {
                 "idx_strategy_policy_tenant_source",
                 "tenant_id,source_snapshot_id",
                 false
+            ),
+            new IndexExpectation(
+                "notification_event",
+                "idx_notification_event_tenant_task",
+                "tenant_id,task_id",
+                false
+            ),
+            new IndexExpectation(
+                "notification_event",
+                "idx_notification_event_tenant_batch",
+                "tenant_id,batch_id",
+                false
+            ),
+            new IndexExpectation(
+                "notification_delivery_log",
+                "idx_notification_delivery_tenant_task",
+                "tenant_id,task_id",
+                false
             )
         );
         for (IndexExpectation index : indexes) {
@@ -1895,6 +1925,71 @@ class ProductionRuntimeContextIntegrationTest {
                 .as(index.tableName() + "." + index.indexName() + " uniqueness")
                 .isEqualTo(index.unique() ? 0 : 1);
         }
+
+        List<ForeignKeyExpectation> foreignKeys = List.of(
+            new ForeignKeyExpectation("changed_file", "fk_changed_file_tenant_task", "tenant_id,task_id", "review_task", "tenant_id,id", "RESTRICT"),
+            new ForeignKeyExpectation("changed_file", "fk_changed_file_tenant_attempt", "tenant_id,attempt_id", "review_execution_attempt", "tenant_id,id", "CASCADE"),
+            new ForeignKeyExpectation("review_finding", "fk_review_finding_tenant_task", "tenant_id,task_id", "review_task", "tenant_id,id", "RESTRICT"),
+            new ForeignKeyExpectation("review_finding", "fk_review_finding_tenant_attempt", "tenant_id,attempt_id", "review_execution_attempt", "tenant_id,id", "CASCADE"),
+            new ForeignKeyExpectation("review_timeline", "fk_review_timeline_tenant_task", "tenant_id,task_id", "review_task", "tenant_id,id", "RESTRICT"),
+            new ForeignKeyExpectation("review_execution_attempt", "fk_review_attempt_tenant_task", "tenant_id,task_id", "review_task", "tenant_id,id", "CASCADE"),
+            new ForeignKeyExpectation("github_comment_publication", "fk_github_comment_pub_tenant_task", "tenant_id,task_id", "review_task", "tenant_id,id", "RESTRICT"),
+            new ForeignKeyExpectation("github_comment_publication", "fk_github_comment_pub_tenant_finding", "tenant_id,finding_id", "review_finding", "tenant_id,id", "RESTRICT"),
+            new ForeignKeyExpectation("github_comment_publication_batch", "fk_github_comment_batch_tenant_task", "tenant_id,task_id", "review_task", "tenant_id,id", "RESTRICT"),
+            new ForeignKeyExpectation("github_comment_publication_batch_item", "fk_github_comment_item_tenant_batch", "tenant_id,batch_id", "github_comment_publication_batch", "tenant_id,id", "RESTRICT"),
+            new ForeignKeyExpectation("github_comment_publication_batch_item", "fk_github_comment_item_tenant_task", "tenant_id,task_id", "review_task", "tenant_id,id", "RESTRICT"),
+            new ForeignKeyExpectation("github_comment_publication_batch_item", "fk_github_comment_item_tenant_finding", "tenant_id,finding_id", "review_finding", "tenant_id,id", "RESTRICT"),
+            new ForeignKeyExpectation("notification_event", "fk_notification_event_tenant_task", "tenant_id,task_id", "review_task", "tenant_id,id", "RESTRICT"),
+            new ForeignKeyExpectation("notification_event", "fk_notification_event_tenant_batch", "tenant_id,batch_id", "github_comment_publication_batch", "tenant_id,id", "RESTRICT"),
+            new ForeignKeyExpectation("notification_delivery_log", "fk_notification_delivery_tenant_event", "tenant_id,event_id", "notification_event", "tenant_id,id", "RESTRICT"),
+            new ForeignKeyExpectation("notification_delivery_log", "fk_notification_delivery_tenant_binding", "tenant_id,binding_id", "notification_channel_binding", "tenant_id,id", "RESTRICT"),
+            new ForeignKeyExpectation("notification_delivery_log", "fk_notification_delivery_tenant_task", "tenant_id,task_id", "review_task", "tenant_id,id", "RESTRICT"),
+            new ForeignKeyExpectation("review_policy_promotion_evidence", "fk_policy_evidence_tenant_rule", "tenant_id,rule_policy_snapshot_id", "review_rule_policy_snapshot", "tenant_id,id", "RESTRICT"),
+            new ForeignKeyExpectation("review_policy_promotion_evidence", "fk_policy_evidence_tenant_strategy", "tenant_id,strategy_policy_snapshot_id", "review_strategy_policy_snapshot", "tenant_id,id", "RESTRICT"),
+            new ForeignKeyExpectation("review_strategy_policy_snapshot", "fk_strategy_policy_tenant_source", "tenant_id,source_snapshot_id", "review_strategy_policy_snapshot", "tenant_id,id", "RESTRICT")
+        );
+        for (ForeignKeyExpectation foreignKey : foreignKeys) {
+            Map<String, Object> actual = jdbcTemplate.queryForMap(
+                "select group_concat(k.column_name order by k.ordinal_position) as columns, "
+                    + "min(k.referenced_table_name) as referenced_table, "
+                    + "group_concat(k.referenced_column_name order by k.ordinal_position) as referenced_columns, "
+                    + "min(r.delete_rule) as delete_rule "
+                    + "from information_schema.key_column_usage k "
+                    + "join information_schema.referential_constraints r "
+                    + "on r.constraint_schema = k.constraint_schema "
+                    + "and r.table_name = k.table_name and r.constraint_name = k.constraint_name "
+                    + "where k.constraint_schema = database() and k.table_name = ? "
+                    + "and k.constraint_name = ?",
+                foreignKey.tableName(),
+                foreignKey.constraintName()
+            );
+            assertThat(actual.get("columns")).isEqualTo(foreignKey.columns());
+            assertThat(actual.get("referenced_table")).isEqualTo(foreignKey.referencedTable());
+            assertThat(actual.get("referenced_columns")).isEqualTo(foreignKey.referencedColumns());
+            assertThat(actual.get("delete_rule")).isEqualTo(foreignKey.deleteRule());
+        }
+    }
+
+    private void assertTenantTableRegistry(ConfigurableApplicationContext context) {
+        Set<String> platformTables = Set.of(
+            "enterprise_identity",
+            "operational_data_cleanup_audit",
+            "scheduled_job_lease",
+            "tenant_cache_version",
+            "tenant_membership",
+            "tenant_quota_config",
+            "tenant_quota_usage",
+            "tenant_repository"
+        );
+        Set<String> classified = new TreeSet<>(MybatisPlusConfig.tenantTables());
+        assertThat(classified).doesNotContainAnyElementsOf(platformTables);
+        classified.addAll(platformTables);
+        Set<String> actual = new TreeSet<>(context.getBean(JdbcTemplate.class).queryForList(
+            "select distinct table_name from information_schema.columns "
+                + "where table_schema = database() and column_name = 'tenant_id'",
+            String.class
+        ));
+        assertThat(actual).isEqualTo(classified);
     }
 
     @FunctionalInterface
@@ -1916,6 +2011,16 @@ class ProductionRuntimeContextIntegrationTest {
         String indexName,
         String columns,
         boolean unique
+    ) {
+    }
+
+    private record ForeignKeyExpectation(
+        String tableName,
+        String constraintName,
+        String columns,
+        String referencedTable,
+        String referencedColumns,
+        String deleteRule
     ) {
     }
 
