@@ -162,6 +162,7 @@ class ProductionRuntimeContextIntegrationTest {
             assertThat(context.getBeansOfType(ReviewController.class)).hasSize(1);
             assertThat(context.getBeansOfType(ReviewTaskWorker.class)).isEmpty();
             assertProductionInfrastructure(context);
+            assertTenantRelationshipExpansion(context);
             assertTenantLifecycleCompareAndSet(context);
             assertTenantQuotaCompareAndSet(context);
         }
@@ -1734,6 +1735,168 @@ class ProductionRuntimeContextIntegrationTest {
         assertThat(rootLogger.getAppender("ROLLING_FILE")).isNull();
     }
 
+    private void assertTenantRelationshipExpansion(ConfigurableApplicationContext context) {
+        JdbcTemplate jdbcTemplate = context.getBean(JdbcTemplate.class);
+        List<IndexExpectation> indexes = List.of(
+            new IndexExpectation("review_task", "uk_review_task_tenant_id", "tenant_id,id", true),
+            new IndexExpectation(
+                "review_execution_attempt",
+                "uk_review_attempt_tenant_id",
+                "tenant_id,id",
+                true
+            ),
+            new IndexExpectation("review_finding", "uk_review_finding_tenant_id", "tenant_id,id", true),
+            new IndexExpectation(
+                "github_comment_publication_batch",
+                "uk_github_comment_batch_tenant_id",
+                "tenant_id,id",
+                true
+            ),
+            new IndexExpectation(
+                "notification_event",
+                "uk_notification_event_tenant_id",
+                "tenant_id,id",
+                true
+            ),
+            new IndexExpectation(
+                "notification_channel_binding",
+                "uk_notification_binding_tenant_id",
+                "tenant_id,id",
+                true
+            ),
+            new IndexExpectation(
+                "review_rule_policy_snapshot",
+                "uk_rule_policy_snapshot_tenant_id",
+                "tenant_id,id",
+                true
+            ),
+            new IndexExpectation(
+                "review_strategy_policy_snapshot",
+                "uk_strategy_policy_snapshot_tenant_id",
+                "tenant_id,id",
+                true
+            ),
+            new IndexExpectation(
+                "changed_file",
+                "idx_changed_file_tenant_task",
+                "tenant_id,task_id",
+                false
+            ),
+            new IndexExpectation(
+                "review_finding",
+                "idx_review_finding_tenant_task",
+                "tenant_id,task_id",
+                false
+            ),
+            new IndexExpectation(
+                "review_timeline",
+                "idx_review_timeline_tenant_task",
+                "tenant_id,task_id",
+                false
+            ),
+            new IndexExpectation(
+                "review_execution_attempt",
+                "idx_review_execution_attempt_tenant_task",
+                "tenant_id,task_id",
+                false
+            ),
+            new IndexExpectation(
+                "changed_file",
+                "idx_changed_file_tenant_attempt",
+                "tenant_id,attempt_id",
+                false
+            ),
+            new IndexExpectation(
+                "review_finding",
+                "idx_review_finding_tenant_attempt",
+                "tenant_id,attempt_id",
+                false
+            ),
+            new IndexExpectation(
+                "github_comment_publication",
+                "idx_github_comment_publication_tenant_task",
+                "tenant_id,task_id",
+                false
+            ),
+            new IndexExpectation(
+                "github_comment_publication",
+                "idx_github_comment_pub_tenant_finding",
+                "tenant_id,finding_id",
+                false
+            ),
+            new IndexExpectation(
+                "github_comment_publication_batch",
+                "idx_github_comment_batch_tenant_task",
+                "tenant_id,task_id",
+                false
+            ),
+            new IndexExpectation(
+                "github_comment_publication_batch_item",
+                "idx_github_comment_item_tenant_batch",
+                "tenant_id,batch_id",
+                false
+            ),
+            new IndexExpectation(
+                "github_comment_publication_batch_item",
+                "idx_github_comment_item_tenant_task",
+                "tenant_id,task_id",
+                false
+            ),
+            new IndexExpectation(
+                "github_comment_publication_batch_item",
+                "idx_github_comment_item_tenant_finding",
+                "tenant_id,finding_id",
+                false
+            ),
+            new IndexExpectation(
+                "notification_delivery_log",
+                "idx_notification_delivery_tenant_event",
+                "tenant_id,event_id",
+                false
+            ),
+            new IndexExpectation(
+                "notification_delivery_log",
+                "idx_notification_delivery_tenant_binding",
+                "tenant_id,binding_id",
+                false
+            ),
+            new IndexExpectation(
+                "review_policy_promotion_evidence",
+                "idx_policy_evidence_tenant_rule_snapshot",
+                "tenant_id,rule_policy_snapshot_id",
+                false
+            ),
+            new IndexExpectation(
+                "review_policy_promotion_evidence",
+                "idx_policy_evidence_tenant_strategy_snapshot",
+                "tenant_id,strategy_policy_snapshot_id",
+                false
+            ),
+            new IndexExpectation(
+                "review_strategy_policy_snapshot",
+                "idx_strategy_policy_tenant_source",
+                "tenant_id,source_snapshot_id",
+                false
+            )
+        );
+        for (IndexExpectation index : indexes) {
+            Map<String, Object> actual = jdbcTemplate.queryForMap(
+                "select group_concat(column_name order by seq_in_index) as columns, "
+                    + "min(non_unique) as non_unique "
+                    + "from information_schema.statistics "
+                    + "where table_schema = database() and table_name = ? and index_name = ?",
+                index.tableName(),
+                index.indexName()
+            );
+            assertThat(actual.get("columns"))
+                .as(index.tableName() + "." + index.indexName() + " columns")
+                .isEqualTo(index.columns());
+            assertThat(((Number) actual.get("non_unique")).intValue())
+                .as(index.tableName() + "." + index.indexName() + " uniqueness")
+                .isEqualTo(index.unique() ? 0 : 1);
+        }
+    }
+
     @FunctionalInterface
     private interface TransitionAction {
         void run();
@@ -1745,6 +1908,14 @@ class ProductionRuntimeContextIntegrationTest {
         int allowedRequests,
         long p95Nanos,
         long p99Nanos
+    ) {
+    }
+
+    private record IndexExpectation(
+        String tableName,
+        String indexName,
+        String columns,
+        boolean unique
     ) {
     }
 
