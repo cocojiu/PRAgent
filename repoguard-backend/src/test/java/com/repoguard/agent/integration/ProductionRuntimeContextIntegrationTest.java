@@ -1060,11 +1060,21 @@ class ProductionRuntimeContextIntegrationTest {
             NotificationEventPublishCompensator compensator =
                 context.getBean(NotificationEventPublishCompensator.class);
             String eventKey = "INTEGRATION_RABBIT_RECOVERY:" + Long.toUnsignedString(System.nanoTime());
+            String organization = "notification-recovery-" + Long.toUnsignedString(System.nanoTime());
             Long eventId = null;
+            Long taskId = null;
 
             try {
                 assertThat(rabbitAdmin.deleteExchange(topology.exchange())).isTrue();
                 LocalDateTime now = LocalDateTime.now();
+                taskId = insertReviewTask(
+                    jdbcTemplate,
+                    organization,
+                    9901,
+                    "FAILED",
+                    false,
+                    "NOT_REQUIRED"
+                );
                 jdbcTemplate.update("""
                     insert into notification_event (
                         event_key, event_type, task_id, batch_id, payload, status,
@@ -1072,8 +1082,8 @@ class ProductionRuntimeContextIntegrationTest {
                     ) values (?, 'REVIEW_FAILED', ?, null, ?, 'PENDING', 0, ?, null, ?, ?)
                     """,
                     eventKey,
-                    990000001L,
-                    "{\"eventType\":\"REVIEW_FAILED\",\"taskId\":990000001}",
+                    taskId,
+                    "{\"eventType\":\"REVIEW_FAILED\"}",
                     now.minusSeconds(1),
                     now,
                     now
@@ -1109,6 +1119,9 @@ class ProductionRuntimeContextIntegrationTest {
                         eventId
                     );
                     jdbcTemplate.update("delete from notification_event where id = ?", eventId);
+                }
+                if (taskId != null) {
+                    jdbcTemplate.update("delete from review_task where id = ?", taskId);
                 }
                 deleteRabbitTopology(context, topology);
             }
@@ -1927,26 +1940,26 @@ class ProductionRuntimeContextIntegrationTest {
         }
 
         List<ForeignKeyExpectation> foreignKeys = List.of(
-            new ForeignKeyExpectation("changed_file", "fk_changed_file_tenant_task", "tenant_id,task_id", "review_task", "tenant_id,id", "RESTRICT"),
+            new ForeignKeyExpectation("changed_file", "fk_changed_file_tenant_task", "tenant_id,task_id", "review_task", "tenant_id,id", "NO ACTION"),
             new ForeignKeyExpectation("changed_file", "fk_changed_file_tenant_attempt", "tenant_id,attempt_id", "review_execution_attempt", "tenant_id,id", "CASCADE"),
-            new ForeignKeyExpectation("review_finding", "fk_review_finding_tenant_task", "tenant_id,task_id", "review_task", "tenant_id,id", "RESTRICT"),
+            new ForeignKeyExpectation("review_finding", "fk_review_finding_tenant_task", "tenant_id,task_id", "review_task", "tenant_id,id", "NO ACTION"),
             new ForeignKeyExpectation("review_finding", "fk_review_finding_tenant_attempt", "tenant_id,attempt_id", "review_execution_attempt", "tenant_id,id", "CASCADE"),
-            new ForeignKeyExpectation("review_timeline", "fk_review_timeline_tenant_task", "tenant_id,task_id", "review_task", "tenant_id,id", "RESTRICT"),
+            new ForeignKeyExpectation("review_timeline", "fk_review_timeline_tenant_task", "tenant_id,task_id", "review_task", "tenant_id,id", "NO ACTION"),
             new ForeignKeyExpectation("review_execution_attempt", "fk_review_attempt_tenant_task", "tenant_id,task_id", "review_task", "tenant_id,id", "CASCADE"),
-            new ForeignKeyExpectation("github_comment_publication", "fk_github_comment_pub_tenant_task", "tenant_id,task_id", "review_task", "tenant_id,id", "RESTRICT"),
-            new ForeignKeyExpectation("github_comment_publication", "fk_github_comment_pub_tenant_finding", "tenant_id,finding_id", "review_finding", "tenant_id,id", "RESTRICT"),
-            new ForeignKeyExpectation("github_comment_publication_batch", "fk_github_comment_batch_tenant_task", "tenant_id,task_id", "review_task", "tenant_id,id", "RESTRICT"),
-            new ForeignKeyExpectation("github_comment_publication_batch_item", "fk_github_comment_item_tenant_batch", "tenant_id,batch_id", "github_comment_publication_batch", "tenant_id,id", "RESTRICT"),
-            new ForeignKeyExpectation("github_comment_publication_batch_item", "fk_github_comment_item_tenant_task", "tenant_id,task_id", "review_task", "tenant_id,id", "RESTRICT"),
-            new ForeignKeyExpectation("github_comment_publication_batch_item", "fk_github_comment_item_tenant_finding", "tenant_id,finding_id", "review_finding", "tenant_id,id", "RESTRICT"),
-            new ForeignKeyExpectation("notification_event", "fk_notification_event_tenant_task", "tenant_id,task_id", "review_task", "tenant_id,id", "RESTRICT"),
-            new ForeignKeyExpectation("notification_event", "fk_notification_event_tenant_batch", "tenant_id,batch_id", "github_comment_publication_batch", "tenant_id,id", "RESTRICT"),
-            new ForeignKeyExpectation("notification_delivery_log", "fk_notification_delivery_tenant_event", "tenant_id,event_id", "notification_event", "tenant_id,id", "RESTRICT"),
-            new ForeignKeyExpectation("notification_delivery_log", "fk_notification_delivery_tenant_binding", "tenant_id,binding_id", "notification_channel_binding", "tenant_id,id", "RESTRICT"),
-            new ForeignKeyExpectation("notification_delivery_log", "fk_notification_delivery_tenant_task", "tenant_id,task_id", "review_task", "tenant_id,id", "RESTRICT"),
+            new ForeignKeyExpectation("github_comment_publication", "fk_github_comment_pub_tenant_task", "tenant_id,task_id", "review_task", "tenant_id,id", "NO ACTION"),
+            new ForeignKeyExpectation("github_comment_publication", "fk_github_comment_pub_tenant_finding", "tenant_id,finding_id", "review_finding", "tenant_id,id", "NO ACTION"),
+            new ForeignKeyExpectation("github_comment_publication_batch", "fk_github_comment_batch_tenant_task", "tenant_id,task_id", "review_task", "tenant_id,id", "NO ACTION"),
+            new ForeignKeyExpectation("github_comment_publication_batch_item", "fk_github_comment_item_tenant_batch", "tenant_id,batch_id", "github_comment_publication_batch", "tenant_id,id", "NO ACTION"),
+            new ForeignKeyExpectation("github_comment_publication_batch_item", "fk_github_comment_item_tenant_task", "tenant_id,task_id", "review_task", "tenant_id,id", "NO ACTION"),
+            new ForeignKeyExpectation("github_comment_publication_batch_item", "fk_github_comment_item_tenant_finding", "tenant_id,finding_id", "review_finding", "tenant_id,id", "NO ACTION"),
+            new ForeignKeyExpectation("notification_event", "fk_notification_event_tenant_task", "tenant_id,task_id", "review_task", "tenant_id,id", "NO ACTION"),
+            new ForeignKeyExpectation("notification_event", "fk_notification_event_tenant_batch", "tenant_id,batch_id", "github_comment_publication_batch", "tenant_id,id", "NO ACTION"),
+            new ForeignKeyExpectation("notification_delivery_log", "fk_notification_delivery_tenant_event", "tenant_id,event_id", "notification_event", "tenant_id,id", "NO ACTION"),
+            new ForeignKeyExpectation("notification_delivery_log", "fk_notification_delivery_tenant_binding", "tenant_id,binding_id", "notification_channel_binding", "tenant_id,id", "NO ACTION"),
+            new ForeignKeyExpectation("notification_delivery_log", "fk_notification_delivery_tenant_task", "tenant_id,task_id", "review_task", "tenant_id,id", "NO ACTION"),
             new ForeignKeyExpectation("review_policy_promotion_evidence", "fk_policy_evidence_tenant_rule", "tenant_id,rule_policy_snapshot_id", "review_rule_policy_snapshot", "tenant_id,id", "RESTRICT"),
             new ForeignKeyExpectation("review_policy_promotion_evidence", "fk_policy_evidence_tenant_strategy", "tenant_id,strategy_policy_snapshot_id", "review_strategy_policy_snapshot", "tenant_id,id", "RESTRICT"),
-            new ForeignKeyExpectation("review_strategy_policy_snapshot", "fk_strategy_policy_tenant_source", "tenant_id,source_snapshot_id", "review_strategy_policy_snapshot", "tenant_id,id", "RESTRICT")
+            new ForeignKeyExpectation("review_strategy_policy_snapshot", "fk_strategy_policy_tenant_source", "tenant_id,source_snapshot_id", "review_strategy_policy_snapshot", "tenant_id,id", "NO ACTION")
         );
         for (ForeignKeyExpectation foreignKey : foreignKeys) {
             Map<String, Object> actual = jdbcTemplate.queryForMap(
