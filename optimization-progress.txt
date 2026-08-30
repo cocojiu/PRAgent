@@ -173,8 +173,9 @@ Worker 门槛：建议窗口为 2026-08-30 02:00–02:30（Asia/Shanghai）；�
 下一步：进入 P0-02B，以 expand-contract 独立批次补齐租户父子组合键/外键、存量脏数据探针和真实 MySQL 迁移验证。
 
 2026-08-30 | 优化-19 | P0-02B-Expand 租户父子组合键扩展
-状态：代码、定向测试和本地完整回归已完成；测试分支 Actions 与真实 MySQL 迁移验收待执行。
+状态：已完成。代码、本地完整回归、测试分支 Actions、真实 MySQL 8.0.46 空库迁移和组合索引验收均已通过。
 变更：新增 V76 扩展迁移，为任务、执行尝试、发现、评论批次、通知事件/绑定、规则/策略快照补齐 (tenant_id, id) 唯一候选键，并为缺失的尝试、发现、评论、通知和策略证据子关系补齐 tenant_id 前导组合索引；保留全部旧单列外键，保证 N/N-1 应用兼容。本阶段不提前切换约束。
 验证增强：生产 MySQL/RabbitMQ 条件化集成在 API 完成 Flyway 后，从 information_schema 校验 8 个组合候选键和 17 个组合子索引的列顺序及唯一性；schema guard、Kubernetes 清单和部署说明同步到 V76。
 本地验证：V76 迁移、schema 版本和 Kubernetes 定向契约共执行 8 项、0 失败，11 项真实 MySQL 条件化集成按环境门禁跳过但编译成功；完整 mvn verify 共 2535 项、0 失败、0 错误、11 项条件化跳过，JaCoCo 覆盖门禁与 JAR 打包通过。
-下一步：完成 V76 本地与远程验收；随后执行 P0-02B-Contract，在切换组合外键前运行存量跨租户脏数据探针并以 fail-closed 方式阻止不一致数据上线。
+远程验收：实现提交 b59308d1；Pull Request Quality #33296560904、Repository Governance #33296560885/#33296559253、Release Images #33296559254、Auto Create Pull Request #33296559251 全部成功。Spring MySQL RabbitMQ integration job #99217127538 在 MySQL 8.0.46 从空库成功应用 76 个迁移到 v76，ProductionRuntimeContextIntegrationTest 11 项、0 失败、0 错误、0 跳过并 BUILD SUCCESS，覆盖 information_schema 中 8 个组合候选键与 17 个组合子索引验收。
+下一步：经单独批准后执行 P0-02B-Contract；该阶段会先运行存量跨租户脏数据探针，再删除旧单列外键并切换为组合外键，操作风险高于只增索引的 V76。
