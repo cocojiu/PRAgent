@@ -482,6 +482,8 @@ V68–V77 没有自动 down migration。V77 已移除旧单列外键，不能通
 
 - 2026-08-30：P1-01 生产 SSH 主机身份预置信任已完成代码门禁，生产环境激活待验收。实现提交 `06d20831` 新增统一 `bootstrap-production-ssh` action，把发布、回滚、备份、可观测性升级、容量复测和真实链路共 9 个工作流从运行时 `ssh-keyscan` 切换为受保护的 `DEPLOY_KNOWN_HOSTS` 离线基线；空基线、无效/加密私钥、无效主机密钥、端口越界和目标主机不匹配均在联网前 fail-closed，并固定启用严格主机校验与非交互模式。Java 合约测试锁定全部工作流不得回退动态信任或关闭严格校验，README 已记录双人复核及新旧密钥重叠轮换流程。本地 `mvn verify` 共 2538 项测试通过（0 失败、0 错误、11 条件跳过），JaCoCo 与打包通过；Pull Request Quality Run `33308963232`、Release Images Run `33308961932`、Production Observability Image Security Run `33308963201`、两路 Repository Governance 与 Auto Create Pull Request 全部成功。仓库级和 production environment Secret 清单均确认尚未配置 `DEPLOY_KNOWN_HOSTS`，因此生产 SSH 作业会按设计拒绝运行；必须先由带外可信渠道取得并复核完整主机公钥，配置 Secret 后运行只读 Inventory，才能将 P1-01 标记为完成。
 
+- 2026-08-30：P1-02 Kubernetes 出站网络隔离已完成代码与测试分支门禁，生产精确授权和集群连通验收待环境。实现提交 `feb00d08` 将全 namespace 的任意 443/3306/5671/5672 放行改为默认拒绝，并按工作负载拆分 CoreDNS、前端到 API、API/Worker 到 MySQL、RabbitMQ 和公网 HTTPS；数据库与消息队列同时要求 namespace/pod 标签，公网 HTTPS 显式排除私网、回环、链路本地、云元数据和保留地址。部署合约锁定每条放行必须具有目标和端口，并验证各工作负载不得获得额外能力。本地 `mvn verify` 共 2539 项测试通过（0 失败、0 错误、11 条件跳过），JaCoCo 与打包通过；Pull Request Quality Run `33311241655`、Release Images Run `33311239842`、Production Observability Image Security Run `33311241584`、Repository Governance Run `33311239860`/`33311241532` 和 Auto Create Pull Request Run `33311239951` 全部成功。标准 NetworkPolicy 不能表达 GitHub、LLM 和 OIDC 的域名白名单，当前公网 IPv4 443 规则只是阻断私网与元数据访问的过渡基线；生产必须补齐托管 MySQL/RabbitMQ 精确 CIDR，并通过 FQDN-aware CNI 或 egress gateway 收敛 SaaS 域名，完成允许/拒绝正反向探针后，才能将 P1-02 标记为完全完成。
+
 ### Kubernetes Secret 契约
 
 `repoguard-enterprise-env` 至少提供以下环境变量：
