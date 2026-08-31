@@ -26,6 +26,9 @@ class FlywayMigrationUpgradePathIntegrationTest {
 
     private static final String INIT_SQL =
         "SET SESSION sql_mode = REPLACE(@@SESSION.sql_mode, 'ONLY_FULL_GROUP_BY', '')";
+    private static final String COMMIT_SHA = "0123456789abcdef0123456789abcdef01234567";
+    private static final String INPUT_FINGERPRINT =
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
     @Test
     void migratesFromExpandToContractAndRejectsCrossTenantRelationships() throws Exception {
@@ -34,36 +37,50 @@ class FlywayMigrationUpgradePathIntegrationTest {
         String password = environmentOrDefault("SPRING_DATASOURCE_PASSWORD", "");
         Long tenantId = null;
         Long taskId = null;
+        Long attemptId = null;
         String suffix = UUID.randomUUID().toString().replace("-", "");
 
-        migrateTo(url, username, password, "76");
-        try (Connection connection = open(url, username, password)) {
-            assertThat(latestSuccessfulMigration(connection)).isEqualTo("76");
-            assertThat(constraintExists(connection, "changed_file", "fk_changed_file_task")).isTrue();
-            assertThat(constraintExists(connection, "changed_file", "fk_changed_file_tenant_task"))
-                .isFalse();
+        try {
+            migrateTo(url, username, password, "76");
+            try (Connection connection = open(url, username, password)) {
+                assertThat(latestSuccessfulMigration(connection)).isEqualTo("76");
+                assertThat(constraintExists(connection, "changed_file", "fk_changed_file_task")).isTrue();
+                assertThat(constraintExists(connection, "changed_file", "fk_changed_file_tenant_task"))
+                    .isFalse();
 
-            tenantId = insertTenant(connection, suffix);
-            taskId = insertReviewTask(connection, tenantId, suffix);
-            insertChangedFile(connection, tenantId, taskId, suffix);
-        }
+                tenantId = insertTenant(connection, suffix);
+                taskId = insertReviewTask(connection, tenantId, suffix);
+                attemptId = insertExecutionAttempt(connection, taskId);
+                updateCurrentAttempt(connection, taskId, attemptId);
+                insertChangedFile(connection, tenantId, taskId, attemptId, suffix);
+            }
 
-        migrateTo(url, username, password, "77");
-        try (Connection connection = open(url, username, password)) {
-            assertThat(latestSuccessfulMigration(connection)).isEqualTo("77");
-            assertThat(constraintExists(connection, "changed_file", "fk_changed_file_task")).isFalse();
-            assertThat(constraintExists(connection, "changed_file", "fk_changed_file_tenant_task"))
-                .isTrue();
-            assertThat(rowCount(connection, "changed_file", tenantId, taskId)).isEqualTo(1L);
+            migrateTo(url, username, password, "77");
+            try (Connection connection = open(url, username, password)) {
+                assertThat(latestSuccessfulMigration(connection)).isEqualTo("77");
+                assertThat(constraintExists(connection, "changed_file", "fk_changed_file_task")).isFalse();
+                assertThat(constraintExists(connection, "changed_file", "fk_changed_file_tenant_task"))
+                    .isTrue();
+                assertThat(rowCount(connection, "changed_file", tenantId, taskId)).isEqualTo(1L);
 
-            long otherTenantId = insertTenant(connection, suffix + "-other");
-            long finalOtherTenantId = otherTenantId;
-            long finalTaskId = taskId;
-            assertThatThrownBy(() -> insertChangedFile(connection, finalOtherTenantId, finalTaskId, suffix + "-cross"))
-                .isInstanceOf(SQLException.class);
-            deleteTenant(connection, otherTenantId);
+                long otherTenantId = insertTenant(connection, suffix + "-other");
+                long finalOtherTenantId = otherTenantId;
+                long finalTaskId = taskId;
+                long finalAttemptId = attemptId;
+                try {
+                    assertThatThrownBy(() -> insertChangedFile(
+                        connection,
+                        finalOtherTenantId,
+                        finalTaskId,
+                        finalAttemptId,
+                        suffix + "-cross"
+                    )).isInstanceOf(SQLException.class);
+                } finally {
+                    deleteTenant(connection, otherTenantId);
+                }
+            }
         } finally {
-            cleanup(url, username, password, tenantId, taskId);
+            cleanup(url, username, password, tenantId, taskId, attemptId);
         }
     }
 
@@ -111,7 +128,7 @@ class FlywayMigrationUpgradePathIntegrationTest {
             statement.setString(3, "Flyway upgrade path task");
             statement.setString(4, "upgrade-repository");
             statement.setString(5, "upgrade-organization-" + suffix);
-            statement.setString(6, "0123456789abcdef0123456789abcdef01234567");
+            statement.setString(6, COMMIT_SHA);
             statement.setString(7, "upgrade");
             statement.setString(8, "COMPLETED");
             statement.setString(9, "LOW");
@@ -133,15 +150,55 @@ class FlywayMigrationUpgradePathIntegrationTest {
         }
     }
 
-    private void insertChangedFile(Connection connection, long tenantId, long taskId, String suffix)
+    private Long insertExecutionAttempt(Connection connection, long taskId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+            insert into review_execution_attempt (
+                task_id, attempt_no, generation, commit_sha, input_fingerprint, status,
+                queued_at, started_at, created_at
+            ) values (?, 1, 1, ?, ?, 'COMPLETED', ?, ?, ?)
+            """, Statement.RETURN_GENERATED_KEYS)) {
+            LocalDateTime now = LocalDateTime.now();
+            statement.setLong(1, taskId);
+            statement.setString(2, COMMIT_SHA);
+            statement.setString(3, INPUT_FINGERPRINT);
+            statement.setObject(4, now);
+            statement.setObject(5, now);
+            statement.setObject(6, now);
+            statement.executeUpdate();
+            try (ResultSet keys = statement.getGeneratedKeys()) {
+                assertThat(keys.next()).isTrue();
+                return keys.getLong(1);
+            }
+        }
+    }
+
+    private void updateCurrentAttempt(Connection connection, long taskId, long attemptId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+            "update review_task set current_attempt_id = ? where id = ?"
+        )) {
+            statement.setLong(1, attemptId);
+            statement.setLong(2, taskId);
+            statement.executeUpdate();
+        }
+    }
+
+    private void insertChangedFile(
+        Connection connection,
+        long tenantId,
+        long taskId,
+        long attemptId,
+        String suffix
+    )
         throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
-            insert into changed_file (tenant_id, task_id, file_path, change_type, additions, deletions)
-            values (?, ?, ?, 'MODIFIED', 1, 0)
+            insert into changed_file (
+                tenant_id, task_id, attempt_id, current_attempt, file_path, change_type, additions, deletions
+            ) values (?, ?, ?, 1, ?, 'MODIFIED', 1, 0)
             """)) {
             statement.setLong(1, tenantId);
             statement.setLong(2, taskId);
-            statement.setString(3, "src/upgrade/" + suffix + ".java");
+            statement.setLong(3, attemptId);
+            statement.setString(4, "src/upgrade/" + suffix + ".java");
             statement.executeUpdate();
         }
     }
@@ -202,7 +259,8 @@ class FlywayMigrationUpgradePathIntegrationTest {
         String username,
         String password,
         Long tenantId,
-        Long taskId
+        Long taskId,
+        Long attemptId
     ) throws SQLException {
         if (tenantId == null || taskId == null) {
             return;
@@ -213,6 +271,15 @@ class FlywayMigrationUpgradePathIntegrationTest {
             changedFiles.setLong(1, tenantId);
             changedFiles.setLong(2, taskId);
             changedFiles.executeUpdate();
+            if (attemptId != null) {
+                try (PreparedStatement attempts = connection.prepareStatement(
+                    "delete from review_execution_attempt where tenant_id = ? and id = ?"
+                )) {
+                    attempts.setLong(1, tenantId);
+                    attempts.setLong(2, attemptId);
+                    attempts.executeUpdate();
+                }
+            }
             try (PreparedStatement tasks = connection.prepareStatement("delete from review_task where tenant_id = ? and id = ?")) {
                 tasks.setLong(1, tenantId);
                 tasks.setLong(2, taskId);
