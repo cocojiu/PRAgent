@@ -267,8 +267,8 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 验收依据：提交 `edc78c6e` 已推送 `origin/PRAgent-test`；Pull Request Quality、Production Observability Image Security、Repository Governance、Auto Create Pull Request 和 Release Images 均成功，其中生产部署作业按策略跳过。
 
 2026-09-01 | 优化-37 | P0-01 个人项目产品真实性与版本一致性
-状态：代码与本地门禁完成，待提交推送 `PRAgent-test` 并等待远程 Actions 验收。
+状态：已完成代码、本地门禁、中文提交、test 分支推送和远程 Actions 验收。
 变更：登录页删除未实现的忘记密码入口；布局删除未接入的帮助入口；登录宣传从 GitHub/GitLab/Bitbucket 多平台改为已实际打通的 GitHub PR 集成；MySQL/RabbitMQ 集成明确为可选诊断配置，不会切换运行时连接；前端版本改为可由 `VITE_APP_VERSION` 覆盖并默认显示发布版本 `0.1.0`；后端 Maven、Dockerfile 和 reviewed OpenAPI 版本统一为 `0.1.0`。
 本地验证：前端 `npm run quality` 通过（38 个测试文件、152 项测试）；后端 `OpenApiPathsContractTest` 与 `OpenApiGeneratedClientContractTest` 共 16 项通过；`git diff --check` 通过。
-提交/远程验收：待提交；不修改用户已有的 OpenAPI frontend-signature snapshot 工作区改动和 `.tmp/`。
-下一步：提交中文 commit 并推送 `origin/PRAgent-test`，等待 Pull Request Quality、Repository Governance、Release Images 等 Action；若失败按日志修复后再进入 P0-02。
+提交/远程验收：实现提交 `0d3b622f` 已推送 `origin/PRAgent-test`，自动 PR #159；Pull Request Quality #33418533148（7 个作业）、PR Repository Governance #33418533178、push Repository Governance #33418513944、Release Images #33418513941 和 Auto Create Pull Request #33418513964 全部成功，生产部署按手动 opt-in 策略跳过。不修改用户已有的 OpenAPI frontend-signature snapshot 工作区改动和 `.tmp/`。
+下一步：进入 P0-02，先建立 50～100 个真实脱敏 PR 的审查质量基线；继续保持每项独立验证、中文提交和 Actions 证据。
