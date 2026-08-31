@@ -99,6 +99,15 @@ public final class LlmQualityEvaluator {
         int parseFailures = (int) samples.stream().filter(sample -> !sample.parseSucceeded()).count();
         int duplicatePredictions = duplicatePredictions(samples);
         String observedFingerprint = sampleFingerprint(samples);
+        int observedFixedRegressionSamples = (int) samples.stream()
+            .filter(sample -> sample.split() == LlmEvaluationObservation.EvaluationSplit.FIXED_REGRESSION)
+            .count();
+        int observedRollingObservationSamples = (int) samples.stream()
+            .filter(sample -> sample.split() == LlmEvaluationObservation.EvaluationSplit.ROLLING_OBSERVATION)
+            .count();
+        int observationsWithoutSplit = (int) samples.stream()
+            .filter(sample -> sample.split() == LlmEvaluationObservation.EvaluationSplit.UNSPECIFIED)
+            .count();
         BigDecimal precision = ratio(truePositives, predicted);
         BigDecimal recall = ratio(truePositives, expected);
         BigDecimal anchorRate = ratio(anchored, predicted);
@@ -125,7 +134,13 @@ public final class LlmQualityEvaluator {
         }
         List<String> datasetBlockers = dataset == null
             ? List.of()
-            : dataset.validationBlockers(samples.size(), observedFingerprint);
+            : dataset.validationBlockers(
+                samples.size(),
+                observedFingerprint,
+                observedFixedRegressionSamples,
+                observedRollingObservationSamples,
+                observationsWithoutSplit
+            );
         if (dataset != null) {
             blockers.addAll(datasetBlockers);
             if (!version.reproducible()) {

@@ -84,6 +84,20 @@ public record LlmEvaluationDatasetMetadata(
      * describes exactly the same case-id set as the observations being evaluated.
      */
     public List<String> validationBlockers(int observedSamples, String observedFingerprint) {
+        return validationBlockers(observedSamples, observedFingerprint, -1, -1, 0);
+    }
+
+    /**
+     * Lists blockers for a complete manifest-to-observation comparison, including the fixed and
+     * rolling split counts declared by the manifest.
+     */
+    public List<String> validationBlockers(
+        int observedSamples,
+        String observedFingerprint,
+        int observedFixedRegressionSamples,
+        int observedRollingObservationSamples,
+        int observationsWithoutSplit
+    ) {
         List<String> blockers = new ArrayList<>();
         if (kind != DatasetKind.REAL_PR) {
             blockers.add("DATASET_NOT_REAL_PR");
@@ -108,6 +122,23 @@ public record LlmEvaluationDatasetMetadata(
         }
         if (rollingObservationSamples == 0) {
             blockers.add("DATASET_ROLLING_OBSERVATION_SPLIT_MISSING");
+        }
+        if (observationsWithoutSplit > 0) {
+            blockers.add("DATASET_SPLIT_LABEL_MISSING:" + observationsWithoutSplit);
+        }
+        if (observedFixedRegressionSamples >= 0
+            && observedFixedRegressionSamples != fixedRegressionSamples) {
+            blockers.add(
+                "DATASET_FIXED_SPLIT_COUNT_MISMATCH:"
+                    + observedFixedRegressionSamples + "/" + fixedRegressionSamples
+            );
+        }
+        if (observedRollingObservationSamples >= 0
+            && observedRollingObservationSamples != rollingObservationSamples) {
+            blockers.add(
+                "DATASET_ROLLING_SPLIT_COUNT_MISMATCH:"
+                    + observedRollingObservationSamples + "/" + rollingObservationSamples
+            );
         }
         if (!authorized) {
             blockers.add("DATASET_AUTHORIZATION_MISSING");

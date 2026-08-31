@@ -119,6 +119,7 @@ class LlmQualityEvaluatorTest {
             "DATASET_NOT_ANONYMIZED",
             "DATASET_NOT_HUMAN_REVIEWED",
             "DATASET_FINGERPRINT_MISSING",
+            "DATASET_SPLIT_LABEL_MISSING:1",
             "VERSION_METADATA_INCOMPLETE"
         );
     }
@@ -146,7 +147,10 @@ class LlmQualityEvaluatorTest {
                 i < 10 ? "HIGH" : "NONE",
                 true,
                 i < 10 ? "finding-" + i : "",
-                true
+                true,
+                i < 40
+                    ? LlmEvaluationObservation.EvaluationSplit.FIXED_REGRESSION
+                    : LlmEvaluationObservation.EvaluationSplit.ROLLING_OBSERVATION
             ));
         }
         String fingerprint = LlmQualityEvaluator.evaluate(reproducibleVersion, observations)
@@ -217,7 +221,10 @@ class LlmQualityEvaluatorTest {
                 i < 10 ? "HIGH" : "NONE",
                 true,
                 i < 10 ? "finding-" + i : "",
-                true
+                true,
+                i < 40
+                    ? LlmEvaluationObservation.EvaluationSplit.FIXED_REGRESSION
+                    : LlmEvaluationObservation.EvaluationSplit.ROLLING_OBSERVATION
             ));
         }
 
@@ -278,6 +285,30 @@ class LlmQualityEvaluatorTest {
         String predictionKey,
         boolean parsed
     ) {
+        return sample(
+            id,
+            expectedFinding,
+            expectedSeverity,
+            predictedFinding,
+            predictedSeverity,
+            anchored,
+            predictionKey,
+            parsed,
+            LlmEvaluationObservation.EvaluationSplit.UNSPECIFIED
+        );
+    }
+
+    private LlmEvaluationObservation sample(
+        String id,
+        boolean expectedFinding,
+        String expectedSeverity,
+        boolean predictedFinding,
+        String predictedSeverity,
+        boolean anchored,
+        String predictionKey,
+        boolean parsed,
+        LlmEvaluationObservation.EvaluationSplit split
+    ) {
         return new LlmEvaluationObservation(
             id,
             "security",
@@ -290,7 +321,16 @@ class LlmQualityEvaluatorTest {
             parsed,
             100,
             1_000,
-            BigDecimal.valueOf(0.10)
+            BigDecimal.valueOf(0.10),
+            null,
+            false,
+            null,
+            null,
+            null,
+            0,
+            0,
+            0,
+            split
         );
     }
 }

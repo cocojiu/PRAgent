@@ -26,8 +26,15 @@ public record LlmEvaluationObservation(
     Boolean commentIgnored,
     long ruleFindingCount,
     long llmFindingCount,
-    long verifiedFindingCount
+    long verifiedFindingCount,
+    EvaluationSplit split
 ) {
+
+    public enum EvaluationSplit {
+        FIXED_REGRESSION,
+        ROLLING_OBSERVATION,
+        UNSPECIFIED
+    }
 
     public LlmEvaluationObservation(
         String caseId,
@@ -63,7 +70,55 @@ public record LlmEvaluationObservation(
             null,
             0,
             0,
-            0
+            0,
+            EvaluationSplit.UNSPECIFIED
+        );
+    }
+
+    public LlmEvaluationObservation(
+        String caseId,
+        String category,
+        boolean expectedFinding,
+        String expectedSeverity,
+        boolean predictedFinding,
+        String predictedSeverity,
+        boolean anchorValid,
+        String predictionKey,
+        boolean parseSucceeded,
+        long latencyMs,
+        long totalTokens,
+        BigDecimal estimatedCost,
+        Boolean usefulComment,
+        boolean commentPublishAttempted,
+        Boolean commentPublished,
+        Boolean commentFixed,
+        Boolean commentIgnored,
+        long ruleFindingCount,
+        long llmFindingCount,
+        long verifiedFindingCount
+    ) {
+        this(
+            caseId,
+            category,
+            expectedFinding,
+            expectedSeverity,
+            predictedFinding,
+            predictedSeverity,
+            anchorValid,
+            predictionKey,
+            parseSucceeded,
+            latencyMs,
+            totalTokens,
+            estimatedCost,
+            usefulComment,
+            commentPublishAttempted,
+            commentPublished,
+            commentFixed,
+            commentIgnored,
+            ruleFindingCount,
+            llmFindingCount,
+            verifiedFindingCount,
+            EvaluationSplit.UNSPECIFIED
         );
     }
 
@@ -77,6 +132,7 @@ public record LlmEvaluationObservation(
         totalTokens = Math.max(0, totalTokens);
         estimatedCost = estimatedCost == null ? BigDecimal.ZERO : estimatedCost.max(BigDecimal.ZERO);
         commentPublishAttempted = commentPublishAttempted || commentPublished != null;
+        split = split == null ? EvaluationSplit.UNSPECIFIED : split;
         if (Boolean.TRUE.equals(commentFixed) && Boolean.TRUE.equals(commentIgnored)) {
             throw new IllegalArgumentException("A comment cannot be both fixed and ignored");
         }
