@@ -56,6 +56,8 @@ reviewControllerRetryReview(input: { path: { id: number } }): Promise<ReviewRetr
 reviewControllerSubmitHumanReview(input: { path: { id: number }; body: HumanReviewRequest }): Promise<HumanReviewResponse>; // POST /api/v1/reviews/{id}/human-review
 reviewControllerTriggerManualReview(input: { body: ManualReviewRequest }): Promise<ManualReviewResponse>; // POST /api/v1/reviews/manual
 reviewControllerUpdateFindingFeedback(input: { path: { findingId: number; id: number }; body: FindingFeedbackRequest }): Promise<FindingFeedbackResponse>; // POST /api/v1/reviews/{id}/findings/{findingId}/feedback
+reviewExecutionAttemptCollectionControllerChangedFiles(input: { path: { attemptId: number; taskId: number }; query?: { cursor?: number; limit?: number } }): Promise<PageResponse<ReviewAttemptChangedFile>>; // GET /api/v1/reviews/{taskId}/attempts/{attemptId}/changed-files
+reviewExecutionAttemptCollectionControllerFindings(input: { path: { attemptId: number; taskId: number }; query?: { cursor?: number; limit?: number } }): Promise<PageResponse<ReviewAttemptFinding>>; // GET /api/v1/reviews/{taskId}/attempts/{attemptId}/findings
 reviewExecutionAttemptControllerGetResult(input: { path: { attemptId: number; taskId: number }; query?: { page?: number; pageSize?: number } }): Promise<ReviewExecutionAttemptResult>; // GET /api/v1/reviews/{taskId}/attempts/{attemptId}
 reviewExecutionAttemptControllerList(input: { path: { taskId: number } }): Promise<ReviewExecutionAttempt[]>; // GET /api/v1/reviews/{taskId}/attempts
 systemConfigControllerCreateReviewRule(input: { body: ReviewRuleConfigRequest }): Promise<ReviewRuleConfig>; // POST /api/v1/config/review-rules
