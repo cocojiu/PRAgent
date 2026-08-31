@@ -312,3 +312,11 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 提交/远程验收：实现提交 `dea9c593`（修复：校验真实 PR 样本上下文标签）已推送 `origin/PRAgent-test`；Pull Request Quality #33426734664、PR Repository Governance #33426734520、push Repository Governance #33426730361、Release Images #33426730227 和 Auto Create Pull Request #33426730261 均成功，生产部署按手动 opt-in 策略跳过。
 数据边界：本批仅完善样本聚合标签契约，不写入真实源码、原始 provider 请求、PR 标识或密钥；当前仍无可用人工标注 LLM review 证据，不能宣称真实质量基线完成。
 下一步：仍需维护者提供 2～3 个授权仓库的 50～100 个脱敏、人工复核样本；数据到位后核对上下文标签、来源分布、指纹与固定/滚动分组，再进入 P0-03 十分钟首次审查闭环。
+
+2026-09-01 | 优化-43 | P0-03 个人模式十分钟首次审查引导
+状态：已完成代码、回归测试、中文提交、test 分支推送和远程 Actions 验收；个人模式首次审查仍需用户提供有效 GitHub/LLM 凭据与至少一个 open PR。
+变更：总览新增个人模式首次审查引导，按 GitHub PAT/默认仓库、LLM provider/模型、权限与模型连通性、仓库 open PR 检查和预览审查五步推进；复用现有配置、连接测试和 PR 选择 API，不读取或展示密钥明文。开始预览会带 `onboarding=preview` 进入审查任务并自动打开 PR 选择器；评论发布仍需在任务详情页明确确认。MySQL/RabbitMQ 继续只作为可选诊断，不进入首次必填路径。
+本地验证：前端 `npm run quality` 通过（39 个测试文件、155 项测试）；新增个人引导步骤测试 3 项；`git diff --check` 通过。
+提交/远程验收：实现提交 `1a81a900`（优化：增加个人模式首次审查引导）已推送 `origin/PRAgent-test`；Pull Request Quality #33428836886、PR Repository Governance #33428836906、push Repository Governance #33428834131、Release Images #33428834134 和 Auto Create Pull Request #33428834092 均成功，生产部署按手动 opt-in 策略跳过。
+安全边界：引导仅管理员加载；测试接口复用保存配置并只显示后端的状态/错误，不把 PAT、API Key 或原始源码写入前端状态/仓库；首次入口只预览，不自动调用评论发布接口。
+下一步：继续 P1-01，按个人模式隔离导航、路由和后端 bean；企业能力默认不暴露且不进入个人首次启动路径。
