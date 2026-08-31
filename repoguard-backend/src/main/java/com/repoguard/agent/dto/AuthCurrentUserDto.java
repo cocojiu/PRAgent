@@ -8,6 +8,18 @@ public record AuthCurrentUserDto(
     String email,
     String role,
     String status,
-    LocalDateTime lastLoginAt
+    LocalDateTime lastLoginAt,
+    String language,
+    String timezone
 ) {
+    public AuthCurrentUserDto(
+        Long id,
+        String username,
+        String email,
+        String role,
+        String status,
+        LocalDateTime lastLoginAt
+    ) {
+        this(id, username, email, role, status, lastLoginAt, "zh-CN", "Asia/Shanghai");
+    }
 }

@@ -70,7 +70,7 @@
           </div>
           <div class="health-item">
             <span>最近连接检测</span>
-            <b>{{ health.activeConfig.lastCheckedAt || "-" }}</b>
+            <b>{{ formatDateTime(health.activeConfig.lastCheckedAt) }}</b>
           </div>
           <div class="health-item">
             <span>最大重试</span>
@@ -147,7 +147,7 @@
         </el-table-column>
         <el-table-column prop="publishAttempts" label="发布次数" width="100" />
         <el-table-column prop="nextRetryAt" label="下次重试时间" min-width="170">
-          <template #default="{ row }">{{ row.nextRetryAt || "-" }}</template>
+          <template #default="{ row }">{{ formatDateTime(row.nextRetryAt) }}</template>
         </el-table-column>
         <el-table-column prop="claimedBy" label="Claim实例" min-width="150">
           <template #default="{ row }">{{ row.claimedBy || "-" }}</template>
@@ -186,7 +186,7 @@
       </el-table>
 
       <div class="table-footer">
-        <span>共 {{ filteredTasks.length }} 条，生成于 {{ health.generatedAt }}</span>
+        <span>共 {{ filteredTasks.length }} 条，生成于 {{ formatDateTime(health.generatedAt) }}</span>
         <el-pagination
           v-model:current-page="currentPage"
           v-model:page-size="pageSize"
@@ -201,6 +201,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatDateTime } from "@/utils/dateTime";
 import "@/features/message-queue/messageQueue.css";
 import { computed } from "vue";
 import { RouterLink, useRouter } from "vue-router";
@@ -293,7 +294,7 @@ const activeConfigMeta = computed(() => {
   if (!config) {
     return "-";
   }
-  return `配置版本 ${config.configVersion} · 已保存于 ${config.updatedAt || "-"}`;
+  return `配置版本 ${config.configVersion} · 已保存于 ${formatDateTime(config.updatedAt)}`;
 });
 
 const savedConfigStatusText = computed(() => configStatusText(health.value?.activeConfig.status));

@@ -9,7 +9,7 @@
     </p>
     <dl v-if="task.humanReviewBy || task.humanReviewedAt" class="human-review-meta">
       <dt>审查人</dt><dd>{{ task.humanReviewBy || "-" }}</dd>
-      <dt>审查时间</dt><dd>{{ task.humanReviewedAt || "-" }}</dd>
+      <dt>审查时间</dt><dd>{{ formatDateTime(task.humanReviewedAt) }}</dd>
     </dl>
     <div class="human-review-actions">
       <el-button
@@ -42,6 +42,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatDateTime } from "@/utils/dateTime";
 import type { HumanReviewRequest, ReviewTaskDetail } from "@/types";
 
 defineProps<{

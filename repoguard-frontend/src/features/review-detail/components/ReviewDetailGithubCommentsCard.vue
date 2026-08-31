@@ -97,7 +97,7 @@
           class="publication-batch-note"
         >
           <span v-if="githubCommentPublishResult.nextRetryAt">
-            下次重试：{{ githubCommentPublishResult.nextRetryAt }}
+            下次重试：{{ formatDateTime(githubCommentPublishResult.nextRetryAt) }}
           </span>
           <span v-if="githubCommentPublishResult.lastError">
             {{ githubCommentPublishResult.lastError }}
@@ -182,7 +182,7 @@
         <section v-for="batch in publicationHistoryBatches" :key="batch.batchId" class="comment-history-batch">
           <div class="comment-history-batch-head">
             <div>
-              <strong>{{ batch.createdAt }}</strong>
+              <strong>{{ formatDateTime(batch.createdAt) }}</strong>
               <span :class="`status-pill ${publicationBatchStatusClass(batch.status)}`">
                 {{ publicationBatchStatusText(batch.status) }}
               </span>
@@ -195,7 +195,7 @@
             </div>
           </div>
           <div v-if="batch.nextRetryAt || batch.lastError" class="publication-batch-note">
-            <span v-if="batch.nextRetryAt">下次重试：{{ batch.nextRetryAt }}</span>
+            <span v-if="batch.nextRetryAt">下次重试：{{ formatDateTime(batch.nextRetryAt) }}</span>
             <span v-if="batch.lastError">{{ batch.lastError }}</span>
           </div>
           <div class="comment-history-items">
@@ -247,6 +247,7 @@
 import { computed, watch } from "vue";
 import Github from "@/components/icons/GithubIcon.vue";
 import { RouterLink } from "vue-router";
+import { formatDateTime } from "@/utils/dateTime";
 import {
   COMMENT_BODY_PREVIEW_CHARS,
   boundedDetailItems,

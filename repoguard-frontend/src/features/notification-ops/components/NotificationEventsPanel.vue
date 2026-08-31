@@ -54,7 +54,9 @@
         </template>
       </el-table-column>
       <el-table-column prop="retryCount" label="重试" width="86" />
-      <el-table-column prop="nextRetryAt" label="下次重试" min-width="160" />
+      <el-table-column label="下次重试" min-width="180">
+        <template #default="{ row }">{{ formatDateTime(row.nextRetryAt) }}</template>
+      </el-table-column>
       <el-table-column prop="lastError" label="最近错误" min-width="240" show-overflow-tooltip />
       <el-table-column label="操作" width="120" fixed="right">
         <template #default="{ row }">
@@ -74,6 +76,7 @@
 
 <script setup lang="ts">
 import { RefreshCw } from "@lucide/vue";
+import { formatDateTime } from "@/utils/dateTime";
 import {
   canRetryNotificationEvent,
   channelIcon,

@@ -56,7 +56,7 @@
         </div>
         <div class="finding-feedback">
           <p v-if="finding.feedbackNote || finding.feedbackBy || finding.feedbackAt" class="finding-feedback-meta">
-            {{ finding.feedbackBy || "admin" }} · {{ finding.feedbackAt || "刚刚" }}
+            {{ finding.feedbackBy || "admin" }} · {{ finding.feedbackAt ? formatDateTime(finding.feedbackAt) : "刚刚" }}
             <span v-if="finding.feedbackNote"> · {{ finding.feedbackNote }}</span>
           </p>
           <div class="finding-feedback-actions">
@@ -120,6 +120,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatDateTime } from "@/utils/dateTime";
 import { computed, watch } from "vue";
 import { RefreshCw } from "@lucide/vue";
 import {

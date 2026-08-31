@@ -1,12 +1,16 @@
 package com.repoguard.agent.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.cache.CacheEvictionService;
 import com.repoguard.agent.config.RabbitReviewQueueProperties;
+import com.repoguard.agent.common.BusinessException;
+import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.dto.BaseSettingsRequest;
 import com.repoguard.agent.dto.NotificationSettingsRequest;
 import com.repoguard.agent.dto.ReviewPolicySettingsRequest;
@@ -78,6 +82,7 @@ class SystemSettingsApplicationServiceImplTest {
         assertThat(reviewPolicyConfig.getWorkerConcurrency()).isEqualTo(4);
         assertThat(result.policy().workerConcurrency()).isEqualTo(4);
         assertThat(result.logs()).hasSize(1);
+        assertThat(result.logs().getFirst().occurredAt()).hasToString("2026-06-18T02:30Z");
         verify(systemSettingsConfigMapper).updateById(settingsConfig);
         verify(reviewPolicyConfigMapper).updateById(reviewPolicyConfig);
 
@@ -114,9 +119,66 @@ class SystemSettingsApplicationServiceImplTest {
         assertThat(result.logs()).isEmpty();
     }
 
+    @Test
+    void updateSystemSettingsRejectsInvalidTimezoneBeforeWriting() {
+        assertThatThrownBy(() -> service.updateSystemSettings(request("devops@repoguard.dev", "Mars/Olympus")))
+            .isInstanceOf(BusinessException.class)
+            .satisfies(error -> assertThat(((BusinessException) error).getErrorCode()).isEqualTo(ErrorCode.BAD_REQUEST));
+
+        verifyNoInteractions(systemSettingsConfigMapper, systemSettingLogMapper, reviewPolicyConfigMapper);
+    }
+
+    @Test
+    void updateSystemSettingsRejectsFixedOffsetTimezoneBeforeWriting() {
+        assertThatThrownBy(() -> service.updateSystemSettings(request("devops@repoguard.dev", "+08:00")))
+            .isInstanceOf(BusinessException.class)
+            .satisfies(error -> assertThat(((BusinessException) error).getErrorCode()).isEqualTo(ErrorCode.BAD_REQUEST));
+
+        verifyNoInteractions(systemSettingsConfigMapper, systemSettingLogMapper, reviewPolicyConfigMapper);
+    }
+
+    @Test
+    void updateSystemSettingsRejectsBlankTimezoneBeforeWriting() {
+        assertThatThrownBy(() -> service.updateSystemSettings(request("devops@repoguard.dev", "   ")))
+            .isInstanceOf(BusinessException.class)
+            .satisfies(error -> assertThat(((BusinessException) error).getErrorCode()).isEqualTo(ErrorCode.BAD_REQUEST));
+
+        verifyNoInteractions(systemSettingsConfigMapper, systemSettingLogMapper, reviewPolicyConfigMapper);
+    }
+
+    @Test
+    void updateSystemSettingsNormalizesCanonicalTimezoneAndLanguage() {
+        SystemSettingsConfig settingsConfig = systemSettingsConfig();
+        ReviewPolicyConfig reviewPolicyConfig = reviewPolicyConfig();
+        when(systemSettingsConfigMapper.selectById(1L)).thenReturn(settingsConfig);
+        when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(reviewPolicyConfig);
+
+        var result = service.updateSystemSettings(request("devops@repoguard.dev", " America/New_York "));
+
+        assertThat(settingsConfig.getTimezone()).isEqualTo("America/New_York");
+        assertThat(settingsConfig.getLanguage()).isEqualTo("中文");
+        assertThat(result.base().timezone()).isEqualTo("America/New_York");
+    }
+
+    @Test
+    void updateSystemSettingsRejectsUnsupportedLanguage() {
+        assertThatThrownBy(() -> service.updateSystemSettings(new SystemSettingsRequest(
+            new BaseSettingsRequest("RepoGuard Agent", "English", "Asia/Shanghai", 90),
+            new ReviewPolicySettingsRequest(800, 60, 1, true, true),
+            new NotificationSettingsRequest(true, true, true, "ops@repoguard.dev"),
+            new SecuritySettingsRequest(true, true, false, 30)
+        )))
+            .isInstanceOf(BusinessException.class)
+            .satisfies(error -> assertThat(((BusinessException) error).getErrorCode()).isEqualTo(ErrorCode.BAD_REQUEST));
+    }
+
     private SystemSettingsRequest request(String email) {
+        return request(email, "Asia/Shanghai");
+    }
+
+    private SystemSettingsRequest request(String email, String timezone) {
         return new SystemSettingsRequest(
-            new BaseSettingsRequest("RepoGuard Agent Pro", "中文", "Asia/Shanghai", 120),
+            new BaseSettingsRequest("RepoGuard Agent Pro", "中文", timezone, 120),
             new ReviewPolicySettingsRequest(1200, 90, 3, true, false),
             new NotificationSettingsRequest(true, false, true, email),
             new SecuritySettingsRequest(true, true, true, 45)

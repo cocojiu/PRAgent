@@ -35,7 +35,7 @@
         <template #default="{ row }">
           <div class="pr-option-cell">
             <strong>#{{ row.number }} {{ row.title }}</strong>
-            <span>{{ row.author || "-" }} · {{ row.updatedAt || "-" }}</span>
+            <span>{{ row.author || "-" }} · {{ formatDateTime(row.updatedAt) }}</span>
           </div>
         </template>
       </el-table-column>
@@ -63,6 +63,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatDateTime } from "@/utils/dateTime";
 import { computed } from "vue";
 import { RefreshCw } from "@lucide/vue";
 import Github from "@/components/icons/GithubIcon.vue";

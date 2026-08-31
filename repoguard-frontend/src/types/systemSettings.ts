@@ -29,6 +29,7 @@ export interface SecuritySettings {
 
 export interface SettingLog {
   time: string;
+  occurredAt?: string;
   operator: string;
   action: string;
   status: string;

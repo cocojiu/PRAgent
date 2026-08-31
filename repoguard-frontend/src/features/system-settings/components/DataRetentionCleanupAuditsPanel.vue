@@ -46,9 +46,11 @@
           </span>
         </template>
       </el-table-column>
-      <el-table-column prop="createdAt" label="开始时间" min-width="162" />
+      <el-table-column label="开始时间" min-width="180">
+        <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
+      </el-table-column>
       <el-table-column prop="completedAt" label="完成时间" min-width="162">
-        <template #default="{ row }">{{ row.completedAt || "-" }}</template>
+        <template #default="{ row }">{{ formatDateTime(row.completedAt) }}</template>
       </el-table-column>
       <el-table-column label="保留/上限" width="120">
         <template #default="{ row }">{{ row.retentionDays ?? "-" }} / {{ row.maxTasks ?? "-" }}</template>
@@ -86,6 +88,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatDateTime } from "@/utils/dateTime";
 import { onMounted, reactive, ref } from "vue";
 import { RefreshCw } from "@lucide/vue";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";

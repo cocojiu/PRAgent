@@ -1,6 +1,8 @@
 import { computed, ref } from "vue";
 import { getCurrentUser } from "@/api/auth";
 import type { CurrentUser } from "@/api/auth";
+import { applyUiPreferences } from "@/stores/uiPreferences";
+import { DEFAULT_TIMEZONE } from "@/utils/dateTime";
 
 export const currentUser = ref<CurrentUser>();
 export const canManage = computed(() => currentUser.value?.role === "ADMIN");
@@ -22,6 +24,7 @@ export const loadCurrentUser = () => {
       .then((user) => {
         if (authEpoch === epoch && !controller.signal.aborted) {
           currentUser.value = user;
+          applyUiPreferences(user.timezone ?? DEFAULT_TIMEZONE);
         }
         return user;
       })

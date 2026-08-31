@@ -205,6 +205,7 @@ import { buildUserManagementMetrics } from "@/features/user-management/userManag
 import { createLatestOnlyLoader } from "@/features/user-management/latestOnlyLoader";
 import { canManage, currentUser } from "@/stores/authState";
 import { getErrorMessage } from "@/utils/errors";
+import { formatDateTime } from "@/utils/dateTime";
 
 const loading = ref(false);
 const auditLoading = ref(false);
@@ -443,13 +444,6 @@ const valueText = (value?: string) => {
     DISABLED: "禁用"
   };
   return labels[value] || value;
-};
-
-const formatDateTime = (value?: string) => {
-  if (!value) {
-    return "-";
-  }
-  return value.replace("T", " ").slice(0, 16);
 };
 
 watch([roleFilter, statusFilter], () => {

@@ -486,6 +486,8 @@ V68–V77 没有自动 down migration。V77 已移除旧单列外键，不能通
 
 - 2026-08-31：P1-03 真实浏览器 E2E 与前端覆盖门禁已完成。基础实现提交 `b368c210` 引入 Playwright Chromium 生产构建回归、Vitest V8 覆盖率门禁和 Java 配置合约，修复提交 `c5544966` 将浏览器夹具凭据改为测试前缀，扩展提交 `39fc1929` 增加受契约约束的双租户评审 seed API；路由烟雾测试与真实浏览器端到端测试已分离。7 项 Chromium 用例覆盖安全深链登录、CSRF 与登出清理、整页刷新后的 Cookie 会话单次续期、RBAC 拒绝、双租户列表正向隔离与跨租户详情 404、同 commit 手动评审幂等复用、失败任务重试与轮询退避、人工审批单次提交，以及 GitHub 评论预览和发布；seed 层同时锁定 HTTP 方法、trace、登出 CSRF、关键请求载荷和租户资源边界，失败时保留 trace、截图和视频。前端 37 个测试文件共 147 项测试通过，覆盖率实测 statements 64.37%、branches 52.57%、functions 55.22%、lines 64.80%，门禁分别为 64%、52%、55%、64%；本地 CI 单 worker 的 7 项 Chromium 全部通过，Java 浏览器质量/供应链合约 10 项通过。扩展提交对应 Pull Request Quality Run `33324133105`、Release Images Run `33324131526`、Production Observability Image Security Run `33324133077`、Repository Governance Run `33324131359`/`33324133073` 和 Auto Create Pull Request Run `33324131314` 全部成功；PR 后端全量、MySQL/RabbitMQ 生产上下文、镜像构建、SBOM/证明、非 root 运行和高危漏洞扫描均通过。当前 PR 门禁使用方案允许的稳定 seed API，不替代发布环境的真实外部 GitHub/LLM 连通性验收。
 
+- 2026-08-31：P1-04 语言、时区与时间语义统一已完成。后端使用 `ZoneId` 校验并规范化 IANA 时区，仅接受 `zh-CN/中文`，`/auth/me` 返回当前语言和时区；设置日志新增带 `date-time` 格式的 UTC `occurredAt`，保留旧 `time` 字段兼容读取。前端移除误导性的英文切换，提供可筛选 IANA 时区选择器和持久化偏好，所有业务时间统一经过 `formatDateTime` 并按配置时区渲染，兼容旧的 `yyyy-MM-dd HH:mm:ss` 数据。新增上海/纽约同一 UTC 时刻、夏令时跳变、非法时区、语言拒绝、审计 UTC 与全局偏好测试，OpenAPI JSON 快照同步更新；后端全量、OpenAPI/Controller 契约测试，前端 38 个测试文件共 152 项测试、类型检查、Lint 与生产构建均通过。
+
 ### Kubernetes Secret 契约
 
 `repoguard-enterprise-env` 至少提供以下环境变量：

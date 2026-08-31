@@ -88,7 +88,7 @@
                     <template #default="{ row }">{{ row.lastError || "-" }}</template>
                   </el-table-column>
                   <el-table-column label="更新时间" min-width="168">
-                    <template #default="{ row }">{{ row.updatedAt || row.createdAt || "-" }}</template>
+                    <template #default="{ row }">{{ formatDateTime(row.updatedAt || row.createdAt) }}</template>
                   </el-table-column>
                   <el-table-column label="操作" width="126" fixed="right">
                     <template #default="{ row }">
@@ -214,6 +214,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatDateTime } from "@/utils/dateTime";
 import "@/features/notification-ops/notificationOps.css";
 import { computed, onMounted, ref } from "vue";
 import {

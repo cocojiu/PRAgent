@@ -121,7 +121,9 @@
               </div>
             </template>
           </el-table-column>
-          <el-table-column prop="updatedAt" label="最近更新" min-width="160" />
+          <el-table-column label="最近更新" min-width="180">
+            <template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template>
+          </el-table-column>
           <el-table-column label="操作" width="180" fixed="right">
             <template #default="{ row }">
               <el-button size="small" type="primary" plain :disabled="!canManage" @click="openEditDialog(row)">编辑</el-button>
@@ -252,7 +254,9 @@
         <el-table-column prop="detectorVersion" label="检测器" min-width="140" />
         <el-table-column prop="enforcementMode" label="模式" width="90" />
         <el-table-column prop="changeType" label="变更类型" width="110" />
-        <el-table-column prop="createdAt" label="创建时间" min-width="170" />
+        <el-table-column label="创建时间" min-width="190">
+          <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
+        </el-table-column>
         <el-table-column label="操作" width="110" fixed="right">
           <template #default="{ row }">
             <el-tag v-if="row.active" type="success">当前</el-tag>
@@ -286,7 +290,9 @@
         <el-table-column prop="aggregationVersion" label="聚合器" min-width="140" />
         <el-table-column prop="enforcementMode" label="模式" width="90" />
         <el-table-column prop="changeType" label="变更类型" width="110" />
-        <el-table-column prop="createdAt" label="创建时间" min-width="170" />
+        <el-table-column label="创建时间" min-width="190">
+          <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
+        </el-table-column>
         <el-table-column label="操作" width="110" fixed="right">
           <template #default="{ row }">
             <el-tag v-if="row.active" type="success">当前</el-tag>
@@ -323,6 +329,7 @@ import { useReviewRuleEditor } from "@/features/rule-config/composables/useRevie
 import { useReviewStrategyGovernance } from "@/features/rule-config/composables/useReviewStrategyGovernance";
 import type { ReviewRuleConfig } from "@/types";
 import { riskText } from "@/utils/risk";
+import { formatDateTime } from "@/utils/dateTime";
 
 const {
   errorMessage,

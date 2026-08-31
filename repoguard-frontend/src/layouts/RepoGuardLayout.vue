@@ -66,7 +66,7 @@
               <div class="notification-head">
                 <div>
                   <strong>消息通知</strong>
-                  <small v-if="notificationCenter?.generatedAt">更新于 {{ notificationCenter.generatedAt }}</small>
+                  <small v-if="notificationCenter?.generatedAt">更新于 {{ formatDateTime(notificationCenter.generatedAt) }}</small>
                 </div>
                 <button type="button" :disabled="!unreadCount" @click.stop="markAllRead">全部已读</button>
               </div>
@@ -157,6 +157,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatDateTime } from "@/utils/dateTime";
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from "vue";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";

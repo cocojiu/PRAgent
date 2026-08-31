@@ -37,6 +37,7 @@ import com.repoguard.agent.authentication.RequestAuthenticationAttributes;
 import com.repoguard.agent.security.SecretReEncryptionJobService;
 import com.repoguard.agent.service.SystemConfigService;
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -286,6 +287,7 @@ class SystemConfigControllerTest {
             .andExpect(jsonPath("$.data.policy.llmTimeoutSeconds").value(60))
             .andExpect(jsonPath("$.data.notification.githubComment").value(true))
             .andExpect(jsonPath("$.data.security.webhookSignature").value(true))
+            .andExpect(jsonPath("$.data.logs[0].occurredAt").value("2026-06-09T04:00:00Z"))
             .andExpect(jsonPath("$.data.logs[0].action").value("更新系统设置"));
     }
 
@@ -646,7 +648,13 @@ class SystemConfigControllerTest {
             new ReviewPolicySettingsDto(800, 60, 1, true, true),
             new NotificationSettingsDto(true, true, true, "ops@repoguard.dev"),
             new SecuritySettingsDto(true, true, false, 30),
-            List.of(new SettingLogDto("2026-06-09 12:00:00", "admin", "更新系统设置", "成功"))
+            List.of(new SettingLogDto(
+                "2026-06-09 12:00:00",
+                OffsetDateTime.parse("2026-06-09T04:00:00Z"),
+                "admin",
+                "更新系统设置",
+                "成功"
+            ))
         );
     }
 

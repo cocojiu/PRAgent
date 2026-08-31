@@ -31,7 +31,7 @@
           <p class="detail-meta">
             <Github :size="20" />
             {{ selectedTask.organization }} / {{ selectedTask.repository }}
-            <span>创建时间：{{ selectedTask.createdAt }}</span>
+            <span>创建时间：{{ formatDateTime(selectedTask.createdAt) }}</span>
             <span>创建方式：{{ sourceText(selectedTask.source) }}</span>
             <span>触发来源：{{ sourceText(selectedTask.triggerSource) }}</span>
           </p>
@@ -97,7 +97,7 @@
 
       <ReviewDetailKpiGrid
         :task="selectedTask"
-        :started-at="reviewTimeline[0]?.time ?? selectedTask.createdAt"
+        :started-at="formatDateTime(reviewTimeline[0]?.time ?? selectedTask.createdAt)"
         :finding-count="findingTotal"
         :changed-file-count="changedFileTotal"
       />
@@ -290,6 +290,7 @@ import {
 } from "@/utils/assessment";
 import { riskText } from "@/utils/risk";
 import { statusClass, statusText } from "@/utils/status";
+import { formatDateTime } from "@/utils/dateTime";
 
 const POLL_INTERVAL_MS = 5000;
 const MAX_POLL_FAILURES = 3;
@@ -418,7 +419,7 @@ const archiveNotice = computed(() => {
   }
   const parts = ["该审查任务已归档，当前展示摘要、计数和归档索引信息"];
   if (selectedTask.value.archivedAt) {
-    parts.push(`归档时间：${selectedTask.value.archivedAt}`);
+    parts.push(`归档时间：${formatDateTime(selectedTask.value.archivedAt)}`);
   }
   if (selectedTask.value.archiveCleanupBatchId) {
     parts.push(`清理批次：#${selectedTask.value.archiveCleanupBatchId}`);

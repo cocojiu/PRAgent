@@ -5915,6 +5915,12 @@
           "lastLoginAt" : {
             "type" : "string",
             "format" : "date-time"
+          },
+          "language" : {
+            "type" : "string"
+          },
+          "timezone" : {
+            "type" : "string"
           }
         }
       },
@@ -10210,6 +10216,10 @@
         "properties" : {
           "time" : {
             "type" : "string"
+          },
+          "occurredAt" : {
+            "type" : "string",
+            "format" : "date-time"
           },
           "operator" : {
             "type" : "string"
