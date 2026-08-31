@@ -28,7 +28,7 @@
         <PanelLeftClose :size="18" />
         <span v-if="!collapsed">收起菜单</span>
       </button>
-      <div v-if="!collapsed" class="version">v1.0.0</div>
+      <div v-if="!collapsed" class="version">v{{ APP_VERSION }}</div>
     </aside>
     <main class="rg-main">
       <header class="rg-topbar">
@@ -98,10 +98,6 @@
             </div>
           </div>
 
-          <button class="top-action-button" type="button" aria-label="帮助文档" @click="openHelp">
-            <CircleHelp :size="20" />
-          </button>
-
           <div class="top-action-menu-shell" @click.stop>
             <button
               class="user"
@@ -164,7 +160,6 @@ import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import {
   Bell,
   ChevronDown,
-  CircleHelp,
   ClipboardList,
   Cog,
   Home,
@@ -183,6 +178,7 @@ import { createPageAwarePoller } from "@/composables/pageAwarePoller";
 import { pruneReadNotificationIds } from "@/layouts/notificationReadState";
 import { canAccessRouteMeta } from "@/router/accessPolicy";
 import { canManage, currentUser, loadCurrentUser, resetCurrentUser } from "@/stores/authState";
+import { APP_VERSION } from "@/config/appVersion";
 import type { NotificationCenter, NotificationItem } from "@/types";
 
 const ChangePasswordDialog = defineAsyncComponent(
@@ -309,11 +305,6 @@ const openNotification = (item: NotificationItem) => {
     return;
   }
   ElMessage.info(item.title);
-};
-
-const openHelp = () => {
-  closeTopActionMenus();
-  ElMessage.info("帮助文档功能将在接入后端后开放，当前可查看 README 和需求文档。");
 };
 
 const closeTopActionMenus = () => {

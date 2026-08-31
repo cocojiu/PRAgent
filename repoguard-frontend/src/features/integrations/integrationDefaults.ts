@@ -38,12 +38,12 @@ export const defaultIntegrationItems: IntegrationConfig[] = [
   {
     id: "mysql",
     name: "MySQL",
-    description: "用于检测数据库连接；当前运行数据源仍由后端启动配置决定",
+    description: "可选的数据库连接诊断；当前运行数据源由后端启动配置决定",
     status: "missing_secret",
     statusText: "未配置",
     metaLabel: "更新时间",
     metaValue: "未更新",
-    message: "请配置用于检测的 MySQL 连接信息",
+    message: "可选：填写 MySQL 诊断配置，不会切换当前运行数据源",
     fields: [
       { label: "JDBC URL", value: "", type: "text", placeholder: "jdbc:mysql://localhost:3306/repoguard" },
       { label: "Username", value: "", type: "text" },
@@ -54,12 +54,12 @@ export const defaultIntegrationItems: IntegrationConfig[] = [
   {
     id: "rabbitmq",
     name: "RabbitMQ",
-    description: "用于检测消息队列连接；当前运行队列仍由后端启动配置决定",
+    description: "可选的消息队列连接诊断；当前运行队列由后端启动配置决定",
     status: "missing_secret",
     statusText: "未配置",
     metaLabel: "更新时间",
     metaValue: "未更新",
-    message: "请配置用于检测的 RabbitMQ 连接信息",
+    message: "可选：填写 RabbitMQ 诊断配置，不会切换当前运行队列",
     fields: [
       { label: "AMQP URL", value: "", type: "text", placeholder: "amqp://localhost:5672" },
       { label: "Username", value: "", type: "text" },

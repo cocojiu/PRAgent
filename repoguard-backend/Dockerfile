@@ -3,7 +3,7 @@ FROM ${JAVA_IMAGE} AS layers
 
 WORKDIR /app
 
-COPY target/repoguard-backend-0.0.1-SNAPSHOT.jar /app/repoguard-backend.jar
+COPY target/repoguard-backend-0.1.0.jar /app/repoguard-backend.jar
 RUN java -Djarmode=tools -jar /app/repoguard-backend.jar extract --launcher --destination /app/extracted
 
 FROM ${JAVA_IMAGE}

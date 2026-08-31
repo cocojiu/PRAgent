@@ -25,7 +25,6 @@
 
     <div class="login-options">
       <el-checkbox v-model="model.remember">记住登录状态</el-checkbox>
-      <button class="text-action" type="button" @click="$emit('forgot-password')">忘记密码?</button>
     </div>
 
     <el-button class="auth-primary" type="primary" size="large" :loading="loading" @click="$emit('submit')">登录</el-button>
@@ -60,7 +59,6 @@ withDefaults(defineProps<{
 
 defineEmits<{
   submit: [];
-  "forgot-password": [];
   "switch-register": [];
 }>();
 
@@ -122,17 +120,6 @@ const model = defineModel<LoginFormModel>({ required: true });
   color: #64748b;
   font-size: 14px;
   font-weight: 400;
-}
-
-.text-action {
-  padding: 0;
-  border: 0;
-  color: #1268ff;
-  background: transparent;
-  font: inherit;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
 }
 
 .auth-primary,

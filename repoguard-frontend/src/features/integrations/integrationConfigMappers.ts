@@ -46,7 +46,7 @@ export const buildServiceIntegrationPatch = (id: "mysql" | "rabbitmq", config: S
       ? `${serviceName} 保存的密文不可解密，请重新填写密钥或执行密钥轮换修复`
       : isConfigured
       ? `${serviceName} 检测配置已保存，不会切换当前运行连接`
-      : `请配置用于检测的 ${serviceName} 连接信息`),
+      : `可选：填写用于检测的 ${serviceName} 配置，不会切换当前运行连接`),
     diagnostics: [
       ...secretDiagnostics(config.secretStatus, config.status),
       {

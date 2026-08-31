@@ -33,8 +33,8 @@ const features = [
     description: "实时检测代码漏洞与安全风险"
   },
   {
-    title: "多平台集成支持",
-    description: "GitHub、GitLab、Bitbucket 无缝接入"
+    title: "GitHub PR 集成",
+    description: "读取 Pull Request 并回写审查评论"
   },
   {
     title: "智能审查报告",

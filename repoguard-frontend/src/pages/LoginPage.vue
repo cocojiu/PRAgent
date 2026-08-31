@@ -19,7 +19,6 @@
           v-model="loginForm"
           :loading="submitting"
           :registration-enabled="registrationEnabled"
-          @forgot-password="handleForgotPassword"
           @submit="handleLogin"
           @switch-register="switchMode('register')"
         />
@@ -79,10 +78,6 @@ const switchMode = (mode: AuthMode) => {
     return;
   }
   authMode.value = mode;
-};
-
-const handleForgotPassword = () => {
-  ElMessage.info("密码找回功能将在账号体系接入后开放");
 };
 
 const handleLogin = async () => {
