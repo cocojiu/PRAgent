@@ -50,7 +50,7 @@ class FlywayMigrationUpgradePathIntegrationTest {
 
                 tenantId = insertTenant(connection, suffix);
                 taskId = insertReviewTask(connection, tenantId, suffix);
-                attemptId = insertExecutionAttempt(connection, taskId);
+                attemptId = insertExecutionAttempt(connection, tenantId, taskId);
                 updateCurrentAttempt(connection, taskId, attemptId);
                 insertChangedFile(connection, tenantId, taskId, attemptId, suffix);
             }
@@ -150,20 +150,21 @@ class FlywayMigrationUpgradePathIntegrationTest {
         }
     }
 
-    private Long insertExecutionAttempt(Connection connection, long taskId) throws SQLException {
+    private Long insertExecutionAttempt(Connection connection, long tenantId, long taskId) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
             insert into review_execution_attempt (
-                task_id, attempt_no, generation, commit_sha, input_fingerprint, status,
+                tenant_id, task_id, attempt_no, generation, commit_sha, input_fingerprint, status,
                 queued_at, started_at, created_at
-            ) values (?, 1, 1, ?, ?, 'COMPLETED', ?, ?, ?)
+            ) values (?, ?, 1, 1, ?, ?, 'COMPLETED', ?, ?, ?)
             """, Statement.RETURN_GENERATED_KEYS)) {
             LocalDateTime now = LocalDateTime.now();
-            statement.setLong(1, taskId);
-            statement.setString(2, COMMIT_SHA);
-            statement.setString(3, INPUT_FINGERPRINT);
-            statement.setObject(4, now);
+            statement.setLong(1, tenantId);
+            statement.setLong(2, taskId);
+            statement.setString(3, COMMIT_SHA);
+            statement.setString(4, INPUT_FINGERPRINT);
             statement.setObject(5, now);
             statement.setObject(6, now);
+            statement.setObject(7, now);
             statement.executeUpdate();
             try (ResultSet keys = statement.getGeneratedKeys()) {
                 assertThat(keys.next()).isTrue();
