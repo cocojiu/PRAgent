@@ -98,6 +98,7 @@ public final class LlmQualityEvaluator {
             .count();
         int parseFailures = (int) samples.stream().filter(sample -> !sample.parseSucceeded()).count();
         int duplicatePredictions = duplicatePredictions(samples);
+        String observedFingerprint = sampleFingerprint(samples);
         BigDecimal precision = ratio(truePositives, predicted);
         BigDecimal recall = ratio(truePositives, expected);
         BigDecimal anchorRate = ratio(anchored, predicted);
@@ -122,15 +123,18 @@ public final class LlmQualityEvaluator {
         if (parseFailureRate.compareTo(MAX_PARSE_FAILURE_RATE) > 0) {
             blockers.add("PARSE_FAILURE_RATE_ABOVE_5");
         }
+        List<String> datasetBlockers = dataset == null
+            ? List.of()
+            : dataset.validationBlockers(samples.size(), observedFingerprint);
         if (dataset != null) {
-            blockers.addAll(dataset.validationBlockers(samples.size()));
+            blockers.addAll(datasetBlockers);
             if (!version.reproducible()) {
                 blockers.add("VERSION_METADATA_INCOMPLETE");
             }
         }
         return new LlmEvaluationReport(
             version,
-            sampleFingerprint(samples),
+            observedFingerprint,
             samples.size(),
             expected,
             predicted,
@@ -151,7 +155,7 @@ public final class LlmQualityEvaluator {
                 .reduce(BigDecimal.ZERO, BigDecimal::add),
             blockers,
             samples.size() >= minimumSamples && (dataset == null || (
-                dataset.validationBlockers(samples.size()).isEmpty() && version.reproducible()
+                datasetBlockers.isEmpty() && version.reproducible()
             )),
             dataset,
             LlmEvaluationMetrics.from(samples)

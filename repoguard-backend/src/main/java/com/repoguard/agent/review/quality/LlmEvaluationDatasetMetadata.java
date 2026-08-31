@@ -76,6 +76,14 @@ public record LlmEvaluationDatasetMetadata(
      * pass, preventing a false claim of real-world quality.
      */
     public List<String> validationBlockers(int observedSamples) {
+        return validationBlockers(observedSamples, null);
+    }
+
+    /**
+     * Lists blockers and, when an observed fingerprint is supplied, verifies that the manifest
+     * describes exactly the same case-id set as the observations being evaluated.
+     */
+    public List<String> validationBlockers(int observedSamples, String observedFingerprint) {
         List<String> blockers = new ArrayList<>();
         if (kind != DatasetKind.REAL_PR) {
             blockers.add("DATASET_NOT_REAL_PR");
@@ -112,6 +120,9 @@ public record LlmEvaluationDatasetMetadata(
         }
         if (sampleFingerprint.isBlank()) {
             blockers.add("DATASET_FINGERPRINT_MISSING");
+        } else if (observedFingerprint != null
+            && !sampleFingerprint.equalsIgnoreCase(observedFingerprint.trim())) {
+            blockers.add("DATASET_FINGERPRINT_MISMATCH");
         }
         return List.copyOf(blockers);
     }

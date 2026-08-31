@@ -136,7 +136,21 @@ class LlmQualityEvaluatorTest {
             "rules-v3",
             "abc123"
         );
-        String fingerprint = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        List<LlmEvaluationObservation> observations = new ArrayList<>();
+        for (int i = 0; i < 50; i++) {
+            observations.add(sample(
+                "real-pr-" + i,
+                i < 10,
+                i < 10 ? "HIGH" : "NONE",
+                i < 10,
+                i < 10 ? "HIGH" : "NONE",
+                true,
+                i < 10 ? "finding-" + i : "",
+                true
+            ));
+        }
+        String fingerprint = LlmQualityEvaluator.evaluate(reproducibleVersion, observations)
+            .sampleFingerprint();
         LlmEvaluationDatasetMetadata dataset = new LlmEvaluationDatasetMetadata(
             "real-pr-v1",
             "2026-09-01",
@@ -150,10 +164,53 @@ class LlmQualityEvaluatorTest {
             true,
             fingerprint
         );
+
+        LlmEvaluationReport report = LlmQualityEvaluator.evaluate(
+            reproducibleVersion,
+            dataset,
+            observations
+        );
+
+        assertThat(report.qualityGatePassed()).isTrue();
+        assertThat(report.versionKey()).contains(
+            "temperature=0.2",
+            "rules=rules-v3",
+            "commit=abc123"
+        );
+        assertThat(report.dataset()).isEqualTo(dataset);
+        assertThat(report.sampleFingerprint()).hasSize(64);
+    }
+
+    @Test
+    void explicitRealDatasetBlocksManifestFingerprintDrift() {
+        LlmEvaluationVersion reproducibleVersion = new LlmEvaluationVersion(
+            "openai",
+            "gpt-test",
+            "review-prompt-v2",
+            "review-context-v2",
+            "review-schema-v2",
+            "chunk-v1",
+            new BigDecimal("0.20"),
+            "rules-v3",
+            "abc123"
+        );
+        LlmEvaluationDatasetMetadata dataset = new LlmEvaluationDatasetMetadata(
+            "real-pr-v1",
+            "2026-09-01",
+            LlmEvaluationDatasetMetadata.DatasetKind.REAL_PR,
+            2,
+            50,
+            40,
+            10,
+            true,
+            true,
+            true,
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        );
         List<LlmEvaluationObservation> observations = new ArrayList<>();
         for (int i = 0; i < 50; i++) {
             observations.add(sample(
-                "real-pr-" + i,
+                "fingerprint-drift-" + i,
                 i < 10,
                 i < 10 ? "HIGH" : "NONE",
                 i < 10,
@@ -170,14 +227,8 @@ class LlmQualityEvaluatorTest {
             observations
         );
 
-        assertThat(report.qualityGatePassed()).isTrue();
-        assertThat(report.versionKey()).contains(
-            "temperature=0.2",
-            "rules=rules-v3",
-            "commit=abc123"
-        );
-        assertThat(report.dataset()).isEqualTo(dataset);
-        assertThat(report.sampleFingerprint()).hasSize(64);
+        assertThat(report.qualityGatePassed()).isFalse();
+        assertThat(report.blockers()).contains("DATASET_FINGERPRINT_MISMATCH");
     }
 
     private LlmEvaluationObservation observation(
