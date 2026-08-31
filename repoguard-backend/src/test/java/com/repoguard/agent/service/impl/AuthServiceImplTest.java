@@ -39,6 +39,8 @@ import com.repoguard.agent.security.AuthAccountCache;
 import com.repoguard.agent.security.AuthProperties;
 import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.security.PasswordHashService;
+import com.repoguard.agent.settings.SystemSettings;
+import com.repoguard.agent.settings.SystemSettingsProvider;
 import com.repoguard.agent.web.AuditClientIpResolver;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.LocalDateTime;
@@ -312,6 +314,46 @@ class AuthServiceImplTest {
         assertThat(profile.role()).isEqualTo("ADMIN");
         assertThat(profile.status()).isEqualTo("ACTIVE");
         assertThat(profile.lastLoginAt()).isEqualTo(LocalDateTime.parse("2026-06-11T10:00:00"));
+        assertThat(profile.language()).isEqualTo("zh-CN");
+        assertThat(profile.timezone()).isEqualTo("Asia/Shanghai");
+    }
+
+    @Test
+    void currentUserIncludesConfiguredTimezoneFromGlobalSettings() {
+        UserAccount user = existingUser();
+        when(userAccountMapper.selectById(1001L)).thenReturn(user);
+        SystemSettingsProvider settingsProvider = Mockito.mock(SystemSettingsProvider.class);
+        when(settingsProvider.getSettings()).thenReturn(new SystemSettings(
+            true,
+            "RepoGuard Agent",
+            "中文",
+            "America/New_York",
+            90,
+            800,
+            true,
+            true,
+            true,
+            true,
+            true,
+            "ops@repoguard.dev",
+            true,
+            true,
+            false,
+            30
+        ));
+
+        AuthServiceImpl configuredAuthService = new AuthServiceImpl(
+            accountLifecycle,
+            credentialAuthenticator,
+            sessionLifecycle,
+            settingsProvider
+        );
+
+        var profile = configuredAuthService.currentUser(1001L);
+
+        assertThat(profile.language()).isEqualTo("zh-CN");
+        assertThat(profile.timezone()).isEqualTo("America/New_York");
+        verify(settingsProvider).getSettings();
     }
 
     @Test

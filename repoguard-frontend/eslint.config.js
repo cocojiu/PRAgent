@@ -64,6 +64,20 @@ export default [
     }
   },
   {
+    files: ["scripts/**/*.mjs"],
+    languageOptions: {
+      ecmaVersion: "latest",
+      sourceType: "module",
+      globals: {
+        console: "readonly",
+        process: "readonly"
+      }
+    },
+    rules: {
+      "no-undef": "error"
+    }
+  },
+  {
     files: ["src/components/EChartPanel.vue"],
     rules: {
       "no-restricted-imports": [

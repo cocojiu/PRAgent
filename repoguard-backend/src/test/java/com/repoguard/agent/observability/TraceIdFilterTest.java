@@ -55,6 +55,23 @@ class TraceIdFilterTest {
         assertThat(response.getHeader(TraceIdFilter.TRACE_ID_HEADER)).isEqualTo("traceidsecretabc");
     }
 
+    @Test
+    void acceptsW3cTraceparentAndReturnsAChildContext() throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/reviews");
+        request.addHeader(TraceIdFilter.TRACE_PARENT_HEADER,
+            "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, new CapturingFilterChain());
+
+        W3CTraceContext incoming = W3CTraceContext.parse(request.getHeader(TraceIdFilter.TRACE_PARENT_HEADER)).orElseThrow();
+        W3CTraceContext returned = W3CTraceContext.parse(response.getHeader(TraceIdFilter.TRACE_PARENT_HEADER)).orElseThrow();
+        assertThat(returned.traceId()).isEqualTo(incoming.traceId());
+        assertThat(returned.spanId()).isNotEqualTo(incoming.spanId());
+        assertThat(request.getAttribute(TraceIdFilter.TRACE_PARENT_ATTRIBUTE)).isEqualTo(returned.traceparent());
+        assertThat(response.getHeader(TraceIdFilter.TRACE_ID_HEADER)).isEqualTo(incoming.traceId());
+    }
+
     private static class CapturingFilterChain extends MockFilterChain {
 
         private String traceIdInMdc;

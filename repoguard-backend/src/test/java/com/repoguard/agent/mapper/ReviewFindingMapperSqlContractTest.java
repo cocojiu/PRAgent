@@ -50,7 +50,6 @@ class ReviewFindingMapperSqlContractTest {
             .doesNotContain("upper(finding.feedback_status) in ('unreviewed', 'valid')");
         assertThat(commentableSql)
             .contains("from review_finding finding")
-            .contains("force index (idx_review_finding_current_category_id)")
             .contains("finding.current_attempt = 1")
             .contains("finding.category = 'finding'")
             .contains("publication.task_id = finding.task_id")
@@ -69,7 +68,6 @@ class ReviewFindingMapperSqlContractTest {
 
         assertThat(sql)
             .contains("from review_finding finding")
-            .contains("force index (idx_review_finding_current_category_id)")
             .contains("finding.current_attempt = 1")
             .contains("finding.task_id = #{taskid}")
             .contains("finding.category = 'finding'")

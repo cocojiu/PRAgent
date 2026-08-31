@@ -121,6 +121,50 @@ class ProductionDeploymentContractTest {
     }
 
     @Test
+    void productionDeployIsManualOptInAndDisabledByDefault() throws IOException {
+        String workflow = read(repositoryRoot().resolve(".github/workflows/release-images.yml"));
+
+        int deployInputStart = workflow.indexOf("\n      deploy:\n");
+        int migrationInputStart = workflow.indexOf("\n      migrate_legacy_secret_files:", deployInputStart);
+        assertThat(deployInputStart).isNotNegative();
+        assertThat(migrationInputStart).isGreaterThan(deployInputStart);
+        assertThat(workflow.substring(deployInputStart, migrationInputStart))
+            .contains(
+                "description: Deploy to the configured server (manual opt-in; default off)",
+                "required: false",
+                "default: false",
+                "type: boolean"
+            );
+        assertThat(workflow)
+            .contains(
+                "migrate_legacy_secret_files:\n"
+                    + "        description: Preserve active inline values in secret files before the first configtree deployment\n"
+                    + "        required: false\n"
+                    + "        default: false\n"
+                    + "        type: boolean",
+                "initialize_missing_encryption_salt:\n"
+                    + "        description: Initialize the salt introduced after the currently deployed legacy release\n"
+                    + "        required: false\n"
+                    + "        default: false\n"
+                    + "        type: boolean"
+            );
+
+        int deployJobStart = workflow.indexOf("\n  deploy:\n");
+        assertThat(deployJobStart).isNotNegative();
+        String deployJob = workflow.substring(deployJobStart);
+        assertThat(deployJob)
+            .contains(
+                "name: Deploy to production (manual opt-in)",
+                "github.event_name == 'workflow_dispatch'",
+                "inputs.deploy == true",
+                "github.ref_name == 'main'",
+                "github.ref_name == 'master'",
+                "startsWith(github.ref, 'refs/tags/v')"
+            )
+            .doesNotContain("github.ref_name == 'PRAgent-test'");
+    }
+
+    @Test
     void releaseKeepsAcrImagesCompatibleAndPublishesExternalAttestations() throws IOException {
         String workflow = read(repositoryRoot().resolve(".github/workflows/release-images.yml"));
 

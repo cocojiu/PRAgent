@@ -11,6 +11,7 @@ import {
 } from "@/api/dashboard";
 import type { MetricGridItem } from "@/components/MetricGrid.vue";
 import { getErrorMessage } from "@/utils/errors";
+import { formatDateTime } from "@/utils/dateTime";
 import type { DashboardOverview } from "@/types";
 
 const createEmptyOverview = (): DashboardOverview => ({
@@ -209,7 +210,7 @@ export const useDashboardOverview = () => {
         ...overview.value,
         systemHealth
       };
-      lastHealthCheckAt.value = new Date().toLocaleString("zh-CN", { hour12: false });
+      lastHealthCheckAt.value = formatDateTime(new Date());
     } catch (error) {
       if (requestSeq !== healthRequestSeq || overviewSeq !== overviewRequestSeq) {
         return;

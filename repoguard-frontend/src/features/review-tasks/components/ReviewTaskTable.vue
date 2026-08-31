@@ -77,7 +77,9 @@
         <span :class="`status-pill ${statusClass(row.llmStatus)}`">{{ statusText(row.llmStatus) }}</span>
       </template>
     </el-table-column>
-    <el-table-column prop="createdAt" label="创建时间" min-width="180" />
+    <el-table-column label="创建时间" min-width="180">
+      <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
+    </el-table-column>
     <el-table-column label="操作" width="230" fixed="right">
       <template #default="{ row }">
         <div class="table-actions">
@@ -127,6 +129,7 @@ import {
 } from "@/utils/assessment";
 import { riskText } from "@/utils/risk";
 import { statusClass, statusText } from "@/utils/status";
+import { formatDateTime } from "@/utils/dateTime";
 import {
   canRetryReviewTask,
   reviewTaskRetryText,

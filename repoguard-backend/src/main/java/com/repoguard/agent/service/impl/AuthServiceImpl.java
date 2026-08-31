@@ -22,20 +22,37 @@ import com.repoguard.agent.identity.IdentitySessionLifecycle;
 import com.repoguard.agent.identity.IdentitySessionLifecycle.RefreshResult;
 import com.repoguard.agent.identity.IdentitySessionTokens;
 import com.repoguard.agent.service.AuthService;
+import com.repoguard.agent.settings.SystemSettingsProvider;
+import java.time.DateTimeException;
+import java.time.ZoneId;
 import java.util.Objects;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
 public class AuthServiceImpl implements AuthService {
 
+    private static final String DEFAULT_TIMEZONE = "Asia/Shanghai";
+
     private final IdentityAccountLifecycle accountLifecycle;
     private final IdentityCredentialAuthenticator credentialAuthenticator;
     private final IdentitySessionLifecycle sessionLifecycle;
+    private final SystemSettingsProvider systemSettingsProvider;
 
     public AuthServiceImpl(
         IdentityAccountLifecycle accountLifecycle,
         IdentityCredentialAuthenticator credentialAuthenticator,
         IdentitySessionLifecycle sessionLifecycle
+    ) {
+        this(accountLifecycle, credentialAuthenticator, sessionLifecycle, null);
+    }
+
+    @Autowired
+    public AuthServiceImpl(
+        IdentityAccountLifecycle accountLifecycle,
+        IdentityCredentialAuthenticator credentialAuthenticator,
+        IdentitySessionLifecycle sessionLifecycle,
+        SystemSettingsProvider systemSettingsProvider
     ) {
         this.accountLifecycle = Objects.requireNonNull(accountLifecycle, "accountLifecycle must not be null");
         this.credentialAuthenticator = Objects.requireNonNull(
@@ -43,6 +60,7 @@ public class AuthServiceImpl implements AuthService {
             "credentialAuthenticator must not be null"
         );
         this.sessionLifecycle = Objects.requireNonNull(sessionLifecycle, "sessionLifecycle must not be null");
+        this.systemSettingsProvider = systemSettingsProvider;
     }
 
     @Override
@@ -72,14 +90,32 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public AuthCurrentUserDto currentUser(Long userId) {
         Profile profile = accountLifecycle.currentProfile(userId);
+        var settings = systemSettingsProvider == null ? null : systemSettingsProvider.getSettings();
         return new AuthCurrentUserDto(
             profile.id(),
             profile.username(),
             profile.email(),
             profile.role(),
             profile.status(),
-            profile.lastLoginAt()
+            profile.lastLoginAt(),
+            "zh-CN",
+            validTimezoneOrDefault(settings == null ? null : settings.timezone())
         );
+    }
+
+    private String validTimezoneOrDefault(String timezone) {
+        if (timezone == null || timezone.isBlank()) {
+            return DEFAULT_TIMEZONE;
+        }
+        String normalized = timezone.trim();
+        try {
+            ZoneId zoneId = ZoneId.of(normalized);
+            return "UTC".equals(normalized) || ZoneId.getAvailableZoneIds().contains(normalized)
+                ? zoneId.getId()
+                : DEFAULT_TIMEZONE;
+        } catch (DateTimeException exception) {
+            return DEFAULT_TIMEZONE;
+        }
     }
 
     @Override

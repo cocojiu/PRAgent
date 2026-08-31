@@ -154,3 +154,114 @@ Worker 门槛：建议窗口为 2026-08-30 02:00–02:30（Asia/Shanghai）；�
 正式压测：run_id=20260830020333。concurrency=2 时 12/12 COMPLETED，P95/P99/最大耗时均为 18 秒，峰值 CPU 157.86%、内存配额 47.84%；concurrency=4 时 12/12 COMPLETED，P95/P99/最大耗时均为 15 秒，峰值 CPU 167.40%、内存配额 47.74%。两轮均为 0 失败、0 未完成、0 重复 PR、0 ready/unacked、0 关键 SQL/数据完整性/OOM/执行器拒绝错误。
 生产恢复：正式压测返回 test_rc=0、restore_rc=0，六个生产容器全部 healthy，healthz=200，review/notification 队列 ready/unacked 均为 0 且消费者均为 1；生产 review_task 状态计数与压测前完全一致（APPROVED 2、CHANGES_REQUESTED 2、COMPLETED 84、FAILED 2、PENDING_HUMAN_REVIEW 86、REJECTED 87、SUPERSEDED 55），无压测容器、卷、网络、进程或工作目录残留。
 证据与备份：正式结果保存为 .deploy-runtime/production-backups/worker-pressure-20260830020333.txt，服务器与本机 SHA-256 均为 0559653231159069385831189a5b4d91d9b24255bd3015bf24035aa4a406f215；完整生产数据库、非敏感配置、敏感配置和分区信息已分别加密保存到本机 .deploy-runtime/production-backups，数据库密文 repoguard-prod-db-20260829-190602.sql.gz.enc 的 SHA-256 为 da050318c308a7cb2035de172c0e9453e4f3d6a85c5a676fc30be267be4e5913。上述目录被 Git 忽略；一次性 TLS 私钥与远端 /run 压测脚本已删除。
+
+2026-08-30 | 优化-17 | P0-01 Kubernetes Secret 非 root 读取身份收敛
+状态：代码、本地部署契约和测试分支 Actions 已完成；生产同类 Kubernetes 集群 Smoke 仍待目标环境验收。
+变更：后端镜像固定使用数值 UID/GID 10001:10001；API 与 Worker Pod 显式设置 runAsUser、runAsGroup、fsGroup 为 10001，并使用 OnRootMismatch 控制卷权限处理；Secret volume 继续保持 0440，容器继续保持 runAsNonRoot、只读根文件系统、禁止提权和 capabilities 全移除。现有部署契约新增镜像身份、Pod 身份和 Secret mode 一致性校验，防止 Dockerfile 与 Kubernetes 清单漂移。
+本地验证：EnterpriseKubernetesDeploymentContractTest 3 项全部通过，git diff --check 通过；未改动用户已有 OpenAPI snapshot 和 .tmp 内容。
+远程验收：提交 6f42f951 的 Release Images #33286248352 成功，其中 Verify non-root backend secret mount access 步骤通过；后续提交 14117b2a 的 Pull Request Quality #33287651584、Repository Governance #33287651585/#33287650003、Release Images #33287649975、Auto Create Pull Request #33287649986 全部成功，证明最新分支继续包含并通过 P0-01 契约与镜像运行验证。
+剩余验收：在与生产同类的 Kubernetes namespace 验证 API/Worker 实际进程 UID/GID、投射 Secret 文件 owner/mode、readiness/liveness、/tmp 可写和只读根文件系统；没有目标集群证据前不宣称 Kubernetes 准出完全闭环。
+下一步：继续 P0-02，多租户模式下缺失 TenantContext 必须 fail-closed，并审计平台级全局作用域。
+
+2026-08-30 | 优化-18 | P0-02A 多租户 SQL 缺失上下文 fail-closed
+状态：已完成。代码、定向测试、本地完整回归、测试分支 Actions 与真实 MySQL A/B 租户隔离均已通过。
+变更：MyBatis 租户拦截器在多租户开启时不再因 TenantContext 缺失而忽略租户表，租户表 SQL 必须取得有效 tenant_id，否则抛出明确异常；非租户表和租户功能关闭场景保持原行为。新增短生命周期 PlatformTenantScope，禁止嵌套、禁止与普通租户上下文并存、要求在创建线程关闭，并记录开启/关闭审计日志；生产代码只有 TenantScheduledTaskRunner.runGlobal 白名单入口可以打开该作用域，异常路径也会自动清理。
+验证增强：新增 handler 正反例、平台作用域异常清理和生产调用点白名单契约；ProductionRuntimeContextIntegrationTest 在真实 MySQL 上启用多租户，验证无上下文访问 review_task 失败，并构造默认租户与第二租户任务验证 A 看不到 B、B 看不到 A，最终清理测试数据。
+本地验证：定向 26 项通过，其中真实 MySQL 条件化用例 11 项按环境门禁跳过但编译成功；后端完整 mvn verify 共 2532 项通过、11 项条件化集成跳过、0 失败、0 错误，JaCoCo 覆盖门禁和 JAR 构建通过；git diff --check 通过。
+边界：本批只关闭应用层静默 fail-open 并建立受控平台作用域；租户父子组合键/外键、存量脏数据探针和生产规模迁移验证仍按 P0-02B expand-contract 独立批次实施，不与本批安全逻辑混合。
+远程验收：实现提交 14117b2a；Pull Request Quality #33287651584、Repository Governance #33287651585/#33287650003、Release Images #33287649975、Auto Create Pull Request #33287649986 全部成功。Spring MySQL RabbitMQ integration job #99193553085 执行 ProductionRuntimeContextIntegrationTest 共 11 项、0 失败、0 错误、0 跳过并 BUILD SUCCESS，包含新增缺失上下文和 A/B 双租户隔离用例。
+下一步：进入 P0-02B，以 expand-contract 独立批次补齐租户父子组合键/外键、存量脏数据探针和真实 MySQL 迁移验证。
+
+2026-08-30 | 优化-19 | P0-02B-Expand 租户父子组合键扩展
+状态：已完成。代码、本地完整回归、测试分支 Actions、真实 MySQL 8.0.46 空库迁移和组合索引验收均已通过。
+变更：新增 V76 扩展迁移，为任务、执行尝试、发现、评论批次、通知事件/绑定、规则/策略快照补齐 (tenant_id, id) 唯一候选键，并为缺失的尝试、发现、评论、通知和策略证据子关系补齐 tenant_id 前导组合索引；保留全部旧单列外键，保证 N/N-1 应用兼容。本阶段不提前切换约束。
+验证增强：生产 MySQL/RabbitMQ 条件化集成在 API 完成 Flyway 后，从 information_schema 校验 8 个组合候选键和 17 个组合子索引的列顺序及唯一性；schema guard、Kubernetes 清单和部署说明同步到 V76。
+本地验证：V76 迁移、schema 版本和 Kubernetes 定向契约共执行 8 项、0 失败，11 项真实 MySQL 条件化集成按环境门禁跳过但编译成功；完整 mvn verify 共 2535 项、0 失败、0 错误、11 项条件化跳过，JaCoCo 覆盖门禁与 JAR 打包通过。
+远程验收：实现提交 b59308d1；Pull Request Quality #33296560904、Repository Governance #33296560885/#33296559253、Release Images #33296559254、Auto Create Pull Request #33296559251 全部成功。Spring MySQL RabbitMQ integration job #99217127538 在 MySQL 8.0.46 从空库成功应用 76 个迁移到 v76，ProductionRuntimeContextIntegrationTest 11 项、0 失败、0 错误、0 跳过并 BUILD SUCCESS，覆盖 information_schema 中 8 个组合候选键与 17 个组合子索引验收。
+下一步：经单独批准后执行 P0-02B-Contract；该阶段会先运行存量跨租户脏数据探针，再删除旧单列外键并切换为组合外键，操作风险高于只增索引的 V76。
+
+2026-08-31 | 优化-20 | P0-02B-Contract 多租户组合外键
+状态：代码、真实 MySQL 8.0.46 迁移验收和测试分支 Actions 已完成；生产数据规模维护窗口与备份恢复仍按上线准出流程执行。
+变更：V77 在维护窗口前执行 fail-closed 脏数据探针，确认 20 条父子关系无跨租户数据后删除旧单列外键并切换 `(tenant_id, id)` 组合外键；新增通知组合索引并保留 repair/forward recovery 运行手册约束。
+验证：Spring MySQL RabbitMQ integration 从空库执行 V1–V77，验证组合外键元数据、跨租户子记录写入拒绝和旧通知恢复夹具；本地后端全量测试与迁移契约测试通过，远程 Pull Request Quality、Repository Governance、Release Images 和 Auto Create Pull Request 全部成功。
+
+2026-08-31 | 优化-21 | P1-01/P1-02 生产验收待外部环境
+状态：代码与测试分支门禁已完成；生产 SSH 受保护 `DEPLOY_KNOWN_HOSTS`、托管 MySQL/RabbitMQ 精确 CIDR、FQDN-aware egress 及允许/拒绝探针尚未提供，保持 fail-closed，不宣称目标环境完成。
+证据：P1-01 统一 bootstrap action 拒绝空/无效基线；P1-02 工作负载 NetworkPolicy 已拆分并拒绝未授权私网、元数据和端口。缺少外部密钥与集群配置时不执行猜测性的 keyscan、CIDR 或网络放行。
+
+2026-08-31 | 优化-22 | P1-03/P1-04/P1-05
+状态：代码、自动化验证和测试分支 Actions 已完成；P1-03 真实 Chromium E2E 与覆盖率、P1-04 时间/语言契约、P1-05 V1–V77 expand-contract 门禁均已记录于 README，未提交方案 Markdown 或测试脚本。
+
+2026-08-31 | 优化-23 | P1-06 LLM 结构化输出与可比较质量评测
+状态：代码门禁已完成，提交 b755a178；目标环境 live eval 与人工样本收集仍需按 provider/版本持续积累，不以少量 Smoke Finding 代替 30 样本晋级门槛。
+变更：按 provider capability 选择 JSON Schema/JSON Object/legacy 请求格式，结构化失败只允许一次 legacy fallback 并记录低基数指标；新增 review/verification schema、版本键、样本指纹、precision/recall、锚点率、重复率、解析失败率、severity 混淆、延迟、token 与成本报告。
+验证：LlmPullRequestReviewerTest、LlmProviderCapabilitiesTest、LlmQualityEvaluatorTest 共 20 项通过；提交已推送，云端 Pull Request Quality 等工作流正在验收。
+
+2026-08-31 | 优化-24 | P2-03 工具脚本 ESLint 覆盖
+状态：已完成代码门禁，待提交推送。
+变更：为 `scripts/**/*.mjs` 增加 Node `process`/`console` globals 与 `no-undef` 规则，并将生成器脚本纳入前端 lint 命令；不修改任何测试脚本。
+验证：使用仓库现有 ESLint 依赖对 `src/**/*.{ts,vue}` 与 `scripts/**/*.mjs` 执行 lint，0 错误。
+
+2026-08-31 | 优化-25 | P2-01 SQL hint 与执行计划基线
+状态：已完成代码门禁，待提交推送。
+变更：移除 ChangedFileMapper、ReviewFindingMapper 中无生产规模 EXPLAIN ANALYZE 证据的 FORCE INDEX 硬绑定；新增版本化 `db/query-plan-baseline.json`，固定数据规模、预热/采样次数、EXPLAIN ANALYZE 实际 rows/time 要求、可接受访问类型、p95/p99 预算和索引调整告警策略。查询继续依赖迁移声明的索引，但由优化器选择，索引变更不会直接导致 SQL 失败。
+验证：ChangedFileMapperSqlContractTest、ReviewFindingMapperSqlContractTest、OperationalSqlVerificationPlanTest、SqlQueryPlanBaselineContractTest 共 16 项通过；基线契约校验全部查询映射、索引存在性和无 FORCE INDEX。
+
+2026-08-31 | 优化-26 | P2-02 执行详情独立游标分页
+状态：已完成代码与 OpenAPI 契约门禁，待提交推送。
+变更：新增独立的 changed-files/findings cursor endpoint，按 `(attempt_id, id)` 条件、limit+1 探测和独立 total/nextCursor/hasMore 返回，限制每次最多 100 条；保留旧的 combined result endpoint 兼容已有调用。新增集合控制器以避免把新运维读取旁路混入前端生成客户端，两个 endpoint 在 OpenAPI 中纳入显式 server-only 清单。
+验证：ReviewExecutionAttemptQueryServiceTest 5 项覆盖独立游标、limit、nextCursor、总数、非法输入；ApiContractTest、OpenApiPathsContractTest、OpenApiGeneratedClientContractTest 共 33 项加回归全部通过，快照同步更新，未纳入用户既有 frontend-signature 快照改动。
+
+2026-08-31 | 优化-27 | P2-05 测试日志噪声收敛
+状态：已完成代码门禁，待提交推送。
+变更：新增 `logback-test.xml`，默认测试级别从 INFO 降至 WARN；只对控制台过滤带 `result=fallback` 的预期 LLM fallback WARN，保留直接 ListAppender 断言能力；ERROR 级内部失败继续输出完整 `%safeEx` 堆栈，未改变生产 logback 配置。
+验证：LogbackTestProfileContractTest、GlobalExceptionHandlerTest、LlmReviewPipelineTest、LlmChunkReviewFallbackHandlerTest、LlmChunkReviewAggregatorTest 共 26 项通过，预期噪声隐藏且失败堆栈测试仍通过。
+
+2026-08-31 | 优化-28 | P2-06 HTTP/MQ/Worker 标准链路追踪
+状态：代码与本地契约测试完成，待提交推送并执行云端门禁；生产 OTel/Micrometer exporter 与跨服务可视化仍需目标环境配置。
+变更：新增 W3C Trace Context 解析、子 span、线程作用域和低基数敏感属性白名单；HTTP RestClient 自动注入 `traceparent`，Rabbit 发布器写入 AMQP header，Review/Notification Worker 从 header 建立消费上下文；保留 X-Trace-Id 兼容响应，不传播 token、prompt、diff 或代码内容。
+验证：W3CTraceContextTest、TraceIdFilterTest、ReviewTaskWorkerTest、NotificationDeliveryWorkerTest、RabbitReviewTaskPublisherTest、RabbitNotificationEventPublisherTest、RestClientConfigTest 共 36 项通过。
+
+2026-08-31 | 优化-29 | P2-07 架构复杂度与依赖边界护栏
+状态：代码与本地契约测试完成，待提交推送并执行云端门禁。
+变更：新增资源驱动的生产类规模 ratchet（当前最大 450 行）和禁止 util/legacy 新旁路；继续复用既有 controller-persistence、实现包跨域、领域环依赖和垂直边界契约，防止复杂度与循环依赖回潮。
+验证：ArchitectureRatchetTest 2 项、ApplicationArchitectureTest 44 项通过，生产源码最大类行数在阈值内。
+
+2026-08-31 | 优化-30 | P2-04 生产观测工作流复用与体积护栏
+状态：代码与本地工作流契约测试完成，待提交推送并执行云端门禁。
+变更：抽取统一 `validate-production-target` composite action，集中校验主机、部署用户和受限路径；Grafana 与日志栈升级工作流统一复用该 action，并保留受保护 SSH bootstrap、固定 action SHA、production environment、只读权限和回滚分支。
+验证：ProductionObservabilityWorkflowContractTest 1 项通过；两条升级工作流均低于 1,400 行并保留固定安全门禁。
+
+2026-08-31 | 优化-31 | P2 工程效率清单提交与 CI 收口
+状态：P2-01/P2-02/P2-03/P2-04/P2-05/P2-06/P2-07 均已提交推送；本地 verify 与最新 PR/Push Actions 全部成功。
+提交映射：P2-03=ccd05baa，P2-01=d8ea6b23，P2-02=aed2784c，P2-05=091e183b，P2-06=8d7698cb，P2-07=5d8ee9bf，P2-04=b13505bb+0c035c0a。
+CI 证据：Pull Request Quality #33373980597、PR Repository Governance #33373980522、PR Production Observability Image Security #33373980560、push Release Images #33373975582、push Repository Governance #33373975643、push Auto Create Pull Request #33373975585 均 success。
+未闭环：P0-01/P0-02/P1-01/P1-02/P1-05/P1-06 的目标生产、Kubernetes、数据规模、供应商及回滚证据仍按验收矩阵执行，不以代码绿灯替代环境验收。
+
+2026-08-31 | 优化-32 | 全量完成度复审与目标环境阻塞确认
+状态：代码与自动化门禁已收口；整体优化不能标记为全部完成，P0/P1 目标环境证据保持 fail-closed。
+复审证据：本机未安装 Docker、kubectl、kind 或 minikube；GitHub production environment 的 secrets 与 variables 列表为空；仓库级部署凭据不包含受保护的 DEPLOY_KNOWN_HOSTS，因此不猜测主机指纹、CIDR、集群或供应商配置，也不触发可能改变生产状态的手动工作流。
+已确认：P0-01/P0-02、P1-01/P1-02/P1-05/P1-06 的代码、负例契约和测试分支 CI 已完成；P2-01 至 P2-07 已提交推送且最新 Push/PR Actions 全部 success。
+待外部验收：生产同类 Kubernetes Secret UID/GID/readiness Smoke；生产规模迁移锁等待、备份恢复和回滚；真实 SSH 指纹与网络 allow/deny 探针；每个 LLM provider 的 live eval/30 样本质量证据；严格 2C4G 压测与跨故障域恢复证据。令牌轮换按用户明确指示暂缓。
+
+2026-08-31 | 优化-33 | 生产工作流凭据需求差异核对
+状态：只读完成，不触发生产工作流；用于明确阻塞条件并保持 fail-closed。
+核对结果：工作流引用的生产配置中，当前仓库未配置 DEPLOY_KNOWN_HOSTS、HEALTH_URL、REPOGUARD_BACKUP_BUCKET/ENDPOINT/REGION/KMS_KEY_ID/ROLE_ARN 及对应主/异地 replica 配置；production environment secrets/variables 列表为空。已有部署凭据不等同于主机信任基线，不能替代上述配置。
+后续入口：由维护者通过 GitHub production environment 或批准的安全凭据存储补齐配置后，依次运行 Kubernetes Smoke、网络正反探针、迁移维护窗口/恢复演练、真实 Smoke 与 LLM live eval；不得把缺配置的工作流失败或跳过解释为验收通过。
+
+2026-08-31 | 优化-34 | GitHub production Environment fail-closed 保护配置
+状态：已完成配置，生产密钥与目标环境验收仍待外部凭据/环境。
+变更：在 `cocojiu/PRAgent` 的 `production` Environment 启用 Required reviewer（`cocojiu`），关闭管理员绕过和等待计时器；部署范围限制为 `main`、`master` 和 `v*` 标签，不允许 `PRAgent-test` 触发生产部署。
+验证：GitHub 页面返回 `Environment "production" updated.`，并核对审批人、保护开关及三条部署规则均已持久化；未修改环境密钥或变量，也未录入占位值。提交 `10d3a4d3` 的 Pull Request Quality #413（run 33389147563）、Repository Governance #1288（run 33389147578）、Release Images #977（run 33389144002）、Production Observability Image Security #180（run 33389147501）和 Auto Create Pull Request #727（run 33389143922）均成功。
+边界：`DEPLOY_KNOWN_HOSTS`、备份角色/桶/区域/KMS 及其他生产凭据仍需由维护者通过安全凭据存储补齐；在这些值和目标 Kubernetes/网络/供应商环境证据到位前，生产工作流继续 fail-closed，不宣称全量优化已完成。
+
+2026-08-31 | 优化-35 | 生产部署默认关闭并改为手动显式启用
+状态：已完成代码与工作流门禁调整；测试、构建和安全检查保持自动运行，未触碰生产凭据或目标服务器。
+变更：`Release Images` 的 `deploy`、旧密钥迁移和加密盐初始化输入均改为非必填且默认 `false`；生产部署作业名称和说明明确为手动 opt-in，并强制要求 `workflow_dispatch`、`deploy=true` 以及 `main`/`master`/`v*` 标签，`PRAgent-test` 和所有 push 事件只能构建/发布镜像，不得连接生产主机。
+验证：新增 `ProductionDeploymentContractTest.productionDeployIsManualOptInAndDisabledByDefault`，校验默认值、事件类型、分支范围和 test 分支排除。
+
+2026-08-31 | 优化-36 | 个人项目范围确认：不做生产环境验收
+状态：范围已确认；仓库内代码、测试、CI 与发布门禁优化视为完成，企业级目标环境验收不纳入本项目准出条件。
+范围决策：不执行 Kubernetes Secret/Pod Smoke、生产规模迁移锁与备份恢复、真实 SSH 主机指纹探针、NetworkPolicy 正反探针、各 LLM provider 的人工样本 live eval，以及生产 OTel/性能观察窗口；这些项目保留为延期/风险接受，不伪造“已完成”证据。
+保留约束：`PRAgent-test` 持续自动构建和测试；生产部署仅允许 `workflow_dispatch` 且显式 `deploy=true`，仍受 `main`/`master`/`v*` 分支范围与 production 环境保护规则约束；未配置占位密钥，也未将私钥写入仓库。
+验收依据：提交 `edc78c6e` 已推送 `origin/PRAgent-test`；Pull Request Quality、Production Observability Image Security、Repository Governance、Auto Create Pull Request 和 Release Images 均成功，其中生产部署作业按策略跳过。

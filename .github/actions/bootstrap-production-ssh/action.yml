@@ -1,0 +1,87 @@
+name: Bootstrap production SSH trust
+description: Install a deployment key and a protected, pre-provisioned known_hosts baseline.
+
+inputs:
+  deploy-host:
+    description: Expected production SSH hostname or address
+    required: true
+  deploy-port:
+    description: Expected production SSH TCP port
+    required: false
+    default: "22"
+  deploy-private-key:
+    description: Private key used by the production deployment account
+    required: true
+  deploy-known-hosts:
+    description: Offline-verified known_hosts content from the protected production environment
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Install protected SSH identity and host baseline
+      shell: bash
+      env:
+        INPUT_DEPLOY_HOST: ${{ inputs.deploy-host }}
+        INPUT_DEPLOY_PORT: ${{ inputs.deploy-port }}
+        INPUT_DEPLOY_PRIVATE_KEY: ${{ inputs.deploy-private-key }}
+        INPUT_DEPLOY_KNOWN_HOSTS: ${{ inputs.deploy-known-hosts }}
+      run: |
+        set -euo pipefail
+        test -n "${INPUT_DEPLOY_HOST}" || {
+          echo "Missing expected production SSH host." >&2
+          exit 1
+        }
+        test -n "${INPUT_DEPLOY_PRIVATE_KEY}" || {
+          echo "Missing production SSH private key." >&2
+          exit 1
+        }
+        test -n "${INPUT_DEPLOY_KNOWN_HOSTS}" || {
+          echo "Missing protected DEPLOY_KNOWN_HOSTS baseline." >&2
+          exit 1
+        }
+
+        deploy_port="${INPUT_DEPLOY_PORT:-22}"
+        case "${deploy_port}" in
+          *[!0-9]* | "")
+            echo "Production SSH port must be numeric." >&2
+            exit 1
+            ;;
+        esac
+        if (( deploy_port < 1 || deploy_port > 65535 )); then
+          echo "Production SSH port must be between 1 and 65535." >&2
+          exit 1
+        fi
+
+        install -m 700 -d ~/.ssh
+        umask 077
+        printf '%s\n' "${INPUT_DEPLOY_PRIVATE_KEY}" > ~/.ssh/deploy_key
+        printf '%s\n' "${INPUT_DEPLOY_KNOWN_HOSTS}" > ~/.ssh/known_hosts
+        chmod 600 ~/.ssh/deploy_key ~/.ssh/known_hosts
+
+        ssh-keygen -y -f ~/.ssh/deploy_key >/dev/null 2>&1 || {
+          echo "Production SSH private key is invalid or encrypted." >&2
+          exit 1
+        }
+        ssh-keygen -l -f ~/.ssh/known_hosts >/dev/null 2>&1 || {
+          echo "DEPLOY_KNOWN_HOSTS does not contain a valid SSH host key." >&2
+          exit 1
+        }
+
+        expected_host="${INPUT_DEPLOY_HOST}"
+        if [[ "${deploy_port}" != "22" ]]; then
+          expected_host="[${INPUT_DEPLOY_HOST}]:${deploy_port}"
+        fi
+        ssh-keygen -F "${expected_host}" -f ~/.ssh/known_hosts >/dev/null 2>&1 || {
+          echo "DEPLOY_KNOWN_HOSTS has no entry for the expected production SSH target." >&2
+          exit 1
+        }
+
+        {
+          echo "Host *"
+          echo "  IdentityFile ~/.ssh/deploy_key"
+          echo "  UserKnownHostsFile ~/.ssh/known_hosts"
+          echo "  StrictHostKeyChecking yes"
+          echo "  BatchMode yes"
+        } > ~/.ssh/config
+        chmod 600 ~/.ssh/config

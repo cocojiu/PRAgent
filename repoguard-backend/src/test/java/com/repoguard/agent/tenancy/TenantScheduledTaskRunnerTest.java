@@ -33,6 +33,7 @@ class TenantScheduledTaskRunnerTest {
     @AfterEach
     void tenantContextIsAlwaysCleared() {
         assertThat(TenantContext.currentTenantId()).isNull();
+        assertThat(PlatformTenantScope.isActive()).isFalse();
     }
 
     @Test
@@ -124,11 +125,25 @@ class TenantScheduledTaskRunnerTest {
     void globalTaskRunsOnlyWhenLeaseIsAcquired() {
         List<String> observed = new ArrayList<>();
 
-        assertThat(runner.runGlobal("global_job", () -> observed.add("first"))).isTrue();
+        assertThat(runner.runGlobal("global_job", () -> {
+            assertThat(PlatformTenantScope.isActive()).isTrue();
+            assertThat(PlatformTenantScope.currentOperation()).isEqualTo("global_job");
+            observed.add("first");
+        })).isTrue();
+        assertThat(PlatformTenantScope.isActive()).isFalse();
         when(leaseGuardFactory.tryAcquireGlobal("global_job")).thenReturn(null);
         assertThat(runner.runGlobal("global_job", () -> observed.add("second"))).isFalse();
 
         assertThat(observed).containsExactly("first");
+    }
+
+    @Test
+    void globalTaskFailureStillClearsPlatformScope() {
+        assertThatThrownBy(() -> runner.runGlobal("failing_global_job", () -> {
+            throw new IllegalStateException("expected failure");
+        })).isInstanceOf(IllegalStateException.class).hasMessage("expected failure");
+
+        assertThat(PlatformTenantScope.isActive()).isFalse();
     }
 
     @Test

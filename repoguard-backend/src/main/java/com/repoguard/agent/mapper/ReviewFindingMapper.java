@@ -154,7 +154,7 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
                 and finding.enforcement_mode <> 'OBSERVE'
                 then 1 else 0 end
             ) as commentableFindings
-        from review_finding finding force index (idx_review_finding_current_category_id)
+        from review_finding finding
         where finding.task_id = #{taskId}
           and finding.current_attempt = 1
           and finding.category = 'FINDING'
@@ -163,7 +163,7 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
 
     @Select("""
         select *
-        from review_finding finding force index (idx_review_finding_current_category_id)
+        from review_finding finding
         where finding.task_id = #{taskId}
           and finding.current_attempt = 1
           and finding.category = 'FINDING'
@@ -178,7 +178,7 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
 
     @Select("""
         select *
-        from review_finding finding force index (idx_review_finding_current_category_id)
+        from review_finding finding
         where finding.task_id = #{taskId}
           and finding.current_attempt = 1
           and finding.category = 'FINDING'
@@ -204,7 +204,7 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
 
     @Select("""
         select *
-        from review_finding finding force index (idx_review_finding_current_category_id)
+        from review_finding finding
         where finding.task_id = #{taskId}
           and finding.current_attempt = 1
           and finding.category = 'FINDING'

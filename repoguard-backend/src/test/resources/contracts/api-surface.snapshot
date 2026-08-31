@@ -44,6 +44,8 @@ GET /api/v1/reviews/{id}/status query=[] body=- bodyRequired=false
 GET /api/v1/reviews/{id}/timeline query=[limit] body=- bodyRequired=false
 GET /api/v1/reviews/{taskId}/attempts query=[] body=- bodyRequired=false
 GET /api/v1/reviews/{taskId}/attempts/{attemptId} query=[page, pageSize] body=- bodyRequired=false
+GET /api/v1/reviews/{taskId}/attempts/{attemptId}/changed-files query=[cursor, limit] body=- bodyRequired=false
+GET /api/v1/reviews/{taskId}/attempts/{attemptId}/findings query=[cursor, limit] body=- bodyRequired=false
 GET /api/v1/system/health/summary query=[] body=- bodyRequired=false
 GET /api/v1/users query=[page, pageSize, role, status, keyword] body=- bodyRequired=false
 GET /api/v1/users/audits query=[page, pageSize] body=- bodyRequired=false

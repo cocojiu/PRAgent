@@ -1,6 +1,7 @@
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import type { ConnectionTestResult } from "@/types";
 import { getErrorMessage } from "@/utils/errors";
+import { formatDateTime } from "@/utils/dateTime";
 
 type UseIntegrationConnectionTestOptions = {
   applyConnectionTestResult: (id: string, result: ConnectionTestResult) => void;
@@ -39,7 +40,7 @@ export const useIntegrationConnectionTest = ({
         success: false,
         status: "failed",
         message,
-        checkedAt: new Date().toLocaleString()
+        checkedAt: formatDateTime(new Date())
       });
       ElMessage.error(message);
     } finally {

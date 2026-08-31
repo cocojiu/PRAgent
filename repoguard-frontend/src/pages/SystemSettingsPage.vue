@@ -29,13 +29,19 @@
             <el-input v-model="baseForm.systemName" :disabled="!isEditing" />
           </el-form-item>
           <el-form-item label="默认语言">
-            <el-select v-model="baseForm.language" :disabled="!isEditing">
-              <el-option label="中文" value="中文" />
-              <el-option label="English" value="English" />
+            <el-select v-model="baseForm.language" disabled>
+              <el-option label="简体中文（当前唯一支持）" value="zh-CN" />
             </el-select>
           </el-form-item>
           <el-form-item label="时区">
-            <el-input v-model="baseForm.timezone" :disabled="!isEditing" />
+            <el-select
+              v-model="baseForm.timezone"
+              :disabled="!isEditing"
+              filterable
+              class="settings-timezone-select"
+            >
+              <el-option v-for="timezone in timezoneOptions" :key="timezone" :label="timezone" :value="timezone" />
+            </el-select>
           </el-form-item>
           <el-form-item label="数据保留天数">
             <el-input-number v-model="baseForm.retentionDays" :disabled="!isEditing" :min="1" :max="365" />
@@ -133,7 +139,9 @@ security:
       <article class="dashboard-card">
         <h2>操作日志</h2>
         <el-table :data="settingLogs" class="rg-table" size="large" aria-label="系统设置操作日志">
-          <el-table-column prop="time" label="时间" width="180" />
+          <el-table-column label="时间" width="210">
+            <template #default="{ row }">{{ formatSettingLogTime(row) }}</template>
+          </el-table-column>
           <el-table-column prop="operator" label="操作人" width="100" />
           <el-table-column prop="action" label="操作内容" min-width="260" />
           <el-table-column label="状态" width="100">
@@ -153,12 +161,18 @@ import { onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import { canManage } from "@/stores/authState";
+import { applyUiPreferences } from "@/stores/uiPreferences";
 import { fetchSystemSettings, updateSystemSettings } from "@/api/config";
 import { useFormSnapshot } from "@/composables/useFormSnapshot";
 import DataRetentionCleanupAuditsPanel from "@/features/system-settings/components/DataRetentionCleanupAuditsPanel.vue";
 import SecretReEncryptionPanel from "@/features/system-settings/components/SecretReEncryptionPanel.vue";
 import { routeNames } from "@/router/names";
 import { getErrorMessage } from "@/utils/errors";
+import {
+  formatDateTime,
+  getTimezoneOptions,
+  SUPPORTED_LOCALE
+} from "@/utils/dateTime";
 import type {
   BaseSettings,
   NotificationSettings,
@@ -175,7 +189,7 @@ const settingLogs = ref<SettingLog[]>([]);
 const router = useRouter();
 const baseForm = reactive<BaseSettings>({
   systemName: "",
-  language: "中文",
+  language: SUPPORTED_LOCALE,
   timezone: "Asia/Shanghai",
   retentionDays: 90
 });
@@ -198,6 +212,7 @@ const securityForm = reactive<SecuritySettings>({
   publicRepoAllowed: false,
   tokenTtlDays: 30
 });
+const timezoneOptions = getTimezoneOptions();
 const { captureSnapshot, restoreSnapshot } = useFormSnapshot({
   baseForm,
   policyForm,
@@ -232,6 +247,8 @@ const goNotificationOps = () => {
 
 const applySettings = (settings: SystemSettings) => {
   Object.assign(baseForm, settings.base);
+  baseForm.language = SUPPORTED_LOCALE;
+  applyUiPreferences(baseForm.timezone);
   Object.assign(policyForm, settings.policy);
   Object.assign(notificationForm, {
     ...settings.notification,
@@ -241,6 +258,10 @@ const applySettings = (settings: SystemSettings) => {
   settingLogs.value = settings.logs ?? [];
   captureSnapshot();
 };
+
+const formatSettingLogTime = (log: SettingLog) => log.occurredAt
+  ? formatDateTime(log.occurredAt)
+  : log.time;
 
 const loadSystemSettings = async () => {
   loading.value = true;

@@ -2,6 +2,8 @@ package com.repoguard.agent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.repoguard.agent.cache.CacheEvictionService;
+import com.repoguard.agent.common.BusinessException;
+import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.dto.BaseSettingsDto;
 import com.repoguard.agent.dto.NotificationSettingsDto;
@@ -18,7 +20,11 @@ import com.repoguard.agent.mapper.SystemSettingLogMapper;
 import com.repoguard.agent.mapper.SystemSettingsConfigMapper;
 import com.repoguard.agent.service.SystemSettingsApplicationService;
 import java.math.BigDecimal;
+import java.time.DateTimeException;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Objects;
@@ -30,6 +36,8 @@ import org.springframework.util.StringUtils;
 public class SystemSettingsApplicationServiceImpl implements SystemSettingsApplicationService {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final ZoneId LEGACY_DATE_TIME_ZONE = ZoneId.of("Asia/Shanghai");
+    private static final String SUPPORTED_LANGUAGE = "中文";
     private static final int DEFAULT_CHUNK_FILE_THRESHOLD = 6;
     private static final int DEFAULT_CHUNK_LINE_THRESHOLD = 700;
     private static final int DEFAULT_CHUNK_MAX_FILES = 4;
@@ -63,13 +71,15 @@ public class SystemSettingsApplicationServiceImpl implements SystemSettingsAppli
     @Override
     @Transactional
     public SystemSettingsDto updateSystemSettings(SystemSettingsRequest request) {
+        String timezone = normalizeTimezone(request.base().timezone());
+        String language = normalizeLanguage(request.base().language());
         SystemSettingsConfig settingsConfig = loadSystemSettings();
         ReviewPolicyConfig reviewPolicyConfig = loadReviewPolicy();
         LocalDateTime now = LocalDateTime.now();
 
         settingsConfig.setSystemName(request.base().systemName().trim());
-        settingsConfig.setLanguage(request.base().language().trim());
-        settingsConfig.setTimezone(request.base().timezone().trim());
+        settingsConfig.setLanguage(language);
+        settingsConfig.setTimezone(timezone);
         settingsConfig.setRetentionDays(request.base().retentionDays());
         settingsConfig.setMaxDiffLines(request.policy().maxDiffLines());
         settingsConfig.setAutoComment(request.policy().autoComment());
@@ -139,7 +149,7 @@ public class SystemSettingsApplicationServiceImpl implements SystemSettingsAppli
         SystemSettingsConfig defaultConfig = new SystemSettingsConfig();
         defaultConfig.setId(1L);
         defaultConfig.setSystemName("RepoGuard Agent");
-        defaultConfig.setLanguage("中文");
+        defaultConfig.setLanguage(SUPPORTED_LANGUAGE);
         defaultConfig.setTimezone("Asia/Shanghai");
         defaultConfig.setRetentionDays(90);
         defaultConfig.setMaxDiffLines(800);
@@ -190,7 +200,7 @@ public class SystemSettingsApplicationServiceImpl implements SystemSettingsAppli
             new BaseSettingsDto(
                 settingsConfig.getSystemName(),
                 settingsConfig.getLanguage(),
-                settingsConfig.getTimezone(),
+                validTimezoneOrDefault(settingsConfig.getTimezone()),
                 settingsConfig.getRetentionDays()
             ),
             new ReviewPolicySettingsDto(
@@ -219,6 +229,7 @@ public class SystemSettingsApplicationServiceImpl implements SystemSettingsAppli
     private SettingLogDto toSettingLogDto(SystemSettingLog log) {
         return new SettingLogDto(
             format(log.getCreatedAt()),
+            formatUtc(log.getCreatedAt()),
             log.getOperator(),
             log.getAction(),
             log.getStatus()
@@ -232,4 +243,52 @@ public class SystemSettingsApplicationServiceImpl implements SystemSettingsAppli
     private String format(LocalDateTime time) {
         return time == null ? null : time.format(DATE_TIME_FORMATTER);
     }
+
+    private OffsetDateTime formatUtc(LocalDateTime time) {
+        return time == null
+            ? null
+            : time.atZone(LEGACY_DATE_TIME_ZONE).withZoneSameInstant(ZoneOffset.UTC).toOffsetDateTime();
+    }
+
+    private String normalizeTimezone(String timezone) {
+        if (timezone == null || timezone.isBlank()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Timezone must be a valid IANA zone id");
+        }
+        String normalized = timezone.trim();
+        try {
+            ZoneId zoneId = ZoneId.of(normalized);
+            if (!isIanaTimezone(normalized)) {
+                throw new DateTimeException("Fixed-offset timezone is not an IANA region id");
+            }
+            return zoneId.getId();
+        } catch (DateTimeException exception) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Timezone must be a valid IANA zone id");
+        }
+    }
+
+    private String validTimezoneOrDefault(String timezone) {
+        if (timezone == null || timezone.isBlank()) {
+            return LEGACY_DATE_TIME_ZONE.getId();
+        }
+        String normalized = timezone.trim();
+        try {
+            ZoneId zoneId = ZoneId.of(normalized);
+            return isIanaTimezone(normalized) ? zoneId.getId() : LEGACY_DATE_TIME_ZONE.getId();
+        } catch (DateTimeException exception) {
+            return LEGACY_DATE_TIME_ZONE.getId();
+        }
+    }
+
+    private boolean isIanaTimezone(String timezone) {
+        return "UTC".equals(timezone) || ZoneId.getAvailableZoneIds().contains(timezone);
+    }
+
+    private String normalizeLanguage(String language) {
+        String normalized = language == null ? "" : language.trim();
+        if ("zh-CN".equalsIgnoreCase(normalized) || SUPPORTED_LANGUAGE.equals(normalized)) {
+            return SUPPORTED_LANGUAGE;
+        }
+        throw new BusinessException(ErrorCode.BAD_REQUEST, "Only zh-CN is currently supported");
+    }
+
 }

@@ -17,8 +17,8 @@ LABEL org.opencontainers.image.version="${OCI_VERSION}" \
 WORKDIR /app
 
 RUN apk upgrade --no-cache libcrypto3 libssl3 openssl libexpat p11-kit p11-kit-trust \
-    && addgroup -S repoguard \
-    && adduser -S -G repoguard repoguard
+    && addgroup -S -g 10001 repoguard \
+    && adduser -S -D -H -u 10001 -G repoguard repoguard
 
 COPY --from=layers /app/extracted/BOOT-INF/lib/ ./BOOT-INF/lib/
 COPY --from=layers /app/extracted/org/ ./org/
@@ -31,6 +31,6 @@ RUN chown -R repoguard:repoguard /app
 
 EXPOSE 8081
 
-USER repoguard
+USER 10001:10001
 
 ENTRYPOINT ["java", "org.springframework.boot.loader.launch.JarLauncher"]

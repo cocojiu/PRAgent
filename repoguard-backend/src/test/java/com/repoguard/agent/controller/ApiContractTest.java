@@ -338,7 +338,9 @@ class ApiContractTest {
             "PUT /api/v1/enterprise/tenants/{tenantKey}/memberships",
             "PUT /api/v1/enterprise/tenants/{tenantKey}/repositories",
             "PUT /api/v1/enterprise/tenants/{tenantKey}/status",
-            "PUT /api/v1/enterprise/tenants/{tenantKey}/quota"
+            "PUT /api/v1/enterprise/tenants/{tenantKey}/quota",
+            "GET /api/v1/reviews/{taskId}/attempts/{attemptId}/changed-files",
+            "GET /api/v1/reviews/{taskId}/attempts/{attemptId}/findings"
         );
     }
 

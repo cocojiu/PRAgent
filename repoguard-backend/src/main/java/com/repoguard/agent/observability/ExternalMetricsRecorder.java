@@ -60,6 +60,16 @@ public class ExternalMetricsRecorder {
         metrics.counter("repoguard.llm.fallback", "reason", metrics.normalize(reason)).increment();
     }
 
+    void llmStructuredOutput(String provider, String mode, String outcome, String reason) {
+        String[] tags = {
+            "provider", metrics.normalize(provider),
+            "mode", metrics.normalize(mode),
+            "outcome", metrics.normalize(outcome),
+            "reason", metrics.normalize(reason)
+        };
+        metrics.counter("repoguard.llm.structured_output", tags).increment();
+    }
+
     void githubCommentPublished(String status) {
         metrics.counter("repoguard.github.comment.publish", "status", metrics.normalize(status)).increment();
     }

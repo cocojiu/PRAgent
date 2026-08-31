@@ -117,7 +117,7 @@
             <div class="calibration-pr-cell">
               <strong>PR #{{ row.prNumber ?? "-" }}</strong>
               <span>{{ row.organization }} / {{ row.repository }}</span>
-              <small>{{ row.taskCreatedAt }}</small>
+              <small>{{ formatDateTime(row.taskCreatedAt) }}</small>
             </div>
           </template>
         </el-table-column>
@@ -168,6 +168,7 @@ import type {
   ReviewRuleConfig
 } from "@/types";
 import { getErrorMessage } from "@/utils/errors";
+import { formatDateTime } from "@/utils/dateTime";
 import { riskText } from "@/utils/risk";
 
 const props = defineProps<{

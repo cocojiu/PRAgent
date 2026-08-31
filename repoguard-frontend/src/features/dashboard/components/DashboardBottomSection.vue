@@ -11,7 +11,9 @@
           </template>
         </el-table-column>
         <el-table-column prop="ruleHits" label="规则命中" width="100" />
-        <el-table-column prop="reviewedAt" label="审查时间" width="170" />
+        <el-table-column label="审查时间" width="190">
+          <template #default="{ row }">{{ formatDateTime(row.reviewedAt) }}</template>
+        </el-table-column>
         <el-table-column label="状态" width="110">
           <template #default="{ row }">
             <span class="status-pill success">{{ row.status }}</span>
@@ -67,6 +69,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatDateTime } from "@/utils/dateTime";
 import { RouterLink } from "vue-router";
 import { riskText } from "@/utils/risk";
 import type { FailedRuleStat, HighRiskReview, SystemHealthItem } from "@/types";

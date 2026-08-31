@@ -1,0 +1,71 @@
+{
+  "formatVersion": 1,
+  "defaultThroughVersion": 75,
+  "futureMigrationsRequireExplicitMetadata": true,
+  "defaults": {
+    "phase": "BASELINE",
+    "estimatedRows": "dataset-dependent",
+    "lockType": "metadata-and-table",
+    "maxDurationSeconds": 300,
+    "maxDiskMegabytes": 1024,
+    "nMinusOneCompatible": true,
+    "interruptedRecovery": "retry after failed statement or apply a reviewed forward fix",
+    "rollbackStrategy": "restore a validated backup and use a forward fix; no automatic DDL rollback"
+  },
+  "migrations": [
+    {
+      "version": 68,
+      "file": "V68__enterprise_tenancy.sql",
+      "phase": "BASELINE",
+      "estimatedRows": "all existing business rows",
+      "lockType": "table metadata",
+      "maxDurationSeconds": 900,
+      "maxDiskMegabytes": 4096,
+      "nMinusOneCompatible": false,
+      "interruptedRecovery": "restore the pre-tenancy backup and rerun the migration owner",
+      "rollbackStrategy": "forward fix only after the tenant backfill is verified",
+      "legacyException": true,
+      "compatibilityNote": "historical tenancy bootstrap predates the expand-contract policy"
+    },
+    {
+      "version": 69,
+      "file": "V69__tenant_safe_background_jobs.sql",
+      "phase": "BASELINE",
+      "estimatedRows": "tenant-scoped background rows",
+      "lockType": "table metadata",
+      "maxDurationSeconds": 600,
+      "maxDiskMegabytes": 2048,
+      "nMinusOneCompatible": false,
+      "interruptedRecovery": "restore the validated pre-migration backup and rerun the migration owner",
+      "rollbackStrategy": "forward fix after validating tenant ownership; no old-binary rollback",
+      "legacyException": true,
+      "compatibilityNote": "historical background-job migration replaced a legacy key before the expand-contract gate was introduced"
+    },
+    {
+      "version": 76,
+      "file": "V76__tenant_relationship_constraint_expansion.sql",
+      "phase": "EXPAND",
+      "estimatedRows": "index and candidate-key metadata only",
+      "lockType": "metadata-and-table",
+      "maxDurationSeconds": 600,
+      "maxDiskMegabytes": 2048,
+      "nMinusOneCompatible": true,
+      "interruptedRecovery": "rerun the additive indexes; do not rewrite existing rows",
+      "rollbackStrategy": "forward fix; retain additive keys until V77 contract completes"
+    },
+    {
+      "version": 77,
+      "file": "V77__tenant_relationship_constraint_contract.sql",
+      "phase": "CONTRACT",
+      "estimatedRows": "all tenant parent-child relationships",
+      "lockType": "write-quiesced table DDL",
+      "maxDurationSeconds": 900,
+      "maxDiskMegabytes": 1024,
+      "nMinusOneCompatible": false,
+      "maintenanceWindowRequired": true,
+      "dirtyDataProbe": "flyway_v77_tenant_relation_violation",
+      "interruptedRecovery": "stop writes, restore or repair dirty rows, then rerun the contract migration",
+      "rollbackStrategy": "forward fix or restore the validated V77-predecessor backup; no old-binary rollback"
+    }
+  ]
+}

@@ -4,6 +4,7 @@ import { fetchReviewDetail, fetchReviewStatus } from "@/api/reviews";
 import type { ReviewStatus, ReviewTaskDetail } from "@/types";
 import { getErrorMessage } from "@/utils/errors";
 import { commonUserMessages, reviewDetailMessages } from "@/utils/userMessages";
+import { formatDateTime } from "@/utils/dateTime";
 import { applyReviewStatusSnapshot, normalizeReviewTaskDetail } from "../reviewDetailTaskMappers";
 
 type LoadDetailOptions = { silent?: boolean; resetPublishResult?: boolean; force?: boolean };
@@ -19,13 +20,11 @@ type UseReviewDetailLoaderOptions = {
   syncPolling: () => void;
 };
 
-const formatRefreshTime = () =>
-  new Intl.DateTimeFormat("zh-CN", {
-    hour12: false,
+const formatRefreshTime = () => formatDateTime(new Date(), {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit"
-  }).format(new Date());
+  });
 
 export const useReviewDetailLoader = ({
   afterDetailLoaded,

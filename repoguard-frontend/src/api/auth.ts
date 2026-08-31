@@ -12,6 +12,8 @@ export interface AuthUser {
 export interface CurrentUser extends AuthUser {
   status: string;
   lastLoginAt?: string;
+  language?: string;
+  timezone?: string;
 }
 
 export interface AuthResponse {

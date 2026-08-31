@@ -8,6 +8,7 @@ import type {
   SecretStatus,
   ServiceIntegrationConfig
 } from "@/types";
+import { formatDateTime } from "@/utils/dateTime";
 import { providerMap } from "./integrationDefaults";
 
 type IntegrationPatch = Pick<IntegrationConfig, "fields" | "message" | "metaLabel" | "metaValue" | "status" | "statusText"> & {
@@ -18,7 +19,7 @@ export const buildGithubIntegrationPatch = (config: GithubIntegrationConfig): In
   status: secretIntegrationStatus(config.secretStatus, config.status),
   statusText: secretIntegrationStatusText(config.secretStatus, "Token", config.status),
   metaLabel: "更新时间",
-  metaValue: config.updatedAt ?? "未更新",
+  metaValue: config.updatedAt ? formatDateTime(config.updatedAt) : "未更新",
   message: config.lastError ?? secretIntegrationMessage(config.secretStatus, "GitHub Token", "GitHub 配置已保存", config.status),
   diagnostics: secretDiagnostics(config.secretStatus, config.status),
   fields: [
@@ -38,7 +39,9 @@ export const buildServiceIntegrationPatch = (id: "mysql" | "rabbitmq", config: S
     status: secretBroken ? "failed" : isConfigured ? "connected" : isFailed ? "failed" : "missing_secret",
     statusText: secretBroken ? "密文异常" : isConfigured ? "已连接" : isFailed ? "连接失败" : "未配置",
     metaLabel: config.lastCheckedAt ? "检测时间" : "更新时间",
-    metaValue: config.lastCheckedAt ?? config.updatedAt ?? "未更新",
+    metaValue: config.lastCheckedAt || config.updatedAt
+      ? formatDateTime(config.lastCheckedAt ?? config.updatedAt)
+      : "未更新",
     message: config.lastError ?? (secretBroken
       ? `${serviceName} 保存的密文不可解密，请重新填写密钥或执行密钥轮换修复`
       : isConfigured
@@ -109,7 +112,7 @@ export const buildConnectionTestPatch = (id: string, result: ConnectionTestResul
   statusText: result.success ? "已连接" : "连接失败",
   message: result.message,
   metaLabel: "检测时间",
-  metaValue: result.checkedAt,
+  metaValue: formatDateTime(result.checkedAt),
   ...(id === "mysql" || id === "rabbitmq" ? { diagnostics: serviceDiagnostics(result) } : {})
 });
 

@@ -27,12 +27,15 @@
       </el-table-column>
       <el-table-column prop="attemptCount" label="次数" width="86" />
       <el-table-column prop="failureReason" label="失败原因" min-width="240" show-overflow-tooltip />
-      <el-table-column prop="sentAt" label="发送时间" min-width="160" />
+      <el-table-column label="发送时间" min-width="180">
+        <template #default="{ row }">{{ formatDateTime(row.sentAt) }}</template>
+      </el-table-column>
     </el-table>
   </article>
 </template>
 
 <script setup lang="ts">
+import { formatDateTime } from "@/utils/dateTime";
 import { RefreshCw } from "@lucide/vue";
 import {
   notificationStatusClass,

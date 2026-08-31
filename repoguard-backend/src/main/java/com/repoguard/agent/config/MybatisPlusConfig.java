@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.handler.TenantLineHandler;
 import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.inner.TenantLineInnerInterceptor;
+import com.repoguard.agent.tenancy.PlatformTenantScope;
 import com.repoguard.agent.tenancy.TenantContext;
 import com.repoguard.agent.tenancy.TenantProperties;
 import java.util.Locale;
@@ -49,6 +50,10 @@ public class MybatisPlusConfig {
         "system_settings_config"
     );
 
+    public static Set<String> tenantTables() {
+        return TENANT_TABLES;
+    }
+
     @Bean
     public MybatisPlusInterceptor mybatisPlusInterceptor(TenantProperties tenantProperties) {
         MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
@@ -57,11 +62,11 @@ public class MybatisPlusConfig {
         return interceptor;
     }
 
-    private static final class TenantHandler implements TenantLineHandler {
+    static final class TenantHandler implements TenantLineHandler {
 
         private final TenantProperties properties;
 
-        private TenantHandler(TenantProperties properties) {
+        TenantHandler(TenantProperties properties) {
             this.properties = properties;
         }
 
@@ -81,13 +86,16 @@ public class MybatisPlusConfig {
 
         @Override
         public boolean ignoreTable(String tableName) {
-            if (!properties.isEnabled() || !TenantContext.hasTenant()) {
+            if (!properties.isEnabled()) {
                 return true;
             }
             String normalized = tableName == null
                 ? ""
                 : tableName.replace("`", "").trim().toLowerCase(Locale.ROOT);
-            return !TENANT_TABLES.contains(normalized);
+            if (!TENANT_TABLES.contains(normalized)) {
+                return true;
+            }
+            return PlatformTenantScope.isActive();
         }
     }
 }

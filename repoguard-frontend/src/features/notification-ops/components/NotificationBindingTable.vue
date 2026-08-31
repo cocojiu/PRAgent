@@ -24,7 +24,9 @@
         </el-tag>
       </template>
     </el-table-column>
-    <el-table-column prop="lastCheckedAt" label="最近检测" min-width="160" />
+    <el-table-column label="最近检测" min-width="180">
+      <template #default="{ row }">{{ formatDateTime(row.lastCheckedAt) }}</template>
+    </el-table-column>
     <el-table-column prop="lastError" label="最近错误" min-width="220" show-overflow-tooltip />
     <el-table-column label="操作" :width="actionWidth" fixed="right">
       <template #default="{ row }">
@@ -42,6 +44,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatDateTime } from "@/utils/dateTime";
 import type { NotificationBinding } from "@/types";
 import { notificationBindingSecretDisplay, providerText } from "../notificationOpsDisplayMappers";
 
