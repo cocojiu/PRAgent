@@ -122,6 +122,32 @@ public record LlmEvaluationDatasetMetadata(
         int observedRollingObservationSamples,
         int observationsWithoutSplit
     ) {
+        return validationBlockers(
+            observedSamples,
+            observedFingerprint,
+            observedSourceRepositories,
+            observationsWithoutRepository,
+            observedFixedRegressionSamples,
+            observedRollingObservationSamples,
+            observationsWithoutSplit,
+            0
+        );
+    }
+
+    /**
+     * Lists blockers for a complete manifest-to-observation comparison, including aggregate
+     * sample-context labels required to stratify a real PR quality baseline.
+     */
+    public List<String> validationBlockers(
+        int observedSamples,
+        String observedFingerprint,
+        int observedSourceRepositories,
+        int observationsWithoutRepository,
+        int observedFixedRegressionSamples,
+        int observedRollingObservationSamples,
+        int observationsWithoutSplit,
+        int observationsWithoutSampleContext
+    ) {
         List<String> blockers = new ArrayList<>();
         if (kind != DatasetKind.REAL_PR) {
             blockers.add("DATASET_NOT_REAL_PR");
@@ -158,6 +184,9 @@ public record LlmEvaluationDatasetMetadata(
         }
         if (observationsWithoutSplit > 0) {
             blockers.add("DATASET_SPLIT_LABEL_MISSING:" + observationsWithoutSplit);
+        }
+        if (observationsWithoutSampleContext > 0) {
+            blockers.add("DATASET_SAMPLE_CONTEXT_MISSING:" + observationsWithoutSampleContext);
         }
         if (observedFixedRegressionSamples >= 0
             && observedFixedRegressionSamples != fixedRegressionSamples) {

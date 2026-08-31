@@ -122,6 +122,7 @@ class LlmQualityEvaluatorTest {
             "DATASET_FINGERPRINT_MISSING",
             "DATASET_REPOSITORY_LABEL_MISSING:1",
             "DATASET_SPLIT_LABEL_MISSING:1",
+            "DATASET_SAMPLE_CONTEXT_MISSING:1",
             "VERSION_METADATA_INCOMPLETE"
         );
     }
@@ -153,7 +154,8 @@ class LlmQualityEvaluatorTest {
                 i < 40
                     ? LlmEvaluationObservation.EvaluationSplit.FIXED_REGRESSION
                     : LlmEvaluationObservation.EvaluationSplit.ROLLING_OBSERVATION,
-                i < 25 ? "repo-a" : "repo-b"
+                i < 25 ? "repo-a" : "repo-b",
+                context(i, i < 10)
             ));
         }
         String fingerprint = LlmQualityEvaluator.evaluate(reproducibleVersion, observations)
@@ -228,7 +230,8 @@ class LlmQualityEvaluatorTest {
                 i < 40
                     ? LlmEvaluationObservation.EvaluationSplit.FIXED_REGRESSION
                     : LlmEvaluationObservation.EvaluationSplit.ROLLING_OBSERVATION,
-                i < 25 ? "repo-a" : "repo-b"
+                i < 25 ? "repo-a" : "repo-b",
+                context(i, i < 10)
             ));
         }
 
@@ -269,7 +272,8 @@ class LlmQualityEvaluatorTest {
                 i < 40
                     ? LlmEvaluationObservation.EvaluationSplit.FIXED_REGRESSION
                     : LlmEvaluationObservation.EvaluationSplit.ROLLING_OBSERVATION,
-                "repo-a"
+                "repo-a",
+                context(i, i < 10)
             ));
         }
         String fingerprint = LlmQualityEvaluator.evaluate(reproducibleVersion, observations)
@@ -412,6 +416,34 @@ class LlmQualityEvaluatorTest {
         LlmEvaluationObservation.EvaluationSplit split,
         String sourceRepositoryKey
     ) {
+        return sample(
+            id,
+            expectedFinding,
+            expectedSeverity,
+            predictedFinding,
+            predictedSeverity,
+            anchored,
+            predictionKey,
+            parsed,
+            split,
+            sourceRepositoryKey,
+            LlmEvaluationSampleContext.unknown()
+        );
+    }
+
+    private LlmEvaluationObservation sample(
+        String id,
+        boolean expectedFinding,
+        String expectedSeverity,
+        boolean predictedFinding,
+        String predictedSeverity,
+        boolean anchored,
+        String predictionKey,
+        boolean parsed,
+        LlmEvaluationObservation.EvaluationSplit split,
+        String sourceRepositoryKey,
+        LlmEvaluationSampleContext sampleContext
+    ) {
         return new LlmEvaluationObservation(
             id,
             "security",
@@ -434,7 +466,18 @@ class LlmQualityEvaluatorTest {
             0,
             0,
             split,
-            sourceRepositoryKey
+            sourceRepositoryKey,
+            sampleContext
+        );
+    }
+
+    private LlmEvaluationSampleContext context(int index, boolean expectedFinding) {
+        return new LlmEvaluationSampleContext(
+            index % 2 == 0 ? "java" : "typescript",
+            1 + index % 4,
+            10 + index,
+            index % 2 == 0 ? "jvm" : "web",
+            expectedFinding ? "location-" + index : ""
         );
     }
 }

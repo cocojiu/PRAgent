@@ -108,6 +108,9 @@ public final class LlmQualityEvaluator {
         int observationsWithoutSplit = (int) samples.stream()
             .filter(sample -> sample.split() == LlmEvaluationObservation.EvaluationSplit.UNSPECIFIED)
             .count();
+        int observationsWithoutSampleContext = (int) samples.stream()
+            .filter(sample -> !sample.sampleContext().complete(sample.expectedFinding()))
+            .count();
         Set<String> sourceRepositoryKeys = samples.stream()
             .map(LlmEvaluationObservation::sourceRepositoryKey)
             .filter(repositoryKey -> !repositoryKey.isBlank())
@@ -149,7 +152,8 @@ public final class LlmQualityEvaluator {
                 observationsWithoutRepository,
                 observedFixedRegressionSamples,
                 observedRollingObservationSamples,
-                observationsWithoutSplit
+                observationsWithoutSplit,
+                observationsWithoutSampleContext
             );
         if (dataset != null) {
             blockers.addAll(datasetBlockers);

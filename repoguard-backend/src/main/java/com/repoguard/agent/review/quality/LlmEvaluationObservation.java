@@ -28,7 +28,8 @@ public record LlmEvaluationObservation(
     long llmFindingCount,
     long verifiedFindingCount,
     EvaluationSplit split,
-    String sourceRepositoryKey
+    String sourceRepositoryKey,
+    LlmEvaluationSampleContext sampleContext
 ) {
 
     public enum EvaluationSplit {
@@ -73,7 +74,8 @@ public record LlmEvaluationObservation(
             0,
             0,
             EvaluationSplit.UNSPECIFIED,
-            ""
+            "",
+            LlmEvaluationSampleContext.unknown()
         );
     }
 
@@ -121,7 +123,8 @@ public record LlmEvaluationObservation(
             llmFindingCount,
             verifiedFindingCount,
             EvaluationSplit.UNSPECIFIED,
-            ""
+            "",
+            LlmEvaluationSampleContext.unknown()
         );
     }
 
@@ -170,7 +173,59 @@ public record LlmEvaluationObservation(
             llmFindingCount,
             verifiedFindingCount,
             split,
-            ""
+            "",
+            LlmEvaluationSampleContext.unknown()
+        );
+    }
+
+    public LlmEvaluationObservation(
+        String caseId,
+        String category,
+        boolean expectedFinding,
+        String expectedSeverity,
+        boolean predictedFinding,
+        String predictedSeverity,
+        boolean anchorValid,
+        String predictionKey,
+        boolean parseSucceeded,
+        long latencyMs,
+        long totalTokens,
+        BigDecimal estimatedCost,
+        Boolean usefulComment,
+        boolean commentPublishAttempted,
+        Boolean commentPublished,
+        Boolean commentFixed,
+        Boolean commentIgnored,
+        long ruleFindingCount,
+        long llmFindingCount,
+        long verifiedFindingCount,
+        EvaluationSplit split,
+        String sourceRepositoryKey
+    ) {
+        this(
+            caseId,
+            category,
+            expectedFinding,
+            expectedSeverity,
+            predictedFinding,
+            predictedSeverity,
+            anchorValid,
+            predictionKey,
+            parseSucceeded,
+            latencyMs,
+            totalTokens,
+            estimatedCost,
+            usefulComment,
+            commentPublishAttempted,
+            commentPublished,
+            commentFixed,
+            commentIgnored,
+            ruleFindingCount,
+            llmFindingCount,
+            verifiedFindingCount,
+            split,
+            sourceRepositoryKey,
+            LlmEvaluationSampleContext.unknown()
         );
     }
 
@@ -186,6 +241,7 @@ public record LlmEvaluationObservation(
         commentPublishAttempted = commentPublishAttempted || commentPublished != null;
         split = split == null ? EvaluationSplit.UNSPECIFIED : split;
         sourceRepositoryKey = normalizeRepositoryKey(sourceRepositoryKey);
+        sampleContext = sampleContext == null ? LlmEvaluationSampleContext.unknown() : sampleContext;
         if (Boolean.TRUE.equals(commentFixed) && Boolean.TRUE.equals(commentIgnored)) {
             throw new IllegalArgumentException("A comment cannot be both fixed and ignored");
         }
