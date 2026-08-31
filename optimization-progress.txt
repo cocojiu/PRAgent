@@ -288,3 +288,11 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 提交/远程验收：实现提交 49cf8576（修复：校验真实 PR 评测数据集指纹一致性）已推送 origin/PRAgent-test；Pull Request Quality #33422128668、PR Repository Governance #33422128713、push Repository Governance #33422124269、Release Images #33422124226 和 Auto Create Pull Request #33422124224 均成功，生产部署按手动 opt-in 策略跳过。
 数据边界：本批仅修复评测契约，不写入真实源码、原始 provider 请求、PR 标识或密钥；仍需维护者提供 2～3 个授权仓库的 50～100 个脱敏、人工复核样本，才能生成真实质量基线。
 下一步：等待真实数据清单和观测结果；数据到位后先验证指纹、固定回归集与滚动观察集，再按顺序进入 P0-03 十分钟首次审查闭环。
+
+2026-09-01 | 优化-40 | P0-02 固定回归集与滚动观察集分组契约
+状态：已完成代码、回归测试、中文提交、test 分支推送和远程 Actions 验收；真实授权数据仍未导入。
+变更：LlmEvaluationObservation 新增 FIXED_REGRESSION、ROLLING_OBSERVATION 和 UNSPECIFIED 分组；真实数据评测现在核对观测分组数量与数据清单声明，缺失分组或 fixed/rolling 数量漂移分别加入阻断项；保留旧构造器和旧校验入口兼容离线样例，避免已有调用方被无意破坏。新增真实分组匹配、分组缺失和指纹漂移场景的回归覆盖。
+本地验证：LlmQualityEvaluatorTest 6 项、ReviewQualityEvaluationTest 23 项共 29 项通过；git diff --check 通过。
+提交/远程验收：实现提交 4d8634a3（修复：校验真实 PR 评测固定与滚动分组）已推送 origin/PRAgent-test；Pull Request Quality #33423574260、PR Repository Governance #33423574291、push Repository Governance #33423570228、Release Images #33423570424 和 Auto Create Pull Request #33423570170 均成功，生产部署按手动 opt-in 策略跳过。
+数据边界：本批只完善真实评测的分组契约，不写入真实源码、原始 provider 请求、PR 标识或密钥；仍需维护者提供 2～3 个授权仓库的 50～100 个脱敏、人工复核样本，才能生成真实质量基线。
+下一步：等待真实数据清单和观测结果；数据到位后先核对样本指纹与固定/滚动分组，再按顺序进入 P0-03 十分钟首次审查闭环。
