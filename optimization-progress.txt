@@ -211,3 +211,8 @@ Worker 门槛：建议窗口为 2026-08-30 02:00–02:30（Asia/Shanghai）；�
 状态：已完成代码与 OpenAPI 契约门禁，待提交推送。
 变更：新增独立的 changed-files/findings cursor endpoint，按 `(attempt_id, id)` 条件、limit+1 探测和独立 total/nextCursor/hasMore 返回，限制每次最多 100 条；保留旧的 combined result endpoint 兼容已有调用。新增集合控制器以避免把新运维读取旁路混入前端生成客户端，两个 endpoint 在 OpenAPI 中纳入显式 server-only 清单。
 验证：ReviewExecutionAttemptQueryServiceTest 5 项覆盖独立游标、limit、nextCursor、总数、非法输入；ApiContractTest、OpenApiPathsContractTest、OpenApiGeneratedClientContractTest 共 33 项加回归全部通过，快照同步更新，未纳入用户既有 frontend-signature 快照改动。
+
+2026-08-31 | 优化-27 | P2-05 测试日志噪声收敛
+状态：已完成代码门禁，待提交推送。
+变更：新增 `logback-test.xml`，默认测试级别从 INFO 降至 WARN；只对控制台过滤带 `result=fallback` 的预期 LLM fallback WARN，保留直接 ListAppender 断言能力；ERROR 级内部失败继续输出完整 `%safeEx` 堆栈，未改变生产 logback 配置。
+验证：LogbackTestProfileContractTest、GlobalExceptionHandlerTest、LlmReviewPipelineTest、LlmChunkReviewFallbackHandlerTest、LlmChunkReviewAggregatorTest 共 26 项通过，预期噪声隐藏且失败堆栈测试仍通过。
