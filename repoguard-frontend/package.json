@@ -8,7 +8,7 @@
     "generate:api": "node scripts/generate-openapi-client.mjs",
     "check:api-generated": "node scripts/generate-openapi-client.mjs --check",
     "typecheck": "npm run check:api-generated && vue-tsc -b",
-    "lint": "eslint \"src/**/*.{ts,vue}\"",
+    "lint": "eslint \"src/**/*.{ts,vue}\" \"scripts/**/*.mjs\"",
     "test:unit": "vitest run",
     "test:route-smoke": "vitest run src/smoke",
     "test:coverage": "vitest run --coverage",

@@ -179,3 +179,25 @@ Worker 门槛：建议窗口为 2026-08-30 02:00–02:30（Asia/Shanghai）；�
 本地验证：V76 迁移、schema 版本和 Kubernetes 定向契约共执行 8 项、0 失败，11 项真实 MySQL 条件化集成按环境门禁跳过但编译成功；完整 mvn verify 共 2535 项、0 失败、0 错误、11 项条件化跳过，JaCoCo 覆盖门禁与 JAR 打包通过。
 远程验收：实现提交 b59308d1；Pull Request Quality #33296560904、Repository Governance #33296560885/#33296559253、Release Images #33296559254、Auto Create Pull Request #33296559251 全部成功。Spring MySQL RabbitMQ integration job #99217127538 在 MySQL 8.0.46 从空库成功应用 76 个迁移到 v76，ProductionRuntimeContextIntegrationTest 11 项、0 失败、0 错误、0 跳过并 BUILD SUCCESS，覆盖 information_schema 中 8 个组合候选键与 17 个组合子索引验收。
 下一步：经单独批准后执行 P0-02B-Contract；该阶段会先运行存量跨租户脏数据探针，再删除旧单列外键并切换为组合外键，操作风险高于只增索引的 V76。
+
+2026-08-31 | 优化-20 | P0-02B-Contract 多租户组合外键
+状态：代码、真实 MySQL 8.0.46 迁移验收和测试分支 Actions 已完成；生产数据规模维护窗口与备份恢复仍按上线准出流程执行。
+变更：V77 在维护窗口前执行 fail-closed 脏数据探针，确认 20 条父子关系无跨租户数据后删除旧单列外键并切换 `(tenant_id, id)` 组合外键；新增通知组合索引并保留 repair/forward recovery 运行手册约束。
+验证：Spring MySQL RabbitMQ integration 从空库执行 V1–V77，验证组合外键元数据、跨租户子记录写入拒绝和旧通知恢复夹具；本地后端全量测试与迁移契约测试通过，远程 Pull Request Quality、Repository Governance、Release Images 和 Auto Create Pull Request 全部成功。
+
+2026-08-31 | 优化-21 | P1-01/P1-02 生产验收待外部环境
+状态：代码与测试分支门禁已完成；生产 SSH 受保护 `DEPLOY_KNOWN_HOSTS`、托管 MySQL/RabbitMQ 精确 CIDR、FQDN-aware egress 及允许/拒绝探针尚未提供，保持 fail-closed，不宣称目标环境完成。
+证据：P1-01 统一 bootstrap action 拒绝空/无效基线；P1-02 工作负载 NetworkPolicy 已拆分并拒绝未授权私网、元数据和端口。缺少外部密钥与集群配置时不执行猜测性的 keyscan、CIDR 或网络放行。
+
+2026-08-31 | 优化-22 | P1-03/P1-04/P1-05
+状态：代码、自动化验证和测试分支 Actions 已完成；P1-03 真实 Chromium E2E 与覆盖率、P1-04 时间/语言契约、P1-05 V1–V77 expand-contract 门禁均已记录于 README，未提交方案 Markdown 或测试脚本。
+
+2026-08-31 | 优化-23 | P1-06 LLM 结构化输出与可比较质量评测
+状态：代码门禁已完成，提交 b755a178；目标环境 live eval 与人工样本收集仍需按 provider/版本持续积累，不以少量 Smoke Finding 代替 30 样本晋级门槛。
+变更：按 provider capability 选择 JSON Schema/JSON Object/legacy 请求格式，结构化失败只允许一次 legacy fallback 并记录低基数指标；新增 review/verification schema、版本键、样本指纹、precision/recall、锚点率、重复率、解析失败率、severity 混淆、延迟、token 与成本报告。
+验证：LlmPullRequestReviewerTest、LlmProviderCapabilitiesTest、LlmQualityEvaluatorTest 共 20 项通过；提交已推送，云端 Pull Request Quality 等工作流正在验收。
+
+2026-08-31 | 优化-24 | P2-03 工具脚本 ESLint 覆盖
+状态：已完成代码门禁，待提交推送。
+变更：为 `scripts/**/*.mjs` 增加 Node `process`/`console` globals 与 `no-undef` 规则，并将生成器脚本纳入前端 lint 命令；不修改任何测试脚本。
+验证：使用仓库现有 ESLint 依赖对 `src/**/*.{ts,vue}` 与 `scripts/**/*.mjs` 执行 lint，0 错误。
