@@ -181,6 +181,8 @@ jobs:
         run: npm run quality
       - name: Build and run browser end-to-end tests
         working-directory: repoguard-frontend
+        env:
+          VITE_REPOGUARD_EDITION: enterprise-experimental
         run: npm run test:e2e
       - name: Upload browser failure evidence
         if: failure()
