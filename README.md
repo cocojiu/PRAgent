@@ -490,6 +490,8 @@ V68–V77 没有自动 down migration。V77 已移除旧单列外键，不能通
 
 - 2026-08-31：P1-05 Flyway expand-contract 迁移门禁已完成。新增 `migration-contract.json`，为全部 V1–V77 解析默认或显式的阶段、估算行数、锁类型、时长/磁盘预算、N/N-1 兼容性、故障恢复和回滚策略；V76 固定为纯 additive expand，V77 固定要求维护窗口、脏数据探针、repair 与 forward recovery。生产 readiness 现在 fail-closed 校验元数据、迁移文件映射及 expand 禁止 DROP/数据重写；真实 MySQL 集成测试从空库执行至 V76，插入非默认租户执行尝试与变更文件后升级至 V77，验证旧外键切换、租户组合关系和跨租户写入拒绝。修复提交 `206e965c` 补齐迁移夹具的 `tenant_id`，Pull Request Quality Run `33369806850` 的 Flyway、后端、前端、Spring/MySQL/RabbitMQ、生产边缘和密钥门禁全部成功；本机后端全量 `mvn test` 共 2553 项测试通过（0 失败、0 错误、12 条件跳过）。
 
+- 2026-08-31：P1-06 LLM 结构化输出与可比较评测已完成代码门禁。按供应商能力选择 JSON Schema/JSON Object/legacy 请求格式，结构化请求因兼容性错误只允许一次 legacy fallback，并以 `repoguard.llm.structured_output` 指标记录请求、降级与失败；新增 review/verification schema、版本键、人工标注样本指纹、precision/recall、Wilson 下界、锚点率、重复率、解析失败率、severity 混淆矩阵及 token/耗时/成本可比较报告，少于 30 个样本或任一质量阈值不允许晋级。新增供应商能力、请求回退和质量评测测试；本机定向 20 项测试通过（0 失败、0 错误）。
+
 ### Kubernetes Secret 契约
 
 `repoguard-enterprise-env` 至少提供以下环境变量：

@@ -21,6 +21,9 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestClient;
@@ -294,6 +297,92 @@ class LlmPullRequestReviewerTest {
         } finally {
             server.stop(0);
         }
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void openAiProviderReceivesStrictReviewJsonSchema() throws Exception {
+        ReviewPolicyProvider reviewPolicyProvider = org.mockito.Mockito.mock(ReviewPolicyProvider.class);
+        RuleBasedPullRequestReviewer ruleBasedReviewer = org.mockito.Mockito.mock(RuleBasedPullRequestReviewer.class);
+        AtomicReference<Map<String, Object>> requestBody = new AtomicReference<>();
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/chat/completions", exchange -> {
+            requestBody.set(readRequestBody(exchange.getRequestBody()));
+            byte[] response = """
+                {"choices":[{"message":{"content":"{\\"riskLevel\\":\\"INFO\\",\\"findings\\":[]}"}}]}
+                """.getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, response.length);
+            exchange.getResponseBody().write(response);
+            exchange.close();
+        });
+        server.start();
+        try {
+            ReviewPolicySettings settings = llmSettings(99, 700, 4, 450,
+                "http://127.0.0.1:" + server.getAddress().getPort());
+            when(reviewPolicyProvider.getSettings()).thenReturn(settings);
+            when(ruleBasedReviewer.review(any(PullRequestDiff.class))).thenReturn(ReviewResult.completed("INFO", List.of()));
+
+            reviewer(reviewPolicyProvider, ruleBasedReviewer, null, null).review(
+                new ReviewTask(),
+                new PullRequestDiff("repo-guard-demo", "spring-boot-demo", 512, List.of())
+            );
+
+            Map<String, Object> format = (Map<String, Object>) requestBody.get().get("response_format");
+            assertThat(format).containsEntry("type", "json_schema");
+            assertThat((Map<String, Object>) format.get("json_schema"))
+                .containsEntry("name", LlmStructuredOutputSchemas.REVIEW_SCHEMA_NAME)
+                .containsEntry("strict", true);
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void unsupportedStructuredOutputRetriesOnceWithLegacyParserPayload() throws Exception {
+        ReviewPolicyProvider reviewPolicyProvider = org.mockito.Mockito.mock(ReviewPolicyProvider.class);
+        RuleBasedPullRequestReviewer ruleBasedReviewer = org.mockito.Mockito.mock(RuleBasedPullRequestReviewer.class);
+        AtomicInteger requests = new AtomicInteger();
+        AtomicReference<Map<String, Object>> secondRequest = new AtomicReference<>();
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/chat/completions", exchange -> {
+            int request = requests.incrementAndGet();
+            Map<String, Object> body = readRequestBody(exchange.getRequestBody());
+            if (request == 2) {
+                secondRequest.set(body);
+            }
+            byte[] response = request == 1
+                ? "{\"error\":\"response_format json_schema is unsupported\"}".getBytes(StandardCharsets.UTF_8)
+                : "{\"choices\":[{\"message\":{\"content\":\"{\\\"riskLevel\\\":\\\"INFO\\\",\\\"findings\\\":[]}\"}}]}".getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            exchange.sendResponseHeaders(request == 1 ? 400 : 200, response.length);
+            exchange.getResponseBody().write(response);
+            exchange.close();
+        });
+        server.start();
+        try {
+            ReviewPolicySettings settings = llmSettings(99, 700, 4, 450,
+                "http://127.0.0.1:" + server.getAddress().getPort());
+            when(reviewPolicyProvider.getSettings()).thenReturn(settings);
+            when(ruleBasedReviewer.review(any(PullRequestDiff.class))).thenReturn(ReviewResult.completed("INFO", List.of()));
+
+            ReviewResult result = reviewer(reviewPolicyProvider, ruleBasedReviewer, null, null).review(
+                new ReviewTask(),
+                new PullRequestDiff("repo-guard-demo", "spring-boot-demo", 512, List.of())
+            );
+
+            assertThat(requests).hasValue(2);
+            assertThat(secondRequest.get()).doesNotContainKey("response_format");
+            assertThat(result.llmStatus()).isEqualTo("COMPLETED");
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> readRequestBody(java.io.InputStream body) throws java.io.IOException {
+        return (Map<String, Object>) (Map<?, ?>) new ObjectMapper().readValue(body, Map.class);
     }
 
     @Test

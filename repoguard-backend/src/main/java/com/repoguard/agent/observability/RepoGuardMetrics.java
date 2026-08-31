@@ -95,6 +95,10 @@ public class RepoGuardMetrics {
         externalMetrics.llmFallback(reason);
     }
 
+    public void llmStructuredOutput(String provider, String mode, String outcome, String reason) {
+        externalMetrics.llmStructuredOutput(provider, mode, outcome, reason);
+    }
+
     public void githubCommentPublished(String status) {
         externalMetrics.githubCommentPublished(status);
     }
