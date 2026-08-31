@@ -259,3 +259,9 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 状态：已完成代码与工作流门禁调整；测试、构建和安全检查保持自动运行，未触碰生产凭据或目标服务器。
 变更：`Release Images` 的 `deploy`、旧密钥迁移和加密盐初始化输入均改为非必填且默认 `false`；生产部署作业名称和说明明确为手动 opt-in，并强制要求 `workflow_dispatch`、`deploy=true` 以及 `main`/`master`/`v*` 标签，`PRAgent-test` 和所有 push 事件只能构建/发布镜像，不得连接生产主机。
 验证：新增 `ProductionDeploymentContractTest.productionDeployIsManualOptInAndDisabledByDefault`，校验默认值、事件类型、分支范围和 test 分支排除。
+
+2026-08-31 | 优化-36 | 个人项目范围确认：不做生产环境验收
+状态：范围已确认；仓库内代码、测试、CI 与发布门禁优化视为完成，企业级目标环境验收不纳入本项目准出条件。
+范围决策：不执行 Kubernetes Secret/Pod Smoke、生产规模迁移锁与备份恢复、真实 SSH 主机指纹探针、NetworkPolicy 正反探针、各 LLM provider 的人工样本 live eval，以及生产 OTel/性能观察窗口；这些项目保留为延期/风险接受，不伪造“已完成”证据。
+保留约束：`PRAgent-test` 持续自动构建和测试；生产部署仅允许 `workflow_dispatch` 且显式 `deploy=true`，仍受 `main`/`master`/`v*` 分支范围与 production 环境保护规则约束；未配置占位密钥，也未将私钥写入仓库。
+验收依据：提交 `edc78c6e` 已推送 `origin/PRAgent-test`；Pull Request Quality、Production Observability Image Security、Repository Governance、Auto Create Pull Request 和 Release Images 均成功，其中生产部署作业按策略跳过。
