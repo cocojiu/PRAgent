@@ -1,0 +1,54 @@
+name: Validate production deployment target
+description: Validate the bounded production host, account, and deployment path before any remote operation.
+
+inputs:
+  deploy-host:
+    description: Expected production SSH hostname or address
+    required: true
+  deploy-user:
+    description: Production deployment account
+    required: true
+  deploy-path:
+    description: Production application directory
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Validate bounded target values
+      shell: bash
+      env:
+        INPUT_DEPLOY_HOST: ${{ inputs.deploy-host }}
+        INPUT_DEPLOY_USER: ${{ inputs.deploy-user }}
+        INPUT_DEPLOY_PATH: ${{ inputs.deploy-path }}
+      run: |
+        set -euo pipefail
+        test -n "${INPUT_DEPLOY_HOST}" || { echo "Missing DEPLOY_HOST secret or variable" >&2; exit 1; }
+        test -n "${INPUT_DEPLOY_USER}" || { echo "Missing DEPLOY_USER secret or variable" >&2; exit 1; }
+        test -n "${INPUT_DEPLOY_PATH}" || { echo "Missing DEPLOY_PATH secret or variable" >&2; exit 1; }
+        case "${INPUT_DEPLOY_HOST}" in
+          *[!A-Za-z0-9.:-]*)
+            echo "DEPLOY_HOST contains unsupported characters." >&2
+            exit 1
+            ;;
+        esac
+        case "${INPUT_DEPLOY_USER}" in
+          *[!A-Za-z0-9._-]*)
+            echo "DEPLOY_USER contains unsupported characters." >&2
+            exit 1
+            ;;
+        esac
+        case "${INPUT_DEPLOY_PATH}" in
+          /opt/repoguard | /opt/repoguard/*)
+            ;;
+          *)
+            echo "DEPLOY_PATH must stay under /opt/repoguard." >&2
+            exit 1
+            ;;
+        esac
+        case "${INPUT_DEPLOY_PATH}" in
+          *[!A-Za-z0-9._/-]*)
+            echo "DEPLOY_PATH contains unsupported characters." >&2
+            exit 1
+            ;;
+        esac

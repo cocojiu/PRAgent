@@ -110,34 +110,11 @@ jobs:
             docker-compose.observability.yml
 
       - name: Validate production deployment target
-        shell: bash
-        env:
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
-        run: |
-          set -euo pipefail
-          test -n "${DEPLOY_PATH}" || { echo "Missing DEPLOY_PATH secret or variable"; exit 1; }
-          test -n "${DEPLOY_USER}" || { echo "Missing DEPLOY_USER secret or variable"; exit 1; }
-          case "${DEPLOY_PATH}" in
-            /opt/repoguard | /opt/repoguard/*)
-              ;;
-            *)
-              echo "DEPLOY_PATH must stay under /opt/repoguard." >&2
-              exit 1
-              ;;
-          esac
-          case "${DEPLOY_PATH}" in
-            *[!A-Za-z0-9._/-]*)
-              echo "DEPLOY_PATH contains unsupported characters." >&2
-              exit 1
-              ;;
-          esac
-          case "${DEPLOY_USER}" in
-            *[!A-Za-z0-9._-]* | "")
-              echo "DEPLOY_USER contains unsupported characters." >&2
-              exit 1
-              ;;
-          esac
+        uses: ./.github/actions/validate-production-target
+        with:
+          deploy-host: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          deploy-user: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
+          deploy-path: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
 
       - name: Prepare SSH key
         uses: ./.github/actions/bootstrap-production-ssh

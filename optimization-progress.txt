@@ -226,3 +226,8 @@ Worker 门槛：建议窗口为 2026-08-30 02:00–02:30（Asia/Shanghai）；�
 状态：代码与本地契约测试完成，待提交推送并执行云端门禁。
 变更：新增资源驱动的生产类规模 ratchet（当前最大 450 行）和禁止 util/legacy 新旁路；继续复用既有 controller-persistence、实现包跨域、领域环依赖和垂直边界契约，防止复杂度与循环依赖回潮。
 验证：ArchitectureRatchetTest 2 项、ApplicationArchitectureTest 44 项通过，生产源码最大类行数在阈值内。
+
+2026-08-31 | 优化-30 | P2-04 生产观测工作流复用与体积护栏
+状态：代码与本地工作流契约测试完成，待提交推送并执行云端门禁。
+变更：抽取统一 `validate-production-target` composite action，集中校验主机、部署用户和受限路径；Grafana 与日志栈升级工作流统一复用该 action，并保留受保护 SSH bootstrap、固定 action SHA、production environment、只读权限和回滚分支。
+验证：ProductionObservabilityWorkflowContractTest 1 项通过；两条升级工作流均低于 1,400 行并保留固定安全门禁。

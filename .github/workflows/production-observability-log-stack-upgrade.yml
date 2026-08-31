@@ -35,6 +35,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
+      - name: Validate production deployment target
+        uses: ./.github/actions/validate-production-target
+        with:
+          deploy-host: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          deploy-user: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
+          deploy-path: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
+
       - name: Validate immutable upgrade assets
         if: inputs.action != 'recover'
         shell: bash
