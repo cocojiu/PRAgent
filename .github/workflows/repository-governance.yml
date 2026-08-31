@@ -1,11 +1,6 @@
 name: Repository Governance
 
 on:
-  pull_request:
-    branches:
-      - main
-      - master
-      - PRAgent-test
   push:
     branches:
       - main
@@ -15,6 +10,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: repository-governance-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   guard:

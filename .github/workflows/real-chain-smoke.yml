@@ -43,6 +43,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: production-maintenance
+  cancel-in-progress: false
+
 jobs:
   smoke:
     name: GitHub and LLM real chain smoke

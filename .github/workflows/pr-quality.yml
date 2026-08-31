@@ -15,6 +15,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  repository-governance:
+    name: Tracked file governance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Run repository governance checks
+        shell: pwsh
+        run: ./scripts/production-readiness-check.ps1 -Mode quick -SkipBackendTests
+
   secret-scan:
     name: PR secret diff
     runs-on: ubuntu-latest

@@ -47,6 +47,7 @@ RepoGuard Agent 是面向 GitHub Pull Request 的代码审查辅助系统，包�
 - `repoguard-frontend/`：Vue 3 + Vite + TypeScript 前端管理台。
 - `config/`：本地和示例配置。
 - `.github/workflows/`：质量检查、镜像构建和仓库治理工作流。
+- `.github/workflow-catalog.txt`：CI、发布和维护入口的引用清单与时长基线。
 
 ## 环境要求
 
@@ -214,7 +215,7 @@ $env:REPOGUARD_LOG_PATH = "../logs/backend"
 
 ## 镜像发布与回滚
 
-镜像构建和质量检查通过 GitHub Actions 的 `Release Images` workflow 执行。生产部署默认关闭，不会因构建或测试自动连接服务器；需要时由维护者在 GitHub Actions 中手动启用，并在受保护环境配置凭据。
+普通 PR 只进入 `Pull Request Quality` CI 主链路；镜像发布仅由 `main`/`master`、`v*` 标签或手动 `Release Images` 触发，`PRAgent-test` 推送不会发布镜像。生产部署默认关闭，不会因构建或测试自动连接服务器；需要时由维护者在 GitHub Actions 中手动启用，并在受保护环境配置凭据。各维护工作流的手动/定时入口和调用关系见 `.github/workflow-catalog.txt`。
 
 手动启用部署时应遵循以下边界：
 

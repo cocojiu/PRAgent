@@ -24,6 +24,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: production-maintenance
+  cancel-in-progress: false
+
 jobs:
   retest:
     name: Retest Worker concurrency
