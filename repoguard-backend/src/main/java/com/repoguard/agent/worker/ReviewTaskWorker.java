@@ -4,6 +4,7 @@ import com.rabbitmq.client.Channel;
 import com.repoguard.agent.config.WorkerRuntimeEnabled;
 import com.repoguard.agent.review.task.ReviewTaskMessage;
 import com.repoguard.agent.observability.LogContext;
+import com.repoguard.agent.observability.TracePropagation;
 import java.io.IOException;
 import java.util.Objects;
 import org.slf4j.Logger;
@@ -36,14 +37,24 @@ public class ReviewTaskWorker {
         this.failureClassifier = Objects.requireNonNull(failureClassifier, "failureClassifier");
     }
 
+    public void handle(
+        ReviewTaskMessage message,
+        Channel channel,
+        long deliveryTag
+    ) throws IOException {
+        handle(message, channel, deliveryTag, null);
+    }
+
     @RabbitListener(queues = "${app.rabbit.review.queue}", concurrency = "${app.rabbit.review.worker-concurrency:1}")
     public void handle(
         ReviewTaskMessage message,
         Channel channel,
-        @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag
+        @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag,
+        @Header(name = TracePropagation.TRACEPARENT_HEADER, required = false) String traceparent
     ) throws IOException {
         long startedAt = metricsRecorder.startedAt();
-        try (LogContext.Scope _ = LogContext.withReviewTaskMessage(message)) {
+        try (TracePropagation.Scope _ = TracePropagation.openIncoming(traceparent)) {
+            try (LogContext.Scope _ = LogContext.withReviewTaskMessage(message)) {
             LOGGER.info(
                 "Rabbit review message received taskId={} repository={} prNumber={} operation=rabbit_consume result=received deliveryTag={} commit={}",
                 message.taskId(),
@@ -71,6 +82,7 @@ public class ReviewTaskWorker {
                 metricsRecorder.elapsedMillis(startedAt),
                 deliveryTag
             );
+            }
         }
     }
 

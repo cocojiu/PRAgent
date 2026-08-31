@@ -6,6 +6,7 @@ import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.notification.NotificationEventMessage;
 import com.repoguard.agent.notification.NotificationMessage;
 import com.repoguard.agent.observability.LogContext;
+import com.repoguard.agent.observability.TracePropagation;
 import com.repoguard.agent.tenancy.TenantContext;
 import com.repoguard.agent.tenancy.TenantRuntimeGuard;
 import java.io.IOException;
@@ -102,14 +103,26 @@ public class NotificationDeliveryWorker {
         this.logContextFormatter = Objects.requireNonNull(logContextFormatter, "logContextFormatter");
     }
 
+    public void handle(
+        NotificationEventMessage message,
+        Channel channel,
+        long deliveryTag
+    ) throws IOException {
+        handle(message, channel, deliveryTag, null);
+    }
+
     @RabbitListener(queues = "${app.rabbit.notification.queue}", concurrency = "${app.rabbit.notification.worker-concurrency:1}")
     public void handle(
         NotificationEventMessage message,
         Channel channel,
-        @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag
+        @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag,
+        @Header(name = TracePropagation.TRACEPARENT_HEADER, required = false) String traceparent
     ) throws IOException {
         long startedAt = metricsRecorder.startedAt();
-        try (LogContext.TraceScope _ = LogContext.withTraceId(message.traceId())) {
+        try (TracePropagation.Scope _ = TracePropagation.openIncoming(traceparent)) {
+            try (LogContext.TraceScope _ = LogContext.withTraceId(
+                message.traceId() == null ? TracePropagation.currentTraceId() : message.traceId()
+            )) {
             try {
                 long tenantId = resolveTenantId(message);
                 if (tenantRuntimeGuard != null) {
@@ -146,6 +159,7 @@ public class NotificationDeliveryWorker {
                 metricsRecorder.elapsedMillis(startedAt),
                 deliveryTag
             );
+            }
         }
     }
 

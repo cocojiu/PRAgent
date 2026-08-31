@@ -216,3 +216,8 @@ Worker 门槛：建议窗口为 2026-08-30 02:00–02:30（Asia/Shanghai）；�
 状态：已完成代码门禁，待提交推送。
 变更：新增 `logback-test.xml`，默认测试级别从 INFO 降至 WARN；只对控制台过滤带 `result=fallback` 的预期 LLM fallback WARN，保留直接 ListAppender 断言能力；ERROR 级内部失败继续输出完整 `%safeEx` 堆栈，未改变生产 logback 配置。
 验证：LogbackTestProfileContractTest、GlobalExceptionHandlerTest、LlmReviewPipelineTest、LlmChunkReviewFallbackHandlerTest、LlmChunkReviewAggregatorTest 共 26 项通过，预期噪声隐藏且失败堆栈测试仍通过。
+
+2026-08-31 | 优化-28 | P2-06 HTTP/MQ/Worker 标准链路追踪
+状态：代码与本地契约测试完成，待提交推送并执行云端门禁；生产 OTel/Micrometer exporter 与跨服务可视化仍需目标环境配置。
+变更：新增 W3C Trace Context 解析、子 span、线程作用域和低基数敏感属性白名单；HTTP RestClient 自动注入 `traceparent`，Rabbit 发布器写入 AMQP header，Review/Notification Worker 从 header 建立消费上下文；保留 X-Trace-Id 兼容响应，不传播 token、prompt、diff 或代码内容。
+验证：W3CTraceContextTest、TraceIdFilterTest、ReviewTaskWorkerTest、NotificationDeliveryWorkerTest、RabbitReviewTaskPublisherTest、RabbitNotificationEventPublisherTest、RestClientConfigTest 共 36 项通过。

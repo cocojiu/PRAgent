@@ -1,5 +1,6 @@
 package com.repoguard.agent.messaging;
 
+import com.repoguard.agent.observability.TracePropagation;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -35,7 +36,20 @@ public class RabbitReliableMessagePublisher {
         CorrelationData correlationData = new CorrelationData(correlationId(spec, attempt));
         try {
             if (spec.priority() == null) {
-                rabbitTemplate.convertAndSend(spec.exchange(), spec.routingKey(), message, correlationData);
+                if (TracePropagation.current().isPresent()) {
+                    rabbitTemplate.convertAndSend(
+                        spec.exchange(),
+                        spec.routingKey(),
+                        message,
+                        amqpMessage -> {
+                            TracePropagation.inject(amqpMessage.getMessageProperties());
+                            return amqpMessage;
+                        },
+                        correlationData
+                    );
+                } else {
+                    rabbitTemplate.convertAndSend(spec.exchange(), spec.routingKey(), message, correlationData);
+                }
             } else {
                 rabbitTemplate.convertAndSend(
                     spec.exchange(),
@@ -43,6 +57,7 @@ public class RabbitReliableMessagePublisher {
                     message,
                     amqpMessage -> {
                         amqpMessage.getMessageProperties().setPriority(Math.max(0, Math.min(spec.priority(), 10)));
+                        TracePropagation.inject(amqpMessage.getMessageProperties());
                         return amqpMessage;
                     },
                     correlationData
