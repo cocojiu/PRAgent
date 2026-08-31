@@ -248,3 +248,9 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 状态：只读完成，不触发生产工作流；用于明确阻塞条件并保持 fail-closed。
 核对结果：工作流引用的生产配置中，当前仓库未配置 DEPLOY_KNOWN_HOSTS、HEALTH_URL、REPOGUARD_BACKUP_BUCKET/ENDPOINT/REGION/KMS_KEY_ID/ROLE_ARN 及对应主/异地 replica 配置；production environment secrets/variables 列表为空。已有部署凭据不等同于主机信任基线，不能替代上述配置。
 后续入口：由维护者通过 GitHub production environment 或批准的安全凭据存储补齐配置后，依次运行 Kubernetes Smoke、网络正反探针、迁移维护窗口/恢复演练、真实 Smoke 与 LLM live eval；不得把缺配置的工作流失败或跳过解释为验收通过。
+
+2026-08-31 | 优化-34 | GitHub production Environment fail-closed 保护配置
+状态：已完成配置，生产密钥与目标环境验收仍待外部凭据/环境。
+变更：在 `cocojiu/PRAgent` 的 `production` Environment 启用 Required reviewer（`cocojiu`），关闭管理员绕过和等待计时器；部署范围限制为 `main`、`master` 和 `v*` 标签，不允许 `PRAgent-test` 触发生产部署。
+验证：GitHub 页面返回 `Environment "production" updated.`，并核对审批人、保护开关及三条部署规则均已持久化；未修改环境密钥或变量，也未录入占位值。
+边界：`DEPLOY_KNOWN_HOSTS`、备份角色/桶/区域/KMS 及其他生产凭据仍需由维护者通过安全凭据存储补齐；在这些值和目标 Kubernetes/网络/供应商环境证据到位前，生产工作流继续 fail-closed，不宣称全量优化已完成。
