@@ -254,3 +254,8 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 变更：在 `cocojiu/PRAgent` 的 `production` Environment 启用 Required reviewer（`cocojiu`），关闭管理员绕过和等待计时器；部署范围限制为 `main`、`master` 和 `v*` 标签，不允许 `PRAgent-test` 触发生产部署。
 验证：GitHub 页面返回 `Environment "production" updated.`，并核对审批人、保护开关及三条部署规则均已持久化；未修改环境密钥或变量，也未录入占位值。提交 `10d3a4d3` 的 Pull Request Quality #413（run 33389147563）、Repository Governance #1288（run 33389147578）、Release Images #977（run 33389144002）、Production Observability Image Security #180（run 33389147501）和 Auto Create Pull Request #727（run 33389143922）均成功。
 边界：`DEPLOY_KNOWN_HOSTS`、备份角色/桶/区域/KMS 及其他生产凭据仍需由维护者通过安全凭据存储补齐；在这些值和目标 Kubernetes/网络/供应商环境证据到位前，生产工作流继续 fail-closed，不宣称全量优化已完成。
+
+2026-08-31 | 优化-35 | 生产部署默认关闭并改为手动显式启用
+状态：已完成代码与工作流门禁调整；测试、构建和安全检查保持自动运行，未触碰生产凭据或目标服务器。
+变更：`Release Images` 的 `deploy`、旧密钥迁移和加密盐初始化输入均改为非必填且默认 `false`；生产部署作业名称和说明明确为手动 opt-in，并强制要求 `workflow_dispatch`、`deploy=true` 以及 `main`/`master`/`v*` 标签，`PRAgent-test` 和所有 push 事件只能构建/发布镜像，不得连接生产主机。
+验证：新增 `ProductionDeploymentContractTest.productionDeployIsManualOptInAndDisabledByDefault`，校验默认值、事件类型、分支范围和 test 分支排除。
