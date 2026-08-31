@@ -280,3 +280,11 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 数据边界：真实源码、原始 provider 请求和 PR 标识不写入仓库；需要维护者从本人可授权的 2～3 个仓库收集并人工复核 50～100 个脱敏样本后，使用新的 dataset overload 生成可比较报告。
 提交/远程验收：实现提交 `483045ee` 已推送 `origin/PRAgent-test`；Pull Request Quality #33420644420、PR Repository Governance #33420644471、push Repository Governance #33420640318、Release Images #33420640157 和 Auto Create Pull Request #33420640130 均成功，生产部署按手动 opt-in 策略跳过。
 下一步：P0-02 的真实数据收集仍是外部前置条件；数据到位后先跑固定回归集和滚动观察集，再进入 P0-03 十分钟首次审查闭环。
+
+2026-09-01 | 优化-39 | P0-02 评测清单指纹一致性校验
+状态：已完成代码、回归测试、中文提交、test 分支推送和远程 Actions 验收；真实 PR 数据集仍未导入，不改变 P0-02 的外部数据前置条件。
+变更：评测器现在将数据清单中的 SHA-256 样本指纹与实际观测 caseId 集合重新计算的指纹进行大小写不敏感比对；清单指纹漂移时加入 DATASET_FINGERPRINT_MISMATCH 阻断并禁止质量门禁通过。保留旧的 validationBlockers(observedSamples) 兼容入口，避免离线调用方误报漂移；新增真实数据清单匹配与漂移回归。
+本地验证：LlmQualityEvaluatorTest 6 项、ReviewQualityEvaluationTest 23 项共 29 项通过；git diff --check 通过。
+提交/远程验收：实现提交 49cf8576（修复：校验真实 PR 评测数据集指纹一致性）已推送 origin/PRAgent-test；Pull Request Quality #33422128668、PR Repository Governance #33422128713、push Repository Governance #33422124269、Release Images #33422124226 和 Auto Create Pull Request #33422124224 均成功，生产部署按手动 opt-in 策略跳过。
+数据边界：本批仅修复评测契约，不写入真实源码、原始 provider 请求、PR 标识或密钥；仍需维护者提供 2～3 个授权仓库的 50～100 个脱敏、人工复核样本，才能生成真实质量基线。
+下一步：等待真实数据清单和观测结果；数据到位后先验证指纹、固定回归集与滚动观察集，再按顺序进入 P0-03 十分钟首次审查闭环。
