@@ -243,3 +243,8 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 复审证据：本机未安装 Docker、kubectl、kind 或 minikube；GitHub production environment 的 secrets 与 variables 列表为空；仓库级部署凭据不包含受保护的 DEPLOY_KNOWN_HOSTS，因此不猜测主机指纹、CIDR、集群或供应商配置，也不触发可能改变生产状态的手动工作流。
 已确认：P0-01/P0-02、P1-01/P1-02/P1-05/P1-06 的代码、负例契约和测试分支 CI 已完成；P2-01 至 P2-07 已提交推送且最新 Push/PR Actions 全部 success。
 待外部验收：生产同类 Kubernetes Secret UID/GID/readiness Smoke；生产规模迁移锁等待、备份恢复和回滚；真实 SSH 指纹与网络 allow/deny 探针；每个 LLM provider 的 live eval/30 样本质量证据；严格 2C4G 压测与跨故障域恢复证据。令牌轮换按用户明确指示暂缓。
+
+2026-08-31 | 优化-33 | 生产工作流凭据需求差异核对
+状态：只读完成，不触发生产工作流；用于明确阻塞条件并保持 fail-closed。
+核对结果：工作流引用的生产配置中，当前仓库未配置 DEPLOY_KNOWN_HOSTS、HEALTH_URL、REPOGUARD_BACKUP_BUCKET/ENDPOINT/REGION/KMS_KEY_ID/ROLE_ARN 及对应主/异地 replica 配置；production environment secrets/variables 列表为空。已有部署凭据不等同于主机信任基线，不能替代上述配置。
+后续入口：由维护者通过 GitHub production environment 或批准的安全凭据存储补齐配置后，依次运行 Kubernetes Smoke、网络正反探针、迁移维护窗口/恢复演练、真实 Smoke 与 LLM live eval；不得把缺配置的工作流失败或跳过解释为验收通过。
