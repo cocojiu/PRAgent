@@ -304,3 +304,11 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 提交/远程验收：实现提交 0dc60ca6（修复：校验真实 PR 数据来源分布）已推送 origin/PRAgent-test；Pull Request Quality #33425225583、PR Repository Governance #33425225580、push Repository Governance #33425220879、Release Images #33425220940 和 Auto Create Pull Request #33425220859 均成功，生产部署按手动 opt-in 策略跳过。
 数据边界：只读盘点确认当前仓库虽然有历史 PR，但抽查 PR 没有可用的 review/comment 质量证据；不能用 PR 标题、文件列表或 Actions 状态冒充人工标注的 LLM 观测。未写入真实源码、原始 provider 请求、PR 标识或密钥。
 下一步：仍需维护者提供 2～3 个授权仓库的 50～100 个脱敏、人工复核样本；数据到位后核对来源分布、指纹和固定/滚动分组，再进入 P0-03 十分钟首次审查闭环。
+
+2026-09-01 | 优化-42 | P0-02 真实 PR 样本上下文标签契约
+状态：已完成代码、回归测试、中文提交、test 分支推送和远程 Actions 验收；真实授权数据仍未导入。
+变更：新增 `LlmEvaluationSampleContext`，记录脱敏的语言、变更文件数、变更行数、文件类型组和期望风险位置键；真实数据评测缺少这些聚合标签时加入 `DATASET_SAMPLE_CONTEXT_MISSING` 阻断，避免只按总样本数计算基线；旧构造器继续兼容离线样例。
+本地验证：`LlmQualityEvaluatorTest` 8 项、`ReviewQualityEvaluationTest` 23 项共 31 项通过；`git diff --check` 通过。
+提交/远程验收：实现提交 `dea9c593`（修复：校验真实 PR 样本上下文标签）已推送 `origin/PRAgent-test`；Pull Request Quality #33426734664、PR Repository Governance #33426734520、push Repository Governance #33426730361、Release Images #33426730227 和 Auto Create Pull Request #33426730261 均成功，生产部署按手动 opt-in 策略跳过。
+数据边界：本批仅完善样本聚合标签契约，不写入真实源码、原始 provider 请求、PR 标识或密钥；当前仍无可用人工标注 LLM review 证据，不能宣称真实质量基线完成。
+下一步：仍需维护者提供 2～3 个授权仓库的 50～100 个脱敏、人工复核样本；数据到位后核对上下文标签、来源分布、指纹与固定/滚动分组，再进入 P0-03 十分钟首次审查闭环。
