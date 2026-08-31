@@ -221,3 +221,8 @@ Worker 门槛：建议窗口为 2026-08-30 02:00–02:30（Asia/Shanghai）；�
 状态：代码与本地契约测试完成，待提交推送并执行云端门禁；生产 OTel/Micrometer exporter 与跨服务可视化仍需目标环境配置。
 变更：新增 W3C Trace Context 解析、子 span、线程作用域和低基数敏感属性白名单；HTTP RestClient 自动注入 `traceparent`，Rabbit 发布器写入 AMQP header，Review/Notification Worker 从 header 建立消费上下文；保留 X-Trace-Id 兼容响应，不传播 token、prompt、diff 或代码内容。
 验证：W3CTraceContextTest、TraceIdFilterTest、ReviewTaskWorkerTest、NotificationDeliveryWorkerTest、RabbitReviewTaskPublisherTest、RabbitNotificationEventPublisherTest、RestClientConfigTest 共 36 项通过。
+
+2026-08-31 | 优化-29 | P2-07 架构复杂度与依赖边界护栏
+状态：代码与本地契约测试完成，待提交推送并执行云端门禁。
+变更：新增资源驱动的生产类规模 ratchet（当前最大 450 行）和禁止 util/legacy 新旁路；继续复用既有 controller-persistence、实现包跨域、领域环依赖和垂直边界契约，防止复杂度与循环依赖回潮。
+验证：ArchitectureRatchetTest 2 项、ApplicationArchitectureTest 44 项通过，生产源码最大类行数在阈值内。
