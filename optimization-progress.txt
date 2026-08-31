@@ -201,3 +201,8 @@ Worker 门槛：建议窗口为 2026-08-30 02:00–02:30（Asia/Shanghai）；�
 状态：已完成代码门禁，待提交推送。
 变更：为 `scripts/**/*.mjs` 增加 Node `process`/`console` globals 与 `no-undef` 规则，并将生成器脚本纳入前端 lint 命令；不修改任何测试脚本。
 验证：使用仓库现有 ESLint 依赖对 `src/**/*.{ts,vue}` 与 `scripts/**/*.mjs` 执行 lint，0 错误。
+
+2026-08-31 | 优化-25 | P2-01 SQL hint 与执行计划基线
+状态：已完成代码门禁，待提交推送。
+变更：移除 ChangedFileMapper、ReviewFindingMapper 中无生产规模 EXPLAIN ANALYZE 证据的 FORCE INDEX 硬绑定；新增版本化 `db/query-plan-baseline.json`，固定数据规模、预热/采样次数、EXPLAIN ANALYZE 实际 rows/time 要求、可接受访问类型、p95/p99 预算和索引调整告警策略。查询继续依赖迁移声明的索引，但由优化器选择，索引变更不会直接导致 SQL 失败。
+验证：ChangedFileMapperSqlContractTest、ReviewFindingMapperSqlContractTest、OperationalSqlVerificationPlanTest、SqlQueryPlanBaselineContractTest 共 16 项通过；基线契约校验全部查询映射、索引存在性和无 FORCE INDEX。

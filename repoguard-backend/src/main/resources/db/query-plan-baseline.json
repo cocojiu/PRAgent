@@ -1,0 +1,96 @@
+{
+  "formatVersion": 1,
+  "hintPolicy": "DISABLED_UNLESS_PRODUCTION_EXPLAIN_ANALYZE_EVIDENCE",
+  "dataScale": {
+    "reviewTaskRows": 500,
+    "changedFileRows": 5000,
+    "reviewFindingRows": 10000,
+    "githubCommentPublicationRows": 5000
+  },
+  "sampling": {
+    "warmupRuns": 1,
+    "measuredRuns": 10,
+    "latencyPercentiles": ["p95", "p99"],
+    "explainCommand": "EXPLAIN ANALYZE",
+    "requireActualRowsAndTime": true
+  },
+  "queries": [
+    {
+      "id": "changed-file.current-attempt",
+      "mapper": "ChangedFileMapper.selectTopChangedFilesByChurn",
+      "supportingIndexes": ["idx_changed_file_current_attempt"],
+      "acceptableAccessTypes": ["ref", "range"],
+      "maxP95Milliseconds": 500,
+      "maxP99Milliseconds": 1000
+    },
+    {
+      "id": "changed-file.finding-presence",
+      "mapper": "ChangedFileMapper.selectChangedFilesWithFindings",
+      "supportingIndexes": [
+        "idx_changed_file_current_attempt",
+        "idx_review_finding_current_category_file"
+      ],
+      "acceptableAccessTypes": ["ref", "range", "eq_ref"],
+      "maxP95Milliseconds": 1000,
+      "maxP99Milliseconds": 2000
+    },
+    {
+      "id": "changed-file.finding-absence",
+      "mapper": "ChangedFileMapper.selectChangedFilesWithoutFindings",
+      "supportingIndexes": [
+        "idx_changed_file_current_attempt",
+        "idx_review_finding_current_category_file"
+      ],
+      "acceptableAccessTypes": ["ref", "range", "eq_ref"],
+      "maxP95Milliseconds": 1000,
+      "maxP99Milliseconds": 2000
+    },
+    {
+      "id": "finding.comment-preview-stat",
+      "mapper": "ReviewFindingMapper.selectGithubCommentPreviewFindingStat",
+      "supportingIndexes": [
+        "idx_review_finding_current_category_id",
+        "idx_github_comment_publication_task_finding_published"
+      ],
+      "acceptableAccessTypes": ["ref", "range", "eq_ref"],
+      "maxP95Milliseconds": 1000,
+      "maxP99Milliseconds": 2000
+    },
+    {
+      "id": "finding.comment-preview-page",
+      "mapper": "ReviewFindingMapper.selectGithubCommentPreviewFindings",
+      "supportingIndexes": ["idx_review_finding_current_category_id"],
+      "acceptableAccessTypes": ["ref", "range"],
+      "maxP95Milliseconds": 1000,
+      "maxP99Milliseconds": 2000
+    },
+    {
+      "id": "finding.commentable-page",
+      "mapper": "ReviewFindingMapper.selectGithubCommentPreviewCommentableFindings",
+      "supportingIndexes": [
+        "idx_review_finding_current_category_id",
+        "idx_github_comment_publication_task_finding_published"
+      ],
+      "acceptableAccessTypes": ["ref", "range", "eq_ref"],
+      "maxP95Milliseconds": 1000,
+      "maxP99Milliseconds": 2000
+    },
+    {
+      "id": "finding.comment-publish-candidates",
+      "mapper": "ReviewFindingMapper.selectGithubCommentPublishCandidatesAfterId",
+      "supportingIndexes": [
+        "idx_review_finding_current_category_id",
+        "idx_github_comment_publication_task_finding_published"
+      ],
+      "acceptableAccessTypes": ["ref", "range", "eq_ref"],
+      "maxP95Milliseconds": 1000,
+      "maxP99Milliseconds": 2000
+    }
+  ],
+  "alerting": {
+    "keyChange": "WARN_AND_REQUIRE_REVIEW",
+    "accessTypeOutsideBaseline": "FAIL",
+    "p95OrP99AboveBudget": "WARN_AND_REQUIRE_REVIEW",
+    "productionEvidenceRequiredForHint": true
+  }
+}

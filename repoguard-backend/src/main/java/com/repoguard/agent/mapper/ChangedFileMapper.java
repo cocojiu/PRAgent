@@ -20,7 +20,7 @@ public interface ChangedFileMapper extends BaseMapper<ChangedFile> {
 
     @Select("""
         select *
-        from changed_file force index (idx_changed_file_current_attempt)
+        from changed_file
         where task_id = #{taskId}
           and current_attempt = 1
         order by (coalesce(additions, 0) + coalesce(deletions, 0)) desc, id asc
@@ -31,12 +31,12 @@ public interface ChangedFileMapper extends BaseMapper<ChangedFile> {
     @Select("""
         <script>
         select file.*
-        from changed_file file force index (idx_changed_file_current_attempt)
+        from changed_file file
         where file.task_id = #{taskId}
           and file.current_attempt = 1
           and exists (
               select 1
-              from review_finding finding force index (idx_review_finding_current_category_file)
+              from review_finding finding
               where finding.task_id = file.task_id
                 and finding.current_attempt = 1
                 and finding.category = 'FINDING'
@@ -50,12 +50,12 @@ public interface ChangedFileMapper extends BaseMapper<ChangedFile> {
     @Select("""
         <script>
         select file.*
-        from changed_file file force index (idx_changed_file_current_attempt)
+        from changed_file file
         where file.task_id = #{taskId}
           and file.current_attempt = 1
           and not exists (
               select 1
-              from review_finding finding force index (idx_review_finding_current_category_file)
+              from review_finding finding
               where finding.task_id = file.task_id
                 and finding.current_attempt = 1
                 and finding.category = 'FINDING'
