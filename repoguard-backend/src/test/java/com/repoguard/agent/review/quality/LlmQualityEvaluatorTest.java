@@ -1,6 +1,7 @@
 package com.repoguard.agent.review.quality;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -119,6 +120,7 @@ class LlmQualityEvaluatorTest {
             "DATASET_NOT_ANONYMIZED",
             "DATASET_NOT_HUMAN_REVIEWED",
             "DATASET_FINGERPRINT_MISSING",
+            "DATASET_REPOSITORY_LABEL_MISSING:1",
             "DATASET_SPLIT_LABEL_MISSING:1",
             "VERSION_METADATA_INCOMPLETE"
         );
@@ -150,7 +152,8 @@ class LlmQualityEvaluatorTest {
                 true,
                 i < 40
                     ? LlmEvaluationObservation.EvaluationSplit.FIXED_REGRESSION
-                    : LlmEvaluationObservation.EvaluationSplit.ROLLING_OBSERVATION
+                    : LlmEvaluationObservation.EvaluationSplit.ROLLING_OBSERVATION,
+                i < 25 ? "repo-a" : "repo-b"
             ));
         }
         String fingerprint = LlmQualityEvaluator.evaluate(reproducibleVersion, observations)
@@ -224,7 +227,8 @@ class LlmQualityEvaluatorTest {
                 true,
                 i < 40
                     ? LlmEvaluationObservation.EvaluationSplit.FIXED_REGRESSION
-                    : LlmEvaluationObservation.EvaluationSplit.ROLLING_OBSERVATION
+                    : LlmEvaluationObservation.EvaluationSplit.ROLLING_OBSERVATION,
+                i < 25 ? "repo-a" : "repo-b"
             ));
         }
 
@@ -236,6 +240,79 @@ class LlmQualityEvaluatorTest {
 
         assertThat(report.qualityGatePassed()).isFalse();
         assertThat(report.blockers()).contains("DATASET_FINGERPRINT_MISMATCH");
+    }
+
+    @Test
+    void explicitRealDatasetBlocksRepositoryDistributionDrift() {
+        LlmEvaluationVersion reproducibleVersion = new LlmEvaluationVersion(
+            "openai",
+            "gpt-test",
+            "review-prompt-v2",
+            "review-context-v2",
+            "review-schema-v2",
+            "chunk-v1",
+            new BigDecimal("0.20"),
+            "rules-v3",
+            "abc123"
+        );
+        List<LlmEvaluationObservation> observations = new ArrayList<>();
+        for (int i = 0; i < 50; i++) {
+            observations.add(sample(
+                "repository-drift-" + i,
+                i < 10,
+                i < 10 ? "HIGH" : "NONE",
+                i < 10,
+                i < 10 ? "HIGH" : "NONE",
+                true,
+                i < 10 ? "finding-" + i : "",
+                true,
+                i < 40
+                    ? LlmEvaluationObservation.EvaluationSplit.FIXED_REGRESSION
+                    : LlmEvaluationObservation.EvaluationSplit.ROLLING_OBSERVATION,
+                "repo-a"
+            ));
+        }
+        String fingerprint = LlmQualityEvaluator.evaluate(reproducibleVersion, observations)
+            .sampleFingerprint();
+        LlmEvaluationDatasetMetadata dataset = new LlmEvaluationDatasetMetadata(
+            "real-pr-v1",
+            "2026-09-01",
+            LlmEvaluationDatasetMetadata.DatasetKind.REAL_PR,
+            2,
+            50,
+            40,
+            10,
+            true,
+            true,
+            true,
+            fingerprint
+        );
+
+        LlmEvaluationReport report = LlmQualityEvaluator.evaluate(
+            reproducibleVersion,
+            dataset,
+            observations
+        );
+
+        assertThat(report.qualityGatePassed()).isFalse();
+        assertThat(report.blockers()).contains("DATASET_REPOSITORY_COUNT_MISMATCH:1/2");
+    }
+
+    @Test
+    void sourceRepositoryKeyMustNotContainRawRepositoryIdentifiers() {
+        assertThatThrownBy(() -> sample(
+            "raw-repository-key",
+            false,
+            "NONE",
+            false,
+            "NONE",
+            true,
+            "",
+            true,
+            LlmEvaluationObservation.EvaluationSplit.FIXED_REGRESSION,
+            "owner/repository"
+        )).isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("sourceRepositoryKey");
     }
 
     private LlmEvaluationObservation observation(
@@ -309,6 +386,32 @@ class LlmQualityEvaluatorTest {
         boolean parsed,
         LlmEvaluationObservation.EvaluationSplit split
     ) {
+        return sample(
+            id,
+            expectedFinding,
+            expectedSeverity,
+            predictedFinding,
+            predictedSeverity,
+            anchored,
+            predictionKey,
+            parsed,
+            split,
+            ""
+        );
+    }
+
+    private LlmEvaluationObservation sample(
+        String id,
+        boolean expectedFinding,
+        String expectedSeverity,
+        boolean predictedFinding,
+        String predictedSeverity,
+        boolean anchored,
+        String predictionKey,
+        boolean parsed,
+        LlmEvaluationObservation.EvaluationSplit split,
+        String sourceRepositoryKey
+    ) {
         return new LlmEvaluationObservation(
             id,
             "security",
@@ -330,7 +433,8 @@ class LlmQualityEvaluatorTest {
             0,
             0,
             0,
-            split
+            split,
+            sourceRepositoryKey
         );
     }
 }

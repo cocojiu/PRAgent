@@ -27,7 +27,8 @@ public record LlmEvaluationObservation(
     long ruleFindingCount,
     long llmFindingCount,
     long verifiedFindingCount,
-    EvaluationSplit split
+    EvaluationSplit split,
+    String sourceRepositoryKey
 ) {
 
     public enum EvaluationSplit {
@@ -71,7 +72,8 @@ public record LlmEvaluationObservation(
             0,
             0,
             0,
-            EvaluationSplit.UNSPECIFIED
+            EvaluationSplit.UNSPECIFIED,
+            ""
         );
     }
 
@@ -118,7 +120,57 @@ public record LlmEvaluationObservation(
             ruleFindingCount,
             llmFindingCount,
             verifiedFindingCount,
-            EvaluationSplit.UNSPECIFIED
+            EvaluationSplit.UNSPECIFIED,
+            ""
+        );
+    }
+
+    public LlmEvaluationObservation(
+        String caseId,
+        String category,
+        boolean expectedFinding,
+        String expectedSeverity,
+        boolean predictedFinding,
+        String predictedSeverity,
+        boolean anchorValid,
+        String predictionKey,
+        boolean parseSucceeded,
+        long latencyMs,
+        long totalTokens,
+        BigDecimal estimatedCost,
+        Boolean usefulComment,
+        boolean commentPublishAttempted,
+        Boolean commentPublished,
+        Boolean commentFixed,
+        Boolean commentIgnored,
+        long ruleFindingCount,
+        long llmFindingCount,
+        long verifiedFindingCount,
+        EvaluationSplit split
+    ) {
+        this(
+            caseId,
+            category,
+            expectedFinding,
+            expectedSeverity,
+            predictedFinding,
+            predictedSeverity,
+            anchorValid,
+            predictionKey,
+            parseSucceeded,
+            latencyMs,
+            totalTokens,
+            estimatedCost,
+            usefulComment,
+            commentPublishAttempted,
+            commentPublished,
+            commentFixed,
+            commentIgnored,
+            ruleFindingCount,
+            llmFindingCount,
+            verifiedFindingCount,
+            split,
+            ""
         );
     }
 
@@ -133,6 +185,7 @@ public record LlmEvaluationObservation(
         estimatedCost = estimatedCost == null ? BigDecimal.ZERO : estimatedCost.max(BigDecimal.ZERO);
         commentPublishAttempted = commentPublishAttempted || commentPublished != null;
         split = split == null ? EvaluationSplit.UNSPECIFIED : split;
+        sourceRepositoryKey = normalizeRepositoryKey(sourceRepositoryKey);
         if (Boolean.TRUE.equals(commentFixed) && Boolean.TRUE.equals(commentIgnored)) {
             throw new IllegalArgumentException("A comment cannot be both fixed and ignored");
         }
@@ -150,5 +203,18 @@ public record LlmEvaluationObservation(
 
     private static String normalizeSeverity(String value) {
         return value == null || value.isBlank() ? "NONE" : value.trim().toUpperCase(java.util.Locale.ROOT);
+    }
+
+    private static String normalizeRepositoryKey(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        String normalized = value.trim().toLowerCase(java.util.Locale.ROOT);
+        if (!normalized.matches("[a-z0-9][a-z0-9._-]{0,63}")) {
+            throw new IllegalArgumentException(
+                "LLM evaluation sourceRepositoryKey must be an anonymized token"
+            );
+        }
+        return normalized;
     }
 }

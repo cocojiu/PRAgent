@@ -108,6 +108,14 @@ public final class LlmQualityEvaluator {
         int observationsWithoutSplit = (int) samples.stream()
             .filter(sample -> sample.split() == LlmEvaluationObservation.EvaluationSplit.UNSPECIFIED)
             .count();
+        Set<String> sourceRepositoryKeys = samples.stream()
+            .map(LlmEvaluationObservation::sourceRepositoryKey)
+            .filter(repositoryKey -> !repositoryKey.isBlank())
+            .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        int observedSourceRepositories = sourceRepositoryKeys.size();
+        int observationsWithoutRepository = (int) samples.stream()
+            .filter(sample -> sample.sourceRepositoryKey().isBlank())
+            .count();
         BigDecimal precision = ratio(truePositives, predicted);
         BigDecimal recall = ratio(truePositives, expected);
         BigDecimal anchorRate = ratio(anchored, predicted);
@@ -137,6 +145,8 @@ public final class LlmQualityEvaluator {
             : dataset.validationBlockers(
                 samples.size(),
                 observedFingerprint,
+                observedSourceRepositories,
+                observationsWithoutRepository,
                 observedFixedRegressionSamples,
                 observedRollingObservationSamples,
                 observationsWithoutSplit

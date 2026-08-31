@@ -84,7 +84,7 @@ public record LlmEvaluationDatasetMetadata(
      * describes exactly the same case-id set as the observations being evaluated.
      */
     public List<String> validationBlockers(int observedSamples, String observedFingerprint) {
-        return validationBlockers(observedSamples, observedFingerprint, -1, -1, 0);
+        return validationBlockers(observedSamples, observedFingerprint, -1, 0, -1, -1, 0);
     }
 
     /**
@@ -94,6 +94,30 @@ public record LlmEvaluationDatasetMetadata(
     public List<String> validationBlockers(
         int observedSamples,
         String observedFingerprint,
+        int observedFixedRegressionSamples,
+        int observedRollingObservationSamples,
+        int observationsWithoutSplit
+    ) {
+        return validationBlockers(
+            observedSamples,
+            observedFingerprint,
+            -1,
+            0,
+            observedFixedRegressionSamples,
+            observedRollingObservationSamples,
+            observationsWithoutSplit
+        );
+    }
+
+    /**
+     * Lists blockers for a complete manifest-to-observation comparison, including source-repository
+     * distribution and the fixed/rolling split counts declared by the manifest.
+     */
+    public List<String> validationBlockers(
+        int observedSamples,
+        String observedFingerprint,
+        int observedSourceRepositories,
+        int observationsWithoutRepository,
         int observedFixedRegressionSamples,
         int observedRollingObservationSamples,
         int observationsWithoutSplit
@@ -122,6 +146,15 @@ public record LlmEvaluationDatasetMetadata(
         }
         if (rollingObservationSamples == 0) {
             blockers.add("DATASET_ROLLING_OBSERVATION_SPLIT_MISSING");
+        }
+        if (observationsWithoutRepository > 0) {
+            blockers.add("DATASET_REPOSITORY_LABEL_MISSING:" + observationsWithoutRepository);
+        }
+        if (observedSourceRepositories >= 0 && observedSourceRepositories != sourceRepositoryCount) {
+            blockers.add(
+                "DATASET_REPOSITORY_COUNT_MISMATCH:"
+                    + observedSourceRepositories + "/" + sourceRepositoryCount
+            );
         }
         if (observationsWithoutSplit > 0) {
             blockers.add("DATASET_SPLIT_LABEL_MISSING:" + observationsWithoutSplit);
