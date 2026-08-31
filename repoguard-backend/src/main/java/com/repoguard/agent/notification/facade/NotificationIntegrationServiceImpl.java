@@ -6,12 +6,14 @@ import com.repoguard.agent.dto.NotificationBindingRequest;
 import com.repoguard.agent.dto.NotificationDeliveryDto;
 import com.repoguard.agent.dto.NotificationEventDto;
 import com.repoguard.agent.dto.PageResponse;
+import com.repoguard.agent.config.EnterpriseEditionEnabled;
 import com.repoguard.agent.service.NotificationBindingConfigService;
 import com.repoguard.agent.service.NotificationEventQueryService;
 import com.repoguard.agent.service.NotificationIntegrationService;
 import org.springframework.stereotype.Service;
 
 @Service
+@EnterpriseEditionEnabled
 public class NotificationIntegrationServiceImpl implements NotificationIntegrationService {
 
     private final NotificationBindingConfigService bindingConfigService;

@@ -1,6 +1,7 @@
 package com.repoguard.agent.cache;
 
 import com.repoguard.agent.mapper.ClusterCacheInvalidationMapper;
+import com.repoguard.agent.config.EnterpriseEditionEnabled;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.LocalDate;
 import java.util.Locale;
@@ -9,6 +10,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
+@EnterpriseEditionEnabled
 @ConditionalOnProperty(
     name = "repoguard.cache-invalidation.enabled",
     havingValue = "true",

@@ -3,6 +3,7 @@ package com.repoguard.agent.review.task;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.common.SensitiveTextSanitizer;
+import com.repoguard.agent.config.EnterpriseEditionEnabled;
 import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.dto.MessageQueueRequeueResponse;
 import com.repoguard.agent.entity.ReviewTask;
@@ -16,6 +17,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Component
+@EnterpriseEditionEnabled
 public class ReviewTaskRequeueService {
 
     private final ReviewTaskTransitionStore transitionStore;

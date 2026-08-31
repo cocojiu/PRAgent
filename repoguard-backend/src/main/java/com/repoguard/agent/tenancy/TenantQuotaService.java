@@ -2,6 +2,7 @@ package com.repoguard.agent.tenancy;
 
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
+import com.repoguard.agent.config.EnterpriseEditionEnabled;
 import com.repoguard.agent.dto.EnterpriseTenantQuotaDto;
 import com.repoguard.agent.dto.EnterpriseTenantQuotaRequest;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -20,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 @Component
+@EnterpriseEditionEnabled
 public class TenantQuotaService {
 
     private static final int DEFAULT_MAX_DAILY_REVIEWS = 1_000;

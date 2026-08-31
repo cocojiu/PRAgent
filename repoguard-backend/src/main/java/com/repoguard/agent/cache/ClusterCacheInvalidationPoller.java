@@ -1,6 +1,7 @@
 package com.repoguard.agent.cache;
 
 import com.repoguard.agent.config.ReplicaRuntimeEnabled;
+import com.repoguard.agent.config.EnterpriseEditionEnabled;
 import com.repoguard.agent.mapper.ClusterCacheInvalidationMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PostConstruct;
@@ -21,6 +22,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @ReplicaRuntimeEnabled
+@EnterpriseEditionEnabled
 @ConditionalOnProperty(
     name = "repoguard.cache-invalidation.enabled",
     havingValue = "true",

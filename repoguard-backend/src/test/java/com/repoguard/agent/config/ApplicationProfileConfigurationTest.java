@@ -15,6 +15,7 @@ class ApplicationProfileConfigurationTest {
         PropertySource<?> base = load("application.yml");
 
         assertThat(base.getProperty("spring.profiles.active")).isNull();
+        assertThat(base.getProperty("app.edition")).isEqualTo("${REPOGUARD_EDITION:personal}");
         assertThat(base.getProperty("spring.rabbitmq.host")).isEqualTo("${SPRING_RABBITMQ_HOST}");
         assertThat(base.getProperty("spring.rabbitmq.username")).isEqualTo("${SPRING_RABBITMQ_USERNAME}");
         assertThat(base.getProperty("spring.rabbitmq.password")).isEqualTo("${SPRING_RABBITMQ_PASSWORD}");

@@ -4,6 +4,7 @@ import com.repoguard.agent.common.ApiResponse;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.config.ApiRuntimeEnabled;
+import com.repoguard.agent.config.EnterpriseEditionEnabled;
 import com.repoguard.agent.dto.EnterpriseTenantQuotaDto;
 import com.repoguard.agent.dto.EnterpriseTenantQuotaRequest;
 import com.repoguard.agent.security.RequireRole;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/enterprise/tenants")
 @ApiRuntimeEnabled
+@EnterpriseEditionEnabled
 @RequireRole({"ADMIN"})
 public class EnterpriseTenantQuotaController {
 

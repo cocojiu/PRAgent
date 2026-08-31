@@ -1,6 +1,7 @@
 package com.repoguard.agent.messaging.health;
 
 import com.repoguard.agent.config.CacheNames;
+import com.repoguard.agent.config.EnterpriseEditionEnabled;
 import com.repoguard.agent.dto.MessageQueueHealthResponse;
 import com.repoguard.agent.dto.MessageQueueRequeueResponse;
 import com.repoguard.agent.review.task.ReviewTaskRequeueService;
@@ -12,6 +13,7 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 @Service
+@EnterpriseEditionEnabled
 public class MessageQueueHealthServiceImpl implements MessageQueueHealthService {
 
     private final MessageQueueHealthQueryService healthQueryService;

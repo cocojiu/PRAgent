@@ -2,6 +2,7 @@ package com.repoguard.agent.identity.internal;
 
 import com.repoguard.agent.authentication.AuthenticatedPrincipal;
 import com.repoguard.agent.authentication.EnterpriseOidcAuthenticator;
+import com.repoguard.agent.config.EnterpriseEditionEnabled;
 import com.repoguard.agent.identity.EnterpriseIdentityView;
 import com.repoguard.agent.identity.EnterpriseOidcProperties;
 import com.repoguard.agent.mapper.EnterpriseIdentityMapper;
@@ -20,6 +21,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 @Component
+@EnterpriseEditionEnabled
 public final class DefaultEnterpriseOidcAuthenticator implements EnterpriseOidcAuthenticator {
 
     private static final String STATUS_ACTIVE = "ACTIVE";

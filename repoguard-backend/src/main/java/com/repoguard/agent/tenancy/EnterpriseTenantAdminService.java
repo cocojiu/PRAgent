@@ -4,6 +4,7 @@ import com.repoguard.agent.cache.ClusterCacheInvalidationPublisher;
 import com.repoguard.agent.cache.ClusterCacheInvalidationType;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
+import com.repoguard.agent.config.EnterpriseEditionEnabled;
 import com.repoguard.agent.dto.EnterpriseIdentityBindingRequest;
 import com.repoguard.agent.dto.EnterpriseTenantCreateRequest;
 import com.repoguard.agent.dto.EnterpriseTenantDto;
@@ -32,6 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 @Service
+@EnterpriseEditionEnabled
 public class EnterpriseTenantAdminService {
 
     private static final long DEFAULT_TENANT_ID = 1L;

@@ -2,6 +2,7 @@ package com.repoguard.agent.controller;
 
 import com.repoguard.agent.common.ApiResponse;
 import com.repoguard.agent.config.ApiRuntimeEnabled;
+import com.repoguard.agent.config.EnterpriseEditionEnabled;
 import com.repoguard.agent.dto.MessageQueueHealthResponse;
 import com.repoguard.agent.dto.MessageQueueRequeueResponse;
 import com.repoguard.agent.security.RequireRole;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/message-queue")
 @ApiRuntimeEnabled
+@EnterpriseEditionEnabled
 @RequireRole("ADMIN")
 public class MessageQueueHealthController {
 

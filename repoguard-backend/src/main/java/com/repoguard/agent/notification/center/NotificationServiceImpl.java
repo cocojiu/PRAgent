@@ -3,6 +3,7 @@ package com.repoguard.agent.notification.center;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.repoguard.agent.github.GithubIntegrationProvider;
 import com.repoguard.agent.github.GithubIntegrationSettings;
+import com.repoguard.agent.config.EnterpriseEditionEnabled;
 import com.repoguard.agent.review.ReviewPolicyProvider;
 import com.repoguard.agent.review.ReviewPolicySettings;
 import com.repoguard.agent.dto.NotificationCenterDto;
@@ -25,6 +26,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 @Service
+@EnterpriseEditionEnabled
 public class NotificationServiceImpl implements NotificationService {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");

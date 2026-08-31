@@ -74,25 +74,30 @@ describe("application route smoke", () => {
     expect(external.fullPath).toBe("/repoguard/overview");
   });
 
-  it("loads management routes after resolving the current admin user", async () => {
+  it("keeps enterprise operations out of the personal route surface", async () => {
     saveAuthToken("access-token", false);
 
-    await expectResolvedRoute("/repoguard/message-queue", routeNames.messageQueue);
-    await expectResolvedRoute("/repoguard/notifications", routeNames.notificationOps);
+    expect((await navigate("/repoguard/message-queue")).name).toBe(routeNames.overview);
+    expect((await navigate("/repoguard/notifications")).name).toBe(routeNames.overview);
+    expect((await navigate("/repoguard/users")).name).toBe(routeNames.overview);
     await expectResolvedRoute("/repoguard/integrations", routeNames.integrations);
     await expectResolvedRoute("/repoguard/settings", routeNames.settings);
+  });
 
-    expect(fetch).toHaveBeenCalledWith(
-      expect.stringContaining("/api/v1/auth/me"),
-      expect.objectContaining({ credentials: "include" })
-    );
+  it("keeps advanced pages behind lazy route boundaries", async () => {
+    for (const routeName of [routeNames.messageQueue, routeNames.notificationOps, routeNames.users]) {
+      const route = router.getRoutes().find((candidate) => candidate.name === routeName);
+      const loader = route?.components?.default as (() => Promise<unknown>) | undefined;
+      expect(loader).toBeTypeOf("function");
+      await loader?.();
+    }
   });
 
   it("redirects to overview with a message when loading the current user fails without 401", async () => {
     saveAuthToken("access-token", false);
     vi.stubGlobal("fetch", vi.fn(async () => errorResponse(502)));
 
-    const route = await navigate("/repoguard/users");
+    const route = await navigate("/repoguard/settings");
 
     expect(route.name).toBe(routeNames.overview);
     expect(messages.error).toHaveBeenCalledWith("权限信息加载失败，请稍后重试");
@@ -107,10 +112,10 @@ describe("application route smoke", () => {
       return errorResponse(401);
     }));
 
-    const route = await navigate("/repoguard/users");
+    const route = await navigate("/repoguard/settings");
 
     expect(route.name).toBe(routeNames.login);
-    expect(route.query.redirect).toBe("/repoguard/users");
+    expect(route.query.redirect).toBe("/repoguard/settings");
     expect(hasAuthToken()).toBe(false);
     expect(messages.error).not.toHaveBeenCalled();
   });

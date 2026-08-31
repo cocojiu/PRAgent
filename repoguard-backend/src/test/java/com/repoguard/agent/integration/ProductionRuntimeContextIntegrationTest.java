@@ -1142,6 +1142,10 @@ class ProductionRuntimeContextIntegrationTest {
             .noneMatch(argument -> argument.startsWith("--app.runtime.api.instance-count="))) {
             arguments.add("--app.runtime.api.instance-count=" + ("worker".equals(runtimeRole) ? 0 : 1));
         }
+        if (Arrays.stream(additionalArguments)
+            .noneMatch(argument -> argument.startsWith("--app.edition="))) {
+            arguments.add("--app.edition=enterprise-experimental");
+        }
         arguments.addAll(Arrays.asList(additionalArguments));
         return new SpringApplicationBuilder(RepoGuardApplication.class)
             .web(WebApplicationType.SERVLET)

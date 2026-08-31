@@ -6,6 +6,7 @@ import { canAccessRouteMeta } from "@/router/accessPolicy";
 import { routeNames } from "@/router/names";
 import { resolveSafePostAuthRedirect } from "@/router/authRedirect";
 import { canManage, currentUser, loadCurrentUser, resetCurrentUser } from "@/stores/authState";
+import { enterpriseEditionEnabled } from "@/config/edition";
 import { getErrorMessage, RequestError } from "@/utils/errors";
 import {
   beginRoutePerformanceTiming,
@@ -40,6 +41,11 @@ const managementRouteNeighbors = new Map<string, RouteComponentLoader>([
   [routeNames.users, SystemSettingsPage],
   [routeNames.settings, RuleConfigPage]
 ]);
+const enterpriseRouteNames = new Set<string>([
+  routeNames.messageQueue,
+  routeNames.notificationOps,
+  routeNames.users
+]);
 
 let routeComponentPrefetchTimer: ReturnType<typeof setTimeout> | undefined;
 let routeComponentPrefetchIdleHandle: number | undefined;
@@ -58,9 +64,15 @@ const cancelScheduledRouteComponentPrefetch = () => {
   }
 };
 
-const scheduleRouteComponentPrefetch = (routeName: string, managementAllowed: boolean) => {
+const scheduleRouteComponentPrefetch = (
+  routeName: string,
+  managementAllowed: boolean,
+  enterpriseEnabled: boolean
+) => {
   const loadComponent = commonRouteNeighbors.get(routeName)
-    ?? (managementAllowed ? managementRouteNeighbors.get(routeName) : undefined);
+    ?? (managementAllowed && (enterpriseEnabled || !enterpriseRouteNames.has(routeName))
+      ? managementRouteNeighbors.get(routeName)
+      : undefined);
   if (!loadComponent || prefetchedRoutes.has(routeName)) {
     return;
   }
@@ -150,19 +162,24 @@ export const router = createRouter({
           path: "message-queue",
           name: routeNames.messageQueue,
           component: MessageQueueHealthPage,
-          meta: { title: "消息队列健康状态", requiresAuth: true, requiresManage: true }
+          meta: {
+            title: "消息队列健康状态",
+            requiresAuth: true,
+            requiresManage: true,
+            requiresEnterprise: true
+          }
         },
         {
           path: "notifications",
           name: routeNames.notificationOps,
           component: NotificationOpsPage,
-          meta: { title: "通知运维", requiresAuth: true, requiresManage: true }
+          meta: { title: "通知运维", requiresAuth: true, requiresManage: true, requiresEnterprise: true }
         },
         {
           path: "users",
           name: routeNames.users,
           component: UserManagementPage,
-          meta: { title: "用户管理", requiresAuth: true, requiresManage: true }
+          meta: { title: "用户管理", requiresAuth: true, requiresManage: true, requiresEnterprise: true }
         },
         {
           path: "settings",
@@ -191,6 +208,10 @@ router.beforeEach(async (to) => {
     };
   }
 
+  if (to.meta.requiresEnterprise && !enterpriseEditionEnabled) {
+    return { name: routeNames.overview };
+  }
+
   if (to.meta.requiresManage) {
     if (!currentUser.value) {
       try {
@@ -210,7 +231,8 @@ router.beforeEach(async (to) => {
     }
     if (!canAccessRouteMeta(to.meta, {
       authenticated: hasAuthToken(),
-      managementAllowed: canManage.value
+      managementAllowed: canManage.value,
+      enterpriseEnabled: enterpriseEditionEnabled
     })) {
       return { name: routeNames.overview };
     }
@@ -227,6 +249,10 @@ router.afterEach((to) => {
   completeRoutePerformanceTiming(String(to.name ?? "unknown"));
   cancelScheduledRouteComponentPrefetch();
   if (to.meta.requiresAuth && hasAuthToken()) {
-    scheduleRouteComponentPrefetch(String(to.name ?? ""), Boolean(to.meta.requiresManage && canManage.value));
+    scheduleRouteComponentPrefetch(
+      String(to.name ?? ""),
+      Boolean(to.meta.requiresManage && canManage.value),
+      enterpriseEditionEnabled
+    );
   }
 });

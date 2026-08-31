@@ -32,6 +32,20 @@ public final class ControllerEndpointCatalog {
     }
 
     public static List<Class<?>> discoverControllers(String basePackage) throws ClassNotFoundException {
+        String previousEdition = System.getProperty("REPOGUARD_EDITION");
+        System.setProperty("REPOGUARD_EDITION", "enterprise-experimental");
+        try {
+            return discoverControllersForEdition(basePackage);
+        } finally {
+            if (previousEdition == null) {
+                System.clearProperty("REPOGUARD_EDITION");
+            } else {
+                System.setProperty("REPOGUARD_EDITION", previousEdition);
+            }
+        }
+    }
+
+    private static List<Class<?>> discoverControllersForEdition(String basePackage) throws ClassNotFoundException {
         ClassPathScanningCandidateComponentProvider scanner = new ClassPathScanningCandidateComponentProvider(false);
         scanner.addIncludeFilter(new AnnotationTypeFilter(RestController.class));
         List<String> controllerClassNames = scanner.findCandidateComponents(basePackage).stream()
