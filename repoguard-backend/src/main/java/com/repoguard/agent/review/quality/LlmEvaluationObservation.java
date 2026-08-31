@@ -18,8 +18,54 @@ public record LlmEvaluationObservation(
     boolean parseSucceeded,
     long latencyMs,
     long totalTokens,
-    BigDecimal estimatedCost
+    BigDecimal estimatedCost,
+    Boolean usefulComment,
+    boolean commentPublishAttempted,
+    Boolean commentPublished,
+    Boolean commentFixed,
+    Boolean commentIgnored,
+    long ruleFindingCount,
+    long llmFindingCount,
+    long verifiedFindingCount
 ) {
+
+    public LlmEvaluationObservation(
+        String caseId,
+        String category,
+        boolean expectedFinding,
+        String expectedSeverity,
+        boolean predictedFinding,
+        String predictedSeverity,
+        boolean anchorValid,
+        String predictionKey,
+        boolean parseSucceeded,
+        long latencyMs,
+        long totalTokens,
+        BigDecimal estimatedCost
+    ) {
+        this(
+            caseId,
+            category,
+            expectedFinding,
+            expectedSeverity,
+            predictedFinding,
+            predictedSeverity,
+            anchorValid,
+            predictionKey,
+            parseSucceeded,
+            latencyMs,
+            totalTokens,
+            estimatedCost,
+            null,
+            false,
+            null,
+            null,
+            null,
+            0,
+            0,
+            0
+        );
+    }
 
     public LlmEvaluationObservation {
         caseId = normalize(caseId, "caseId");
@@ -30,6 +76,13 @@ public record LlmEvaluationObservation(
         latencyMs = Math.max(0, latencyMs);
         totalTokens = Math.max(0, totalTokens);
         estimatedCost = estimatedCost == null ? BigDecimal.ZERO : estimatedCost.max(BigDecimal.ZERO);
+        commentPublishAttempted = commentPublishAttempted || commentPublished != null;
+        if (Boolean.TRUE.equals(commentFixed) && Boolean.TRUE.equals(commentIgnored)) {
+            throw new IllegalArgumentException("A comment cannot be both fixed and ignored");
+        }
+        ruleFindingCount = Math.max(0, ruleFindingCount);
+        llmFindingCount = Math.max(0, llmFindingCount);
+        verifiedFindingCount = Math.max(0, verifiedFindingCount);
     }
 
     private static String normalize(String value, String field) {

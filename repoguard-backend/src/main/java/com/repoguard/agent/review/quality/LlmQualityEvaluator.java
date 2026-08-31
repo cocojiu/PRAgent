@@ -34,11 +34,37 @@ public final class LlmQualityEvaluator {
         LlmEvaluationVersion version,
         List<LlmEvaluationObservation> observations
     ) {
-        return evaluate(version, observations, DEFAULT_MINIMUM_SAMPLES);
+        return evaluateInternal(version, null, observations, DEFAULT_MINIMUM_SAMPLES);
     }
 
     public static LlmEvaluationReport evaluate(
         LlmEvaluationVersion version,
+        List<LlmEvaluationObservation> observations,
+        int minimumSamples
+    ) {
+        return evaluateInternal(version, null, observations, minimumSamples);
+    }
+
+    public static LlmEvaluationReport evaluate(
+        LlmEvaluationVersion version,
+        LlmEvaluationDatasetMetadata dataset,
+        List<LlmEvaluationObservation> observations
+    ) {
+        return evaluate(version, dataset, observations, DEFAULT_MINIMUM_SAMPLES);
+    }
+
+    public static LlmEvaluationReport evaluate(
+        LlmEvaluationVersion version,
+        LlmEvaluationDatasetMetadata dataset,
+        List<LlmEvaluationObservation> observations,
+        int minimumSamples
+    ) {
+        return evaluateInternal(version, dataset, observations, minimumSamples);
+    }
+
+    private static LlmEvaluationReport evaluateInternal(
+        LlmEvaluationVersion version,
+        LlmEvaluationDatasetMetadata dataset,
         List<LlmEvaluationObservation> observations,
         int minimumSamples
     ) {
@@ -96,6 +122,12 @@ public final class LlmQualityEvaluator {
         if (parseFailureRate.compareTo(MAX_PARSE_FAILURE_RATE) > 0) {
             blockers.add("PARSE_FAILURE_RATE_ABOVE_5");
         }
+        if (dataset != null) {
+            blockers.addAll(dataset.validationBlockers(samples.size()));
+            if (!version.reproducible()) {
+                blockers.add("VERSION_METADATA_INCOMPLETE");
+            }
+        }
         return new LlmEvaluationReport(
             version,
             sampleFingerprint(samples),
@@ -118,7 +150,11 @@ public final class LlmQualityEvaluator {
                 .map(LlmEvaluationObservation::estimatedCost)
                 .reduce(BigDecimal.ZERO, BigDecimal::add),
             blockers,
-            samples.size() >= minimumSamples
+            samples.size() >= minimumSamples && (dataset == null || (
+                dataset.validationBlockers(samples.size()).isEmpty() && version.reproducible()
+            )),
+            dataset,
+            LlmEvaluationMetrics.from(samples)
         );
     }
 

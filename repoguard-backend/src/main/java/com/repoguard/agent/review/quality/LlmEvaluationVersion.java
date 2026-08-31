@@ -1,5 +1,6 @@
 package com.repoguard.agent.review.quality;
 
+import java.math.BigDecimal;
 import org.springframework.util.StringUtils;
 
 /** Immutable version tuple used to compare provider evaluation results. */
@@ -9,8 +10,32 @@ public record LlmEvaluationVersion(
     String promptVersion,
     String contextVersion,
     String schemaVersion,
-    String chunkPolicyVersion
+    String chunkPolicyVersion,
+    BigDecimal temperature,
+    String ruleVersion,
+    String codeRevision
 ) {
+
+    public LlmEvaluationVersion(
+        String provider,
+        String model,
+        String promptVersion,
+        String contextVersion,
+        String schemaVersion,
+        String chunkPolicyVersion
+    ) {
+        this(
+            provider,
+            model,
+            promptVersion,
+            contextVersion,
+            schemaVersion,
+            chunkPolicyVersion,
+            null,
+            "unspecified",
+            "unspecified"
+        );
+    }
 
     public LlmEvaluationVersion {
         provider = requireText(provider, "provider");
@@ -19,6 +44,14 @@ public record LlmEvaluationVersion(
         contextVersion = requireText(contextVersion, "contextVersion");
         schemaVersion = requireText(schemaVersion, "schemaVersion");
         chunkPolicyVersion = requireText(chunkPolicyVersion, "chunkPolicyVersion");
+        if (temperature != null
+            && (temperature.compareTo(BigDecimal.ZERO) < 0
+                || temperature.compareTo(BigDecimal.valueOf(2)) > 0)) {
+            throw new IllegalArgumentException("LLM evaluation temperature must be between 0 and 2");
+        }
+        temperature = temperature == null ? null : temperature.stripTrailingZeros();
+        ruleVersion = requireText(ruleVersion, "ruleVersion");
+        codeRevision = requireText(codeRevision, "codeRevision");
     }
 
     public String versionKey() {
@@ -26,7 +59,25 @@ public record LlmEvaluationVersion(
             + "|prompt=" + promptVersion
             + "|context=" + contextVersion
             + "|schema=" + schemaVersion
-            + "|chunk=" + chunkPolicyVersion;
+            + "|chunk=" + chunkPolicyVersion
+            + "|temperature=" + (temperature == null ? "unspecified" : temperature.toPlainString())
+            + "|rules=" + ruleVersion
+            + "|commit=" + codeRevision;
+    }
+
+    /**
+     * Returns whether this version contains enough immutable inputs to compare live runs.
+     * The six-field compatibility constructor intentionally remains usable for offline tests,
+     * but those runs must not be promoted as a real-data baseline.
+     */
+    public boolean reproducible() {
+        return temperature != null
+            && !isPlaceholder(ruleVersion)
+            && !isPlaceholder(codeRevision);
+    }
+
+    private boolean isPlaceholder(String value) {
+        return "unspecified".equalsIgnoreCase(value) || "unknown".equalsIgnoreCase(value);
     }
 
     private static String requireText(String value, String field) {
