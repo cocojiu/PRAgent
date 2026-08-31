@@ -248,6 +248,38 @@ jobs:
         working-directory: repoguard-backend
         run: ./mvnw -B -Dtest=ProductionRuntimeContextIntegrationTest test
 
+  migration-upgrade:
+    name: Flyway supported upgrade path
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0.46@sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b
+        env:
+          MYSQL_ROOT_PASSWORD: integration-root
+          MYSQL_DATABASE: repoguard_upgrade
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pintegration-root --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    env:
+      REPOGUARD_RUN_INTEGRATION_TESTS: 'true'
+      SPRING_DATASOURCE_URL: jdbc:mysql://127.0.0.1:3306/repoguard_upgrade?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&useSSL=false&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: integration-root
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5.5.0
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Run V76 to V77 upgrade-path test
+        working-directory: repoguard-backend
+        run: ./mvnw -B -Dtest=FlywayMigrationUpgradePathIntegrationTest test
+
   dependency-review:
     name: Dependency review
     runs-on: ubuntu-latest

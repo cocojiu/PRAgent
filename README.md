@@ -488,6 +488,8 @@ V68–V77 没有自动 down migration。V77 已移除旧单列外键，不能通
 
 - 2026-08-31：P1-04 语言、时区与时间语义统一已完成。后端使用 `ZoneId` 校验并规范化 IANA 时区，仅接受 `zh-CN/中文`，`/auth/me` 返回当前语言和时区；设置日志新增带 `date-time` 格式的 UTC `occurredAt`，保留旧 `time` 字段兼容读取。前端移除误导性的英文切换，提供可筛选 IANA 时区选择器和持久化偏好，所有业务时间统一经过 `formatDateTime` 并按配置时区渲染，兼容旧的 `yyyy-MM-dd HH:mm:ss` 数据。新增上海/纽约同一 UTC 时刻、夏令时跳变、非法时区、语言拒绝、审计 UTC 与全局偏好测试，OpenAPI JSON 快照同步更新；后端全量、OpenAPI/Controller 契约测试，前端 38 个测试文件共 152 项测试、类型检查、Lint 与生产构建均通过。
 
+- 2026-08-31：P1-05 Flyway expand-contract 迁移门禁已实现，待云端真实 MySQL 升级路径 job 验收后标记完成。新增 `migration-contract.json`，为全部 V1–V77 解析默认或显式的阶段、估算行数、锁类型、时长/磁盘预算、N/N-1 兼容性、故障恢复和回滚策略；V76 固定为纯 additive expand，V77 固定要求维护窗口、脏数据探针、repair 与 forward recovery。生产 readiness 现在 fail-closed 校验元数据、迁移文件映射及 expand 禁止 DROP/数据重写；新增真实 MySQL 从空库迁移至 V76、插入租户关系、升级至 V77 并验证旧外键切换与跨租户写入拒绝的集成测试，CI 使用独立 MySQL 服务执行。当前本机后端全量 `mvn test` 共 2553 项测试通过（0 失败、0 错误、12 条件跳过），迁移契约测试与 production-readiness quick 均通过。
+
 ### Kubernetes Secret 契约
 
 `repoguard-enterprise-env` 至少提供以下环境变量：
