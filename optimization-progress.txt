@@ -320,3 +320,11 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 提交/远程验收：实现提交 `1a81a900`（优化：增加个人模式首次审查引导）已推送 `origin/PRAgent-test`；Pull Request Quality #33428836886、PR Repository Governance #33428836906、push Repository Governance #33428834131、Release Images #33428834134 和 Auto Create Pull Request #33428834092 均成功，生产部署按手动 opt-in 策略跳过。
 安全边界：引导仅管理员加载；测试接口复用保存配置并只显示后端的状态/错误，不把 PAT、API Key 或原始源码写入前端状态/仓库；首次入口只预览，不自动调用评论发布接口。
 下一步：继续 P1-01，按个人模式隔离导航、路由和后端 bean；企业能力默认不暴露且不进入个人首次启动路径。
+
+2026-09-01 | 优化-44 | P1-01 个人模式界面与运行面收敛
+状态：已完成 edition/profile 边界、个人默认导航收敛、运行时企业能力隔离、回归测试、中文提交、test 分支推送和远程 Actions 验收。
+变更：新增 `personal`（默认）与 `enterprise-experimental` edition 契约；个人模式隐藏并拦截消息队列、通知运维和用户管理入口，停止通知轮询；企业租户、配额、用户管理生命周期、OIDC、消息队列运维、通知中心/配置和多实例缓存失效组件仅在高级 edition 条件装配。审查核心链路保留，租户配额与企业 OIDC 改为可选依赖，个人模式缺少企业配置时仍可启动；`PRAgent-test` 的浏览器 E2E 显式使用高级 edition，继续覆盖企业管理会话场景，默认单测/路由契约仍验证个人版收敛。
+本地验证：后端 `mvn test` 通过（2587 项通过、12 项按既有条件跳过）；前端质量通过（39 个测试文件、157 项测试，语句 64.76%、分支 53.11%、函数 55.47%、行 65.14%）；高级版真实浏览器 E2E 7 项通过；`git diff --check` 通过。首次远程质量运行因默认个人版执行旧企业 `/users` E2E 失败，已通过 CI edition 环境修复并复验通过，未提交测试脚本。
+提交/远程验收：实现提交 `eef1d6d6`（优化：收敛个人模式界面与运行面）和修复提交 `43653061`（修复：为浏览器测试启用高级模式）已推送 `origin/PRAgent-test`；修复后的 Pull Request Quality #33432730683、PR Repository Governance #33432730674、push Repository Governance #33432726806、Release Images #33432726862 和 Auto Create Pull Request #33432726849 均成功，生产部署按手动 opt-in 策略跳过。
+边界：OpenAPI reviewed 静态契约扫描仍以高级视图保留企业 server-only operations；个人运行时 controller 不注册，默认生成文档按 P1-03 再拆分接口域。未删除迁移、DTO 或纵向切片，物理删除保留独立回滚边界；未修改既有 `openapi-generated-client.frontend-signature.snapshot` 工作区改动和 `.tmp/`。
+下一步：继续 P1-02，盘点普通 PR 的 CI/运维工作流引用和时长基线，合并重复检查、明确维护入口，并保持每项独立提交、推送、Actions 验收和进度记录。
