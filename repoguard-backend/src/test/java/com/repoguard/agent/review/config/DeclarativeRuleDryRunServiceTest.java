@@ -107,7 +107,7 @@ class DeclarativeRuleDryRunServiceTest {
         return new ReviewRuleSettings(
             "RG-CUSTOM-001", "ENABLED", "*.java", "HIGH", 95,
             EnforcementMode.COMMENT, "Use a secret provider", "Generated files are exempt",
-            "Password assignment", "declarative-regex-v1", 1, 1,
+            "Credential assignment", "declarative-regex-v1", 1, 1,
             DeclarativeRulePolicy.REGEX, "password\\s*=", "**/generated/**"
         );
     }
