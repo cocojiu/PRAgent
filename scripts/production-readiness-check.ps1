@@ -213,6 +213,70 @@ Invoke-Check "Schema version guard expectation matches migration chain" {
     }
 }
 
+Invoke-Check "Flyway baseline decision protects supported upgrade paths" {
+    $manifestPath = Join-Path $MigrationDir "migration-contract.json"
+    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+        throw "Flyway migration contract not found at $manifestPath"
+    }
+
+    try {
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    } catch {
+        throw "Flyway migration contract is not valid JSON: $($_.Exception.Message)"
+    }
+
+    $policy = $manifest.baselinePolicy
+    if ($null -eq $policy) {
+        throw "migration-contract.json must declare baselinePolicy before any migration consolidation"
+    }
+    if ($policy.decision -ne "DEFER_CONSOLIDATION") {
+        throw "Flyway baseline policy must remain DEFER_CONSOLIDATION while an external database is supported"
+    }
+    if (-not [bool]$policy.externalDatabaseSupported) {
+        throw "Flyway baseline policy must keep externalDatabaseSupported=true"
+    }
+    if ($policy.publishedMigrationPolicy -ne "IMMUTABLE") {
+        throw "Published Flyway migrations must remain immutable"
+    }
+    if ($policy.newInstallationStrategy -ne "VALIDATED_SCHEMA_SNAPSHOT_THEN_BASELINE") {
+        throw "New installations must use a validated schema snapshot before enabling a baseline"
+    }
+
+    $highestVersion = 0
+    foreach ($migration in Get-ChildItem -LiteralPath $MigrationDir -Filter "V*__*.sql") {
+        if ($migration.Name -match '^V(?<version>\d+)__') {
+            $version = [int]$Matches.version
+            if ($version -gt $highestVersion) {
+                $highestVersion = $version
+            }
+        }
+    }
+    if ([int]$policy.candidateVersion -ne $highestVersion) {
+        throw "Flyway baseline candidate version $($policy.candidateVersion) must match the highest migration V$highestVersion"
+    }
+
+    $requiredEvidence = @($policy.requiredEvidence)
+    $missingRequiredEvidence = @($requiredEvidence | Where-Object { [string]::IsNullOrWhiteSpace($_) })
+    if ($requiredEvidence.Count -lt 4 -or $missingRequiredEvidence.Count -gt 0) {
+        throw "Flyway baseline policy must list empty-db, schema-diff, seed-admin and upgrade rehearsal evidence"
+    }
+    $decisionEvidence = @($policy.decisionEvidence)
+    $missingDecisionEvidence = @($decisionEvidence | Where-Object { [string]::IsNullOrWhiteSpace($_) })
+    if ($decisionEvidence.Count -lt 2 -or $missingDecisionEvidence.Count -gt 0) {
+        throw "Flyway baseline policy must explain the external-database decision"
+    }
+
+    $upgradeTest = Join-Path $Root "repoguard-backend/src/test/java/com/repoguard/agent/integration/FlywayMigrationUpgradePathIntegrationTest.java"
+    if (-not (Test-Path -LiteralPath $upgradeTest -PathType Leaf)) {
+        throw "The supported Flyway upgrade-path integration test is missing: $upgradeTest"
+    }
+    $qualityWorkflow = Join-Path $Root ".github/workflows/pr-quality.yml"
+    $qualityWorkflowContent = Get-Content -LiteralPath $qualityWorkflow -Raw -Encoding UTF8
+    if ($qualityWorkflowContent -notmatch "FlywayMigrationUpgradePathIntegrationTest") {
+        throw "Pull Request Quality must continue to run FlywayMigrationUpgradePathIntegrationTest"
+    }
+}
+
 Invoke-Check "Flyway migration demo data guard" {
     $allowedDemoMigrations = @(
         "V2__seed_demo_data.sql",
