@@ -18,3 +18,9 @@ e884d8c4a5c760a415837a7ddb2927f0f33ebe59:repoguard-backend/src/test/java/com/rep
 # runtime-fragmented PEM markers in the subsequent remediation commit. Keep
 # this exemption scoped to the historical fingerprint so current source scans.
 1907d4525bb09428d7b4fd6b7d8c90d9582891e0:repoguard-backend/src/test/java/com/repoguard/agent/common/SensitiveTextSanitizerTest.java:private-key:72
+
+# Synthetic declarative-rule matcher fixture introduced in c32da764 and
+# refactored in a313b628. The regex intentionally exercised a credential-like
+# assignment; the current fixture fragments the token so new diffs stay clean.
+c32da764242d4ff2ed8ebaae26bf2056a1696fff:repoguard-backend/src/test/java/com/repoguard/agent/review/config/DeclarativeRuleDryRunServiceTest.java:generic-api-key:110
+a313b628313b2f31fde7e160a5599477e423f432:repoguard-backend/src/test/java/com/repoguard/agent/review/config/DeclarativeRuleDryRunServiceTest.java:generic-api-key:110

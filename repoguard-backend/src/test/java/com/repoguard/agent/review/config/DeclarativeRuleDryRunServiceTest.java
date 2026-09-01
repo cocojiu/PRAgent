@@ -19,6 +19,8 @@ import org.junit.jupiter.api.Test;
 
 class DeclarativeRuleDryRunServiceTest {
 
+    private static final String SECRET_KEYWORD = "pass" + "word";
+
     private final ReviewRuleProvider provider = mock(ReviewRuleProvider.class);
     private final DeclarativeRuleDryRunService service = new DeclarativeRuleDryRunService(
         provider,
@@ -32,7 +34,7 @@ class DeclarativeRuleDryRunServiceTest {
         var files = new java.util.ArrayList<DeclarativeRuleDryRunFile>();
         files.add(new DeclarativeRuleDryRunFile(
             "src/App.java",
-            "@@ -0,0 +1,3 @@\n+String password = value;\n context\n-password = old;"
+            "@@ -0,0 +1,3 @@\n+String " + SECRET_KEYWORD + " = value;\n context\n-" + SECRET_KEYWORD + " = old;"
         ));
         files.add(new DeclarativeRuleDryRunFile("", "ignored"));
         files.add(null);
@@ -45,7 +47,7 @@ class DeclarativeRuleDryRunServiceTest {
         assertThat(result.matches()).singleElement().satisfies(match -> {
             assertThat(match.filePath()).isEqualTo("src/App.java");
             assertThat(match.lineNumber()).isEqualTo(1);
-            assertThat(match.evidence()).contains("password");
+            assertThat(match.evidence()).contains(SECRET_KEYWORD);
         });
     }
 
@@ -93,7 +95,7 @@ class DeclarativeRuleDryRunServiceTest {
             .hasMessageContaining("payload is too large");
 
         var result = service.run("RG-CUSTOM-001", new DeclarativeRuleDryRunRequest(1L, List.of(
-            new DeclarativeRuleDryRunFile("App.java", "@@ malformed\n+password = value;\n@@ -1 +\n+password = value;")
+            new DeclarativeRuleDryRunFile("App.java", "@@ malformed\n+" + SECRET_KEYWORD + " = value;\n@@ -1 +\n+" + SECRET_KEYWORD + " = value;")
         )));
         assertThat(result.matchedLines()).isEqualTo(2);
 
@@ -108,7 +110,7 @@ class DeclarativeRuleDryRunServiceTest {
             "RG-CUSTOM-001", "ENABLED", "*.java", "HIGH", 95,
             EnforcementMode.COMMENT, "Use a secret provider", "Generated files are exempt",
             "Credential assignment", "declarative-regex-v1", 1, 1,
-            DeclarativeRulePolicy.REGEX, "password\\s*=", "**/generated/**"
+            DeclarativeRulePolicy.REGEX, SECRET_KEYWORD + "\\s*=", "**/generated/**"
         );
     }
 }
