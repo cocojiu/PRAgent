@@ -391,3 +391,11 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 提交/远程验收：实现提交 `15080abe`（新增：实现 GitHub Checks 合并门禁）已推送 `origin/PRAgent-test`；首次 Pull Request Quality `33515872257` 发现升级测试把三列复合索引按单列断言，已由修复提交 `ff3134b8`（修复：校正 GitHub Checks 复合索引升级断言）修复并重新推送。修复后的 Pull Request Quality `33516343298`（8 个作业全部成功，含真实 MySQL/RabbitMQ 与 V76→V79 Flyway 升级）、push Repository Governance `33516337598` 和 Auto Create Pull Request `33516337638` 全部成功。
 边界：GitHub App 仍需维护者在目标组织授予 Checks write、Pull requests write 等权限，并在分支保护中将 `RepoGuard PR Review` 设为 required status；未写入真实 token、源码或 PR 数据，不提交非 README Markdown 或测试脚本；工作区既有 `ArchitectureRatchetTest.java`、OpenAPI frontend-signature snapshot 和 `.tmp/` 保持未提交。
 下一步：进入优化-52 企业租户与仓库管理台，先复用现有租户/成员/仓库/OIDC/配额接口补齐前端路由，再扩展细粒度 RBAC，并保持单项提交、推送、Actions 验收。
+
+2026-09-01 | 优化-52 | P0 企业租户与仓库管理台、细粒度 RBAC
+状态：已完成企业控制台、租户上下文、细粒度角色、本地门禁、中文提交、test 分支推送和远程 Actions 验收。
+变更：补齐企业租户列表/详情、创建、状态切换、成员角色绑定、GitHub App 仓库绑定、OIDC 身份绑定和配额维护页面；新增顶部租户切换器，将当前租户以 `X-RepoGuard-Tenant` 请求头传递且不暴露到 URL；企业控制面路径绕过业务租户解析并保留平台管理员校验。后端新增 `PLATFORM_ADMIN`、`TENANT_ADMIN`、`RULE_ADMIN`、`REVIEWER`、`READ_ONLY` 角色及权限蕴含策略，保留 `ADMIN`/`VIEWER` 兼容；用户管理、规则治理、校准和企业接口分别收敛到对应角色，活动平台管理员数量约束同步扩展。OpenAPI、生成客户端、前端 API contracts、路由和个人版访问边界同步更新。
+本地验证：后端定向安全/租户/控制器/OpenAPI 测试 42 项通过；完整后端 `mvn verify` 共 2647 项测试通过、0 失败、12 项按环境条件跳过，JaCoCo 覆盖率门禁通过；前端 `npm run quality` 通过（40 个测试文件、162 项测试，语句 65.25%、分支 53.40%、函数 56.18%、行 65.60%），生产 `npm run build` 通过 bundle budget（首屏请求 10/16，概览增量请求 16/16）；readiness quick 与 `git diff --check` 通过。首次远程质量运行因租户切换器同步引入 Element Plus 依赖导致 bundle budget 超限（#33520788074），已通过异步加载和原生 select 控件修复，未放宽预算。
+提交/远程验收：实现提交 `d4287762`（优化：建设企业租户管理台与细粒度 RBAC）和修复提交 `7e4d4b81`（修复：降低租户切换控件的首屏构建开销）已推送 `origin/PRAgent-test`；最终 Pull Request Quality #33521775825 的 8 个作业全部成功，含后端单测/契约、真实 MySQL/RabbitMQ、Flyway 升级、前端类型/lint/测试/构建、密钥差异、依赖和生产边缘配置；push Repository Governance #33521555128、Auto Create Pull Request #33521555110 均成功。
+边界：架构复杂度预算按新增生产类实际值更新为 71,821 行/955 类；GitHub App、真实 OIDC、组织安装和生产配额仍需部署环境凭据与分支保护配置，不在仓库伪造。保留用户既有 `ArchitectureRatchetTest.java` 未提交改动和 `.tmp/`，未提交非 README Markdown 或测试脚本。
+下一步：进入优化-53 仓库级语义上下文，先建立默认分支符号索引和确定性调用方/测试/配置检索，再接入审查上下文并保持单项验收。
