@@ -1,0 +1,13 @@
+# name|owner|trigger|lifecycle
+archive-prod-mysql-binlogs.sh|Production MySQL binlog archive|production-mysql-binlog-archive.yml schedule or manual dispatch|Retire after binlog retention is replaced and an export rehearsal proves equivalent recovery.
+backup-prod-mysql.sh|Production MySQL backup|production-mysql-backup.yml schedule or manual dispatch|Retire only after the replacement backup and restore rehearsal cover encrypted and legacy inputs.
+bootstrap-docker-server.sh|Deployment host bootstrap|Operator one-time manual run|Retire when supported hosts are provisioned by an approved image or infrastructure pipeline.
+deploy-prod.sh|Production image deployment|release-images.yml manual opt-in|Retire when a replacement deployment entrypoint preserves preflight, rollback and environment approval.
+drop-retired-prod-mysql-indexes.sh|Production MySQL index retirement|Operator manual evidence-gated run|Retire after the index-usage report and rollback window are no longer required.
+migrate-legacy-mysql-backups.sh|Legacy MySQL backup migration|production-mysql-legacy-backups.yml manual dispatch|Retire after all legacy plaintext backups have verified encrypted copies and the support window closes.
+migrate-prod-secret-files.sh|Production secret file migration|release-images.yml migration input|Retire after all supported deployments use mounted secret files and the legacy compatibility window closes.
+production-readiness-check.ps1|Repository production readiness|pr-quality.yml, repository-governance.yml and release-images.yml|Retire only when every tracked-file, migration and runtime preflight check has an equivalent maintained gate.
+prune-prod-mysql-backups.sh|Production MySQL backup pruning|production-mysql-backup.yml schedule or manual dispatch|Retire after retention and immutable-copy cleanup are owned by a replacement with restore evidence.
+report-prod-mysql-index-usage.sh|Production MySQL index usage report|Operator manual read-only run|Retire after index retirement evidence is emitted by a maintained observability query.
+restore-prod-mysql-pitr.sh|Production MySQL point-in-time restore|Operator manual recovery run|Retire after a replacement recovery procedure is rehearsed against binlog and encrypted backup artifacts.
+upload-immutable-backup-object.sh|Immutable backup object upload|production-mysql-backup.yml and production-mysql-binlog-archive.yml|Retire after the replacement object-lock upload path is verified for backup and binlog artifacts.
