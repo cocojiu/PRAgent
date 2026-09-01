@@ -359,3 +359,11 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 提交/远程验收：实现提交 `dac00497`（优化：明确 Flyway 基线与外部数据库迁移策略）已推送 `origin/PRAgent-test`；Pull Request Quality #33472653684、push Repository Governance #33472650479、Auto Create Pull Request #33472650443 均成功，PRAgent-test 未触发生产镜像发布。
 边界：当前选择保守的延后合并，不伪造尚未完成的 schema snapshot；既有 migration、外部数据库数据和升级路径保持不变。未修改用户已有 `openapi-generated-client.frontend-signature.snapshot` 工作区改动和 `.tmp/`。
 下一步：继续按顺序处理后续工程优化项；涉及数据库基线时，先补齐 V77 snapshot 与空库/结构/数据演练证据，再考虑启用 baseline。
+
+2026-09-01 | 优化-49 | P2-01 复杂度预算补齐 Bean 与废弃配置审计
+状态：已完成补充审计、回归测试、中文提交、test 分支推送和远程 Actions 验收。
+变更：复杂度预算新增未引用 Spring Bean 与废弃配置项上限；架构门禁扫描 `@Component`、`@Service`、`@Repository` 实现，识别接口分派引用并阻断孤立 Bean；新增配置生命周期目录，要求每个兼容期配置记录替代项、验证方式和退役条件，阻断无替代或无退役计划的废弃配置。
+本地验证：`ArchitectureRatchetTest` 8 项、组合架构/迁移/Schema/Workflow 门禁共 60 项通过；`git diff --check` 通过。
+提交/远程验收：修复提交 `29345dd5`（补齐 Bean 与配置审计）已推送 `origin/PRAgent-test`；Pull Request Quality #33473466454、push Repository Governance #33473463434、Auto Create Pull Request #33473463482 均成功，PRAgent-test 未触发生产镜像发布。
+边界：本批仅补齐个人项目复杂度与配置生命周期证据，不改变运行时业务行为；未修改既有 `openapi-generated-client.frontend-signature.snapshot` 工作区改动和 `.tmp/`。
+下一步：继续按顺序处理后续工程优化项；若预算再次接近上限，必须优先删除、合并或完成退役证据后再扩展。
