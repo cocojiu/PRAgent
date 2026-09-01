@@ -52,6 +52,10 @@ import type {
   EnterpriseTenantQuotaRequest,
   EnterpriseTenantRepositoryRequest,
   EnterpriseTenantStatusRequest,
+  LlmModelRelease,
+  LlmModelReleaseCenter,
+  LlmModelReleaseRequest,
+  LlmModelRollbackRequest,
   CacheStats,
   GithubCommentPreview,
   GithubCommentPublicationHistory,
@@ -263,6 +267,13 @@ export type ApiContract = {
   fetchReviewCalibrationQueue: ApiOperation<
     { ruleId: string; limit?: number; includeIgnored?: boolean },
     ReviewCalibrationQueue
+  >;
+  fetchLlmModelReleaseCenter: ApiOperation<{ trendDays?: number }, LlmModelReleaseCenter>;
+  registerLlmModelShadowRelease: ApiOperation<LlmModelReleaseRequest, LlmModelRelease>;
+  promoteLlmModelRelease: ApiOperation<LlmModelReleaseRequest, LlmModelRelease>;
+  rollbackLlmModelRelease: ApiOperation<
+    { releaseId: number; payload: LlmModelRollbackRequest },
+    LlmModelRelease
   >;
   createReviewRule: ApiOperation<ReviewRuleConfigRequest, ReviewRuleConfig>;
   updateReviewRule: ApiOperation<
@@ -579,6 +590,19 @@ const apiEndpoints: ApiEndpointMap = {
       limit: input.limit ?? 30,
       includeIgnored: input.includeIgnored ?? false
     })
+  }),
+  fetchLlmModelReleaseCenter: generatedEndpoint("reviewCalibrationControllerGetModelReleaseCenter", {
+    query: input => ({ trendDays: input.trendDays })
+  }),
+  registerLlmModelShadowRelease: generatedEndpoint("reviewCalibrationControllerRegisterShadowRelease", {
+    body: input => input
+  }),
+  promoteLlmModelRelease: generatedEndpoint("reviewCalibrationControllerPromoteModelRelease", {
+    body: input => input
+  }),
+  rollbackLlmModelRelease: generatedEndpoint("reviewCalibrationControllerRollbackModelRelease", {
+    path: input => ({ releaseId: input.releaseId }),
+    body: input => input.payload
   }),
   createReviewRule: generatedEndpoint("systemConfigControllerCreateReviewRule", {
     body: input => input

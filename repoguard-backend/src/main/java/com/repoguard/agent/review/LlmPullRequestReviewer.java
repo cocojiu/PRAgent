@@ -3,6 +3,7 @@ package com.repoguard.agent.review;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.repoguard.agent.review.ReviewPolicyProvider;
 import com.repoguard.agent.review.ReviewPolicySettings;
+import com.repoguard.agent.review.quality.LlmModelReleaseService;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.external.ExternalCallErrorClassifier;
 import com.repoguard.agent.external.ExternalCallException;
@@ -21,6 +22,7 @@ import java.util.Objects;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
@@ -37,6 +39,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
     private final ExternalHttpJsonResponseReader responseReader;
     private final LlmChatCompletionResponseExtractor responseExtractor;
     private final OutboundEndpointPolicy endpointPolicy;
+    private final LlmModelReleaseService modelReleaseService;
     private final AtomicReference<CachedRestClient> cachedRestClient = new AtomicReference<>();
 
     @Autowired
@@ -49,9 +52,22 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         LlmReviewPipeline reviewPipeline,
         ExternalHttpJsonResponseReader responseReader,
         LlmChatCompletionResponseExtractor responseExtractor,
-        OutboundEndpointPolicy endpointPolicy
+        OutboundEndpointPolicy endpointPolicy,
+        ObjectProvider<LlmModelReleaseService> modelReleaseServiceProvider
     ) {
-        this(reviewPolicyProvider, restClientBuilder, metrics, resilience, promptBuilder, reviewPipeline, responseReader, responseExtractor, endpointPolicy, true);
+        this(
+            reviewPolicyProvider,
+            restClientBuilder,
+            metrics,
+            resilience,
+            promptBuilder,
+            reviewPipeline,
+            responseReader,
+            responseExtractor,
+            endpointPolicy,
+            modelReleaseServiceProvider.getIfAvailable(),
+            true
+        );
     }
 
     public LlmPullRequestReviewer(
@@ -64,7 +80,19 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         ExternalHttpJsonResponseReader responseReader,
         LlmChatCompletionResponseExtractor responseExtractor
     ) {
-        this(reviewPolicyProvider, restClientBuilder, metrics, resilience, promptBuilder, reviewPipeline, responseReader, responseExtractor, null, true);
+        this(
+            reviewPolicyProvider,
+            restClientBuilder,
+            metrics,
+            resilience,
+            promptBuilder,
+            reviewPipeline,
+            responseReader,
+            responseExtractor,
+            null,
+            null,
+            true
+        );
     }
 
     private LlmPullRequestReviewer(
@@ -77,6 +105,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         ExternalHttpJsonResponseReader responseReader,
         LlmChatCompletionResponseExtractor responseExtractor,
         OutboundEndpointPolicy endpointPolicy,
+        LlmModelReleaseService modelReleaseService,
         boolean ignored
     ) {
         this.reviewPolicyProvider = Objects.requireNonNull(reviewPolicyProvider, "reviewPolicyProvider");
@@ -88,6 +117,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         this.responseReader = Objects.requireNonNull(responseReader, "responseReader");
         this.responseExtractor = Objects.requireNonNull(responseExtractor, "responseExtractor");
         this.endpointPolicy = endpointPolicy;
+        this.modelReleaseService = modelReleaseService;
     }
 
     @Override
@@ -102,6 +132,9 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
             deadline.requireRemaining("review_context");
         }
         ReviewPolicySettings settings = reviewPolicyProvider.getSettings();
+        if (modelReleaseService != null) {
+            settings = modelReleaseService.route(settings, task);
+        }
         LlmReviewContext promptContext = promptBuilder.buildContext(diff);
         String promptSummary = promptBuilder.promptSummary(diff, promptContext);
         if (deadline != null) {

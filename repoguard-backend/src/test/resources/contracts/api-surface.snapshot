@@ -7,6 +7,7 @@ GET /api/v1/config/integrations/mysql query=[] body=- bodyRequired=false
 GET /api/v1/config/integrations/rabbitmq query=[] body=- bodyRequired=false
 GET /api/v1/config/notification-bindings query=[page, pageSize, organization, repository, provider] body=- bodyRequired=false
 GET /api/v1/config/review-calibration/queue query=[ruleId, limit, includeIgnored] body=- bodyRequired=false
+GET /api/v1/config/review-calibration/release-center query=[trendDays] body=- bodyRequired=false
 GET /api/v1/config/review-policy query=[] body=- bodyRequired=false
 GET /api/v1/config/review-rules query=[] body=- bodyRequired=false
 GET /api/v1/config/review-rules/{id}/versions query=[cursor, pageSize] body=- bodyRequired=false
@@ -61,6 +62,9 @@ POST /api/v1/config/integrations/mysql/test query=[] body=ServiceIntegrationConf
 POST /api/v1/config/integrations/rabbitmq/test query=[] body=ServiceIntegrationConfigRequest bodyRequired=false
 POST /api/v1/config/notification-bindings query=[] body=NotificationBindingRequest bodyRequired=true
 POST /api/v1/config/notification-bindings/{id}/test query=[] body=- bodyRequired=false
+POST /api/v1/config/review-calibration/release-center/promote query=[] body=LlmModelReleaseRequest bodyRequired=true
+POST /api/v1/config/review-calibration/release-center/shadow query=[] body=LlmModelReleaseRequest bodyRequired=true
+POST /api/v1/config/review-calibration/release-center/{releaseId}/rollback query=[] body=LlmModelRollbackRequest bodyRequired=true
 POST /api/v1/config/review-policy/test query=[] body=ReviewPolicyConfigRequest bodyRequired=false
 POST /api/v1/config/review-rules query=[] body=ReviewRuleConfigRequest bodyRequired=true
 POST /api/v1/config/review-rules/{id}/versions/{policyVersion}/rollback query=[] body=ReviewRuleRollbackRequest bodyRequired=true

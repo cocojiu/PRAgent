@@ -38,7 +38,11 @@ notificationIntegrationControllerRetryEvent(input: { path: { id: number } }): Pr
 notificationIntegrationControllerTestBinding(input: { path: { id: number } }): Promise<ConnectionTestResult>; // POST /api/v1/config/notification-bindings/{id}/test
 notificationIntegrationControllerUpdateBinding(input: { path: { id: number }; body: NotificationBindingRequest }): Promise<NotificationBinding>; // PUT /api/v1/config/notification-bindings/{id}
 notificationIntegrationControllerUpdateBindingStatus(input: { path: { id: number }; body: NotificationBindingStatusRequest }): Promise<NotificationBinding>; // PUT /api/v1/config/notification-bindings/{id}/status
+reviewCalibrationControllerGetModelReleaseCenter(input?: { query?: { trendDays?: number } }): Promise<LlmModelReleaseCenter>; // GET /api/v1/config/review-calibration/release-center
 reviewCalibrationControllerGetReviewCalibrationQueue(input?: { query?: { includeIgnored?: boolean; limit?: number; ruleId: string } }): Promise<ReviewCalibrationQueue>; // GET /api/v1/config/review-calibration/queue
+reviewCalibrationControllerPromoteModelRelease(input: { body: LlmModelReleaseRequest }): Promise<LlmModelRelease>; // POST /api/v1/config/review-calibration/release-center/promote
+reviewCalibrationControllerRegisterShadowRelease(input: { body: LlmModelReleaseRequest }): Promise<LlmModelRelease>; // POST /api/v1/config/review-calibration/release-center/shadow
+reviewCalibrationControllerRollbackModelRelease(input: { path: { releaseId: number }; body: LlmModelRollbackRequest }): Promise<LlmModelRelease>; // POST /api/v1/config/review-calibration/release-center/{releaseId}/rollback
 reviewControllerGetGithubCommentPreview(input: { path: { id: number }; query?: { commentableOnly?: boolean; page?: number; pageSize?: number } }): Promise<GithubCommentPreview>; // GET /api/v1/reviews/{id}/github-comments/preview
 reviewControllerGetGithubCommentPublicationHistory(input: { path: { id: number }; query?: { page?: number; pageSize?: number; status?: string } }): Promise<GithubCommentPublicationHistory>; // GET /api/v1/reviews/{id}/github-comments/publications
 reviewControllerGetReviewDetail(input: { path: { id: number } }): Promise<ReviewTaskSummary>; // GET /api/v1/reviews/{id}

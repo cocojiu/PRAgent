@@ -95,6 +95,12 @@
             <el-form-item label="每日上限">
               <el-input-number v-model="quotaForm.maxDailyReviews" :min="1" :max="1000000" controls-position="right" />
             </el-form-item>
+            <el-form-item label="月度 token 上限（0 表示不限）">
+              <el-input-number v-model="quotaForm.monthlyLlmTokenBudget" :min="0" :max="100000000000" controls-position="right" />
+            </el-form-item>
+            <el-form-item label="月度费用上限（0 表示不限）">
+              <el-input-number v-model="quotaForm.monthlyLlmCostBudget" :min="0" :max="1000000000" :precision="6" controls-position="right" />
+            </el-form-item>
             <el-button type="primary" :loading="savingQuota" @click="saveQuota">保存配额</el-button>
           </el-form>
         </div>
@@ -216,7 +222,7 @@ const selectedTenant = ref<EnterpriseTenant>();
 const quota = ref<Awaited<ReturnType<typeof fetchEnterpriseTenantQuota>>>();
 
 const createForm = reactive({ tenantKey: "", displayName: "", initialAdminUserId: 1 });
-const quotaForm = reactive({ maxDailyReviews: 1000 });
+const quotaForm = reactive({ maxDailyReviews: 1000, monthlyLlmTokenBudget: 0, monthlyLlmCostBudget: 0 });
 const repositoryForm = reactive<EnterpriseTenantRepositoryRequest>({ organization: "", repository: "", githubInstallationId: 1 });
 const membershipForm = reactive<EnterpriseTenantMembershipRequest>({ userId: 1, role: "TENANT_ADMIN", defaultTenant: false });
 const identityForm = reactive<EnterpriseIdentityBindingRequest>({ userId: 1, issuer: "", subject: "" });
@@ -268,6 +274,8 @@ const selectTenant = async (tenant: EnterpriseTenant) => {
     selectedTenant.value = detail;
     quota.value = detailQuota;
     quotaForm.maxDailyReviews = detailQuota.maxDailyReviews;
+    quotaForm.monthlyLlmTokenBudget = detailQuota.monthlyLlmTokenBudget ?? 0;
+    quotaForm.monthlyLlmCostBudget = detailQuota.monthlyLlmCostBudget ?? 0;
   } catch (error) {
     ElMessage.error(getErrorMessage(error, "租户详情加载失败"));
   }
@@ -350,7 +358,9 @@ const saveQuota = async () => {
   try {
     const payload: EnterpriseTenantQuotaRequest = {
       expectedVersion: quota.value.quotaVersion,
-      maxDailyReviews: quotaForm.maxDailyReviews
+      maxDailyReviews: quotaForm.maxDailyReviews,
+      monthlyLlmTokenBudget: quotaForm.monthlyLlmTokenBudget,
+      monthlyLlmCostBudget: quotaForm.monthlyLlmCostBudget
     };
     quota.value = await updateEnterpriseTenantQuota(tenant.tenantKey, payload);
     ElMessage.success("审查配额已更新");

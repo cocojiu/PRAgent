@@ -3,6 +3,8 @@ import type { ApiRequestOptions } from "@/api/contracts";
 import type {
   DataRetentionCleanupRequest,
   GithubIntegrationConfigRequest,
+  LlmModelReleaseRequest,
+  LlmModelRollbackRequest,
   ReviewPolicyConfigRequest,
   ReviewEnforcementModeRequest,
   ReviewRuleConfigRequest,
@@ -86,6 +88,18 @@ export const fetchReviewCalibrationQueue = (
   ruleId: string,
   options: { limit?: number; includeIgnored?: boolean } = {}
 ) => apiRequest("fetchReviewCalibrationQueue", { ruleId, ...options });
+
+export const fetchLlmModelReleaseCenter = (trendDays = 30) =>
+  apiRequest("fetchLlmModelReleaseCenter", { trendDays });
+
+export const registerLlmModelShadowRelease = (payload: LlmModelReleaseRequest) =>
+  apiRequest("registerLlmModelShadowRelease", payload);
+
+export const promoteLlmModelRelease = (payload: LlmModelReleaseRequest) =>
+  apiRequest("promoteLlmModelRelease", payload);
+
+export const rollbackLlmModelRelease = (releaseId: number, payload: LlmModelRollbackRequest) =>
+  apiRequest("rollbackLlmModelRelease", { releaseId, payload });
 
 export const createReviewRule = (payload: ReviewRuleConfigRequest) =>
   apiRequest("createReviewRule", payload);

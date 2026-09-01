@@ -57,6 +57,8 @@ export interface EnterpriseTenantQuota {
   tenantKey: string;
   quotaVersion: number;
   maxDailyReviews: number;
+  monthlyLlmTokenBudget: number;
+  monthlyLlmCostBudget: number;
   usedReviews: number;
   usageDate?: string;
   updatedAt?: string;
@@ -65,4 +67,6 @@ export interface EnterpriseTenantQuota {
 export interface EnterpriseTenantQuotaRequest {
   expectedVersion: number;
   maxDailyReviews: number;
+  monthlyLlmTokenBudget: number;
+  monthlyLlmCostBudget: number;
 }

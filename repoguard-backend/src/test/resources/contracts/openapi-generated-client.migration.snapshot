@@ -24,6 +24,7 @@ fetchGithubCommentPreview -> reviewControllerGetGithubCommentPreview // GET /api
 fetchGithubCommentPublicationHistory -> reviewControllerGetGithubCommentPublicationHistory // GET /api/v1/reviews/{id}/github-comments/publications
 fetchGithubIntegrationConfig -> systemConfigControllerGetGithubIntegration // GET /api/v1/config/integrations/github
 fetchGithubPullRequestOptions -> reviewControllerListConfiguredGithubPullRequests // GET /api/v1/reviews/github/pull-requests
+fetchLlmModelReleaseCenter -> reviewCalibrationControllerGetModelReleaseCenter // GET /api/v1/config/review-calibration/release-center
 fetchMessageQueueHealth -> messageQueueHealthControllerGetHealth // GET /api/v1/message-queue/health
 fetchMysqlIntegrationConfig -> systemConfigControllerGetMysqlIntegration // GET /api/v1/config/integrations/mysql
 fetchNotificationBindings -> notificationIntegrationControllerListBindings // GET /api/v1/config/notification-bindings
@@ -59,15 +60,18 @@ getCurrentUser -> authControllerMe // GET /api/v1/auth/me
 login -> authControllerLogin // POST /api/v1/auth/login
 logout -> authControllerLogout // POST /api/v1/auth/logout
 pauseSecretReEncryptionJob -> systemConfigControllerPauseSecretReEncryptionJob // POST /api/v1/config/secrets/re-encryption/jobs/{jobId}/pause
+promoteLlmModelRelease -> reviewCalibrationControllerPromoteModelRelease // POST /api/v1/config/review-calibration/release-center/promote
 publishGithubComments -> reviewControllerPublishGithubComments // POST /api/v1/reviews/{id}/github-comments
 reEncryptSecrets -> systemConfigControllerReEncryptSecrets // POST /api/v1/config/secrets/re-encryption
 register -> authControllerRegister // POST /api/v1/auth/register
+registerLlmModelShadowRelease -> reviewCalibrationControllerRegisterShadowRelease // POST /api/v1/config/review-calibration/release-center/shadow
 reportFrontendPerformance -> frontendPerformanceControllerRecordPerformance // POST /api/v1/observability/frontend/performance
 requeueMessageQueueTask -> messageQueueHealthControllerRequeueTask // POST /api/v1/message-queue/tasks/{taskId}/requeue
 resetRefreshToken -> authControllerResetRefreshToken // POST /api/v1/auth/refresh-token/reset
 resumeSecretReEncryptionJob -> systemConfigControllerResumeSecretReEncryptionJob // POST /api/v1/config/secrets/re-encryption/jobs/{jobId}/resume
 retryNotificationEvent -> notificationIntegrationControllerRetryEvent // POST /api/v1/notification-events/{id}/retry
 retryReview -> reviewControllerRetryReview // POST /api/v1/reviews/{id}/retry
+rollbackLlmModelRelease -> reviewCalibrationControllerRollbackModelRelease // POST /api/v1/config/review-calibration/release-center/{releaseId}/rollback
 rollbackReviewRule -> systemConfigControllerRollbackReviewRule // POST /api/v1/config/review-rules/{id}/versions/{policyVersion}/rollback
 rollbackReviewStrategy -> systemConfigControllerRollbackReviewStrategy // POST /api/v1/config/review-strategy/versions/{snapshotId}/rollback
 submitHumanReview -> reviewControllerSubmitHumanReview // POST /api/v1/reviews/{id}/human-review

@@ -19,7 +19,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
  * Exercises the supported rolling-upgrade path against a real MySQL instance.
  *
  * <p>The test is opt-in because local unit-test runs do not provision a database. CI enables it
- * with an isolated database and verifies the V76 expand state plus the V77, V78 and V79 contract states.
+ * with an isolated database and verifies the V76 expand state plus the V77, V78, V79 and V80 states.
  */
 @EnabledIfEnvironmentVariable(named = "REPOGUARD_RUN_INTEGRATION_TESTS", matches = "true")
 class FlywayMigrationUpgradePathIntegrationTest {
@@ -122,6 +122,25 @@ class FlywayMigrationUpgradePathIntegrationTest {
                 } finally {
                     deleteTenant(connection, otherTenantId);
                 }
+            }
+
+            migrateTo(url, username, password, "80");
+            try (Connection connection = open(url, username, password)) {
+                assertThat(latestSuccessfulMigration(connection)).isEqualTo("80");
+                assertThat(columnExists(connection, "tenant_quota_config", "monthly_llm_token_budget"))
+                    .isTrue();
+                assertThat(columnExists(connection, "tenant_quota_config", "monthly_llm_cost_budget"))
+                    .isTrue();
+                assertThat(uniqueIndexExists(
+                    connection,
+                    "llm_model_release",
+                    "uk_llm_model_release_tenant_key"
+                )).isTrue();
+                assertThat(constraintExists(
+                    connection,
+                    "llm_model_release",
+                    "fk_llm_model_release_tenant"
+                )).isTrue();
             }
         } finally {
             cleanup(url, username, password, tenantId, taskId, attemptId);
@@ -333,6 +352,21 @@ class FlywayMigrationUpgradePathIntegrationTest {
     private boolean uniqueIndexExists(Connection connection, String table, String index)
         throws SQLException {
         return indexColumnCount(connection, table, index) == 1;
+    }
+
+    private boolean columnExists(Connection connection, String table, String column) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+            select count(*)
+              from information_schema.columns
+             where table_schema = database() and table_name = ? and column_name = ?
+            """)) {
+            statement.setString(1, table);
+            statement.setString(2, column);
+            try (ResultSet result = statement.executeQuery()) {
+                assertThat(result.next()).isTrue();
+                return result.getLong(1) == 1L;
+            }
+        }
     }
 
     private boolean compositeUniqueIndexExists(Connection connection, String table, String index, int expectedColumns)

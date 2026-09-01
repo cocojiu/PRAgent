@@ -1456,6 +1456,227 @@
         }
       }
     },
+    "/api/v1/config/review-calibration/release-center" : {
+      "get" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerGetModelReleaseCenter",
+        "x-controller-operation" : "ReviewCalibrationController#getModelReleaseCenter",
+        "parameters" : [ {
+          "name" : "trendDays",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 7,
+            "maximum" : 90,
+            "default" : 30
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "LlmModelReleaseCenterDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/LlmModelReleaseCenterDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-calibration/release-center/promote" : {
+      "post" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerPromoteModelRelease",
+        "x-controller-operation" : "ReviewCalibrationController#promoteModelRelease",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "LlmModelReleaseRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/LlmModelReleaseRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "LlmModelReleaseDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/LlmModelReleaseDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-calibration/release-center/shadow" : {
+      "post" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerRegisterShadowRelease",
+        "x-controller-operation" : "ReviewCalibrationController#registerShadowRelease",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "LlmModelReleaseRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/LlmModelReleaseRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "LlmModelReleaseDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/LlmModelReleaseDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-calibration/release-center/{releaseId}/rollback" : {
+      "post" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerRollbackModelRelease",
+        "x-controller-operation" : "ReviewCalibrationController#rollbackModelRelease",
+        "parameters" : [ {
+          "name" : "releaseId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "LlmModelRollbackRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/LlmModelRollbackRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "LlmModelReleaseDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/LlmModelReleaseDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/config/review-policy" : {
       "get" : {
         "tags" : [ "SystemConfig" ],
@@ -6909,6 +7130,13 @@
             "type" : "integer",
             "format" : "int32"
           },
+          "monthlyLlmTokenBudget" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "monthlyLlmCostBudget" : {
+            "type" : "number"
+          },
           "usedReviews" : {
             "type" : "integer",
             "format" : "int32"
@@ -6937,9 +7165,20 @@
             "format" : "int32",
             "minimum" : 1,
             "maximum" : 1000000
+          },
+          "monthlyLlmTokenBudget" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 0,
+            "maximum" : 100000000000
+          },
+          "monthlyLlmCostBudget" : {
+            "type" : "number",
+            "minimum" : 0.0,
+            "maximum" : 1000000000.0
           }
         },
-        "required" : [ "expectedVersion", "maxDailyReviews" ]
+        "required" : [ "expectedVersion", "maxDailyReviews", "monthlyLlmTokenBudget", "monthlyLlmCostBudget" ]
       },
       "EnterpriseTenantRepositoryRequest" : {
         "type" : "object",
@@ -7747,6 +7986,289 @@
             "type" : "string"
           }
         }
+      },
+      "LlmModelBudgetDto" : {
+        "type" : "object",
+        "x-java-type" : "LlmModelBudgetDto",
+        "properties" : {
+          "month" : {
+            "type" : "object",
+            "x-java-type" : "YearMonth"
+          },
+          "tokenBudget" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "tokenUsed" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "tokenRemaining" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "costBudget" : {
+            "type" : "number"
+          },
+          "costUsed" : {
+            "type" : "number"
+          },
+          "costRemaining" : {
+            "type" : "number"
+          },
+          "exhausted" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "tokenBudget", "tokenUsed", "tokenRemaining", "exhausted" ]
+      },
+      "LlmModelReleaseCenterDto" : {
+        "type" : "object",
+        "x-java-type" : "LlmModelReleaseCenterDto",
+        "properties" : {
+          "configuredProvider" : {
+            "type" : "string"
+          },
+          "configuredModel" : {
+            "type" : "string"
+          },
+          "activeRelease" : {
+            "$ref" : "#/components/schemas/LlmModelReleaseDto"
+          },
+          "canaryRelease" : {
+            "$ref" : "#/components/schemas/LlmModelReleaseDto"
+          },
+          "releases" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/LlmModelReleaseDto"
+            }
+          },
+          "modelComparison" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/LlmQualityByModelDto"
+            }
+          },
+          "monthlyBudget" : {
+            "$ref" : "#/components/schemas/LlmModelBudgetDto"
+          },
+          "recommendedAction" : {
+            "type" : "string"
+          }
+        }
+      },
+      "LlmModelReleaseDto" : {
+        "type" : "object",
+        "x-java-type" : "LlmModelReleaseDto",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "releaseKey" : {
+            "type" : "string"
+          },
+          "provider" : {
+            "type" : "string"
+          },
+          "modelName" : {
+            "type" : "string"
+          },
+          "promptVersion" : {
+            "type" : "string"
+          },
+          "contextVersion" : {
+            "type" : "string"
+          },
+          "schemaVersion" : {
+            "type" : "string"
+          },
+          "datasetId" : {
+            "type" : "string"
+          },
+          "datasetVersion" : {
+            "type" : "string"
+          },
+          "datasetFingerprint" : {
+            "type" : "string"
+          },
+          "state" : {
+            "type" : "string"
+          },
+          "trafficPercent" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "qualityGatePassed" : {
+            "type" : "boolean"
+          },
+          "precisionRate" : {
+            "type" : "number"
+          },
+          "recallRate" : {
+            "type" : "number"
+          },
+          "anchorRate" : {
+            "type" : "number"
+          },
+          "duplicateRate" : {
+            "type" : "number"
+          },
+          "parseFailureRate" : {
+            "type" : "number"
+          },
+          "p95LatencyMs" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "averageCost" : {
+            "type" : "number"
+          },
+          "totalTokens" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "blockers" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "rollbackReason" : {
+            "type" : "string"
+          },
+          "createdBy" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "updatedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "LlmModelReleaseRequest" : {
+        "type" : "object",
+        "x-java-type" : "LlmModelReleaseRequest",
+        "properties" : {
+          "releaseKey" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "provider" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 64
+          },
+          "modelName" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "promptVersion" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 96
+          },
+          "contextVersion" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 96
+          },
+          "schemaVersion" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 96
+          },
+          "datasetId" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "datasetVersion" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 64
+          },
+          "datasetFingerprint" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "(?i)[0-9a-f]{64}"
+          },
+          "trafficPercent" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 0,
+            "maximum" : 100
+          },
+          "qualityGatePassed" : {
+            "type" : "boolean"
+          },
+          "precisionRate" : {
+            "type" : "number",
+            "minimum" : 0.0,
+            "maximum" : 1.0
+          },
+          "recallRate" : {
+            "type" : "number",
+            "minimum" : 0.0,
+            "maximum" : 1.0
+          },
+          "anchorRate" : {
+            "type" : "number",
+            "minimum" : 0.0,
+            "maximum" : 1.0
+          },
+          "duplicateRate" : {
+            "type" : "number",
+            "minimum" : 0.0,
+            "maximum" : 1.0
+          },
+          "parseFailureRate" : {
+            "type" : "number",
+            "minimum" : 0.0,
+            "maximum" : 1.0
+          },
+          "p95LatencyMs" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 0
+          },
+          "averageCost" : {
+            "type" : "number",
+            "minimum" : 0.0
+          },
+          "totalTokens" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 0
+          },
+          "blockers" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            },
+            "maxItems" : 10
+          }
+        },
+        "required" : [ "releaseKey", "provider", "modelName", "promptVersion", "contextVersion", "schemaVersion", "datasetId", "datasetVersion", "datasetFingerprint", "trafficPercent", "qualityGatePassed", "precisionRate", "recallRate", "anchorRate", "duplicateRate", "parseFailureRate", "p95LatencyMs", "averageCost", "totalTokens" ]
+      },
+      "LlmModelRollbackRequest" : {
+        "type" : "object",
+        "x-java-type" : "LlmModelRollbackRequest",
+        "properties" : {
+          "reason" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 512
+          }
+        },
+        "required" : [ "reason" ]
       },
       "LlmQualityByModelDto" : {
         "type" : "object",

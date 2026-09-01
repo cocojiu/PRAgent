@@ -1,6 +1,7 @@
 export * from "./dashboard";
 export * from "./enterpriseTenant";
 export * from "./integration";
+export * from "./llmModelRelease";
 export * from "./messageQueue";
 export * from "./notification";
 export * from "./operations";

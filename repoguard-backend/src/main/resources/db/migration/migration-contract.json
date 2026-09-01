@@ -7,7 +7,7 @@
     "externalDatabaseSupported": true,
     "publishedMigrationPolicy": "IMMUTABLE",
     "newInstallationStrategy": "VALIDATED_SCHEMA_SNAPSHOT_THEN_BASELINE",
-    "candidateVersion": 79,
+    "candidateVersion": 80,
     "requiredEvidence": [
       "empty database migration to the candidate version",
       "schema structure diff against the supported production shape",
@@ -16,9 +16,9 @@
     ],
     "decisionEvidence": [
       "application-prod.yml requires an externally supplied datasource",
-      "FlywayMigrationUpgradePathIntegrationTest verifies the V76 to V77, V77 to V78 and V78 to V79 upgrade paths"
+      "FlywayMigrationUpgradePathIntegrationTest verifies the V76 to V77, V77 to V78, V78 to V79 and V79 to V80 upgrade paths"
     ],
-    "reconsiderWhen": "A V79 schema snapshot and all required rehearsal evidence are versioned together.",
+    "reconsiderWhen": "A V80 schema snapshot and all required rehearsal evidence are versioned together.",
     "rollbackStrategy": "restore a validated backup and apply a forward fix; never rewrite or delete a published migration"
   },
   "defaults": {
@@ -111,6 +111,18 @@
       "nMinusOneCompatible": true,
       "interruptedRecovery": "rerun the additive table migration after checking Flyway state; unprocessed rows remain retryable",
       "rollbackStrategy": "forward fix or restore the validated V78 predecessor backup; do not delete published migration"
+    },
+    {
+      "version": 80,
+      "file": "V80__llm_model_release_center.sql",
+      "phase": "EXPAND",
+      "estimatedRows": "one release record per model publication plus tenant quota metadata",
+      "lockType": "metadata-and-table",
+      "maxDurationSeconds": 600,
+      "maxDiskMegabytes": 1024,
+      "nMinusOneCompatible": true,
+      "interruptedRecovery": "rerun the additive migration after checking Flyway state; release metadata remains retryable",
+      "rollbackStrategy": "forward fix or restore the validated V79 predecessor backup; do not delete published migration"
     }
   ]
 }

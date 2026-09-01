@@ -28,6 +28,10 @@ import type {
   GithubIntegrationConfigRequest,
   GithubPullRequestOptions,
   HighRiskReview,
+  LlmModelRelease,
+  LlmModelReleaseCenter,
+  LlmModelReleaseRequest,
+  LlmModelRollbackRequest,
   ManagedUser,
   ManualReviewRequest,
   ManualReviewResponse,
@@ -310,12 +314,40 @@ export type GeneratedOpenApiOperationMap = {
     body: NotificationBindingStatusRequest;
     response: NotificationBinding;
   };
+  "reviewCalibrationControllerGetModelReleaseCenter": {
+    method: "GET";
+    pathParams: never;
+    query: { trendDays?: number };
+    body: never;
+    response: LlmModelReleaseCenter;
+  };
   "reviewCalibrationControllerGetReviewCalibrationQueue": {
     method: "GET";
     pathParams: never;
     query: { includeIgnored?: boolean; limit?: number; ruleId: string };
     body: never;
     response: ReviewCalibrationQueue;
+  };
+  "reviewCalibrationControllerPromoteModelRelease": {
+    method: "POST";
+    pathParams: never;
+    query: never;
+    body: LlmModelReleaseRequest;
+    response: LlmModelRelease;
+  };
+  "reviewCalibrationControllerRegisterShadowRelease": {
+    method: "POST";
+    pathParams: never;
+    query: never;
+    body: LlmModelReleaseRequest;
+    response: LlmModelRelease;
+  };
+  "reviewCalibrationControllerRollbackModelRelease": {
+    method: "POST";
+    pathParams: { releaseId: number };
+    query: never;
+    body: LlmModelRollbackRequest;
+    response: LlmModelRelease;
   };
   "reviewControllerGetGithubCommentPreview": {
     method: "GET";
@@ -980,6 +1012,14 @@ export const generatedOpenApiOperations = {
     hasRequestBody: true,
     requestBodyRequired: true
   },
+  "reviewCalibrationControllerGetModelReleaseCenter": {
+    method: "GET",
+    path: "/api/v1/config/review-calibration/release-center",
+    pathParamNames: [],
+    queryParamNames: ["trendDays"],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
   "reviewCalibrationControllerGetReviewCalibrationQueue": {
     method: "GET",
     path: "/api/v1/config/review-calibration/queue",
@@ -987,6 +1027,30 @@ export const generatedOpenApiOperations = {
     queryParamNames: ["includeIgnored", "limit", "ruleId"],
     hasRequestBody: false,
     requestBodyRequired: false
+  },
+  "reviewCalibrationControllerPromoteModelRelease": {
+    method: "POST",
+    path: "/api/v1/config/review-calibration/release-center/promote",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "reviewCalibrationControllerRegisterShadowRelease": {
+    method: "POST",
+    path: "/api/v1/config/review-calibration/release-center/shadow",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "reviewCalibrationControllerRollbackModelRelease": {
+    method: "POST",
+    path: "/api/v1/config/review-calibration/release-center/{releaseId}/rollback",
+    pathParamNames: ["releaseId"],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
   },
   "reviewControllerGetGithubCommentPreview": {
     method: "GET",

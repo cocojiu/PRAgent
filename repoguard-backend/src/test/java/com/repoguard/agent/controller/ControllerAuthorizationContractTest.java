@@ -33,6 +33,7 @@ class ControllerAuthorizationContractTest {
         "SystemConfigController#listSecretReEncryptionJobs",
         "SystemConfigController#listSecretReEncryptionJobItems",
         "ReviewCalibrationController#getReviewCalibrationQueue",
+        "ReviewCalibrationController#getModelReleaseCenter",
         "NotificationIntegrationController#listBindings",
         "NotificationIntegrationController#listEvents",
         "NotificationIntegrationController#listDeliveries",

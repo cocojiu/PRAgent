@@ -803,7 +803,12 @@ describe("apiRequest", () => {
     await apiRequest("fetchEnterpriseTenantQuota", { tenantKey: "acme-prod" });
     await apiRequest("updateEnterpriseTenantQuota", {
       tenantKey: "acme-prod",
-      payload: { expectedVersion: 1, maxDailyReviews: 2000 }
+      payload: {
+        expectedVersion: 1,
+        maxDailyReviews: 2000,
+        monthlyLlmTokenBudget: 0,
+        monthlyLlmCostBudget: 0
+      }
     });
 
     const calls = fetchMock.mock.calls as [string, RequestInit][];

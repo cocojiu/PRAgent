@@ -24,6 +24,7 @@ fetchGithubCommentPreview -> reviewControllerGetGithubCommentPreview(input: { pa
 fetchGithubCommentPublicationHistory -> reviewControllerGetGithubCommentPublicationHistory(input: { path: { id: number }; query?: { page?: number; pageSize?: number; status?: string } }): Promise<GithubCommentPublicationHistory>; // GET /api/v1/reviews/{id}/github-comments/publications
 fetchGithubIntegrationConfig -> systemConfigControllerGetGithubIntegration(): Promise<GithubIntegrationConfig>; // GET /api/v1/config/integrations/github
 fetchGithubPullRequestOptions -> reviewControllerListConfiguredGithubPullRequests(): Promise<GithubPullRequestOptions>; // GET /api/v1/reviews/github/pull-requests
+fetchLlmModelReleaseCenter -> reviewCalibrationControllerGetModelReleaseCenter(input?: { query?: { trendDays?: number } }): Promise<LlmModelReleaseCenter>; // GET /api/v1/config/review-calibration/release-center
 fetchMessageQueueHealth -> messageQueueHealthControllerGetHealth(): Promise<MessageQueueHealth>; // GET /api/v1/message-queue/health
 fetchMysqlIntegrationConfig -> systemConfigControllerGetMysqlIntegration(): Promise<ServiceIntegrationConfig>; // GET /api/v1/config/integrations/mysql
 fetchNotificationBindings -> notificationIntegrationControllerListBindings(input?: { query?: { organization?: string; page?: number; pageSize?: number; provider?: string; repository?: string } }): Promise<PageResponse<NotificationBinding>>; // GET /api/v1/config/notification-bindings
@@ -59,15 +60,18 @@ getCurrentUser -> authControllerMe(): Promise<CurrentUser>; // GET /api/v1/auth/
 login -> authControllerLogin(input: { body: AuthLoginRequest }): Promise<AuthResponse>; // POST /api/v1/auth/login
 logout -> authControllerLogout(input?: { body?: AuthLogoutRequest }): Promise<void>; // POST /api/v1/auth/logout
 pauseSecretReEncryptionJob -> systemConfigControllerPauseSecretReEncryptionJob(input: { path: { jobId: number } }): Promise<SecretReEncryptionJob>; // POST /api/v1/config/secrets/re-encryption/jobs/{jobId}/pause
+promoteLlmModelRelease -> reviewCalibrationControllerPromoteModelRelease(input: { body: LlmModelReleaseRequest }): Promise<LlmModelRelease>; // POST /api/v1/config/review-calibration/release-center/promote
 publishGithubComments -> reviewControllerPublishGithubComments(input: { path: { id: number } }): Promise<GithubCommentPublish>; // POST /api/v1/reviews/{id}/github-comments
 reEncryptSecrets -> systemConfigControllerReEncryptSecrets(input: { body: SecretReEncryptionRequest }): Promise<SecretReEncryptionJob>; // POST /api/v1/config/secrets/re-encryption
 register -> authControllerRegister(input: { body: AuthRegisterRequest }): Promise<AuthResponse>; // POST /api/v1/auth/register
+registerLlmModelShadowRelease -> reviewCalibrationControllerRegisterShadowRelease(input: { body: LlmModelReleaseRequest }): Promise<LlmModelRelease>; // POST /api/v1/config/review-calibration/release-center/shadow
 reportFrontendPerformance -> frontendPerformanceControllerRecordPerformance(input: { body: FrontendPerformanceReport }): Promise<void>; // POST /api/v1/observability/frontend/performance
 requeueMessageQueueTask -> messageQueueHealthControllerRequeueTask(input: { path: { taskId: number } }): Promise<MessageQueueRequeueResponse>; // POST /api/v1/message-queue/tasks/{taskId}/requeue
 resetRefreshToken -> authControllerResetRefreshToken(input: { body: AuthRefreshTokenResetRequest }): Promise<AuthResponse>; // POST /api/v1/auth/refresh-token/reset
 resumeSecretReEncryptionJob -> systemConfigControllerResumeSecretReEncryptionJob(input: { path: { jobId: number } }): Promise<SecretReEncryptionJob>; // POST /api/v1/config/secrets/re-encryption/jobs/{jobId}/resume
 retryNotificationEvent -> notificationIntegrationControllerRetryEvent(input: { path: { id: number } }): Promise<NotificationEvent>; // POST /api/v1/notification-events/{id}/retry
 retryReview -> reviewControllerRetryReview(input: { path: { id: number } }): Promise<ReviewRetryResponse>; // POST /api/v1/reviews/{id}/retry
+rollbackLlmModelRelease -> reviewCalibrationControllerRollbackModelRelease(input: { path: { releaseId: number }; body: LlmModelRollbackRequest }): Promise<LlmModelRelease>; // POST /api/v1/config/review-calibration/release-center/{releaseId}/rollback
 rollbackReviewRule -> systemConfigControllerRollbackReviewRule(input: { path: { id: string; policyVersion: number }; body: ReviewRuleRollbackRequest }): Promise<ReviewRuleConfig>; // POST /api/v1/config/review-rules/{id}/versions/{policyVersion}/rollback
 rollbackReviewStrategy -> systemConfigControllerRollbackReviewStrategy(input: { path: { snapshotId: number }; body: ReviewStrategyRollbackRequest }): Promise<ReviewStrategyPolicy>; // POST /api/v1/config/review-strategy/versions/{snapshotId}/rollback
 submitHumanReview -> reviewControllerSubmitHumanReview(input: { path: { id: number }; body: HumanReviewRequest }): Promise<HumanReviewResponse>; // POST /api/v1/reviews/{id}/human-review

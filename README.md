@@ -206,6 +206,12 @@ GitHub suggestion 一键修复：
 2. 评论中会显示原生 `suggestion` 代码块和“请先确认”提示，作者可在 GitHub 页面确认后应用；系统不会自动提交作者分支，也不会为不完整证据创建修复 PR。
 3. 删除文件、PR 总评、已发布/非 actionable finding 和包含嵌套代码围栏或控制字符的内容不会生成可应用建议。
 
+LLM 评测与模型发布中心：
+
+1. 企业管理员可在 `/api/v1/config/review-calibration/release-center` 查看按租户隔离的影子版本、灰度版本、当前版本、历史质量对比和当月 token/费用预算；版本只接收数据集 ID、版本和 SHA-256 指纹等聚合证据，不保存原始 prompt 或模型响应。
+2. 通过 `/shadow` 登记候选版本，只有 precision ≥ 90%、recall ≥ 80%、锚定率 ≥ 95%、重复率/解析失败率 ≤ 5%、p95 ≤ 15 秒且数据集质量门禁通过后，才能按 1–99% 灰度或 100% 全量发布；同一租户同一 `releaseKey` 会幂等更新。
+3. 灰度路由使用审查任务 ID 的确定性桶分配，重试不会改变模型；运行时发现质量指标不安全或月度预算耗尽会自动回滚/停用 LLM 并回退规则审查。租户配额中的 `monthlyLlmTokenBudget` 与 `monthlyLlmCostBudget` 为 0 表示不设上限。
+
 运行角色边界：
 
 - `combined` 同时提供 HTTP API、RabbitMQ 消费者和受数据库保护的定时任务。
