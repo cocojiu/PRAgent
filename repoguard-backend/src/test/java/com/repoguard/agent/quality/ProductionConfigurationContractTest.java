@@ -477,7 +477,9 @@ class ProductionConfigurationContractTest {
             "adb052dff215ba677c2e3496269facd5dfbd3127:.github/workflows/release-images.yml:generic-api-key:77",
             "e884d8c4a5c760a415837a7ddb2927f0f33ebe59:repoguard-backend/src/test/java/com/repoguard/agent/external/ExternalHttpFailureDetailTest.java:generic-api-key:31",
             "8284ce355d3f6fe4c5727e240d3c0430e6838e90:repoguard-backend/src/test/java/com/repoguard/agent/review/SensitiveLiteralRuleTest.java:generic-api-key:30",
-            "1907d4525bb09428d7b4fd6b7d8c90d9582891e0:repoguard-backend/src/test/java/com/repoguard/agent/common/SensitiveTextSanitizerTest.java:private-key:72"
+            "1907d4525bb09428d7b4fd6b7d8c90d9582891e0:repoguard-backend/src/test/java/com/repoguard/agent/common/SensitiveTextSanitizerTest.java:private-key:72",
+            "c32da764242d4ff2ed8ebaae26bf2056a1696fff:repoguard-backend/src/test/java/com/repoguard/agent/review/config/DeclarativeRuleDryRunServiceTest.java:generic-api-key:110",
+            "a313b628313b2f31fde7e160a5599477e423f432:repoguard-backend/src/test/java/com/repoguard/agent/review/config/DeclarativeRuleDryRunServiceTest.java:generic-api-key:110"
         );
     }
 
