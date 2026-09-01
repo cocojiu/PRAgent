@@ -1,6 +1,7 @@
 package com.repoguard.agent.scanner;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -68,5 +69,13 @@ class SarifFindingServiceTest {
         assertThat(document.runs()).hasSize(1);
         assertThat(document.runs().getFirst()).containsKey("results");
         verify(findingMapper, never()).insert(any(ReviewFinding.class));
+    }
+
+    @Test
+    void rejectsMalformedSarifJson() {
+        when(taskMapper.selectById(9L)).thenReturn(new ReviewTask());
+
+        assertThatThrownBy(() -> service.importFindings(9L, new SarifImportRequest("{")))
+            .hasMessageContaining("Invalid SARIF JSON");
     }
 }
