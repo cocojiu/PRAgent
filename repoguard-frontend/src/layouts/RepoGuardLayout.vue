@@ -28,7 +28,7 @@
         <PanelLeftClose :size="18" />
         <span v-if="!collapsed">收起菜单</span>
       </button>
-      <div v-if="!collapsed" class="version">v1.0.0</div>
+      <div v-if="!collapsed" class="version">v{{ APP_VERSION }}</div>
     </aside>
     <main class="rg-main">
       <header class="rg-topbar">
@@ -43,7 +43,7 @@
         </button>
         <div class="top-title">{{ currentTitle }}</div>
         <div class="top-actions">
-          <div class="top-action-menu-shell" @click.stop>
+          <div v-if="enterpriseEditionEnabled" class="top-action-menu-shell" @click.stop>
             <button
               class="top-action-button bell-wrap"
               type="button"
@@ -97,10 +97,6 @@
               </RouterLink>
             </div>
           </div>
-
-          <button class="top-action-button" type="button" aria-label="帮助文档" @click="openHelp">
-            <CircleHelp :size="20" />
-          </button>
 
           <div class="top-action-menu-shell" @click.stop>
             <button
@@ -164,7 +160,6 @@ import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import {
   Bell,
   ChevronDown,
-  CircleHelp,
   ClipboardList,
   Cog,
   Home,
@@ -183,6 +178,8 @@ import { createPageAwarePoller } from "@/composables/pageAwarePoller";
 import { pruneReadNotificationIds } from "@/layouts/notificationReadState";
 import { canAccessRouteMeta } from "@/router/accessPolicy";
 import { canManage, currentUser, loadCurrentUser, resetCurrentUser } from "@/stores/authState";
+import { APP_VERSION } from "@/config/appVersion";
+import { enterpriseEditionEnabled } from "@/config/edition";
 import type { NotificationCenter, NotificationItem } from "@/types";
 
 const ChangePasswordDialog = defineAsyncComponent(
@@ -215,7 +212,8 @@ const navItems = [
 
 const canOpenPath = (path: string) => canAccessRouteMeta(router.resolve(path).meta, {
   authenticated: hasAuthToken(),
-  managementAllowed: canManage.value
+  managementAllowed: canManage.value,
+  enterpriseEnabled: enterpriseEditionEnabled
 });
 const visibleNavItems = computed(() => navItems.filter((item) => canOpenPath(item.path)));
 const currentTitle = computed(() => String(route.meta.title || "RepoGuard Agent"));
@@ -261,7 +259,7 @@ const refreshCurrentUser = async () => {
 };
 
 const loadNotifications = async (options: { force?: boolean } = {}) => {
-  if (loadingNotifications.value || (notificationCenter.value && !options.force)) {
+  if (!enterpriseEditionEnabled || loadingNotifications.value || (notificationCenter.value && !options.force)) {
     return;
   }
   loadingNotifications.value = true;
@@ -288,7 +286,7 @@ const pruneReadNotifications = (items: NotificationItem[]) => {
 
 const notificationPoller = createPageAwarePoller({
   intervalMs: () => NOTIFICATION_POLL_INTERVAL_MS,
-  isEnabled: () => true,
+  isEnabled: () => enterpriseEditionEnabled,
   poll: () => loadNotifications({ force: true })
 });
 
@@ -311,17 +309,15 @@ const openNotification = (item: NotificationItem) => {
   ElMessage.info(item.title);
 };
 
-const openHelp = () => {
-  closeTopActionMenus();
-  ElMessage.info("帮助文档功能将在接入后端后开放，当前可查看 README 和需求文档。");
-};
-
 const closeTopActionMenus = () => {
   notificationPanelOpen.value = false;
   userMenuOpen.value = false;
 };
 
 const toggleNotificationPanel = () => {
+  if (!enterpriseEditionEnabled) {
+    return;
+  }
   const nextOpen = !notificationPanelOpen.value;
   userMenuOpen.value = false;
   notificationPanelOpen.value = nextOpen;
@@ -385,13 +381,15 @@ const handlePasswordChanged = () => {
 onMounted(() => {
   document.addEventListener("click", closeTopActionMenus);
   document.addEventListener("keydown", handleDocumentKeydown);
-  loadReadNotificationIds();
   void refreshCurrentUser();
-  notificationWarmupTimer = setTimeout(() => {
-    notificationWarmupTimer = undefined;
-    void loadNotifications();
-  }, 12000);
-  notificationPoller.start();
+  if (enterpriseEditionEnabled) {
+    loadReadNotificationIds();
+    notificationWarmupTimer = setTimeout(() => {
+      notificationWarmupTimer = undefined;
+      void loadNotifications();
+    }, 12000);
+    notificationPoller.start();
+  }
 });
 
 onBeforeUnmount(() => {

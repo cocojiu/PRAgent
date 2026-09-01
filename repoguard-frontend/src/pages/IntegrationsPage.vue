@@ -20,7 +20,7 @@
     </el-alert>
 
     <el-alert
-      title="GitHub 与 LLM 配置会参与审查链路；MySQL 与 RabbitMQ 配置用于页面检测和运维核对，保存后不会动态切换当前运行中的数据源或消息队列连接。密钥字段保存后只会显示脱敏值。"
+      title="个人模式只需配置 GitHub Token 和 LLM；MySQL 与 RabbitMQ 仅用于连接诊断，保存后不会动态切换当前运行中的数据源或消息队列连接。密钥字段保存后只会显示脱敏值。"
       type="primary"
       :closable="false"
       show-icon

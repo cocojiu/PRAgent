@@ -122,7 +122,7 @@ public final class OpenApiContractDocument {
     private static Map<String, Object> info() {
         Map<String, Object> info = new LinkedHashMap<>();
         info.put("title", "RepoGuard Agent API");
-        info.put("version", "0.0.1-SNAPSHOT");
+        info.put("version", "0.1.0");
         return info;
     }
 

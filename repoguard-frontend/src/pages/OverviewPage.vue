@@ -2,6 +2,8 @@
   <div v-loading="loading" class="overview-page">
     <el-alert v-if="errorMessage" class="page-alert" type="error" :title="errorMessage" show-icon :closable="false" />
 
+    <PersonalOnboardingCard v-if="canManage" />
+
     <MetricGrid
       :metrics="overviewMetricItems"
       :resolve-icon="getMetricIcon"
@@ -55,6 +57,8 @@ import {
 } from "@/features/dashboard/overviewChartOptions";
 import { recordRoutePerformanceMilestone } from "@/observability/frontendPerformanceDiagnosticsBridge";
 import { routeNames } from "@/router/names";
+import { canManage } from "@/stores/authState";
+import { PersonalOnboardingCard } from "@/features/onboarding";
 
 const LlmQualitySection = defineAsyncComponent(
   () => import("@/features/dashboard/components/LlmQualitySection.vue")

@@ -3,7 +3,8 @@ import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import { ElMessageBox } from "element-plus/es/components/message-box/index.mjs";
 import { submitHumanReview } from "@/api/reviews";
 import type { ComputedRef, Ref } from "vue";
-import type { HumanReviewRequest, ReviewStatus, ReviewTaskDetail } from "@/types";
+import type { HumanReviewRequest } from "@/api/generated/reviewDetailTypes";
+import type { ReviewStatus, ReviewTaskDetail } from "@/types";
 import { getErrorMessage } from "@/utils/errors";
 
 type UseReviewDetailHumanReviewOptions = {
@@ -52,8 +53,8 @@ export const useReviewDetailHumanReview = ({
         selectedTask.value = {
           ...selectedTask.value,
           status: response.status as ReviewStatus,
-          humanReviewRequired: response.humanReviewRequired,
-          humanReviewStatus: response.humanReviewStatus,
+          humanReviewRequired: response.humanReviewRequired ?? selectedTask.value.humanReviewRequired,
+          humanReviewStatus: response.humanReviewStatus ?? selectedTask.value.humanReviewStatus,
           humanReviewNote: response.humanReviewNote,
           humanReviewBy: response.humanReviewBy,
           humanReviewedAt: response.humanReviewedAt

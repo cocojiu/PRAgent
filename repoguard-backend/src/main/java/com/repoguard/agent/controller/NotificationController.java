@@ -2,6 +2,7 @@ package com.repoguard.agent.controller;
 
 import com.repoguard.agent.common.ApiResponse;
 import com.repoguard.agent.config.ApiRuntimeEnabled;
+import com.repoguard.agent.config.EnterpriseEditionEnabled;
 import com.repoguard.agent.dto.NotificationCenterDto;
 import com.repoguard.agent.service.NotificationService;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -11,6 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/notifications")
 @ApiRuntimeEnabled
+@EnterpriseEditionEnabled
 public class NotificationController {
 
     private final NotificationService notificationService;

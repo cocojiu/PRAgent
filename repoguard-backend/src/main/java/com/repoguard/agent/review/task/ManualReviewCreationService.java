@@ -20,6 +20,7 @@ import com.repoguard.agent.tenancy.TenantContext;
 import com.repoguard.agent.tenancy.TenantQuotaService;
 import java.time.LocalDateTime;
 import java.util.Objects;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Component;
@@ -77,7 +78,7 @@ public class ManualReviewCreationService {
         ReviewRepositoryDimensionService repositoryDimensionService,
         ReviewPullRequestGenerationCoordinator generationCoordinator,
         ReviewTaskCreationAssembler creationAssembler,
-        TenantQuotaService tenantQuotaService
+        ObjectProvider<TenantQuotaService> tenantQuotaServiceProvider
     ) {
         this(
             reviewTaskMapper,
@@ -90,7 +91,8 @@ public class ManualReviewCreationService {
             repositoryDimensionService,
             Objects.requireNonNull(generationCoordinator, "generationCoordinator"),
             creationAssembler,
-            Objects.requireNonNull(tenantQuotaService, "tenantQuotaService")
+            Objects.requireNonNull(tenantQuotaServiceProvider, "tenantQuotaServiceProvider")
+                .getIfAvailable()
         );
     }
     public ManualReviewCreationService(

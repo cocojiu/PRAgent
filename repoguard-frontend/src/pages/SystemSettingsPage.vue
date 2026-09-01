@@ -22,7 +22,7 @@
     />
 
     <section class="settings-grid">
-      <article class="dashboard-card settings-card">
+      <article v-if="enterpriseEditionEnabled" class="dashboard-card settings-card">
         <h2>基础设置</h2>
         <el-form label-position="top">
           <el-form-item label="系统名称">
@@ -162,6 +162,7 @@ import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import { canManage } from "@/stores/authState";
 import { applyUiPreferences } from "@/stores/uiPreferences";
+import { enterpriseEditionEnabled } from "@/config/edition";
 import { fetchSystemSettings, updateSystemSettings } from "@/api/config";
 import { useFormSnapshot } from "@/composables/useFormSnapshot";
 import DataRetentionCleanupAuditsPanel from "@/features/system-settings/components/DataRetentionCleanupAuditsPanel.vue";

@@ -7,6 +7,19 @@ import type {
 import { generatedEndpoint } from "@/api/generatedEndpoint";
 import { observeFrontendApiRequest } from "@/observability/frontendPerformanceBuffer";
 import type { FrontendPerformanceReport } from "@/observability/frontendPerformanceBuffer";
+import type {
+  ChangedFile,
+  FindingFeedbackRequest,
+  FindingFeedbackResponse,
+  HumanReviewRequest,
+  HumanReviewResponse,
+  MissingTest,
+  ReviewFinding,
+  ReviewRetryResponse,
+  ReviewTaskStatus,
+  ReviewTaskSummary,
+  TimelineItem
+} from "@/api/generated/reviewDetailTypes";
 import type { AuthResponse, CurrentUser, LoginRequest, PasswordChangeRequest, RefreshTokenResetRequest, RegisterRequest } from "@/api/auth";
 import type { ManagedUser, UserCreateRequest, UserOperationAudit, UserRole, UserStatus } from "@/api/users";
 import {
@@ -31,10 +44,7 @@ import type {
   DataRetentionCleanupAudit,
   DataRetentionCleanupRequest,
   DataRetentionCleanupResponse,
-  FindingFeedbackRequest,
-  FindingFeedbackResponse,
   CacheStats,
-  ChangedFile,
   GithubCommentPreview,
   GithubCommentPublicationHistory,
   GithubCommentPublish,
@@ -42,8 +52,6 @@ import type {
   GithubIntegrationConfigRequest,
   GithubPullRequestOptions,
   HighRiskReview,
-  HumanReviewRequest,
-  HumanReviewResponse,
   ManualReviewRequest,
   ManualReviewResponse,
   MessageQueueHealth,
@@ -55,15 +63,12 @@ import type {
   NotificationDelivery,
   NotificationEvent,
   PageResponse,
-  MissingTest,
   ReviewPolicyConfig,
   ReviewPolicyConfigRequest,
   ReviewQuery,
-  ReviewFinding,
   ReviewExecutionAttempt,
   ReviewExecutionAttemptResult,
   ReviewCalibrationQueue,
-  ReviewRetryResponse,
   ReviewRuleConfig,
   ReviewRuleConfigRequest,
   ReviewRulePolicyVersion,
@@ -78,14 +83,11 @@ import type {
   ReviewTask,
   ReviewTaskListSummary,
   ReviewTaskListSummaryQuery,
-  ReviewTaskSummary,
-  ReviewTaskStatus,
   ServiceIntegrationConfig,
   ServiceIntegrationConfigRequest,
   SystemHealthItem,
   SystemSettings,
   SystemSettingsRequest,
-  TimelineItem
 } from "@/types";
 import { RequestError } from "@/utils/errors";
 

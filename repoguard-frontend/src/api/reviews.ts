@@ -1,7 +1,9 @@
 import { apiRequest, type ApiRequestOptions } from "@/api/contracts";
 import type {
   FindingFeedbackRequest,
-  HumanReviewRequest,
+  HumanReviewRequest
+} from "@/api/generated/reviewDetailTypes";
+import type {
   ManualReviewRequest,
   ReviewQuery,
   ReviewTaskListSummaryQuery

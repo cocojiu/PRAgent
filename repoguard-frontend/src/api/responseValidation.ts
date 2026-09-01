@@ -1,9 +1,9 @@
 import type { AuthResponse, AuthUser, CurrentUser } from "@/api/auth";
+import type { ReviewTaskSummary } from "@/api/generated/reviewDetailTypes";
 import type {
   GithubIntegrationConfig,
   PageResponse,
   ReviewPolicyConfig,
-  ReviewTaskSummary,
   SecretReEncryptionItem,
   SecretReEncryptionJob,
   ServiceIntegrationConfig

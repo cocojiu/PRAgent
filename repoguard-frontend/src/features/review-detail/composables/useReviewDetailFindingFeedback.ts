@@ -3,7 +3,8 @@ import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import { ElMessageBox } from "element-plus/es/components/message-box/index.mjs";
 import { updateFindingFeedback } from "@/api/reviews";
 import type { ComputedRef, Ref } from "vue";
-import type { FindingFeedbackResponse, FindingFeedbackStatus, ReviewTaskDetail } from "@/types";
+import type { FindingFeedbackResponse } from "@/api/generated/reviewDetailTypes";
+import type { FindingFeedbackStatus, ReviewTaskDetail } from "@/types";
 import { getErrorMessage } from "@/utils/errors";
 
 type UseReviewDetailFindingFeedbackOptions = {
@@ -35,7 +36,7 @@ export const useReviewDetailFindingFeedback = ({
         finding.id === response.findingId
           ? {
               ...finding,
-              feedbackStatus: response.feedbackStatus,
+              feedbackStatus: response.feedbackStatus ?? "unreviewed",
               feedbackNote: response.feedbackNote,
               feedbackBy: response.feedbackBy,
               feedbackAt: response.feedbackAt

@@ -265,3 +265,105 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 范围决策：不执行 Kubernetes Secret/Pod Smoke、生产规模迁移锁与备份恢复、真实 SSH 主机指纹探针、NetworkPolicy 正反探针、各 LLM provider 的人工样本 live eval，以及生产 OTel/性能观察窗口；这些项目保留为延期/风险接受，不伪造“已完成”证据。
 保留约束：`PRAgent-test` 持续自动构建和测试；生产部署仅允许 `workflow_dispatch` 且显式 `deploy=true`，仍受 `main`/`master`/`v*` 分支范围与 production 环境保护规则约束；未配置占位密钥，也未将私钥写入仓库。
 验收依据：提交 `edc78c6e` 已推送 `origin/PRAgent-test`；Pull Request Quality、Production Observability Image Security、Repository Governance、Auto Create Pull Request 和 Release Images 均成功，其中生产部署作业按策略跳过。
+
+2026-09-01 | 优化-37 | P0-01 个人项目产品真实性与版本一致性
+状态：已完成代码、本地门禁、中文提交、test 分支推送和远程 Actions 验收。
+变更：登录页删除未实现的忘记密码入口；布局删除未接入的帮助入口；登录宣传从 GitHub/GitLab/Bitbucket 多平台改为已实际打通的 GitHub PR 集成；MySQL/RabbitMQ 集成明确为可选诊断配置，不会切换运行时连接；前端版本改为可由 `VITE_APP_VERSION` 覆盖并默认显示发布版本 `0.1.0`；后端 Maven、Dockerfile 和 reviewed OpenAPI 版本统一为 `0.1.0`。
+本地验证：前端 `npm run quality` 通过（38 个测试文件、152 项测试）；后端 `OpenApiPathsContractTest` 与 `OpenApiGeneratedClientContractTest` 共 16 项通过；`git diff --check` 通过。
+提交/远程验收：实现提交 `0d3b622f` 已推送 `origin/PRAgent-test`，自动 PR #159；Pull Request Quality #33418533148（7 个作业）、PR Repository Governance #33418533178、push Repository Governance #33418513944、Release Images #33418513941 和 Auto Create Pull Request #33418513964 全部成功，生产部署按手动 opt-in 策略跳过。不修改用户已有的 OpenAPI frontend-signature snapshot 工作区改动和 `.tmp/`。
+下一步：进入 P0-02，先建立 50～100 个真实脱敏 PR 的审查质量基线；继续保持每项独立验证、中文提交和 Actions 证据。
+
+2026-09-01 | 优化-38 | P0-02 真实 PR 基线评测契约与运营指标
+状态：代码与本地评测契约完成；真实授权数据集尚未导入，不以现有合成样例宣称真实质量基线完成。
+变更：扩展 LLM 评测版本元数据，固定 temperature、规则版本和代码提交号；新增真实 PR 数据集清单，要求 2～3 个授权仓库、50～100 个样本、固定回归集与滚动观察集、脱敏和人工复核，并记录 SHA-256 样本指纹；评测显式拒绝合成/未授权/未脱敏/未人工复核或样本规模不符的数据。新增有用评论率、误报评论率、GitHub 发布成功率、修复率、忽略率、p50/p95 时延、平均 token/PR、平均成本/PR，以及规则/LLM/二次校验贡献率。
+本地验证：LlmQualityEvaluatorTest、ReviewQualityEvaluationTest 共 28 项通过；后端 `mvn -DskipTests package` 成功产出 `repoguard-backend-0.1.0.jar`；既有 22 个离线样例继续通过。
+数据边界：真实源码、原始 provider 请求和 PR 标识不写入仓库；需要维护者从本人可授权的 2～3 个仓库收集并人工复核 50～100 个脱敏样本后，使用新的 dataset overload 生成可比较报告。
+提交/远程验收：实现提交 `483045ee` 已推送 `origin/PRAgent-test`；Pull Request Quality #33420644420、PR Repository Governance #33420644471、push Repository Governance #33420640318、Release Images #33420640157 和 Auto Create Pull Request #33420640130 均成功，生产部署按手动 opt-in 策略跳过。
+下一步：P0-02 的真实数据收集仍是外部前置条件；数据到位后先跑固定回归集和滚动观察集，再进入 P0-03 十分钟首次审查闭环。
+
+2026-09-01 | 优化-39 | P0-02 评测清单指纹一致性校验
+状态：已完成代码、回归测试、中文提交、test 分支推送和远程 Actions 验收；真实 PR 数据集仍未导入，不改变 P0-02 的外部数据前置条件。
+变更：评测器现在将数据清单中的 SHA-256 样本指纹与实际观测 caseId 集合重新计算的指纹进行大小写不敏感比对；清单指纹漂移时加入 DATASET_FINGERPRINT_MISMATCH 阻断并禁止质量门禁通过。保留旧的 validationBlockers(observedSamples) 兼容入口，避免离线调用方误报漂移；新增真实数据清单匹配与漂移回归。
+本地验证：LlmQualityEvaluatorTest 6 项、ReviewQualityEvaluationTest 23 项共 29 项通过；git diff --check 通过。
+提交/远程验收：实现提交 49cf8576（修复：校验真实 PR 评测数据集指纹一致性）已推送 origin/PRAgent-test；Pull Request Quality #33422128668、PR Repository Governance #33422128713、push Repository Governance #33422124269、Release Images #33422124226 和 Auto Create Pull Request #33422124224 均成功，生产部署按手动 opt-in 策略跳过。
+数据边界：本批仅修复评测契约，不写入真实源码、原始 provider 请求、PR 标识或密钥；仍需维护者提供 2～3 个授权仓库的 50～100 个脱敏、人工复核样本，才能生成真实质量基线。
+下一步：等待真实数据清单和观测结果；数据到位后先验证指纹、固定回归集与滚动观察集，再按顺序进入 P0-03 十分钟首次审查闭环。
+
+2026-09-01 | 优化-40 | P0-02 固定回归集与滚动观察集分组契约
+状态：已完成代码、回归测试、中文提交、test 分支推送和远程 Actions 验收；真实授权数据仍未导入。
+变更：LlmEvaluationObservation 新增 FIXED_REGRESSION、ROLLING_OBSERVATION 和 UNSPECIFIED 分组；真实数据评测现在核对观测分组数量与数据清单声明，缺失分组或 fixed/rolling 数量漂移分别加入阻断项；保留旧构造器和旧校验入口兼容离线样例，避免已有调用方被无意破坏。新增真实分组匹配、分组缺失和指纹漂移场景的回归覆盖。
+本地验证：LlmQualityEvaluatorTest 6 项、ReviewQualityEvaluationTest 23 项共 29 项通过；git diff --check 通过。
+提交/远程验收：实现提交 4d8634a3（修复：校验真实 PR 评测固定与滚动分组）已推送 origin/PRAgent-test；Pull Request Quality #33423574260、PR Repository Governance #33423574291、push Repository Governance #33423570228、Release Images #33423570424 和 Auto Create Pull Request #33423570170 均成功，生产部署按手动 opt-in 策略跳过。
+数据边界：本批只完善真实评测的分组契约，不写入真实源码、原始 provider 请求、PR 标识或密钥；仍需维护者提供 2～3 个授权仓库的 50～100 个脱敏、人工复核样本，才能生成真实质量基线。
+下一步：等待真实数据清单和观测结果；数据到位后先核对样本指纹与固定/滚动分组，再按顺序进入 P0-03 十分钟首次审查闭环。
+
+2026-09-01 | 优化-41 | P0-02 授权仓库来源分布与脱敏键契约
+状态：已完成代码、回归测试、中文提交、test 分支推送和远程 Actions 验收；真实授权数据仍未导入。
+变更：LlmEvaluationObservation 新增 sourceRepositoryKey，仅接受不含斜杠、URL 或路径的脱敏 token；评测器统计实际来源仓库数量，并与数据清单声明的 2～3 个仓库数量核对。来源键缺失、来源数量漂移分别加入 DATASET_REPOSITORY_LABEL_MISSING 和 DATASET_REPOSITORY_COUNT_MISMATCH 阻断；保留旧构造器兼容离线样例。
+本地验证：LlmQualityEvaluatorTest 8 项、ReviewQualityEvaluationTest 23 项共 31 项通过；git diff --check 通过。
+提交/远程验收：实现提交 0dc60ca6（修复：校验真实 PR 数据来源分布）已推送 origin/PRAgent-test；Pull Request Quality #33425225583、PR Repository Governance #33425225580、push Repository Governance #33425220879、Release Images #33425220940 和 Auto Create Pull Request #33425220859 均成功，生产部署按手动 opt-in 策略跳过。
+数据边界：只读盘点确认当前仓库虽然有历史 PR，但抽查 PR 没有可用的 review/comment 质量证据；不能用 PR 标题、文件列表或 Actions 状态冒充人工标注的 LLM 观测。未写入真实源码、原始 provider 请求、PR 标识或密钥。
+下一步：仍需维护者提供 2～3 个授权仓库的 50～100 个脱敏、人工复核样本；数据到位后核对来源分布、指纹和固定/滚动分组，再进入 P0-03 十分钟首次审查闭环。
+
+2026-09-01 | 优化-42 | P0-02 真实 PR 样本上下文标签契约
+状态：已完成代码、回归测试、中文提交、test 分支推送和远程 Actions 验收；真实授权数据仍未导入。
+变更：新增 `LlmEvaluationSampleContext`，记录脱敏的语言、变更文件数、变更行数、文件类型组和期望风险位置键；真实数据评测缺少这些聚合标签时加入 `DATASET_SAMPLE_CONTEXT_MISSING` 阻断，避免只按总样本数计算基线；旧构造器继续兼容离线样例。
+本地验证：`LlmQualityEvaluatorTest` 8 项、`ReviewQualityEvaluationTest` 23 项共 31 项通过；`git diff --check` 通过。
+提交/远程验收：实现提交 `dea9c593`（修复：校验真实 PR 样本上下文标签）已推送 `origin/PRAgent-test`；Pull Request Quality #33426734664、PR Repository Governance #33426734520、push Repository Governance #33426730361、Release Images #33426730227 和 Auto Create Pull Request #33426730261 均成功，生产部署按手动 opt-in 策略跳过。
+数据边界：本批仅完善样本聚合标签契约，不写入真实源码、原始 provider 请求、PR 标识或密钥；当前仍无可用人工标注 LLM review 证据，不能宣称真实质量基线完成。
+下一步：仍需维护者提供 2～3 个授权仓库的 50～100 个脱敏、人工复核样本；数据到位后核对上下文标签、来源分布、指纹与固定/滚动分组，再进入 P0-03 十分钟首次审查闭环。
+
+2026-09-01 | 优化-43 | P0-03 个人模式十分钟首次审查引导
+状态：已完成代码、回归测试、中文提交、test 分支推送和远程 Actions 验收；个人模式首次审查仍需用户提供有效 GitHub/LLM 凭据与至少一个 open PR。
+变更：总览新增个人模式首次审查引导，按 GitHub PAT/默认仓库、LLM provider/模型、权限与模型连通性、仓库 open PR 检查和预览审查五步推进；复用现有配置、连接测试和 PR 选择 API，不读取或展示密钥明文。开始预览会带 `onboarding=preview` 进入审查任务并自动打开 PR 选择器；评论发布仍需在任务详情页明确确认。MySQL/RabbitMQ 继续只作为可选诊断，不进入首次必填路径。
+本地验证：前端 `npm run quality` 通过（39 个测试文件、155 项测试）；新增个人引导步骤测试 3 项；`git diff --check` 通过。
+提交/远程验收：实现提交 `1a81a900`（优化：增加个人模式首次审查引导）已推送 `origin/PRAgent-test`；Pull Request Quality #33428836886、PR Repository Governance #33428836906、push Repository Governance #33428834131、Release Images #33428834134 和 Auto Create Pull Request #33428834092 均成功，生产部署按手动 opt-in 策略跳过。
+安全边界：引导仅管理员加载；测试接口复用保存配置并只显示后端的状态/错误，不把 PAT、API Key 或原始源码写入前端状态/仓库；首次入口只预览，不自动调用评论发布接口。
+下一步：继续 P1-01，按个人模式隔离导航、路由和后端 bean；企业能力默认不暴露且不进入个人首次启动路径。
+
+2026-09-01 | 优化-44 | P1-01 个人模式界面与运行面收敛
+状态：已完成 edition/profile 边界、个人默认导航收敛、运行时企业能力隔离、回归测试、中文提交、test 分支推送和远程 Actions 验收。
+变更：新增 `personal`（默认）与 `enterprise-experimental` edition 契约；个人模式隐藏并拦截消息队列、通知运维和用户管理入口，停止通知轮询；企业租户、配额、用户管理生命周期、OIDC、消息队列运维、通知中心/配置和多实例缓存失效组件仅在高级 edition 条件装配。审查核心链路保留，租户配额与企业 OIDC 改为可选依赖，个人模式缺少企业配置时仍可启动；`PRAgent-test` 的浏览器 E2E 显式使用高级 edition，继续覆盖企业管理会话场景，默认单测/路由契约仍验证个人版收敛。
+本地验证：后端 `mvn test` 通过（2587 项通过、12 项按既有条件跳过）；前端质量通过（39 个测试文件、157 项测试，语句 64.76%、分支 53.11%、函数 55.47%、行 65.14%）；高级版真实浏览器 E2E 7 项通过；`git diff --check` 通过。首次远程质量运行因默认个人版执行旧企业 `/users` E2E 失败，已通过 CI edition 环境修复并复验通过，未提交测试脚本。
+提交/远程验收：实现提交 `eef1d6d6`（优化：收敛个人模式界面与运行面）和修复提交 `43653061`（修复：为浏览器测试启用高级模式）已推送 `origin/PRAgent-test`；修复后的 Pull Request Quality #33432730683、PR Repository Governance #33432730674、push Repository Governance #33432726806、Release Images #33432726862 和 Auto Create Pull Request #33432726849 均成功，生产部署按手动 opt-in 策略跳过。
+边界：OpenAPI reviewed 静态契约扫描仍以高级视图保留企业 server-only operations；个人运行时 controller 不注册，默认生成文档按 P1-03 再拆分接口域。未删除迁移、DTO 或纵向切片，物理删除保留独立回滚边界；未修改既有 `openapi-generated-client.frontend-signature.snapshot` 工作区改动和 `.tmp/`。
+下一步：继续 P1-02，盘点普通 PR 的 CI/运维工作流引用和时长基线，合并重复检查、明确维护入口，并保持每项独立提交、推送、Actions 验收和进度记录。
+
+2026-09-01 | 优化-45 | P1-02 CI、发布与维护入口收敛
+状态：已完成工作流入口收敛、引用清单、回归契约、中文提交、test 分支推送和远程 Actions 验收；生产维护工作流仍只允许受控手动或既有定时入口。
+变更：普通 PR 的 `Pull Request Quality` 新增跟踪文件治理 job，独立 `Repository Governance` 改为仅 push/手动触发，避免同一 PR 重复跑治理检查；`Release Images` 仅接受 main/master、`v*` 标签或手动触发，`PRAgent-test` 推送不再发布镜像；高风险 real-chain、runtime metadata 和 worker concurrency 维护入口串行化；新增 `.github/workflow-catalog.txt`，记录版本化 workflow 的 CI/release/maintenance 分类、action/script/config 引用、时长基线和删除复审规则；README 补充入口策略。`.gitignore` 明确排除的本地 `runtime-metadata-check.yml` 未纳入版本化清单或提交。
+本地验证：`WorkflowCatalogContractTest`、`FrontendBrowserQualityContractTest`、`ProductionDeploymentContractTest`、`ProductionConfigurationContractTest`、`SupplyChainPolicyTest` 共 41 项通过；`git diff --check` 通过；未暂存既有契约快照和 `.tmp/`。
+提交/远程验收：实现提交 `0dab8a95`（优化：收敛 CI 发布与维护入口）已推送 `origin/PRAgent-test`；Pull Request Quality #33434537784（含 Tracked file governance）、push Repository Governance #33434531914 和 Auto Create Pull Request #33434531822 均成功。因发布入口已收敛，PRAgent-test 推送未触发 Release Images，生产部署保持手动 opt-in。
+下一步：继续 P1-03，按个人模式拆分 OpenAPI reviewed/generated DTO 边界，先盘点重复手写 DTO 和生成客户端引用，再以契约测试阻断漂移。
+
+2026-09-01 | 优化-46 | P1-03 审查详情 OpenAPI 生成 DTO 与 UI mapper 试点
+状态：已完成生成脚本、审查详情契约接线、显式 view model mapper、本地质量门禁、中文提交、test 分支推送和远程 Actions 验收。
+变更：`generate-openapi-client.mjs` 现在从 reviewed `openapi.json` 同时生成 `openapiOperations.ts` 和 `reviewDetailTypes.ts`，并在 `--check` 模式阻断任一生成物漂移；审查详情、发现、变更文件、缺失测试、时间线、状态、人工审查和反馈 API 直接使用生成 DTO。`reviewDetailTaskMappers.ts` 将可选 API DTO 统一归一化为稳定的页面 view model，分页 section loader 也在边界处执行显式 mapper；移除同名手写详情 DTO，保留列表与非详情领域类型。
+本地验证：前端生成物检查、`vue-tsc -b`、ESLint、Vite 构建和全量单元测试通过（39 个测试文件、157 项测试，语句 64.80%、分支 52.83%、函数 55.47%、行 65.18%）；后端 `OpenApiGeneratedClientContractTest`、`FrontendApiContractCatalogTest` 共 12 项通过；`git diff --check` 通过。
+提交/远程验收：实现提交 `9d1bd62c`（优化：试点审查详情 OpenAPI 生成契约）已推送 `origin/PRAgent-test`；Pull Request Quality #33462145133（含前后端、集成、Flyway、边缘配置和供应链门禁）、push Repository Governance #33462140655、Auto Create Pull Request #33462140662 均成功，PRAgent-test 未触发生产镜像发布。
+边界：生成文件仅声明 DTO 类型，无业务逻辑；当前只推进审查详情纵向切片，规则、集成、配置等领域按后续批次扩展。未修改用户已有 `openapi-generated-client.frontend-signature.snapshot` 工作区改动和 `.tmp/`。
+下一步：继续按顺序进入后续 P1/P2 优化项，保持单项实现、中文提交、Actions 验收和进度记录。
+
+2026-09-01 | 优化-47 | P2-01 总复杂度预算与孤立项审计
+状态：已完成生产代码总量、类数、个人模式必填环境变量、工作流、定时任务、接口、DTO 和生产脚本的可审计预算；完成中文提交、test 分支推送和远程 Actions 验收。
+变更：保留现有单类 450 行上限，并在架构门禁中锁定已复核基线（70,036 行、941 个生产 Java 文件/类、15 个已跟踪工作流、个人默认配置 6 个必填环境变量、13 个定时任务）；新增定时任务生命周期目录，要求记录触发频率、超时、幂等、资源预算和关闭开关；新增生产脚本目录，要求记录 owner、触发入口和退出条件；每次门禁审计无调用接口、重复 DTO、孤立脚本及陈旧目录项。预算达到上限时必须伴随删除或合并证据，避免只增加一层转发或旁路。
+本地验证：`ArchitectureRatchetTest` 7 项、`ApplicationArchitectureTest` 44 项、`WorkflowCatalogContractTest` 2 项全部通过；`git diff --check` 通过。
+提交/远程验收：实现提交 `2fc7a794`（优化：建立总复杂度预算与孤立项审计）已推送 `origin/PRAgent-test`；Pull Request Quality #33471874993、push Repository Governance #33471872712、Auto Create Pull Request #33471872727 均成功，PRAgent-test 未触发生产镜像发布。
+边界：预算是个人项目的复杂度天花板，不改变运行时业务行为；生产脚本仍保留现有手动/定时入口，目录仅补齐 owner、触发和退役证据；未修改既有 `openapi-generated-client.frontend-signature.snapshot` 工作区改动和 `.tmp/`。
+下一步：按顺序评估 P2-02 Flyway 基线整理的数据库前置条件；若存在外部数据库则保持已发布 migration 不变，仅补充增量迁移和新安装 baseline 方案。
+
+2026-09-01 | 优化-48 | P2-02 Flyway 基线条件决策与升级保护
+状态：已完成数据库前置条件审计、基线决策契约、readiness 门禁、中文提交、test 分支推送和远程 Actions 验收。
+变更：确认生产 profile 依赖外部 `SPRING_DATASOURCE_URL`，且 CI 通过真实 MySQL 验证 V76→V77 原地升级；因此不重写或删除现有 77 个 Flyway migration。`migration-contract.json` 记录外部数据库支持、已发布 migration 不可变、V77 为候选基线，以及空库迁移、结构对比、种子管理员/核心链路和最老支持版本升级四类证据；新安装只有在 V77 schema snapshot 与演练证据版本化后才能采用 snapshot→baseline。`production-readiness-check.ps1` 和 manifest JUnit 契约共同阻断缺少决策、候选版本漂移或升级路径缺失的变更。
+本地验证：`MigrationContractManifestTest` 4 项、`SchemaVersionExpectationContractTest` 2 项通过；Flyway 升级集成测试在未设置 `REPOGUARD_RUN_INTEGRATION_TESTS` 的本地环境按条件跳过；readiness quick（设置 Windows shell 探测环境）通过；`git diff --check` 通过。
+提交/远程验收：实现提交 `dac00497`（优化：明确 Flyway 基线与外部数据库迁移策略）已推送 `origin/PRAgent-test`；Pull Request Quality #33472653684、push Repository Governance #33472650479、Auto Create Pull Request #33472650443 均成功，PRAgent-test 未触发生产镜像发布。
+边界：当前选择保守的延后合并，不伪造尚未完成的 schema snapshot；既有 migration、外部数据库数据和升级路径保持不变。未修改用户已有 `openapi-generated-client.frontend-signature.snapshot` 工作区改动和 `.tmp/`。
+下一步：继续按顺序处理后续工程优化项；涉及数据库基线时，先补齐 V77 snapshot 与空库/结构/数据演练证据，再考虑启用 baseline。
+
+2026-09-01 | 优化-49 | P2-01 复杂度预算补齐 Bean 与废弃配置审计
+状态：已完成补充审计、回归测试、中文提交、test 分支推送和远程 Actions 验收。
+变更：复杂度预算新增未引用 Spring Bean 与废弃配置项上限；架构门禁扫描 `@Component`、`@Service`、`@Repository` 实现，识别接口分派引用并阻断孤立 Bean；新增配置生命周期目录，要求每个兼容期配置记录替代项、验证方式和退役条件，阻断无替代或无退役计划的废弃配置。
+本地验证：`ArchitectureRatchetTest` 8 项、组合架构/迁移/Schema/Workflow 门禁共 60 项通过；`git diff --check` 通过。
+提交/远程验收：修复提交 `29345dd5`（补齐 Bean 与配置审计）已推送 `origin/PRAgent-test`；Pull Request Quality #33473466454、push Repository Governance #33473463434、Auto Create Pull Request #33473463482 均成功，PRAgent-test 未触发生产镜像发布。
+边界：本批仅补齐个人项目复杂度与配置生命周期证据，不改变运行时业务行为；未修改既有 `openapi-generated-client.frontend-signature.snapshot` 工作区改动和 `.tmp/`。
+下一步：继续按顺序处理后续工程优化项；若预算再次接近上限，必须优先删除、合并或完成退役证据后再扩展。

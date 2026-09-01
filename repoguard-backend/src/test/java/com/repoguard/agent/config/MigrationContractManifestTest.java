@@ -59,6 +59,30 @@ class MigrationContractManifestTest {
     }
 
     @Test
+    void baselinePolicyDefersConsolidationUntilExternalDatabaseEvidenceIsComplete() throws IOException {
+        JsonNode policy = readManifest().required("baselinePolicy");
+
+        assertThat(policy.required("decision").asText()).isEqualTo("DEFER_CONSOLIDATION");
+        assertThat(policy.required("externalDatabaseSupported").asBoolean()).isTrue();
+        assertThat(policy.required("publishedMigrationPolicy").asText()).isEqualTo("IMMUTABLE");
+        assertThat(policy.required("newInstallationStrategy").asText())
+            .isEqualTo("VALIDATED_SCHEMA_SNAPSHOT_THEN_BASELINE");
+        assertThat(policy.required("candidateVersion").asInt())
+            .isEqualTo(migrationVersions().stream().mapToInt(Integer::intValue).max().orElseThrow());
+        assertThat(policy.required("requiredEvidence").isArray()).isTrue();
+        assertThat(policy.required("requiredEvidence"))
+            .hasSizeGreaterThanOrEqualTo(4)
+            .allMatch(node -> !node.asText().isBlank());
+        assertThat(policy.required("decisionEvidence").isArray()).isTrue();
+        assertThat(policy.required("decisionEvidence"))
+            .hasSizeGreaterThanOrEqualTo(2)
+            .allMatch(node -> !node.asText().isBlank());
+        assertThat(policy.required("reconsiderWhen").asText()).containsIgnoringCase("snapshot");
+        assertThat(policy.required("rollbackStrategy").asText())
+            .containsIgnoringCase("never rewrite or delete");
+    }
+
+    @Test
     void expandMigrationsDoNotContainDestructiveOrDataRewriteStatements() throws IOException {
         JsonNode root = readManifest();
         for (JsonNode entry : root.required("migrations")) {

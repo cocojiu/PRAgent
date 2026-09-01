@@ -2,6 +2,25 @@
   "formatVersion": 1,
   "defaultThroughVersion": 75,
   "futureMigrationsRequireExplicitMetadata": true,
+  "baselinePolicy": {
+    "decision": "DEFER_CONSOLIDATION",
+    "externalDatabaseSupported": true,
+    "publishedMigrationPolicy": "IMMUTABLE",
+    "newInstallationStrategy": "VALIDATED_SCHEMA_SNAPSHOT_THEN_BASELINE",
+    "candidateVersion": 77,
+    "requiredEvidence": [
+      "empty database migration to the candidate version",
+      "schema structure diff against the supported production shape",
+      "seed administrator and core review path validation",
+      "oldest supported version upgrade to the candidate version"
+    ],
+    "decisionEvidence": [
+      "application-prod.yml requires an externally supplied datasource",
+      "FlywayMigrationUpgradePathIntegrationTest verifies the V76 to V77 rolling path"
+    ],
+    "reconsiderWhen": "A V77 schema snapshot and all required rehearsal evidence are versioned together.",
+    "rollbackStrategy": "restore a validated backup and apply a forward fix; never rewrite or delete a published migration"
+  },
   "defaults": {
     "phase": "BASELINE",
     "estimatedRows": "dataset-dependent",

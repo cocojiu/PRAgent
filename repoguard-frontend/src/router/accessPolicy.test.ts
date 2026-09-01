@@ -7,15 +7,37 @@ describe("route access policy", () => {
 
     expect(canAccessRouteMeta(managementRoute, {
       authenticated: true,
-      managementAllowed: true
+      managementAllowed: true,
+      enterpriseEnabled: true
     })).toBe(true);
     expect(canAccessRouteMeta(managementRoute, {
       authenticated: true,
-      managementAllowed: false
+      managementAllowed: false,
+      enterpriseEnabled: true
     })).toBe(false);
     expect(canAccessRouteMeta({ requiresAuth: true }, {
       authenticated: false,
-      managementAllowed: false
+      managementAllowed: false,
+      enterpriseEnabled: true
     })).toBe(false);
+  });
+
+  it("hides enterprise routes from the personal edition", () => {
+    const enterpriseRoute = {
+      requiresAuth: true,
+      requiresManage: true,
+      requiresEnterprise: true
+    };
+
+    expect(canAccessRouteMeta(enterpriseRoute, {
+      authenticated: true,
+      managementAllowed: true,
+      enterpriseEnabled: false
+    })).toBe(false);
+    expect(canAccessRouteMeta(enterpriseRoute, {
+      authenticated: true,
+      managementAllowed: true,
+      enterpriseEnabled: true
+    })).toBe(true);
   });
 });

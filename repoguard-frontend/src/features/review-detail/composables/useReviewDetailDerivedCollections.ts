@@ -1,9 +1,9 @@
 import { computed } from "vue";
 import { statusReasonText, timelineLabelText } from "../reviewDetailDisplayMappers";
 import type { ComputedRef, Ref } from "vue";
-import type { ChangedFile, ReviewTaskDetail, RiskLevel, TimelineItem } from "@/types";
+import type { ChangedFileViewModel, ReviewTaskDetail, RiskLevel, TimelineItemViewModel } from "@/types";
 
-export type ChangedFileWithFindingCount = ChangedFile & { findingCount: number };
+export type ChangedFileWithFindingCount = ChangedFileViewModel & { findingCount: number };
 
 type UseReviewDetailDerivedCollectionsOptions = {
   failureReason: ComputedRef<string>;
@@ -54,7 +54,7 @@ export const useReviewDetailDerivedCollections = ({
     }))
   );
 
-  const localizedTimeline = computed<TimelineItem[]>(() =>
+  const localizedTimeline = computed<TimelineItemViewModel[]>(() =>
     reviewTimeline.value.map((item) => ({
       ...item,
       label: timelineLabelText(item.label)

@@ -71,9 +71,19 @@ class RuntimeRoleBoundaryContractTest {
             new ClassPathScanningCandidateComponentProvider(false);
         scanner.addIncludeFilter(new AnnotationTypeFilter(Component.class, true, true));
         ClassLoader classLoader = getClass().getClassLoader();
-        return scanner.findCandidateComponents("com.repoguard.agent").stream()
-            .map(definition -> ClassUtils.resolveClassName(definition.getBeanClassName(), classLoader))
-            .collect(Collectors.toSet());
+        String previousEdition = System.getProperty("REPOGUARD_EDITION");
+        System.setProperty("REPOGUARD_EDITION", "enterprise-experimental");
+        try {
+            return scanner.findCandidateComponents("com.repoguard.agent").stream()
+                .map(definition -> ClassUtils.resolveClassName(definition.getBeanClassName(), classLoader))
+                .collect(Collectors.toSet());
+        } finally {
+            if (previousEdition == null) {
+                System.clearProperty("REPOGUARD_EDITION");
+            } else {
+                System.setProperty("REPOGUARD_EDITION", previousEdition);
+            }
+        }
     }
 
     private boolean hasAnnotatedMethod(Class<?> component, Class<? extends Annotation> annotationType) {

@@ -8,8 +8,15 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 
@@ -21,7 +28,30 @@ import org.junit.jupiter.api.Test;
 class ArchitectureRatchetTest {
 
     private static final Path MAIN_SOURCE_ROOT = Path.of("src", "main", "java").toAbsolutePath().normalize();
+    private static final Path REPOSITORY_ROOT = MAIN_SOURCE_ROOT.getParent().getParent().getParent().getParent();
     private static final String RATchet_RESOURCE = "architecture-ratchet.properties";
+    private static final Pattern REQUIRED_ENVIRONMENT_VARIABLE = Pattern.compile("\\$\\{([A-Z][A-Z0-9_]*)\\}");
+    private static final Pattern INTERFACE_DECLARATION = Pattern.compile(
+        "\\binterface\\s+([A-Za-z_$][A-Za-z0-9_$]*)"
+    );
+    private static final Pattern COMPONENT_ANNOTATION = Pattern.compile(
+        "(?m)^\\s*@(Component|Service|Repository)(?:\\([^\\r\\n]*\\))?"
+    );
+    private static final Pattern CLASS_DECLARATION = Pattern.compile(
+        "\\b(?:public\\s+)?(?:abstract\\s+)?(?:final\\s+)?class\\s+"
+            + "([A-Za-z_$][A-Za-z0-9_$]*)"
+    );
+    private static final Pattern IMPLEMENTED_INTERFACE = Pattern.compile(
+        "\\bimplements\\s+([A-Za-z_$][A-Za-z0-9_$]*)"
+    );
+    private static final Pattern LEGACY_CONFIGURATION = Pattern.compile(
+        "\\\"(app\\.runtime\\.(?:api|worker)\\.enabled|REPOGUARD_(?:API|WORKER)_ENABLED)\\\""
+    );
+    private static final Pattern SCHEDULED_METHOD = Pattern.compile(
+        "(?m)^\\s*@Scheduled(?:\\([^\\r\\n]*\\))?\\s*\\r?\\n"
+            + "\\s*public\\s+(?:[A-Za-z_$][A-Za-z0-9_$]*\\s+)*void\\s+"
+            + "([A-Za-z_$][A-Za-z0-9_$]*)\\s*\\("
+    );
 
     @Test
     void productionClassesStayBelowTheReviewedComplexityThreshold() throws IOException {
@@ -65,6 +95,321 @@ class ArchitectureRatchetTest {
         assertThat(violations)
             .as("new production code must live in an owned domain or technical boundary")
             .isEmpty();
+    }
+
+    @Test
+    void totalProductionComplexityStaysWithinTheReviewedBudget() throws IOException {
+        Properties properties = loadProperties();
+        List<Path> sources = productionSources();
+        long productionLines = sources.stream()
+            .mapToLong(path -> sourceSize(path).lines())
+            .sum();
+        int productionClassCount = sources.size();
+
+        assertThat(productionLines)
+            .as("production Java line budget")
+            .isLessThanOrEqualTo(Long.parseLong(properties.getProperty("maxProductionJavaLines", "70036")));
+        assertThat(productionClassCount)
+            .as("production Java class budget")
+            .isLessThanOrEqualTo(Integer.parseInt(properties.getProperty("maxProductionClassCount", "941")));
+    }
+
+    @Test
+    void personalRuntimeAndWorkflowBudgetsStayExplicit() throws IOException {
+        Properties properties = loadProperties();
+        int workflowCount = trackedFiles(".github/workflows").size();
+        int requiredEnvironmentVariables = requiredPersonalEnvironmentVariables().size();
+
+        assertThat(workflowCount)
+            .as("tracked workflow budget")
+            .isLessThanOrEqualTo(Integer.parseInt(properties.getProperty("maxTrackedWorkflowCount", "15")));
+        assertThat(requiredEnvironmentVariables)
+            .as("required environment variables in the default personal profile")
+            .isLessThanOrEqualTo(Integer.parseInt(
+                properties.getProperty("maxPersonalRequiredEnvironmentVariables", "12")
+            ));
+    }
+
+    @Test
+    void scheduledJobsHaveAuditableTriggerAndLifecycleMetadata() throws IOException {
+        Properties properties = loadProperties();
+        Set<String> scheduledJobs = scheduledJobKeys();
+        Map<String, List<String>> catalog = delimitedCatalog(
+            REPOSITORY_ROOT.resolve(properties.getProperty(
+                "backgroundJobCatalog",
+                "repoguard-backend/src/test/resources/background-job-catalog.txt"
+            )),
+            6
+        );
+
+        assertThat(scheduledJobs.size())
+            .as("scheduled job budget")
+            .isLessThanOrEqualTo(Integer.parseInt(properties.getProperty("maxScheduledJobCount", "13")));
+        assertThat(catalog.keySet())
+            .as("every scheduled method must have trigger, timeout, idempotency, resource and shutdown metadata")
+            .containsExactlyInAnyOrderElementsOf(scheduledJobs);
+        catalog.values().forEach(fields -> assertThat(fields.subList(1, fields.size()))
+            .as("scheduled job metadata fields")
+            .allMatch(value -> !value.isBlank()));
+    }
+
+    @Test
+    void productionInterfacesAndDtosDoNotAccumulateUnreferencedDuplicates() throws IOException {
+        Properties properties = loadProperties();
+        List<String> unreferencedBeans = unreferencedBeanNames();
+        List<String> unreferencedInterfaces = unreferencedInterfaceNames();
+        List<String> duplicateDtoNames = duplicateDtoNames();
+
+        assertThat(unreferencedBeans)
+            .as("production beans without a direct or interface-dispatch caller")
+            .hasSizeLessThanOrEqualTo(Integer.parseInt(properties.getProperty("maxUnreferencedBeanCount", "0")));
+        assertThat(unreferencedInterfaces)
+            .as("production interfaces without a caller")
+            .hasSizeLessThanOrEqualTo(Integer.parseInt(properties.getProperty("maxUnreferencedInterfaceCount", "0")));
+        assertThat(duplicateDtoNames)
+            .as("duplicate production DTO simple names")
+            .hasSizeLessThanOrEqualTo(Integer.parseInt(properties.getProperty("maxDuplicateDtoNameCount", "0")));
+    }
+
+    @Test
+    void productionScriptsHaveAnOwnerTriggerAndRetirementCondition() throws IOException {
+        Properties properties = loadProperties();
+        Path catalogPath = REPOSITORY_ROOT.resolve(properties.getProperty(
+            "productionScriptCatalog",
+            "scripts/production-script-catalog.txt"
+        ));
+        Map<String, List<String>> catalog = delimitedCatalog(catalogPath, 4);
+        Set<String> scripts = productionScriptNames();
+        Set<String> orphanScripts = new LinkedHashSet<>(scripts);
+        orphanScripts.removeAll(catalog.keySet());
+        Set<String> staleCatalogEntries = new LinkedHashSet<>(catalog.keySet());
+        staleCatalogEntries.removeAll(scripts);
+
+        assertThat(orphanScripts)
+            .as("production scripts without a catalog owner")
+            .hasSizeLessThanOrEqualTo(Integer.parseInt(properties.getProperty("maxOrphanProductionScriptCount", "0")));
+        assertThat(staleCatalogEntries)
+            .as("production script catalog entries without a file")
+            .isEmpty();
+        catalog.values().forEach(fields -> assertThat(fields.subList(1, fields.size()))
+            .as("production script catalog metadata fields")
+            .allMatch(value -> !value.isBlank()));
+    }
+
+    @Test
+    void deprecatedConfigurationHasReplacementVerificationAndRetirementMetadata() throws IOException {
+        Properties properties = loadProperties();
+        Path catalogPath = REPOSITORY_ROOT.resolve(properties.getProperty(
+            "configurationLifecycleCatalog",
+            "scripts/configuration-lifecycle-catalog.txt"
+        ));
+        Map<String, List<String>> catalog = delimitedCatalog(catalogPath, 5);
+        Set<String> deprecatedConfigurations = deprecatedConfigurationNames();
+
+        assertThat(deprecatedConfigurations.size())
+            .as("deprecated configuration budget")
+            .isLessThanOrEqualTo(Integer.parseInt(
+                properties.getProperty("maxDeprecatedConfigurationCount", "4")
+            ));
+        assertThat(catalog.keySet())
+            .as("every deprecated configuration must have a replacement and retirement plan")
+            .containsExactlyInAnyOrderElementsOf(deprecatedConfigurations);
+        catalog.values().forEach(fields -> {
+            assertThat(fields.get(1)).isEqualTo("compatibility-only");
+            assertThat(fields.subList(2, fields.size()))
+                .as("deprecated configuration lifecycle metadata")
+                .allMatch(value -> !value.isBlank());
+        });
+    }
+
+    private static List<Path> productionSources() throws IOException {
+        try (Stream<Path> paths = Files.walk(MAIN_SOURCE_ROOT)) {
+            return paths.filter(path -> path.toString().endsWith(".java")).toList();
+        }
+    }
+
+    private static Set<String> requiredPersonalEnvironmentVariables() throws IOException {
+        String application = Files.readString(
+            REPOSITORY_ROOT.resolve("repoguard-backend/src/main/resources/application.yml"),
+            StandardCharsets.UTF_8
+        );
+        Set<String> variables = new LinkedHashSet<>();
+        Matcher matcher = REQUIRED_ENVIRONMENT_VARIABLE.matcher(application);
+        while (matcher.find()) {
+            variables.add(matcher.group(1));
+        }
+        return variables;
+    }
+
+    private static List<String> unreferencedBeanNames() throws IOException {
+        List<String> sourceTexts = productionSources().stream()
+            .map(ArchitectureRatchetTest::read)
+            .toList();
+        Set<String> names = new LinkedHashSet<>();
+        for (String sourceText : sourceTexts) {
+            Matcher annotation = COMPONENT_ANNOTATION.matcher(sourceText);
+            while (annotation.find()) {
+                Matcher declaration = CLASS_DECLARATION.matcher(sourceText);
+                declaration.region(annotation.end(), Math.min(sourceText.length(), annotation.end() + 1000));
+                if (!declaration.find()) {
+                    continue;
+                }
+                String name = declaration.group(1);
+                Pattern reference = Pattern.compile("\\b" + Pattern.quote(name) + "\\b");
+                long references = sourceTexts.stream()
+                    .mapToLong(text -> reference.matcher(text).results().count())
+                    .sum();
+                if (references <= 1 && !referencedThroughInterface(sourceText, sourceTexts)) {
+                    names.add(name);
+                }
+            }
+        }
+        return names.stream().sorted().toList();
+    }
+
+    private static boolean referencedThroughInterface(String sourceText, List<String> sourceTexts) {
+        Matcher implemented = IMPLEMENTED_INTERFACE.matcher(sourceText);
+        while (implemented.find()) {
+            String name = implemented.group(1);
+            Pattern reference = Pattern.compile("\\b" + Pattern.quote(name) + "\\b");
+            long references = sourceTexts.stream()
+                .mapToLong(text -> reference.matcher(text).results().count())
+                .sum();
+            if (references > 1) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static Set<String> deprecatedConfigurationNames() throws IOException {
+        Set<String> names = new LinkedHashSet<>();
+        for (Path source : productionSources()) {
+            Matcher matcher = LEGACY_CONFIGURATION.matcher(read(source));
+            while (matcher.find()) {
+                names.add(matcher.group(1));
+            }
+        }
+        return names;
+    }
+
+    private static Set<String> scheduledJobKeys() throws IOException {
+        Set<String> jobs = new LinkedHashSet<>();
+        for (Path source : productionSources()) {
+            String sourceText = Files.readString(source, StandardCharsets.UTF_8);
+            Matcher matcher = SCHEDULED_METHOD.matcher(sourceText);
+            while (matcher.find()) {
+                jobs.add(MAIN_SOURCE_ROOT.relativize(source).toString().replace('\\', '/') + "#" + matcher.group(1));
+            }
+        }
+        return jobs;
+    }
+
+    private static List<String> unreferencedInterfaceNames() throws IOException {
+        List<String> sourceTexts = productionSources().stream()
+            .map(path -> read(path))
+            .toList();
+        List<String> names = new java.util.ArrayList<>();
+        for (String sourceText : sourceTexts) {
+            Matcher declaration = INTERFACE_DECLARATION.matcher(sourceText);
+            while (declaration.find()) {
+                String name = declaration.group(1);
+                Pattern reference = Pattern.compile("\\b" + Pattern.quote(name) + "\\b");
+                long references = sourceTexts.stream()
+                    .mapToLong(text -> reference.matcher(text).results().count())
+                    .sum();
+                if (references <= 1) {
+                    names.add(name);
+                }
+            }
+        }
+        return names.stream().distinct().sorted().toList();
+    }
+
+    private static List<String> duplicateDtoNames() throws IOException {
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        for (Path source : productionSources()) {
+            String fileName = source.getFileName().toString();
+            if (!fileName.endsWith("Dto.java")) {
+                continue;
+            }
+            String name = fileName.substring(0, fileName.length() - ".java".length());
+            counts.merge(name, 1, Integer::sum);
+        }
+        return counts.entrySet().stream()
+            .filter(entry -> entry.getValue() > 1)
+            .map(entry -> entry.getKey() + " x" + entry.getValue())
+            .sorted()
+            .toList();
+    }
+
+    private static Set<String> productionScriptNames() throws IOException {
+        try (Stream<Path> paths = Files.list(REPOSITORY_ROOT.resolve("scripts"))) {
+            return paths.filter(Files::isRegularFile)
+                .filter(path -> Set.of(".sh", ".ps1", ".bat", ".cmd").contains(extension(path)))
+                .map(path -> path.getFileName().toString())
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        }
+    }
+
+    private static String extension(Path path) {
+        String name = path.getFileName().toString();
+        int dot = name.lastIndexOf('.');
+        return dot < 0 ? "" : name.substring(dot).toLowerCase(java.util.Locale.ROOT);
+    }
+
+    private static Map<String, List<String>> delimitedCatalog(Path path, int expectedColumns) throws IOException {
+        Map<String, List<String>> entries = new LinkedHashMap<>();
+        for (String line : Files.readAllLines(path, StandardCharsets.UTF_8)) {
+            String trimmed = line.trim();
+            if (trimmed.isBlank() || trimmed.startsWith("#")) {
+                continue;
+            }
+            List<String> fields = Arrays.stream(trimmed.split("\\|", -1)).map(String::trim).toList();
+            if (fields.size() != expectedColumns || fields.getFirst().isBlank()) {
+                throw new IOException("Invalid catalog row in " + path + ": " + line);
+            }
+            if (entries.put(fields.getFirst(), fields) != null) {
+                throw new IOException("Duplicate catalog key in " + path + ": " + fields.getFirst());
+            }
+        }
+        return entries;
+    }
+
+    private static List<String> trackedFiles(String path) throws IOException {
+        Process process = new ProcessBuilder(
+            "git",
+            "-c",
+            "core.quotePath=false",
+            "-C",
+            REPOSITORY_ROOT.toString(),
+            "ls-files",
+            path
+        )
+            .redirectErrorStream(true)
+            .start();
+        try {
+            String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            if (!process.waitFor(10, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                throw new IOException("git ls-files timed out for " + path);
+            }
+            if (process.exitValue() != 0) {
+                throw new IOException("git ls-files failed for " + path + ": " + output);
+            }
+            return output.lines().filter(line -> !line.isBlank()).toList();
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted while listing " + path, ex);
+        }
+    }
+
+    private static String read(Path path) {
+        try {
+            return Files.readString(path, StandardCharsets.UTF_8);
+        } catch (IOException ex) {
+            throw new IllegalStateException("Cannot read " + path, ex);
+        }
     }
 
     private static Properties loadProperties() throws IOException {

@@ -58,8 +58,9 @@
 
 <script setup lang="ts">
 import "@/features/review-tasks/reviewTasks.css";
-import { onMounted, ref } from "vue";
+import { onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
+import { useRoute } from "vue-router";
 import { canManage } from "@/stores/authState";
 import { CheckCircle, Clock, GitPullRequestArrow, ListTodo, ShieldAlert, XCircle } from "@lucide/vue";
 import MetricGrid from "@/components/MetricGrid.vue";
@@ -75,7 +76,9 @@ import {
 } from "@/features/review-tasks";
 
 const router = useRouter();
+const route = useRoute();
 const createDialogVisible = ref(false);
+let onboardingPreviewOpened = false;
 
 const {
   currentPage,
@@ -139,6 +142,11 @@ const getMetricIcon = useMetricIcon(metricIconMap, CheckCircle);
 
 onMounted(() => {
   initializeReviewTasksList();
+  tryOpenOnboardingPreview();
+});
+
+watch(canManage, () => {
+  tryOpenOnboardingPreview();
 });
 
 const goDetail = (id: number) => router.push({ name: "task-detail", params: { id } });
@@ -152,6 +160,14 @@ const openCreateDialog = () => {
   if (!pullRequestsLoaded.value && !loadingPullRequests.value) {
     void loadPullRequests();
   }
+};
+
+const tryOpenOnboardingPreview = () => {
+  if (onboardingPreviewOpened || route.query.onboarding !== "preview" || !canManage.value) {
+    return;
+  }
+  onboardingPreviewOpened = true;
+  openCreateDialog();
 };
 
 </script>

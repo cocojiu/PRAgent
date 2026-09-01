@@ -6,8 +6,19 @@ import {
   fetchReviewMissingTests,
   fetchReviewTimeline
 } from "@/api/reviews";
-import type { ChangedFile, MissingTest, ReviewFinding, ReviewTaskDetail } from "@/types";
+import type {
+  ChangedFileViewModel,
+  MissingTestViewModel,
+  ReviewFindingViewModel,
+  ReviewTaskDetail
+} from "@/types";
 import { getErrorMessage } from "@/utils/errors";
+import {
+  toChangedFileViewModel,
+  toMissingTestViewModel,
+  toReviewFindingViewModel,
+  toTimelineItemViewModel
+} from "../reviewDetailTaskMappers";
 
 export const DETAIL_SECTION_PAGE_SIZE = 20;
 
@@ -102,28 +113,37 @@ export const useReviewDetailSectionLoaders = ({
   };
 
   const loadFindingsPage = (page: number) =>
-    loadPagedSection<ReviewFinding>({
+    loadPagedSection<ReviewFindingViewModel>({
       applyResult: (task, items, total) => ({ ...task, findings: items, findingTotal: total }),
       clearArchived: (task) => ({ ...task, findings: [] }),
-      fetchPage: (taskId) => fetchReviewFindings(taskId, { page, pageSize: DETAIL_SECTION_PAGE_SIZE }),
+      fetchPage: async (taskId) => {
+        const result = await fetchReviewFindings(taskId, { page, pageSize: DETAIL_SECTION_PAGE_SIZE });
+        return { items: result.items.map(toReviewFindingViewModel), total: result.total };
+      },
       page,
       state: findings
     });
 
   const loadChangedFilesPage = (page: number) =>
-    loadPagedSection<ChangedFile>({
+    loadPagedSection<ChangedFileViewModel>({
       applyResult: (task, items, total) => ({ ...task, changedFiles: items, changedFileTotal: total }),
       clearArchived: (task) => ({ ...task, changedFiles: [] }),
-      fetchPage: (taskId) => fetchReviewChangedFiles(taskId, { page, pageSize: DETAIL_SECTION_PAGE_SIZE }),
+      fetchPage: async (taskId) => {
+        const result = await fetchReviewChangedFiles(taskId, { page, pageSize: DETAIL_SECTION_PAGE_SIZE });
+        return { items: result.items.map(toChangedFileViewModel), total: result.total };
+      },
       page,
       state: changedFiles
     });
 
   const loadMissingTestsPage = (page: number) =>
-    loadPagedSection<MissingTest>({
+    loadPagedSection<MissingTestViewModel>({
       applyResult: (task, items, total) => ({ ...task, missingTests: items, missingTestTotal: total }),
       clearArchived: (task) => ({ ...task, missingTests: [] }),
-      fetchPage: (taskId) => fetchReviewMissingTests(taskId, { page, pageSize: DETAIL_SECTION_PAGE_SIZE }),
+      fetchPage: async (taskId) => {
+        const result = await fetchReviewMissingTests(taskId, { page, pageSize: DETAIL_SECTION_PAGE_SIZE });
+        return { items: result.items.map(toMissingTestViewModel), total: result.total };
+      },
       page,
       state: missingTests
     });
@@ -137,7 +157,8 @@ export const useReviewDetailSectionLoaders = ({
     const sequence = ++timelineRequestSequence;
     timelineLoading.value = true;
     try {
-      const timeline = await fetchReviewTimeline(taskId, { limit: DETAIL_SECTION_PAGE_SIZE });
+      const timeline = (await fetchReviewTimeline(taskId, { limit: DETAIL_SECTION_PAGE_SIZE }))
+        .map(toTimelineItemViewModel);
       if (timelineRequestSequence !== sequence || selectedTask.value?.id !== taskId) {
         return;
       }

@@ -3,7 +3,6 @@
 
 import type {
   CacheStats,
-  ChangedFile,
   ChartSlice,
   ConnectionTestResult,
   DashboardLlmQuality,
@@ -13,8 +12,6 @@ import type {
   DataRetentionCleanupAudit,
   DataRetentionCleanupRequest,
   DataRetentionCleanupResponse,
-  FindingFeedbackRequest,
-  FindingFeedbackResponse,
   FrontendPerformanceReport,
   GithubCommentPreview,
   GithubCommentPublicationHistory,
@@ -23,14 +20,11 @@ import type {
   GithubIntegrationConfigRequest,
   GithubPullRequestOptions,
   HighRiskReview,
-  HumanReviewRequest,
-  HumanReviewResponse,
   ManagedUser,
   ManualReviewRequest,
   ManualReviewResponse,
   MessageQueueHealth,
   MessageQueueRequeueResponse,
-  MissingTest,
   NotificationBinding,
   NotificationBindingRequest,
   NotificationBindingStatusRequest,
@@ -42,10 +36,8 @@ import type {
   ReviewEnforcementModeRequest,
   ReviewExecutionAttempt,
   ReviewExecutionAttemptResult,
-  ReviewFinding,
   ReviewPolicyConfig,
   ReviewPolicyConfigRequest,
-  ReviewRetryResponse,
   ReviewRuleConfig,
   ReviewRuleConfigRequest,
   ReviewRulePolicyVersion,
@@ -56,8 +48,6 @@ import type {
   ReviewStrategyRollbackRequest,
   ReviewTask,
   ReviewTaskListSummary,
-  ReviewTaskStatus,
-  ReviewTaskSummary,
   ReviewTrendPoint,
   SecretReEncryptionItem,
   SecretReEncryptionJob,
@@ -67,12 +57,25 @@ import type {
   SystemHealthItem,
   SystemSettings,
   SystemSettingsRequest,
-  TimelineItem,
   UserCreateRequest,
   UserOperationAudit,
   UserRoleUpdateRequest,
   UserStatusUpdateRequest,
 } from "@/types";
+
+import type {
+  ChangedFile,
+  FindingFeedbackRequest,
+  FindingFeedbackResponse,
+  HumanReviewRequest,
+  HumanReviewResponse,
+  MissingTest,
+  ReviewFinding,
+  ReviewRetryResponse,
+  ReviewTaskStatus,
+  ReviewTaskSummary,
+  TimelineItem,
+} from "@/api/generated/reviewDetailTypes";
 
 export type GeneratedOpenApiOperationMap = {
   "cacheStatsControllerGetStats": {

@@ -2,6 +2,7 @@ package com.repoguard.agent.messaging.health;
 
 import com.repoguard.agent.messaging.RabbitMqIntegrationProvider;
 import com.repoguard.agent.messaging.RabbitMqIntegrationSettings;
+import com.repoguard.agent.config.EnterpriseEditionEnabled;
 import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.dto.MessageQueueExceptionTaskDto;
 import com.repoguard.agent.dto.MessageQueueHealthResponse;
@@ -16,6 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
+@EnterpriseEditionEnabled
 class MessageQueueHealthQueryService {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");

@@ -1,4 +1,19 @@
 import type { PageResponse, RiskLevel } from "./shared";
+import type {
+  ChangedFile as GeneratedChangedFile,
+  ChunkedReview as GeneratedChunkedReview,
+  FindingSeverityCounts as GeneratedFindingSeverityCounts,
+  LlmStatus as GeneratedLlmStatus,
+  MissingTest as GeneratedMissingTest,
+  PrReviewSummary as GeneratedPrReviewSummary,
+  PrRiskFile as GeneratedPrRiskFile,
+  PrRiskProfile as GeneratedPrRiskProfile,
+  RabbitMqStatus as GeneratedRabbitMqStatus,
+  ReviewFinding as GeneratedReviewFinding,
+  ReviewFindingTrace as GeneratedReviewFindingTrace,
+  ReviewTaskSummary as GeneratedReviewTaskSummary,
+  TimelineItem as GeneratedTimelineItem
+} from "@/api/generated/reviewDetailTypes";
 
 export type ReviewStatus =
   | "completed"
@@ -45,70 +60,83 @@ export interface ReviewTask {
   humanReviewedAt?: string;
 }
 
-export interface ReviewTaskSummary extends ReviewTask {
+/**
+ * View model used by the review detail page. The API DTO is generated from OpenAPI; this type only adds
+ * normalized defaults and UI-specific status unions after the explicit mapper runs.
+ */
+export type ReviewTaskDetailViewModel = Omit<
+  GeneratedReviewTaskSummary,
+  | "id"
+  | "prNumber"
+  | "title"
+  | "repository"
+  | "organization"
+  | "commit"
+  | "branch"
+  | "status"
+  | "riskLevel"
+  | "mqRetries"
+  | "llmStatus"
+  | "source"
+  | "triggerSource"
+  | "createdAt"
+  | "duration"
+  | "prUrl"
+  | "findings"
+  | "missingTests"
+  | "changedFiles"
+  | "findingTotal"
+  | "missingTestTotal"
+  | "changedFileTotal"
+  | "findingSeverityCounts"
+  | "timeline"
+  | "riskProfile"
+  | "prSummary"
+  | "llm"
+  | "chunkedReview"
+  | "rabbitMq"
+  | "humanReviewRequired"
+  | "humanReviewStatus"
+> & {
+  assessmentStatus?: AssessmentStatus | string;
+  id: number;
+  prNumber: number;
+  title: string;
+  repository: string;
+  organization: string;
+  commit: string;
+  branch: string;
+  status: ReviewStatus;
+  riskLevel: RiskLevel;
+  mqRetries: number;
+  llmStatus: ReviewStatus;
+  source: ReviewTaskSource | string;
+  triggerSource: ReviewTaskTriggerSource | string;
+  createdAt: string;
+  duration: string;
   prUrl: string;
-  /**
-   * Summary responses keep large sections empty; use the paged review detail endpoints to load rows.
-   */
-  findings: ReviewFinding[];
-  missingTests: MissingTest[];
-  changedFiles: ChangedFile[];
+  findings: ReviewFindingViewModel[];
+  missingTests: MissingTestViewModel[];
+  changedFiles: ChangedFileViewModel[];
   findingTotal: number;
   missingTestTotal: number;
   changedFileTotal: number;
-  findingSeverityCounts?: FindingSeverityCounts;
-  timeline: TimelineItem[];
-  riskProfile: PrRiskProfile;
-  prSummary: PrReviewSummary;
-  llm: LlmStatus;
-  chunkedReview: ChunkedReview;
-  rabbitMq: RabbitMqStatus;
+  findingSeverityCounts?: FindingSeverityCountsViewModel;
+  timeline: TimelineItemViewModel[];
+  riskProfile: PrRiskProfileViewModel;
+  prSummary: PrReviewSummaryViewModel;
+  llm: LlmStatusViewModel;
+  chunkedReview: ChunkedReviewViewModel;
+  rabbitMq: RabbitMqStatusViewModel;
+  humanReviewRequired: boolean;
+  humanReviewStatus: HumanReviewStatus | string;
   archived?: boolean;
   archiveCleanupBatchId?: number;
   archiveBackupReference?: string;
   archivedAt?: string;
-}
+};
 
-/**
- * Compatibility alias for detail page state. The root review endpoint returns a summary shell; heavy sections are
- * populated from paged endpoints after the first screen loads.
- */
-export type ReviewTaskDetail = ReviewTaskSummary;
-
-export interface ReviewTaskStatus {
-  id: number;
-  status: ReviewStatus;
-  riskLevel: RiskLevel;
-  assessmentStatus?: AssessmentStatus | string;
-  llmStatus: ReviewStatus;
-  duration: string;
-  updatedAt?: string;
-  failureCategory?: string;
-  failureReason?: string;
-  failureSuggestion?: string;
-  latestTimeline?: TimelineItem;
-  humanReviewRequired: boolean;
-  humanReviewStatus: HumanReviewStatus | string;
-  humanReviewNote?: string;
-  humanReviewBy?: string;
-  humanReviewedAt?: string;
-}
-
-export interface HumanReviewRequest {
-  action: "approve" | "changes_requested" | "reject";
-  note?: string;
-}
-
-export interface HumanReviewResponse {
-  taskId: number;
-  status: ReviewStatus | string;
-  humanReviewRequired: boolean;
-  humanReviewStatus: HumanReviewStatus | string;
-  humanReviewNote?: string;
-  humanReviewBy?: string;
-  humanReviewedAt?: string;
-  message: string;
-}
+export type ReviewTaskDetail = ReviewTaskDetailViewModel;
 
 export interface GithubCommentPreview {
   taskId: number;
@@ -163,20 +191,6 @@ export interface GithubCommentPreviewItem {
   publicationMessage?: string;
   publishedAt?: string;
   feedbackStatus?: FindingFeedbackStatus | string;
-}
-
-export interface FindingFeedbackRequest {
-  status: FindingFeedbackStatus;
-  note?: string;
-}
-
-export interface FindingFeedbackResponse {
-  findingId: number;
-  taskId: number;
-  feedbackStatus: FindingFeedbackStatus | string;
-  feedbackNote?: string;
-  feedbackBy?: string;
-  feedbackAt?: string;
 }
 
 export interface GithubCommentPublish {
@@ -235,7 +249,24 @@ export interface GithubCommentPublicationBatch {
 
 export type GithubCommentPublicationHistoryItem = GithubCommentPublishItem;
 
-export interface ReviewFindingTrace {
+export type ReviewFindingTraceViewModel = Omit<
+  GeneratedReviewFindingTrace,
+  | "detectorVersion"
+  | "ruleConfigVersion"
+  | "promptVersion"
+  | "contextVersion"
+  | "schemaVersion"
+  | "verifierVersion"
+  | "aggregationVersion"
+  | "policyVersion"
+  | "originalSeverity"
+  | "effectiveSeverity"
+  | "originalConfidence"
+  | "effectiveConfidence"
+  | "downgradeReason"
+  | "blockReason"
+  | "anchorType"
+> & {
   detectorVersion: string;
   ruleConfigVersion: number;
   promptVersion: string;
@@ -244,8 +275,6 @@ export interface ReviewFindingTrace {
   verifierVersion: string;
   aggregationVersion: string;
   policyVersion: number;
-  llmProvider?: string;
-  llmModel?: string;
   originalSeverity: string;
   effectiveSeverity: string;
   originalConfidence: string;
@@ -253,50 +282,38 @@ export interface ReviewFindingTrace {
   downgradeReason: string;
   blockReason: string;
   anchorType: string;
-}
+};
 
-export interface ReviewFinding {
+export type ReviewFindingViewModel = Omit<
+  GeneratedReviewFinding,
+  "id" | "severity" | "file" | "line" | "message" | "recommendation" | "trace" | "feedbackStatus"
+> & {
   id: number;
   severity: RiskLevel;
   file: string;
   line: number;
   message: string;
   recommendation: string;
-  confidence?: "HIGH" | "MEDIUM" | "LOW" | string;
-  evidence?: string;
-  impact?: string;
-  fixExample?: string;
-  isBlocking?: boolean;
-  reviewDimension?: string;
-  enforcementMode?: "OBSERVE" | "COMMENT" | "BLOCK" | string;
-  policyReason?: string;
-  source?: string;
-  ruleId?: string;
-  issueType?: string;
-  preconditions?: string;
-  relatedFiles?: string[];
-  blockingCandidate?: boolean;
-  verificationStatus?: string;
-  trace?: ReviewFindingTrace;
+  trace?: ReviewFindingTraceViewModel;
   feedbackStatus: FindingFeedbackStatus | string;
-  feedbackNote?: string;
-  feedbackBy?: string;
-  feedbackAt?: string;
-}
+};
 
-export interface MissingTest {
+export type MissingTestViewModel = Omit<GeneratedMissingTest, "file" | "method" | "type" | "suggestion"> & {
   file: string;
   method: string;
   type: string;
   suggestion: string;
-}
+};
 
-export interface ChangedFile {
+export type ChangedFileViewModel = Omit<
+  GeneratedChangedFile,
+  "path" | "changeType" | "additions" | "deletions"
+> & {
   path: string;
   changeType: "A" | "M" | "D" | "ADD" | "MODIFY" | "DELETE" | "RENAMED";
   additions: number;
   deletions: number;
-}
+};
 
 export interface ReviewExecutionAttempt {
   id: number;
@@ -364,25 +381,34 @@ export interface ReviewExecutionAttemptResult {
   findings: PageResponse<ReviewAttemptFinding>;
 }
 
-export interface PrRiskProfile {
+export type PrRiskProfileViewModel = Omit<
+  GeneratedPrRiskProfile,
+  "score" | "level" | "summary" | "recommendHumanReview" | "humanReviewReason" | "signals" | "highRiskFiles"
+> & {
   score: number;
   level: RiskLevel;
   summary: string;
   recommendHumanReview: boolean;
   humanReviewReason: string;
   signals: string[];
-  highRiskFiles: PrRiskFile[];
-}
+  highRiskFiles: PrRiskFileViewModel[];
+};
 
-export interface FindingSeverityCounts {
+export type FindingSeverityCountsViewModel = Omit<
+  GeneratedFindingSeverityCounts,
+  "critical" | "high" | "medium" | "low" | "info"
+> & {
   critical: number;
   high: number;
   medium: number;
   low: number;
   info: number;
-}
+};
 
-export interface PrRiskFile {
+export type PrRiskFileViewModel = Omit<
+  GeneratedPrRiskFile,
+  "file" | "changeType" | "additions" | "deletions" | "findingCount" | "score" | "reasons"
+> & {
   file: string;
   changeType: string;
   additions: number;
@@ -390,9 +416,19 @@ export interface PrRiskFile {
   findingCount: number;
   score: number;
   reasons: string[];
-}
+};
 
-export interface PrReviewSummary {
+export type PrReviewSummaryViewModel = Omit<
+  GeneratedPrReviewSummary,
+  | "overallRisk"
+  | "summary"
+  | "mergeRecommendation"
+  | "recommendMerge"
+  | "humanReviewRequired"
+  | "keyRisks"
+  | "focusFiles"
+  | "githubCommentBody"
+> & {
   overallRisk: RiskLevel | string;
   summary: string;
   mergeRecommendation: string;
@@ -401,44 +437,40 @@ export interface PrReviewSummary {
   keyRisks: string[];
   focusFiles: string[];
   githubCommentBody: string;
-}
+};
 
-export interface TimelineItem {
+export type TimelineItemViewModel = Omit<GeneratedTimelineItem, "label" | "time" | "status"> & {
   label: string;
   time: string;
   status: "done" | "current" | "pending";
-}
+};
 
-export interface LlmStatus {
+export type LlmStatusViewModel = Omit<GeneratedLlmStatus, "status" | "duration" | "riskLevel"> & {
   status: ReviewStatus;
   duration: string;
   riskLevel: RiskLevel;
-  provider?: string;
-  model?: string;
-  durationMs?: number;
-  parseStatus?: string;
-  fallbackReason?: string;
-  promptSummary?: string;
-  promptTokens?: number;
-  completionTokens?: number;
-  totalTokens?: number;
-  estimatedCost?: string;
-}
+};
 
-export interface ChunkedReview {
+export type ChunkedReviewViewModel = Omit<
+  GeneratedChunkedReview,
+  "enabled" | "chunkCount" | "aggregateRisk" | "aggregateFindings" | "failedChunks" | "reasons"
+> & {
   enabled: boolean;
   chunkCount: number;
   aggregateRisk?: RiskLevel | string;
   aggregateFindings: number;
   failedChunks: number;
   reasons: string[];
-}
+};
 
-export interface RabbitMqStatus {
+export type RabbitMqStatusViewModel = Omit<
+  GeneratedRabbitMqStatus,
+  "deliveryCount" | "retryCount" | "consumeStatus"
+> & {
   deliveryCount: number;
   retryCount: number;
   consumeStatus: string;
-}
+};
 
 export interface ReviewQuery {
   page: number;
@@ -485,13 +517,6 @@ export interface ManualReviewResponse {
   existing?: boolean;
   source?: string;
   triggerSource?: string;
-}
-
-export interface ReviewRetryResponse {
-  taskId: number;
-  status: ReviewStatus;
-  message: string;
-  retryCount: number;
 }
 
 export interface GithubPullRequestOptions {

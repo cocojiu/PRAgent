@@ -1,0 +1,56 @@
+RepoGuard CI / Release / Maintenance Workflow Catalog
+======================================================
+
+Purpose
+-------
+This is the maintained inventory for the personal-project workflow surface.
+Every workflow must have one category, one trigger owner, and an explicit list
+of the actions/scripts/configuration it owns. Do not delete a script only
+because it is absent from a recent run: observe one complete release cycle
+first, then review the row and its manual usage evidence.
+
+The local-only `.github/workflows/runtime-metadata-check.yml` is intentionally
+ignored by `.gitignore`; it is not a versioned GitHub Actions entry and is
+therefore excluded from this catalog.
+
+Entrypoint policy
+-----------------
+CI       Pull requests use Pull Request Quality as the single required chain.
+         Repository governance runs inside that chain; its standalone workflow
+         remains for branch pushes and explicit manual checks. Observability
+         image security is a path-scoped CI supplement.
+Release  Only protected main/master pushes, v* tags, or an explicit manual
+         dispatch build and publish images. PRAgent-test pushes do not publish.
+Maintenance  Scheduled or manual production checks are isolated from PR CI and
+             release. State-changing maintenance requires its own confirmation.
+
+Category | Workflow | Trigger | Primary action/script | Configuration/assets
+---------|----------|---------|----------------------|----------------------
+CI | .github/workflows/pr-quality.yml | pull_request: main, master, PRAgent-test | checkout, gitleaks, setup-java/node, trivy, Playwright; production-readiness-check.ps1 | Maven, npm, docker-compose*.yml, config/observability
+CI | .github/workflows/repository-governance.yml | push: main, master, PRAgent-test; workflow_dispatch | production-readiness-check.ps1 -Mode quick -SkipBackendTests | tracked-file policy and repository scripts
+CI | .github/workflows/auto-create-pr.yml | push: PRAgent-test | actions/github-script | branch head and main base
+CI | .github/workflows/production-observability-security.yml | observability path PR/push/manual | trivy, caddy validation | config/observability, docker-compose.observability.yml
+Release | .github/workflows/release-images.yml | push: main/master or v*; workflow_dispatch | Docker Buildx/login, SBOM, attestations, trivy; deploy-prod.sh | Dockerfiles, compose files, .env.prod.example, production SSH action
+Maintenance | .github/workflows/production-observation.yml | schedule; workflow_dispatch | curl endpoint probes and GitHub issue alerting | PRODUCTION_BASE_URL, liveness/readiness paths
+Maintenance | .github/workflows/production-mysql-backup.yml | schedule; workflow_dispatch | encrypted backup, restore rehearsal, AWS OIDC | backup scripts, MySQL compose and production environment
+Maintenance | .github/workflows/production-mysql-binlog-archive.yml | schedule; workflow_dispatch | encrypted PITR binlog archive, AWS OIDC | binlog archive script and production environment
+Maintenance | .github/workflows/production-mysql-legacy-backups.yml | workflow_dispatch | inventory or encrypt legacy backups | production SSH action and backup paths
+Maintenance | .github/workflows/production-observability-inventory.yml | workflow_dispatch | read-only SSH inventory | observability compose, Alloy and Grafana assets
+Maintenance | .github/workflows/production-observability-log-stack-upgrade.yml | workflow_dispatch | preflight/canary/upgrade/recover with confirmation | log-stack compose and production SSH action
+Maintenance | .github/workflows/production-observability-grafana-upgrade.yml | workflow_dispatch | preflight/prefetch/canary/upgrade/recover with confirmation | Grafana compose and production SSH action
+Maintenance | .github/workflows/real-chain-smoke.yml | workflow_dispatch | isolated GitHub/LLM review chain smoke | remote smoke scripts, production SSH action, seeded sample inputs
+Maintenance | .github/workflows/worker-concurrency-retest.yml | workflow_dispatch | controlled worker concurrency retest | production SSH action and performance scripts
+Maintenance | .github/workflows/secret-history-scan.yml | schedule; workflow_dispatch | full-history gitleaks scan | .gitleaksignore and fetch-depth: 0
+
+Baseline snapshot (2026-09-01, PRAgent-test)
+--------------------------------------------
+Pull Request Quality: about 2m39s after all test jobs complete.
+Release Images: about 4m43s for build, attestations, health and CVE scans.
+Repository Governance: about 8s. Auto Create Pull Request: sub-minute.
+Target: keep the PR chain median below 12 minutes; refresh this snapshot after
+the next ten PR runs and move slow, non-blocking checks to maintenance.
+
+Review rule
+-----------
+Before deleting or merging a workflow, record the replacement caller, the
+last observed run, and the rollback commit in optimization-progress.txt.

@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
+import com.repoguard.agent.config.EnterpriseEditionEnabled;
 import com.repoguard.agent.credential.PasswordHasher;
 import com.repoguard.agent.entity.UserAccount;
 import com.repoguard.agent.entity.UserOperationAudit;
@@ -30,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 @Component
+@EnterpriseEditionEnabled
 public class DefaultUserManagementLifecycle implements UserManagementLifecycle {
 
     private static final String ACTION_USER_CREATE = "USER_CREATE";

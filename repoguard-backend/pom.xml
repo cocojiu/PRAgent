@@ -13,7 +13,7 @@
 
     <groupId>com.repoguard</groupId>
     <artifactId>repoguard-backend</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
+    <version>0.1.0</version>
     <name>repoguard-backend</name>
     <description>RepoGuard Agent backend service</description>
 

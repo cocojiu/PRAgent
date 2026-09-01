@@ -34,11 +34,37 @@ public final class LlmQualityEvaluator {
         LlmEvaluationVersion version,
         List<LlmEvaluationObservation> observations
     ) {
-        return evaluate(version, observations, DEFAULT_MINIMUM_SAMPLES);
+        return evaluateInternal(version, null, observations, DEFAULT_MINIMUM_SAMPLES);
     }
 
     public static LlmEvaluationReport evaluate(
         LlmEvaluationVersion version,
+        List<LlmEvaluationObservation> observations,
+        int minimumSamples
+    ) {
+        return evaluateInternal(version, null, observations, minimumSamples);
+    }
+
+    public static LlmEvaluationReport evaluate(
+        LlmEvaluationVersion version,
+        LlmEvaluationDatasetMetadata dataset,
+        List<LlmEvaluationObservation> observations
+    ) {
+        return evaluate(version, dataset, observations, DEFAULT_MINIMUM_SAMPLES);
+    }
+
+    public static LlmEvaluationReport evaluate(
+        LlmEvaluationVersion version,
+        LlmEvaluationDatasetMetadata dataset,
+        List<LlmEvaluationObservation> observations,
+        int minimumSamples
+    ) {
+        return evaluateInternal(version, dataset, observations, minimumSamples);
+    }
+
+    private static LlmEvaluationReport evaluateInternal(
+        LlmEvaluationVersion version,
+        LlmEvaluationDatasetMetadata dataset,
         List<LlmEvaluationObservation> observations,
         int minimumSamples
     ) {
@@ -72,6 +98,27 @@ public final class LlmQualityEvaluator {
             .count();
         int parseFailures = (int) samples.stream().filter(sample -> !sample.parseSucceeded()).count();
         int duplicatePredictions = duplicatePredictions(samples);
+        String observedFingerprint = sampleFingerprint(samples);
+        int observedFixedRegressionSamples = (int) samples.stream()
+            .filter(sample -> sample.split() == LlmEvaluationObservation.EvaluationSplit.FIXED_REGRESSION)
+            .count();
+        int observedRollingObservationSamples = (int) samples.stream()
+            .filter(sample -> sample.split() == LlmEvaluationObservation.EvaluationSplit.ROLLING_OBSERVATION)
+            .count();
+        int observationsWithoutSplit = (int) samples.stream()
+            .filter(sample -> sample.split() == LlmEvaluationObservation.EvaluationSplit.UNSPECIFIED)
+            .count();
+        int observationsWithoutSampleContext = (int) samples.stream()
+            .filter(sample -> !sample.sampleContext().complete(sample.expectedFinding()))
+            .count();
+        Set<String> sourceRepositoryKeys = samples.stream()
+            .map(LlmEvaluationObservation::sourceRepositoryKey)
+            .filter(repositoryKey -> !repositoryKey.isBlank())
+            .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        int observedSourceRepositories = sourceRepositoryKeys.size();
+        int observationsWithoutRepository = (int) samples.stream()
+            .filter(sample -> sample.sourceRepositoryKey().isBlank())
+            .count();
         BigDecimal precision = ratio(truePositives, predicted);
         BigDecimal recall = ratio(truePositives, expected);
         BigDecimal anchorRate = ratio(anchored, predicted);
@@ -96,9 +143,27 @@ public final class LlmQualityEvaluator {
         if (parseFailureRate.compareTo(MAX_PARSE_FAILURE_RATE) > 0) {
             blockers.add("PARSE_FAILURE_RATE_ABOVE_5");
         }
+        List<String> datasetBlockers = dataset == null
+            ? List.of()
+            : dataset.validationBlockers(
+                samples.size(),
+                observedFingerprint,
+                observedSourceRepositories,
+                observationsWithoutRepository,
+                observedFixedRegressionSamples,
+                observedRollingObservationSamples,
+                observationsWithoutSplit,
+                observationsWithoutSampleContext
+            );
+        if (dataset != null) {
+            blockers.addAll(datasetBlockers);
+            if (!version.reproducible()) {
+                blockers.add("VERSION_METADATA_INCOMPLETE");
+            }
+        }
         return new LlmEvaluationReport(
             version,
-            sampleFingerprint(samples),
+            observedFingerprint,
             samples.size(),
             expected,
             predicted,
@@ -118,7 +183,11 @@ public final class LlmQualityEvaluator {
                 .map(LlmEvaluationObservation::estimatedCost)
                 .reduce(BigDecimal.ZERO, BigDecimal::add),
             blockers,
-            samples.size() >= minimumSamples
+            samples.size() >= minimumSamples && (dataset == null || (
+                datasetBlockers.isEmpty() && version.reproducible()
+            )),
+            dataset,
+            LlmEvaluationMetrics.from(samples)
         );
     }
 

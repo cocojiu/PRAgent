@@ -5,7 +5,6 @@ on:
     branches:
       - main
       - master
-      - PRAgent-test
     tags:
       - "v*"
     paths-ignore:

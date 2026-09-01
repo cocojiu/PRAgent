@@ -285,6 +285,7 @@ repoguard:
     public-auth-requests-per-minute-per-account-ip: ${REPOGUARD_AUTH_REQUESTS_PER_MINUTE_PER_ACCOUNT_IP:10}
 
 app:
+  edition: ${REPOGUARD_EDITION:personal}
   runtime:
     role: ${REPOGUARD_RUNTIME_ROLE:}
     deployment-mode: ${REPOGUARD_DEPLOYMENT_MODE:}
