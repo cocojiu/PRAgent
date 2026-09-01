@@ -383,3 +383,11 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 提交/远程验收：实现提交 `e6b7ce39`（修复：按租户寻址单例配置）已推送 `origin/PRAgent-test`，自动 PR #160；Pull Request Quality #33508881510 的 8 个作业全部成功，其中 Flyway supported upgrade path 与 Spring MySQL RabbitMQ integration 均在真实服务环境通过；push Repository Governance #33508878357 和 Auto Create Pull Request #33508878343 成功。
 边界：仅提升复杂度预算 38 行至本项实际生产净增量；`ArchitectureRatchetTest.java` 中用户原有其他未提交改动、OpenAPI frontend-signature snapshot 和 `.tmp/` 不纳入提交。不提交非 README Markdown 或测试脚本。
 下一步：远程 Actions 全部成功并补齐证据后，进入优化-51 GitHub Checks 合并门禁。
+
+2026-09-01 | 优化-51 | P0 GitHub Checks 合并门禁
+状态：已完成 Checks 生命周期、阻断结论、人工复核动作、重新运行入口、租户隔离、恢复调度、本地门禁、中文提交、test 分支推送和远程 Actions 验收。
+变更：新增 V79 `github_check_run` 租户安全表和复合唯一约束；审查任务排队、执行中、完成/失败/人工复核状态在同事务中写入期望 Check Run 状态；新增 GitHub Checks REST 客户端、幂等 external_id、失败重试与租约恢复、阻断 Finding failure annotation、无定位问题摘要、`action_required`/`cancelled`/`failure`/`success` 结论；`check_run.rerequested` webhook 可安全触发已结束任务重跑，并校验仓库、租户、Check 名称、head SHA 和活动任务；数据保留先删除 Check Run 记录再删除任务，避免外键悬挂。README 补充 GitHub App Checks 权限、事件订阅、分支保护 required status 和内置 Re-run 配置。
+本地验证：新增 GitHub Checks 客户端、网关、生命周期、结论、Webhook、恢复和配置测试；完整后端 `mvn verify` 共 2642 项测试通过、0 失败、12 项按环境条件跳过，JaCoCo 覆盖率门禁通过；生产就绪 quick 检查、架构/迁移/Schema/调度契约和 `git diff --check` 通过。
+提交/远程验收：实现提交 `15080abe`（新增：实现 GitHub Checks 合并门禁）已推送 `origin/PRAgent-test`；首次 Pull Request Quality `33515872257` 发现升级测试把三列复合索引按单列断言，已由修复提交 `ff3134b8`（修复：校正 GitHub Checks 复合索引升级断言）修复并重新推送。修复后的 Pull Request Quality `33516343298`（8 个作业全部成功，含真实 MySQL/RabbitMQ 与 V76→V79 Flyway 升级）、push Repository Governance `33516337598` 和 Auto Create Pull Request `33516337638` 全部成功。
+边界：GitHub App 仍需维护者在目标组织授予 Checks write、Pull requests write 等权限，并在分支保护中将 `RepoGuard PR Review` 设为 required status；未写入真实 token、源码或 PR 数据，不提交非 README Markdown 或测试脚本；工作区既有 `ArchitectureRatchetTest.java`、OpenAPI frontend-signature snapshot 和 `.tmp/` 保持未提交。
+下一步：进入优化-52 企业租户与仓库管理台，先复用现有租户/成员/仓库/OIDC/配额接口补齐前端路由，再扩展细粒度 RBAC，并保持单项提交、推送、Actions 验收。
