@@ -351,3 +351,11 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 提交/远程验收：实现提交 `2fc7a794`（优化：建立总复杂度预算与孤立项审计）已推送 `origin/PRAgent-test`；Pull Request Quality #33471874993、push Repository Governance #33471872712、Auto Create Pull Request #33471872727 均成功，PRAgent-test 未触发生产镜像发布。
 边界：预算是个人项目的复杂度天花板，不改变运行时业务行为；生产脚本仍保留现有手动/定时入口，目录仅补齐 owner、触发和退役证据；未修改既有 `openapi-generated-client.frontend-signature.snapshot` 工作区改动和 `.tmp/`。
 下一步：按顺序评估 P2-02 Flyway 基线整理的数据库前置条件；若存在外部数据库则保持已发布 migration 不变，仅补充增量迁移和新安装 baseline 方案。
+
+2026-09-01 | 优化-48 | P2-02 Flyway 基线条件决策与升级保护
+状态：已完成数据库前置条件审计、基线决策契约、readiness 门禁、中文提交、test 分支推送和远程 Actions 验收。
+变更：确认生产 profile 依赖外部 `SPRING_DATASOURCE_URL`，且 CI 通过真实 MySQL 验证 V76→V77 原地升级；因此不重写或删除现有 77 个 Flyway migration。`migration-contract.json` 记录外部数据库支持、已发布 migration 不可变、V77 为候选基线，以及空库迁移、结构对比、种子管理员/核心链路和最老支持版本升级四类证据；新安装只有在 V77 schema snapshot 与演练证据版本化后才能采用 snapshot→baseline。`production-readiness-check.ps1` 和 manifest JUnit 契约共同阻断缺少决策、候选版本漂移或升级路径缺失的变更。
+本地验证：`MigrationContractManifestTest` 4 项、`SchemaVersionExpectationContractTest` 2 项通过；Flyway 升级集成测试在未设置 `REPOGUARD_RUN_INTEGRATION_TESTS` 的本地环境按条件跳过；readiness quick（设置 Windows shell 探测环境）通过；`git diff --check` 通过。
+提交/远程验收：实现提交 `dac00497`（优化：明确 Flyway 基线与外部数据库迁移策略）已推送 `origin/PRAgent-test`；Pull Request Quality #33472653684、push Repository Governance #33472650479、Auto Create Pull Request #33472650443 均成功，PRAgent-test 未触发生产镜像发布。
+边界：当前选择保守的延后合并，不伪造尚未完成的 schema snapshot；既有 migration、外部数据库数据和升级路径保持不变。未修改用户已有 `openapi-generated-client.frontend-signature.snapshot` 工作区改动和 `.tmp/`。
+下一步：继续按顺序处理后续工程优化项；涉及数据库基线时，先补齐 V77 snapshot 与空库/结构/数据演练证据，再考虑启用 baseline。
