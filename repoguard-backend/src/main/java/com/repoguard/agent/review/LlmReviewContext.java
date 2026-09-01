@@ -14,17 +14,38 @@ record LlmReviewContext(
     List<ContextLimitation> limitations,
     boolean budgetTruncated,
     int maxTotalChars,
-    int maxRelatedFiles
+    int maxRelatedFiles,
+    String repositoryContextSummary
 ) {
 
     LlmReviewContext {
         slices = slices == null ? List.of() : List.copyOf(slices);
         rulePolicyContext = rulePolicyContext == null ? "" : rulePolicyContext;
         limitations = limitations == null ? List.of() : List.copyOf(limitations);
+        repositoryContextSummary = repositoryContextSummary == null ? "" : repositoryContextSummary;
+    }
+
+    LlmReviewContext(
+        List<LlmContextSlice> slices,
+        String rulePolicyContext,
+        List<ContextLimitation> limitations,
+        boolean budgetTruncated,
+        int maxTotalChars,
+        int maxRelatedFiles
+    ) {
+        this(
+            slices,
+            rulePolicyContext,
+            limitations,
+            budgetTruncated,
+            maxTotalChars,
+            maxRelatedFiles,
+            ""
+        );
     }
 
     static LlmReviewContext legacy() {
-        return new LlmReviewContext(List.of(), "", List.of(), false, 24_000, 8);
+        return new LlmReviewContext(List.of(), "", List.of(), false, 24_000, 8, "");
     }
 
     String renderFor(PullRequestDiff diff) {
@@ -58,8 +79,12 @@ record LlmReviewContext(
 
         StringBuilder rendered = new StringBuilder();
         append(rendered, "Context version: " + LlmReviewVersions.CONTEXT);
+        if (StringUtils.hasText(repositoryContextSummary)) {
+            appendWithinBudget(rendered, "[REPOSITORY_SEMANTIC_CONTEXT] " + repositoryContextSummary);
+        }
         List<ContextLimitation> relevantLimitations = limitations.stream()
-            .filter(limitation -> primaryPaths.contains(normalizePath(limitation.filePath())))
+            .filter(limitation -> "[repository]".equalsIgnoreCase(limitation.filePath())
+                || primaryPaths.contains(normalizePath(limitation.filePath())))
             .toList();
         if (!relevantLimitations.isEmpty() || budgetTruncated) {
             String values = relevantLimitations.stream()

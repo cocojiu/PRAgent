@@ -166,6 +166,44 @@ class LlmReviewContextBuilderTest {
         assertThat(context.renderFor(diff(List.of(stale)))).contains("UNAVAILABLE:head_sha_mismatch");
     }
 
+    @Test
+    void mergesDefaultBranchSemanticSlicesAndSummaryAfterPrimarySlices() {
+        RepositorySemanticContextProvider provider = mock(RepositorySemanticContextProvider.class);
+        LlmReviewContextProperties properties = new LlmReviewContextProperties();
+        LlmContextSlice caller = new LlmContextSlice(
+            "src/main/java/com/example/OrderFacade.java",
+            1,
+            1,
+            LlmContextSlice.Role.SOURCE,
+            "L1: OrderService service;",
+            java.util.Set.of("OrderService"),
+            100
+        );
+        PullRequestDiff pullRequest = diff(List.of(available(
+            "src/main/java/com/example/OrderService.java",
+            "class OrderService {}",
+            "@@ -1,0 +1,1 @@\n+class OrderService {}"
+        )));
+        when(provider.load(pullRequest)).thenReturn(new RepositorySemanticContext(
+            "main",
+            List.of(caller),
+            List.of(),
+            false,
+            "branch=main; deterministic=true; indexedFiles=1"
+        ));
+
+        LlmReviewContext context = new LlmReviewContextBuilder(
+            null,
+            properties,
+            new DiffRiskClassifier(),
+            provider
+        ).build(pullRequest);
+
+        assertThat(context.repositoryContextSummary()).contains("branch=main", "deterministic=true");
+        assertThat(context.renderFor(pullRequest))
+            .contains("[REPOSITORY_SEMANTIC_CONTEXT]", "OrderFacade.java", "[DIRECT_CALLER]");
+    }
+
     private PullRequestChangedFile available(String path, String content, String patch) {
         return new PullRequestChangedFile(
             path,

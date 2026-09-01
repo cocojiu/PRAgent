@@ -18,6 +18,13 @@ class LlmReviewContextPropertiesTest {
         assertThat(properties.getMaxRelatedFiles()).isEqualTo(8);
         assertThat(properties.getMaxRulePolicies()).isEqualTo(20);
         assertThat(properties.getMaxRuleTextChars()).isEqualTo(360);
+        assertThat(properties.isSemanticIndexEnabled()).isTrue();
+        assertThat(properties.getSemanticIndexMaxFiles()).isEqualTo(24);
+        assertThat(properties.getSemanticIndexMaxFileBytes()).isEqualTo(65_536);
+        assertThat(properties.getSemanticIndexMaxTotalBytes()).isEqualTo(1_048_576);
+        assertThat(properties.getSemanticIndexTimeoutMs()).isEqualTo(3_000);
+        assertThat(properties.getSemanticIndexCacheMaximumSize()).isEqualTo(128);
+        assertThat(properties.getSemanticIndexCacheTtlSeconds()).isEqualTo(900);
     }
 
     @Test
@@ -37,5 +44,19 @@ class LlmReviewContextPropertiesTest {
             .isEqualTo("${REPOGUARD_LLM_CONTEXT_MAX_RULE_POLICIES:20}");
         assertThat(properties.getProperty("repoguard.review.llm-context.max-rule-text-chars"))
             .isEqualTo("${REPOGUARD_LLM_CONTEXT_MAX_RULE_TEXT_CHARS:360}");
+        assertThat(properties.getProperty("repoguard.review.llm-context.semantic-index-enabled"))
+            .isEqualTo("${REPOGUARD_LLM_SEMANTIC_INDEX_ENABLED:true}");
+        assertThat(properties.getProperty("repoguard.review.llm-context.semantic-index-max-files"))
+            .isEqualTo("${REPOGUARD_LLM_SEMANTIC_INDEX_MAX_FILES:24}");
+        assertThat(properties.getProperty("repoguard.review.llm-context.semantic-index-max-file-bytes"))
+            .isEqualTo("${REPOGUARD_LLM_SEMANTIC_INDEX_MAX_FILE_BYTES:65536}");
+        assertThat(properties.getProperty("repoguard.review.llm-context.semantic-index-max-total-bytes"))
+            .isEqualTo("${REPOGUARD_LLM_SEMANTIC_INDEX_MAX_TOTAL_BYTES:1048576}");
+        assertThat(properties.getProperty("repoguard.review.llm-context.semantic-index-timeout-ms"))
+            .isEqualTo("${REPOGUARD_LLM_SEMANTIC_INDEX_TIMEOUT_MS:3000}");
+        assertThat(properties.getProperty("repoguard.review.llm-context.semantic-index-cache-maximum-size"))
+            .isEqualTo("${REPOGUARD_LLM_SEMANTIC_INDEX_CACHE_MAXIMUM_SIZE:128}");
+        assertThat(properties.getProperty("repoguard.review.llm-context.semantic-index-cache-ttl-seconds"))
+            .isEqualTo("${REPOGUARD_LLM_SEMANTIC_INDEX_CACHE_TTL_SECONDS:900}");
     }
 }

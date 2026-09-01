@@ -103,6 +103,13 @@ repoguard:
       max-related-files: ${REPOGUARD_LLM_CONTEXT_MAX_RELATED_FILES:8}
       max-rule-policies: ${REPOGUARD_LLM_CONTEXT_MAX_RULE_POLICIES:20}
       max-rule-text-chars: ${REPOGUARD_LLM_CONTEXT_MAX_RULE_TEXT_CHARS:360}
+      semantic-index-enabled: ${REPOGUARD_LLM_SEMANTIC_INDEX_ENABLED:true}
+      semantic-index-max-files: ${REPOGUARD_LLM_SEMANTIC_INDEX_MAX_FILES:24}
+      semantic-index-max-file-bytes: ${REPOGUARD_LLM_SEMANTIC_INDEX_MAX_FILE_BYTES:65536}
+      semantic-index-max-total-bytes: ${REPOGUARD_LLM_SEMANTIC_INDEX_MAX_TOTAL_BYTES:1048576}
+      semantic-index-timeout-ms: ${REPOGUARD_LLM_SEMANTIC_INDEX_TIMEOUT_MS:3000}
+      semantic-index-cache-maximum-size: ${REPOGUARD_LLM_SEMANTIC_INDEX_CACHE_MAXIMUM_SIZE:128}
+      semantic-index-cache-ttl-seconds: ${REPOGUARD_LLM_SEMANTIC_INDEX_CACHE_TTL_SECONDS:900}
     llm-verification:
       enabled: ${REPOGUARD_LLM_VERIFICATION_ENABLED:true}
       max-candidates: ${REPOGUARD_LLM_VERIFICATION_MAX_CANDIDATES:4}

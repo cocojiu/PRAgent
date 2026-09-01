@@ -21,21 +21,32 @@ class LlmReviewContextBuilder {
     private final LlmReviewContextProperties properties;
     private final DiffRiskClassifier riskClassifier;
     private final LlmSourceContextSlicer sourceSlicer;
+    private final RepositorySemanticContextProvider semanticContextProvider;
 
     LlmReviewContextBuilder() {
-        this(null, new LlmReviewContextProperties(), new DiffRiskClassifier());
+        this(null, new LlmReviewContextProperties(), new DiffRiskClassifier(), null);
+    }
+
+    LlmReviewContextBuilder(
+        ReviewRuleProvider ruleProvider,
+        LlmReviewContextProperties properties,
+        DiffRiskClassifier riskClassifier
+    ) {
+        this(ruleProvider, properties, riskClassifier, null);
     }
 
     @Autowired
     LlmReviewContextBuilder(
         ReviewRuleProvider ruleProvider,
         LlmReviewContextProperties properties,
-        DiffRiskClassifier riskClassifier
+        DiffRiskClassifier riskClassifier,
+        RepositorySemanticContextProvider semanticContextProvider
     ) {
         this.ruleProvider = ruleProvider;
         this.properties = Objects.requireNonNull(properties, "properties");
         this.riskClassifier = Objects.requireNonNull(riskClassifier, "riskClassifier");
         this.sourceSlicer = new LlmSourceContextSlicer(properties);
+        this.semanticContextProvider = semanticContextProvider;
     }
 
     LlmReviewContext build(PullRequestDiff diff) {
@@ -90,14 +101,54 @@ class LlmReviewContextBuilder {
             retainedChars += nextChars;
             slices.add(slice);
         }
+        RepositorySemanticContext semanticContext = semanticContext(diff);
+        if (semanticContext != null) {
+            limitations.addAll(semanticContext.limitations());
+            if (semanticContext.truncated()) {
+                truncated = true;
+            }
+            for (LlmContextSlice slice : semanticContext.slices()) {
+                int nextChars = slice.numberedContent().length();
+                if (retainedChars + nextChars > properties.getMaxTotalChars()) {
+                    truncated = true;
+                    continue;
+                }
+                retainedChars += nextChars;
+                slices.add(slice);
+            }
+        }
         return new LlmReviewContext(
             slices,
             rulePolicyContext(),
             limitations,
             truncated,
             properties.getMaxTotalChars(),
-            properties.getMaxRelatedFiles()
+            properties.getMaxRelatedFiles(),
+            semanticContext == null ? "" : semanticContext.summary()
         );
+    }
+
+    private RepositorySemanticContext semanticContext(PullRequestDiff diff) {
+        if (semanticContextProvider == null || diff == null) {
+            return null;
+        }
+        try {
+            return semanticContextProvider.load(diff);
+        } catch (RuntimeException ex) {
+            LOGGER.warn(
+                "Repository semantic context unavailable operation=llm_context result=degraded exceptionType={}",
+                ex.getClass().getName()
+            );
+            return new RepositorySemanticContext(
+                "",
+                List.of(),
+                List.of(new LlmReviewContext.ContextLimitation(
+                    "[repository]", "UNAVAILABLE", "semantic_context_provider_failed"
+                )),
+                false,
+                "unavailable; reason=semantic_context_provider_failed"
+            );
+        }
     }
 
     private String rulePolicyContext() {

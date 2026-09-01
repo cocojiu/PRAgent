@@ -194,6 +194,12 @@ GitHub Checks 合并门禁：
 2. `PLATFORM_ADMIN` 管理租户控制面，`TENANT_ADMIN` 管理租户成员，`RULE_ADMIN` 管理规则，`REVIEWER` 执行审查，`READ_ONLY` 只读；`ADMIN`/`VIEWER` 作为兼容角色保留。
 3. 顶部租户切换器把选择写入 `X-RepoGuard-Tenant` 请求头，不把租户标识放入 URL；启用 `REPOGUARD_TENANCY_ENABLED=true` 后，服务端只接受当前用户拥有的租户成员关系。
 
+仓库级语义上下文：
+
+1. LLM 审查会从变更文件提取类型/文件名符号，在 GitHub 默认分支树中确定性检索同目录调用方、实现/接口、测试和运行配置，并将命中内容作为关联上下文。
+2. 检索使用受限的 Caffeine 缓存和内容/文件/时间预算，不执行仓库代码；GitHub 未配置、默认分支不可用或请求失败时自动降级为仅使用 PR 变更上下文。
+3. 可通过 `REPOGUARD_LLM_SEMANTIC_INDEX_ENABLED`、`REPOGUARD_LLM_SEMANTIC_INDEX_MAX_FILES`、`REPOGUARD_LLM_SEMANTIC_INDEX_MAX_FILE_BYTES`、`REPOGUARD_LLM_SEMANTIC_INDEX_MAX_TOTAL_BYTES`、`REPOGUARD_LLM_SEMANTIC_INDEX_TIMEOUT_MS` 和缓存大小/TTL 变量调整预算。当前实现只做符号和路径检索，向量检索留待后续评估。
+
 运行角色边界：
 
 - `combined` 同时提供 HTTP API、RabbitMQ 消费者和受数据库保护的定时任务。
