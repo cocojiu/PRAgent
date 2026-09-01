@@ -106,13 +106,13 @@ import {
   hiddenDetailItemCount,
   observeDetailRegionRender
 } from "../reviewDetailRenderBudget";
-import type { ChangedFile, MissingTest } from "@/types";
+import type { ChangedFileViewModel, MissingTestViewModel } from "@/types";
 
-type ChangedFileWithFindingCount = ChangedFile & { findingCount: number };
+type ChangedFileWithFindingCount = ChangedFileViewModel & { findingCount: number };
 
 const props = defineProps<{
   archived: boolean;
-  missingTests: MissingTest[];
+  missingTests: MissingTestViewModel[];
   changedFiles: ChangedFileWithFindingCount[];
   missingTestsLoaded: boolean;
   changedFilesLoaded: boolean;
@@ -123,7 +123,7 @@ const props = defineProps<{
   pageSize: number;
   missingTestsTotal: number;
   changedFilesTotal: number;
-  changeTypeText: (changeType: ChangedFile["changeType"] | string) => string;
+  changeTypeText: (changeType: ChangedFileViewModel["changeType"] | string) => string;
 }>();
 
 defineEmits<{

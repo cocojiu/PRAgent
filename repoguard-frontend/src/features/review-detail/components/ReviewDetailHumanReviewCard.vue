@@ -43,7 +43,8 @@
 
 <script setup lang="ts">
 import { formatDateTime } from "@/utils/dateTime";
-import type { HumanReviewRequest, ReviewTaskDetail } from "@/types";
+import type { HumanReviewRequest } from "@/api/generated/reviewDetailTypes";
+import type { ReviewTaskDetail } from "@/types";
 
 defineProps<{
   canManage: boolean;

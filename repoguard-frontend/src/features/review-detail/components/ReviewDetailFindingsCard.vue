@@ -129,13 +129,13 @@ import {
   observeDetailRegionRender,
   truncateDetailText
 } from "../reviewDetailRenderBudget";
-import type { FindingFeedbackStatus, ReviewFinding, RiskLevel } from "@/types";
+import type { FindingFeedbackStatus, ReviewFindingViewModel, RiskLevel } from "@/types";
 
 const props = defineProps<{
   canManage: boolean;
   archived: boolean;
   feedbackSavingId: number | null;
-  findings: ReviewFinding[];
+  findings: ReviewFindingViewModel[];
   loaded: boolean;
   loading: boolean;
   currentPage: number;
@@ -184,7 +184,7 @@ const reviewDimensionText = (dimension?: string) => {
   return dimension ? labels[dimension] ?? dimension.replaceAll("_", " ") : "";
 };
 
-const hasExplainability = (finding: ReviewFinding) =>
+const hasExplainability = (finding: ReviewFindingViewModel) =>
   Boolean(finding.evidence || finding.impact || finding.fixExample);
 
 const renderedFindings = computed(() => boundedDetailItems(props.findings));

@@ -57,11 +57,11 @@
 
 <script setup lang="ts">
 import { RefreshCw } from "@lucide/vue";
-import type { ReviewStatus, ReviewTaskDetail, RiskLevel, TimelineItem } from "@/types";
+import type { ReviewStatus, ReviewTaskDetail, RiskLevel, TimelineItemViewModel } from "@/types";
 
 defineProps<{
   task: ReviewTaskDetail;
-  timeline: TimelineItem[];
+  timeline: TimelineItemViewModel[];
   timelineLoaded: boolean;
   timelineLoading: boolean;
   llmModelText: string;

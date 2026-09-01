@@ -57,13 +57,13 @@
 </template>
 
 <script setup lang="ts">
-import type { PrRiskProfile, ReviewTaskDetail, ReviewStatus, RiskLevel } from "@/types";
+import type { PrRiskProfileViewModel, ReviewTaskDetail, ReviewStatus, RiskLevel } from "@/types";
 
 defineProps<{
   task: ReviewTaskDetail;
   findingCount: number;
   findingCounts: Record<RiskLevel, number>;
-  riskProfile?: PrRiskProfile;
+  riskProfile?: PrRiskProfileViewModel;
   statusText: (status: ReviewStatus) => string;
   riskText: (risk: RiskLevel) => string;
   changeTypeText: (changeType: string) => string;

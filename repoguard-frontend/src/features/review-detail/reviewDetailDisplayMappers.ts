@@ -1,13 +1,13 @@
 import type {
-  ChangedFile,
   FindingFeedbackStatus,
   GithubCommentPreview,
-  HumanReviewRequest,
   HumanReviewStatus,
+  ChangedFileViewModel,
   ReviewTaskDetail,
   RiskLevel,
-  TimelineItem
+  TimelineItemViewModel
 } from "@/types";
+import type { HumanReviewRequest } from "@/api/generated/reviewDetailTypes";
 import { riskText } from "@/utils/risk";
 
 export const chunkAggregateRiskText = (risk?: RiskLevel | string) => riskText((risk || "info") as RiskLevel);
@@ -70,7 +70,7 @@ export const timelineLabelText = (label: string) => {
   return label;
 };
 
-export const changeTypeText = (type: ChangedFile["changeType"] | string) => {
+export const changeTypeText = (type: ChangedFileViewModel["changeType"] | string) => {
   const labels: Record<string, string> = {
     A: "新增",
     M: "修改",
@@ -332,7 +332,7 @@ export const refreshStatusText = ({
   return lastRefreshedAt ? `已完成，最后更新 ${lastRefreshedAt}` : "已完成";
 };
 
-export const statusReasonText = (failureReason: string, timeline: TimelineItem[]) => {
+export const statusReasonText = (failureReason: string, timeline: TimelineItemViewModel[]) => {
   if (failureReason) {
     return failureReason;
   }
