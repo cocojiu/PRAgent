@@ -407,3 +407,11 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 提交/远程验收：实现提交 `c8c9941f`（新增：建设仓库级语义上下文索引）已推送，push Repository Governance #33525560125、Auto Create Pull Request #33525560081 成功；修复提交 `de666efc`（修复：补齐语义上下文覆盖率测试）已推送，push Repository Governance #33527235941、Auto Create Pull Request #33527235974 成功；最终 Pull Request Quality #33527240746 的 8 个作业全部成功，含真实 MySQL/RabbitMQ、Flyway 升级、前端构建、边缘配置、跟踪文件治理、密钥差异和依赖审查。
 边界：索引只读取默认分支且以确定性规则检索，不伪造未取得的调用关系；GitLab/Gitee/Bitbucket 适配、向量检索和增量符号索引留待后续 SCM/模型批次；未新增数据库迁移，不提交非 README Markdown 或测试脚本；用户既有 `ArchitectureRatchetTest.java`、OpenAPI frontend-signature snapshot 和 `.tmp/` 保持未提交。
 下一步：进入优化-54 一键修复建议，先约束为可精确定位的单行/小范围 GitHub suggestion，并保留人工确认边界。
+
+2026-09-02 | 优化-54 | P1 GitHub suggestion 一键修复建议
+状态：已完成精确替换建议生成、评论发布链路接入、安全边界、本地门禁、中文提交、test 分支推送和远程 Actions 验收。
+变更：GitHub 评论预览现在仅对定位到变更行的 finding 生成原生 `suggestion` 代码块；`fixExample` 必须是完整代码块或 `suggestion:` 前缀，限制为最多 5 行、4,000 字符且拒绝嵌套围栏和控制字符，普通自然语言、删除文件、PR 总评、已发布和非 actionable finding 均不生成可应用补丁。作者在 GitHub 页面确认后可直接应用建议，系统不自动提交作者分支或创建修复 PR。LLM prompt 与结构化输出契约增加精确替换字段及空字符串约束，README 补充使用边界。
+本地验证：GitHub 评论、LLM prompt/schema 相关定向测试 20 项通过；完整后端 `mvn verify` 共 2664 项测试通过、0 失败、12 项按环境条件跳过，JaCoCo 覆盖率、`ApplicationArchitectureTest` 44 项和 `ArchitectureRatchetTest` 9 项均通过；复杂度预算按实际生产净增量更新至 72,604 行；`git diff --check` 通过。
+提交/远程验收：实现提交 `01a5dfb7`（新增：实现 GitHub suggestion 一键修复建议）已推送，push Repository Governance #33528912035、Auto Create Pull Request #33528912064 成功；Pull Request Quality #33528918715 的 8 个作业全部成功，含前后端质量、真实 MySQL/RabbitMQ、Flyway 升级、边缘配置、跟踪文件治理、密钥差异和依赖审查。
+边界：当前只支持作者在 GitHub 原生评论中人工确认后应用单行/小范围替换；创建修复分支/PR、跨文件补丁、自动验证和批量应用留待后续模型评测与协作批次；未提交非 README Markdown 或测试脚本，用户既有 `ArchitectureRatchetTest.java`、OpenAPI frontend-signature snapshot 和 `.tmp/` 保持未提交。
+下一步：进入优化-55 LLM 评测与模型发布中心，先复用已有质量指标和校准队列建设版本化数据集、影子运行与发布门禁。
