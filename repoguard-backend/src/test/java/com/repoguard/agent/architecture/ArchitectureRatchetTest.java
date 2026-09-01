@@ -34,6 +34,19 @@ class ArchitectureRatchetTest {
     private static final Pattern INTERFACE_DECLARATION = Pattern.compile(
         "\\binterface\\s+([A-Za-z_$][A-Za-z0-9_$]*)"
     );
+    private static final Pattern COMPONENT_ANNOTATION = Pattern.compile(
+        "(?m)^\\s*@(Component|Service|Repository)(?:\\([^\\r\\n]*\\))?"
+    );
+    private static final Pattern CLASS_DECLARATION = Pattern.compile(
+        "\\b(?:public\\s+)?(?:abstract\\s+)?(?:final\\s+)?class\\s+"
+            + "([A-Za-z_$][A-Za-z0-9_$]*)"
+    );
+    private static final Pattern IMPLEMENTED_INTERFACE = Pattern.compile(
+        "\\bimplements\\s+([A-Za-z_$][A-Za-z0-9_$]*)"
+    );
+    private static final Pattern LEGACY_CONFIGURATION = Pattern.compile(
+        "\\\"(app\\.runtime\\.(?:api|worker)\\.enabled|REPOGUARD_(?:API|WORKER)_ENABLED)\\\""
+    );
     private static final Pattern SCHEDULED_METHOD = Pattern.compile(
         "(?m)^\\s*@Scheduled(?:\\([^\\r\\n]*\\))?\\s*\\r?\\n"
             + "\\s*public\\s+(?:[A-Za-z_$][A-Za-z0-9_$]*\\s+)*void\\s+"
@@ -143,9 +156,13 @@ class ArchitectureRatchetTest {
     @Test
     void productionInterfacesAndDtosDoNotAccumulateUnreferencedDuplicates() throws IOException {
         Properties properties = loadProperties();
+        List<String> unreferencedBeans = unreferencedBeanNames();
         List<String> unreferencedInterfaces = unreferencedInterfaceNames();
         List<String> duplicateDtoNames = duplicateDtoNames();
 
+        assertThat(unreferencedBeans)
+            .as("production beans without a direct or interface-dispatch caller")
+            .hasSizeLessThanOrEqualTo(Integer.parseInt(properties.getProperty("maxUnreferencedBeanCount", "0")));
         assertThat(unreferencedInterfaces)
             .as("production interfaces without a caller")
             .hasSizeLessThanOrEqualTo(Integer.parseInt(properties.getProperty("maxUnreferencedInterfaceCount", "0")));
@@ -179,6 +196,32 @@ class ArchitectureRatchetTest {
             .allMatch(value -> !value.isBlank()));
     }
 
+    @Test
+    void deprecatedConfigurationHasReplacementVerificationAndRetirementMetadata() throws IOException {
+        Properties properties = loadProperties();
+        Path catalogPath = REPOSITORY_ROOT.resolve(properties.getProperty(
+            "configurationLifecycleCatalog",
+            "scripts/configuration-lifecycle-catalog.txt"
+        ));
+        Map<String, List<String>> catalog = delimitedCatalog(catalogPath, 5);
+        Set<String> deprecatedConfigurations = deprecatedConfigurationNames();
+
+        assertThat(deprecatedConfigurations.size())
+            .as("deprecated configuration budget")
+            .isLessThanOrEqualTo(Integer.parseInt(
+                properties.getProperty("maxDeprecatedConfigurationCount", "4")
+            ));
+        assertThat(catalog.keySet())
+            .as("every deprecated configuration must have a replacement and retirement plan")
+            .containsExactlyInAnyOrderElementsOf(deprecatedConfigurations);
+        catalog.values().forEach(fields -> {
+            assertThat(fields.get(1)).isEqualTo("compatibility-only");
+            assertThat(fields.subList(2, fields.size()))
+                .as("deprecated configuration lifecycle metadata")
+                .allMatch(value -> !value.isBlank());
+        });
+    }
+
     private static List<Path> productionSources() throws IOException {
         try (Stream<Path> paths = Files.walk(MAIN_SOURCE_ROOT)) {
             return paths.filter(path -> path.toString().endsWith(".java")).toList();
@@ -196,6 +239,58 @@ class ArchitectureRatchetTest {
             variables.add(matcher.group(1));
         }
         return variables;
+    }
+
+    private static List<String> unreferencedBeanNames() throws IOException {
+        List<String> sourceTexts = productionSources().stream()
+            .map(ArchitectureRatchetTest::read)
+            .toList();
+        Set<String> names = new LinkedHashSet<>();
+        for (String sourceText : sourceTexts) {
+            Matcher annotation = COMPONENT_ANNOTATION.matcher(sourceText);
+            while (annotation.find()) {
+                Matcher declaration = CLASS_DECLARATION.matcher(sourceText);
+                declaration.region(annotation.end(), Math.min(sourceText.length(), annotation.end() + 1000));
+                if (!declaration.find()) {
+                    continue;
+                }
+                String name = declaration.group(1);
+                Pattern reference = Pattern.compile("\\b" + Pattern.quote(name) + "\\b");
+                long references = sourceTexts.stream()
+                    .mapToLong(text -> reference.matcher(text).results().count())
+                    .sum();
+                if (references <= 1 && !referencedThroughInterface(sourceText, sourceTexts)) {
+                    names.add(name);
+                }
+            }
+        }
+        return names.stream().sorted().toList();
+    }
+
+    private static boolean referencedThroughInterface(String sourceText, List<String> sourceTexts) {
+        Matcher implemented = IMPLEMENTED_INTERFACE.matcher(sourceText);
+        while (implemented.find()) {
+            String name = implemented.group(1);
+            Pattern reference = Pattern.compile("\\b" + Pattern.quote(name) + "\\b");
+            long references = sourceTexts.stream()
+                .mapToLong(text -> reference.matcher(text).results().count())
+                .sum();
+            if (references > 1) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static Set<String> deprecatedConfigurationNames() throws IOException {
+        Set<String> names = new LinkedHashSet<>();
+        for (Path source : productionSources()) {
+            Matcher matcher = LEGACY_CONFIGURATION.matcher(read(source));
+            while (matcher.find()) {
+                names.add(matcher.group(1));
+            }
+        }
+        return names;
     }
 
     private static Set<String> scheduledJobKeys() throws IOException {

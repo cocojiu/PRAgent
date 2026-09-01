@@ -1,0 +1,5 @@
+# name|status|replacement|verification|retirement
+app.runtime.api.enabled|compatibility-only|app.runtime.role or REPOGUARD_RUNTIME_ROLE|RuntimeRoleContract resolves the legacy alias and rejects conflicts with the canonical role|Remove after all deployment templates and operators use the canonical runtime role.
+REPOGUARD_API_ENABLED|compatibility-only|REPOGUARD_RUNTIME_ROLE|RuntimeRoleContract resolves the legacy environment alias and emits a migration warning|Remove after all deployment templates and operators use the canonical runtime role.
+app.runtime.worker.enabled|compatibility-only|app.runtime.role or REPOGUARD_RUNTIME_ROLE|RuntimeRoleContract resolves the legacy alias and rejects conflicts with the canonical role|Remove after all deployment templates and operators use the canonical runtime role.
+REPOGUARD_WORKER_ENABLED|compatibility-only|REPOGUARD_RUNTIME_ROLE|RuntimeRoleContract resolves the legacy environment alias and emits a migration warning|Remove after all deployment templates and operators use the canonical runtime role.
