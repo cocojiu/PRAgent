@@ -2051,6 +2051,7 @@ class ProductionRuntimeContextIntegrationTest {
             "tenant_membership",
             "tenant_quota_config",
             "tenant_quota_usage",
+            "llm_model_release",
             "tenant_repository"
         );
         Set<String> classified = new TreeSet<>(MybatisPlusConfig.tenantTables());
