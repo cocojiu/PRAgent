@@ -182,11 +182,13 @@ import { canAccessRouteMeta } from "@/router/accessPolicy";
 import { canManage, currentUser, loadCurrentUser, resetCurrentUser } from "@/stores/authState";
 import { APP_VERSION } from "@/config/appVersion";
 import { enterpriseEditionEnabled } from "@/config/edition";
-import TenantSwitcher from "@/components/TenantSwitcher.vue";
 import type { NotificationCenter, NotificationItem } from "@/types";
 
 const ChangePasswordDialog = defineAsyncComponent(
   () => import("@/features/auth/components/ChangePasswordDialog.vue")
+);
+const TenantSwitcher = defineAsyncComponent(
+  () => import("@/components/TenantSwitcher.vue")
 );
 const collapsed = ref(false);
 const route = useRoute();

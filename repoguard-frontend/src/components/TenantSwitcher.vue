@@ -1,22 +1,20 @@
 <template>
   <div v-if="canManageTenants" class="tenant-switcher" aria-label="当前租户">
     <span class="tenant-switcher-label">租户</span>
-    <el-select
+    <select
       v-model="selectedTenantKey"
       class="tenant-switcher-select"
-      size="small"
-      placeholder="选择租户"
-      :loading="loading"
-      clearable
+      aria-label="选择租户"
+      :disabled="loading"
       @change="changeTenant"
     >
-      <el-option
+      <option value="">选择租户</option>
+      <option
         v-for="tenant in tenants"
         :key="tenant.tenantKey"
-        :label="`${tenant.displayName} (${tenant.tenantKey})`"
         :value="tenant.tenantKey"
-      />
-    </el-select>
+      >{{ `${tenant.displayName} (${tenant.tenantKey})` }}</option>
+    </select>
   </div>
 </template>
 
@@ -53,7 +51,8 @@ const loadTenants = async () => {
   }
 };
 
-const changeTenant = (tenantKey: string | undefined) => {
+const changeTenant = (event: Event) => {
+  const tenantKey = (event.target as HTMLSelectElement).value || undefined;
   setActiveTenant(tenantKey);
   ElMessage.success(tenantKey ? `已切换到租户 ${tenantKey}` : "已清除租户选择");
 };
