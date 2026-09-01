@@ -37,7 +37,7 @@ public class GithubCommentPreviewItemBuilder {
             finding.getLineNumber(),
             finding.getMessage(),
             finding.getRecommendation(),
-            buildGithubCommentBody(finding),
+            buildGithubCommentBody(finding, targetType),
             !published && actionable,
             targetType.code(),
             published ? "GitHub comment already published" : actionable ? reason : feedbackSkipReason(finding),
@@ -124,7 +124,7 @@ public class GithubCommentPreviewItemBuilder {
         return Set.of("D", "DELETE", "DELETED", "REMOVE", "REMOVED").contains(changeType.trim().toUpperCase(Locale.ROOT));
     }
 
-    private String buildGithubCommentBody(ReviewFinding finding) {
+    private String buildGithubCommentBody(ReviewFinding finding, GithubCommentTargetType targetType) {
         StringBuilder body = new StringBuilder();
         body.append("**RepoGuard ");
         if (StringUtils.hasText(finding.getSeverity())) {
@@ -143,7 +143,48 @@ public class GithubCommentPreviewItemBuilder {
         if (StringUtils.hasText(finding.getRecommendation())) {
             body.append("\n\n**建议**：").append(finding.getRecommendation().trim());
         }
+        String suggestion = extractSuggestion(finding, targetType);
+        if (suggestion != null) {
+            body.append("\n\n**可应用修复（请先确认）**\n\n```suggestion\n")
+                .append(suggestion)
+                .append("\n```");
+        }
         return body.toString();
+    }
+
+    private String extractSuggestion(ReviewFinding finding, GithubCommentTargetType targetType) {
+        if (targetType != GithubCommentTargetType.LINE || finding == null
+            || !StringUtils.hasText(finding.getFixExample())) {
+            return null;
+        }
+        String value = finding.getFixExample().trim().replace("\r\n", "\n").replace('\r', '\n');
+        if (value.regionMatches(true, 0, "suggestion:", 0, "suggestion:".length())) {
+            value = value.substring("suggestion:".length()).stripLeading();
+        } else if (value.startsWith("```")) {
+            int firstNewline = value.indexOf('\n');
+            if (firstNewline < 0 || !value.endsWith("```")) {
+                return null;
+            }
+            String language = value.substring(3, firstNewline).trim();
+            if (!language.isEmpty() && !language.equalsIgnoreCase("suggestion")
+                && !language.matches("[A-Za-z0-9_+.-]{1,32}")) {
+                return null;
+            }
+            value = value.substring(firstNewline + 1, value.length() - 3);
+            if (value.startsWith("\n")) {
+                value = value.substring(1);
+            }
+            if (value.endsWith("\n")) {
+                value = value.substring(0, value.length() - 1);
+            }
+        } else {
+            return null;
+        }
+        if (!StringUtils.hasText(value) || value.length() > 4_000 || value.lines().count() > 5
+            || value.contains("```") || value.chars().anyMatch(character -> character < 32 && character != '\n' && character != '\t')) {
+            return null;
+        }
+        return value;
     }
 
     private boolean isActionableFinding(ReviewFinding finding) {

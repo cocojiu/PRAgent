@@ -200,6 +200,12 @@ GitHub Checks 合并门禁：
 2. 检索使用受限的 Caffeine 缓存和内容/文件/时间预算，不执行仓库代码；GitHub 未配置、默认分支不可用或请求失败时自动降级为仅使用 PR 变更上下文。
 3. 可通过 `REPOGUARD_LLM_SEMANTIC_INDEX_ENABLED`、`REPOGUARD_LLM_SEMANTIC_INDEX_MAX_FILES`、`REPOGUARD_LLM_SEMANTIC_INDEX_MAX_FILE_BYTES`、`REPOGUARD_LLM_SEMANTIC_INDEX_MAX_TOTAL_BYTES`、`REPOGUARD_LLM_SEMANTIC_INDEX_TIMEOUT_MS` 和缓存大小/TTL 变量调整预算。当前实现只做符号和路径检索，向量检索留待后续评估。
 
+GitHub suggestion 一键修复：
+
+1. 只有定位到变更行的 finding 才允许生成建议；`fixExample` 必须是完整替换代码块（例如 ```java ... ```）或 `suggestion:` 前缀，最多 5 行、4,000 字符，普通自然语言会被拒绝。
+2. 评论中会显示原生 `suggestion` 代码块和“请先确认”提示，作者可在 GitHub 页面确认后应用；系统不会自动提交作者分支，也不会为不完整证据创建修复 PR。
+3. 删除文件、PR 总评、已发布/非 actionable finding 和包含嵌套代码围栏或控制字符的内容不会生成可应用建议。
+
 运行角色边界：
 
 - `combined` 同时提供 HTTP API、RabbitMQ 消费者和受数据库保护的定时任务。
