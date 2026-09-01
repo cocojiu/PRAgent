@@ -121,7 +121,7 @@ repoguard:
     # Roles that do not own Flyway migrations refuse to start below this version.
     # Keep in sync with the highest version under db/migration; the production
     # readiness check enforces the match.
-    expected-version: ${REPOGUARD_SCHEMA_EXPECTED_VERSION:78}
+    expected-version: ${REPOGUARD_SCHEMA_EXPECTED_VERSION:79}
   tenancy:
     enabled: ${REPOGUARD_TENANCY_ENABLED:false}
     header-name: ${REPOGUARD_TENANCY_HEADER_NAME:X-RepoGuard-Tenant}
@@ -314,6 +314,15 @@ app:
       mysql-allowed-ports: ${REPOGUARD_OUTBOUND_MYSQL_ALLOWED_PORTS:3306}
       rabbit-mq-allowed-ports: ${REPOGUARD_OUTBOUND_RABBITMQ_ALLOWED_PORTS:5671,5672}
   github:
+    check-run:
+      enabled: ${REPOGUARD_GITHUB_CHECK_RUN_ENABLED:${REPOGUARD_GITHUB_APP_ENABLED:false}}
+      name: ${REPOGUARD_GITHUB_CHECK_RUN_NAME:RepoGuard PR Review}
+      recovery-interval-ms: ${REPOGUARD_GITHUB_CHECK_RUN_RECOVERY_INTERVAL_MS:5000}
+      recovery-batch-size: ${REPOGUARD_GITHUB_CHECK_RUN_RECOVERY_BATCH_SIZE:20}
+      claim-lease-seconds: ${REPOGUARD_GITHUB_CHECK_RUN_CLAIM_LEASE_SECONDS:120}
+      retry-base-seconds: ${REPOGUARD_GITHUB_CHECK_RUN_RETRY_BASE_SECONDS:10}
+      retry-max-seconds: ${REPOGUARD_GITHUB_CHECK_RUN_RETRY_MAX_SECONDS:900}
+      annotation-limit: ${REPOGUARD_GITHUB_CHECK_RUN_ANNOTATION_LIMIT:50}
     diff-budget:
       max-pages: ${REPOGUARD_GITHUB_DIFF_MAX_PAGES:10}
       max-files: ${REPOGUARD_GITHUB_DIFF_MAX_FILES:1000}

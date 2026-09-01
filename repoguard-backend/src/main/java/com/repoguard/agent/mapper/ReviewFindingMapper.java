@@ -228,4 +228,17 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
         @Param("afterFindingId") long afterFindingId,
         @Param("limit") int limit
     );
+
+    @Select("""
+        select *
+        from review_finding
+        where task_id = #{taskId}
+          and current_attempt = 1
+          and category = 'FINDING'
+          and coalesce(feedback_status_norm, 'UNREVIEWED') <> 'FALSE_POSITIVE'
+          and is_blocking = 1
+          and upper(enforcement_mode) = 'BLOCK'
+        order by id asc
+        """)
+    List<ReviewFinding> selectGithubCheckRunBlockingFindings(@Param("taskId") Long taskId);
 }

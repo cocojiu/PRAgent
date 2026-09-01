@@ -11,6 +11,7 @@ import com.repoguard.agent.github.webhook.GithubWebhookProperties;
 import com.repoguard.agent.github.webhook.GithubWebhookRateLimiter;
 import com.repoguard.agent.github.webhook.GithubWebhookResponse;
 import com.repoguard.agent.github.webhook.GithubWebhookSignatureVerifier;
+import com.repoguard.agent.github.checks.GithubCheckRunWebhookService;
 import com.repoguard.agent.security.AllowAnonymous;
 import java.io.IOException;
 import org.springframework.http.MediaType;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.util.StringUtils;
 
 @RestController
@@ -32,6 +34,7 @@ public class GithubWebhookController {
     private final GithubWebhookSignatureVerifier signatureVerifier;
     private final GithubPullRequestWebhookService pullRequestWebhookService;
     private final GithubWebhookRateLimiter rateLimiter;
+    private final GithubCheckRunWebhookService checkRunWebhookService;
 
     @Autowired
     public GithubWebhookController(
@@ -39,13 +42,15 @@ public class GithubWebhookController {
         GithubWebhookProperties properties,
         GithubWebhookSignatureVerifier signatureVerifier,
         GithubPullRequestWebhookService pullRequestWebhookService,
-        GithubWebhookRateLimiter rateLimiter
+        GithubWebhookRateLimiter rateLimiter,
+        ObjectProvider<GithubCheckRunWebhookService> checkRunWebhookServiceProvider
     ) {
         this.objectMapper = objectMapper;
         this.properties = properties;
         this.signatureVerifier = signatureVerifier;
         this.pullRequestWebhookService = pullRequestWebhookService;
         this.rateLimiter = rateLimiter;
+        this.checkRunWebhookService = checkRunWebhookServiceProvider.getIfAvailable();
     }
 
     public GithubWebhookController(
@@ -54,11 +59,35 @@ public class GithubWebhookController {
         GithubWebhookSignatureVerifier signatureVerifier,
         GithubPullRequestWebhookService pullRequestWebhookService
     ) {
+        this(objectMapper, properties, signatureVerifier, pullRequestWebhookService, null,
+            (GithubCheckRunWebhookService) null);
+    }
+
+    public GithubWebhookController(
+        ObjectMapper objectMapper,
+        GithubWebhookProperties properties,
+        GithubWebhookSignatureVerifier signatureVerifier,
+        GithubPullRequestWebhookService pullRequestWebhookService,
+        GithubWebhookRateLimiter rateLimiter
+    ) {
+        this(objectMapper, properties, signatureVerifier, pullRequestWebhookService, rateLimiter,
+            (GithubCheckRunWebhookService) null);
+    }
+
+    private GithubWebhookController(
+        ObjectMapper objectMapper,
+        GithubWebhookProperties properties,
+        GithubWebhookSignatureVerifier signatureVerifier,
+        GithubPullRequestWebhookService pullRequestWebhookService,
+        GithubWebhookRateLimiter rateLimiter,
+        GithubCheckRunWebhookService checkRunWebhookService
+    ) {
         this.objectMapper = objectMapper;
         this.properties = properties;
         this.signatureVerifier = signatureVerifier;
         this.pullRequestWebhookService = pullRequestWebhookService;
-        this.rateLimiter = null;
+        this.rateLimiter = rateLimiter;
+        this.checkRunWebhookService = checkRunWebhookService;
     }
 
     @AllowAnonymous
@@ -71,12 +100,18 @@ public class GithubWebhookController {
     ) {
         validatePayloadSize(payload);
         signatureVerifier.verify(signature, payload);
-        if (!"pull_request".equals(event)) {
+        if (!"pull_request".equals(event) && !"check_run".equals(event)) {
             return ApiResponse.ok(GithubWebhookResponse.skipped("GitHub event is ignored", deliveryId, null));
         }
         JsonNode root = parsePayload(payload);
         if (rateLimiter != null) {
             rateLimiter.requireRepository(repositoryName(root));
+        }
+        if ("check_run".equals(event)) {
+            if (checkRunWebhookService == null) {
+                return ApiResponse.ok(GithubWebhookResponse.skipped("GitHub Check Run handler is unavailable", deliveryId, null));
+            }
+            return ApiResponse.ok(checkRunWebhookService.handle(root, deliveryId));
         }
         return ApiResponse.ok(pullRequestWebhookService.handlePullRequest(root, deliveryId));
     }

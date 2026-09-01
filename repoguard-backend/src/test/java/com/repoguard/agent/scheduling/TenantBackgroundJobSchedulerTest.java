@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.dashboard.DashboardDailySnapshotRecoveryWorker;
 import com.repoguard.agent.github.comment.GithubCommentPublicationBatchRecoveryWorker;
+import com.repoguard.agent.github.checks.GithubCheckRunRecoveryWorker;
 import com.repoguard.agent.messaging.ReviewTaskPublishCompensator;
 import com.repoguard.agent.notification.delivery.NotificationDeliveryRecoveryCompensator;
 import com.repoguard.agent.notification.publish.NotificationEventPublishCompensator;
@@ -45,6 +46,7 @@ class TenantBackgroundJobSchedulerTest {
     private final SecretReEncryptionJobWorker secretReEncryption = mock(SecretReEncryptionJobWorker.class);
     private final ReviewQualityBaselineRecoveryWorker qualityBaseline =
         mock(ReviewQualityBaselineRecoveryWorker.class);
+    private final GithubCheckRunRecoveryWorker githubCheckRuns = mock(GithubCheckRunRecoveryWorker.class);
     private final TenantBackgroundJobScheduler scheduler = new TenantBackgroundJobScheduler(
         tenantRunner,
         dashboard,
@@ -56,11 +58,12 @@ class TenantBackgroundJobSchedulerTest {
         notificationDelivery,
         reviewPublish,
         secretReEncryption,
-        qualityBaseline
+        qualityBaseline,
+        githubCheckRuns
     );
 
     @Test
-    void delegatesAllTwelveEntrypointsThroughTenantRunner() {
+    void delegatesAllThirteenEntrypointsThroughTenantRunner() {
         when(tenantRunner.runForEachActiveTenant(anyString(), any(Runnable.class))).thenAnswer(invocation -> {
             invocation.getArgument(1, Runnable.class).run();
             return new TenantScheduledTaskRunner.TenantRunSummary(1, 1, 0, 0);
@@ -82,8 +85,9 @@ class TenantBackgroundJobSchedulerTest {
         scheduler.processSecretReEncryption();
         scheduler.recoverQualityBaseline();
         scheduler.reconcileQualityBaseline();
+        scheduler.recoverGithubCheckRuns();
 
-        verify(tenantRunner, times(12)).runForEachActiveTenant(anyString(), any(Runnable.class));
+        verify(tenantRunner, times(13)).runForEachActiveTenant(anyString(), any(Runnable.class));
         verify(tenantRunner).runGlobal(
             org.mockito.ArgumentMatchers.eq("global_operational_data_retention"),
             any(Runnable.class)
@@ -101,6 +105,7 @@ class TenantBackgroundJobSchedulerTest {
         verify(secretReEncryption).processDueJob();
         verify(qualityBaseline).recoverDirtySnapshot();
         verify(qualityBaseline).reconcileSnapshot();
+        verify(githubCheckRuns).recover();
     }
 
     @Test
@@ -109,7 +114,7 @@ class TenantBackgroundJobSchedulerTest {
             .filter(method -> method.isAnnotationPresent(Scheduled.class))
             .count();
 
-        assertThat(scheduledMethods).isEqualTo(12L);
+        assertThat(scheduledMethods).isEqualTo(13L);
     }
 
     @Test
@@ -131,7 +136,7 @@ class TenantBackgroundJobSchedulerTest {
                 "ClusterCacheInvalidationPoller.java",
                 "TenantBackgroundJobScheduler.java"
             );
-        assertThat(annotationCount).isEqualTo(13L);
+        assertThat(annotationCount).isEqualTo(14L);
     }
 
     private boolean containsScheduledAnnotation(Path path) {

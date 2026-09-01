@@ -125,6 +125,22 @@ public class ReviewTaskStateMachine {
         }
     }
 
+    public void ensureGithubCheckRerunAllowed(String status) {
+        ReviewTaskStatus taskStatus = ReviewTaskStatus.from(status);
+        if (taskStatus != ReviewTaskStatus.COMPLETED
+            && taskStatus != ReviewTaskStatus.FAILED
+            && taskStatus != ReviewTaskStatus.SUPERSEDED
+            && taskStatus != ReviewTaskStatus.PENDING_HUMAN_REVIEW
+            && taskStatus != ReviewTaskStatus.APPROVED
+            && taskStatus != ReviewTaskStatus.CHANGES_REQUESTED
+            && taskStatus != ReviewTaskStatus.REJECTED) {
+            throw new BusinessException(
+                ErrorCode.BAD_REQUEST,
+                "Only a finished review task can be rerun from a GitHub Check Run"
+            );
+        }
+    }
+
     public boolean canPublishGithubComments(boolean humanReviewRequired, String humanReviewStatus) {
         if (!humanReviewRequired) {
             return true;

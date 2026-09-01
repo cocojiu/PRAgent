@@ -1,0 +1,31 @@
+-- Persist the ordered GitHub Check Run lifecycle so external writes are retryable and tenant-safe.
+create table if not exists github_check_run (
+    id bigint not null auto_increment,
+    tenant_id bigint not null default 1,
+    task_id bigint not null,
+    run_sequence int unsigned not null,
+    github_check_run_id bigint null,
+    name varchar(100) not null,
+    head_sha varchar(64) not null,
+    external_id varchar(192) not null,
+    desired_stage varchar(32) not null,
+    applied_stage varchar(32) null,
+    desired_version bigint unsigned not null default 1,
+    applied_version bigint unsigned not null default 0,
+    dispatch_attempts int unsigned not null default 0,
+    next_dispatch_at datetime(6) null,
+    claimed_at datetime(6) null,
+    claimed_by varchar(128) null,
+    last_error varchar(1000) null,
+    created_at datetime(6) not null,
+    updated_at datetime(6) not null,
+    primary key (id),
+    unique key uk_github_check_run_tenant_id (tenant_id, id),
+    unique key uk_github_check_run_tenant_task_sequence (tenant_id, task_id, run_sequence),
+    unique key uk_github_check_run_tenant_external (tenant_id, external_id),
+    unique key uk_github_check_run_tenant_github_id (tenant_id, github_check_run_id),
+    key idx_github_check_run_due (tenant_id, next_dispatch_at, claimed_at, updated_at),
+    key idx_github_check_run_task (tenant_id, task_id),
+    constraint fk_github_check_run_tenant_task
+        foreign key (tenant_id, task_id) references review_task (tenant_id, id)
+) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;

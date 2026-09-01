@@ -164,6 +164,8 @@ powershell -ExecutionPolicy Bypass -File scripts/production-readiness-check.ps1 
 - `WORKER_CPU_LIMIT`、`BACKEND_MEM_LIMIT`、`WORKER_MEM_LIMIT`
 - `REPOGUARD_GITHUB_WEBHOOK_ALLOWED_REPOSITORIES`
 - `REPOGUARD_GITHUB_WEBHOOK_ALLOWED_HEAD_BRANCHES`
+- `REPOGUARD_GITHUB_CHECK_RUN_ENABLED`：启用 GitHub Checks 合并门禁（需要 GitHub App）
+- `REPOGUARD_GITHUB_CHECK_RUN_NAME`：分支保护中配置的必需状态检查名称，默认 `RepoGuard PR Review`
 
 敏感配置必须通过本地未跟踪的环境文件、文件化 Secret 或受保护的 CI Secret 注入。README 不保存真实密码、令牌、API Key、私钥、主机地址、主机指纹、备份位置或镜像仓库凭据；示例只允许使用占位符。缺少必要凭据时，应用和工作流应保持 fail-closed。
 
@@ -178,6 +180,12 @@ powershell -ExecutionPolicy Bypass -File scripts/production-readiness-check.ps1 
 - `REPOGUARD_GITHUB_WEBHOOK_SECRET_FILE`
 
 不要把这些变量的实际值写入 Git、命令参数、Shell 历史、容器镜像或日志。
+
+GitHub Checks 合并门禁：
+
+1. GitHub App 需要 `Checks: Read and write`、`Pull requests: Read and write`、`Contents: Read` 和 `Metadata: Read` 权限，并订阅 `pull_request`、`check_run` webhook。
+2. 设置 `REPOGUARD_GITHUB_CHECK_RUN_ENABLED=true`，并确保租户仓库绑定到该 App installation；系统会按 `queued → in_progress → completed` 顺序写入 Check Run。
+3. 在 GitHub 分支保护规则中，将 `REPOGUARD_GITHUB_CHECK_RUN_NAME`（默认 `RepoGuard PR Review`）设为必需状态检查。BLOCK Finding 会产生 failure annotation，人工复核期间为 `action_required`；Check Run 页面自带的 Re-run 会触发新一轮审查。
 
 运行角色边界：
 
@@ -234,7 +242,7 @@ $env:REPOGUARD_LOG_PATH = "../logs/backend"
 - `/api/v1/auth/**`：注册、登录、刷新、当前用户、登出。
 - `/api/v1/dashboard/**`：总览统计、趋势、风险分布、通知摘要。
 - `/api/v1/reviews/**`：审查任务列表、详情、手动触发、重试、评论预览与回写。
-- `/api/v1/github/webhooks`：GitHub `pull_request` webhook 自动触发审查任务。
+- `/api/v1/github/webhooks`：GitHub `pull_request` 自动触发审查，`check_run.rerequested` 支持页面重新运行。
 - `/api/v1/config/**`：系统设置、集成配置、连接测试和密钥重加密。
 - `/api/v1/message-queue/**`：RabbitMQ 健康、异常任务和重新入队。
 - `/api/v1/users/**`：用户管理。

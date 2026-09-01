@@ -19,7 +19,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
  * Exercises the supported rolling-upgrade path against a real MySQL instance.
  *
  * <p>The test is opt-in because local unit-test runs do not provision a database. CI enables it
- * with an isolated database and verifies the V76 expand state plus the V77 and V78 contract states.
+ * with an isolated database and verifies the V76 expand state plus the V77, V78 and V79 contract states.
  */
 @EnabledIfEnvironmentVariable(named = "REPOGUARD_RUN_INTEGRATION_TESTS", matches = "true")
 class FlywayMigrationUpgradePathIntegrationTest {
@@ -97,6 +97,30 @@ class FlywayMigrationUpgradePathIntegrationTest {
                 long finalTenantId = tenantId;
                 assertThatThrownBy(() -> insertTenantSingletonConfigs(connection, finalTenantId))
                     .isInstanceOf(SQLException.class);
+            }
+
+            migrateTo(url, username, password, "79");
+            try (Connection connection = open(url, username, password)) {
+                assertThat(latestSuccessfulMigration(connection)).isEqualTo("79");
+                assertThat(uniqueIndexExists(
+                    connection,
+                    "github_check_run",
+                    "uk_github_check_run_tenant_task_sequence"
+                )).isTrue();
+                assertThat(constraintExists(
+                    connection,
+                    "github_check_run",
+                    "fk_github_check_run_tenant_task"
+                )).isTrue();
+                insertGithubCheckRun(connection, tenantId, taskId, suffix);
+                long otherTenantId = insertTenant(connection, suffix + "-check-other");
+                long finalTaskIdForCheck = taskId;
+                try {
+                    assertThatThrownBy(() -> insertGithubCheckRun(connection, otherTenantId, finalTaskIdForCheck, suffix + "-cross"))
+                        .isInstanceOf(SQLException.class);
+                } finally {
+                    deleteTenant(connection, otherTenantId);
+                }
             }
         } finally {
             cleanup(url, username, password, tenantId, taskId, attemptId);
@@ -258,6 +282,23 @@ class FlywayMigrationUpgradePathIntegrationTest {
         }
     }
 
+    private void insertGithubCheckRun(Connection connection, long tenantId, long taskId, String suffix)
+        throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+            insert into github_check_run (
+                tenant_id, task_id, run_sequence, name, head_sha, external_id,
+                desired_stage, desired_version, applied_version, dispatch_attempts,
+                created_at, updated_at
+            ) values (?, ?, 1, 'RepoGuard PR Review', ?, ?, 'QUEUED', 1, 0, 0, now(), now())
+            """)) {
+            statement.setLong(1, tenantId);
+            statement.setLong(2, taskId);
+            statement.setString(3, COMMIT_SHA);
+            statement.setString(4, "repoguard-upgrade-" + suffix);
+            statement.executeUpdate();
+        }
+    }
+
     private long rowCount(Connection connection, String table, long tenantId, long taskId)
         throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(
@@ -350,6 +391,13 @@ class FlywayMigrationUpgradePathIntegrationTest {
                     attempts.setLong(2, attemptId);
                     attempts.executeUpdate();
                 }
+            }
+            try (PreparedStatement checkRuns = connection.prepareStatement(
+                "delete from github_check_run where tenant_id = ? and task_id = ?"
+            )) {
+                checkRuns.setLong(1, tenantId);
+                checkRuns.setLong(2, taskId);
+                checkRuns.executeUpdate();
             }
             try (PreparedStatement tasks = connection.prepareStatement("delete from review_task where tenant_id = ? and id = ?")) {
                 tasks.setLong(1, tenantId);

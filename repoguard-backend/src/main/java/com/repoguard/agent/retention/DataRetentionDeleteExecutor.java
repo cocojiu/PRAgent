@@ -9,6 +9,7 @@ import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.mapper.ChangedFileMapper;
+import com.repoguard.agent.mapper.GithubCheckRunMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationBatchItemMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationBatchMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationMapper;
@@ -18,6 +19,8 @@ import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import java.util.List;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 
 @Component
 public class DataRetentionDeleteExecutor {
@@ -29,6 +32,25 @@ public class DataRetentionDeleteExecutor {
     private final GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper;
     private final GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper;
     private final ReviewTaskMapper reviewTaskMapper;
+    private final GithubCheckRunMapper githubCheckRunMapper;
+
+    @Autowired
+    public DataRetentionDeleteExecutor(
+        ChangedFileMapper changedFileMapper,
+        ReviewFindingMapper reviewFindingMapper,
+        ReviewTimelineMapper reviewTimelineMapper,
+        GithubCommentPublicationMapper githubCommentPublicationMapper,
+        GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper,
+        GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper,
+        ReviewTaskMapper reviewTaskMapper,
+        ObjectProvider<GithubCheckRunMapper> githubCheckRunMapperProvider
+    ) {
+        this(
+            changedFileMapper, reviewFindingMapper, reviewTimelineMapper, githubCommentPublicationMapper,
+            githubCommentPublicationBatchMapper, githubCommentPublicationBatchItemMapper, reviewTaskMapper,
+            githubCheckRunMapperProvider.getIfAvailable()
+        );
+    }
 
     public DataRetentionDeleteExecutor(
         ChangedFileMapper changedFileMapper,
@@ -38,6 +60,23 @@ public class DataRetentionDeleteExecutor {
         GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper,
         GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper,
         ReviewTaskMapper reviewTaskMapper
+    ) {
+        this(
+            changedFileMapper, reviewFindingMapper, reviewTimelineMapper, githubCommentPublicationMapper,
+            githubCommentPublicationBatchMapper, githubCommentPublicationBatchItemMapper, reviewTaskMapper,
+            (GithubCheckRunMapper) null
+        );
+    }
+
+    private DataRetentionDeleteExecutor(
+        ChangedFileMapper changedFileMapper,
+        ReviewFindingMapper reviewFindingMapper,
+        ReviewTimelineMapper reviewTimelineMapper,
+        GithubCommentPublicationMapper githubCommentPublicationMapper,
+        GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper,
+        GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper,
+        ReviewTaskMapper reviewTaskMapper,
+        GithubCheckRunMapper githubCheckRunMapper
     ) {
         this.changedFileMapper = Objects.requireNonNull(changedFileMapper, "changedFileMapper");
         this.reviewFindingMapper = Objects.requireNonNull(reviewFindingMapper, "reviewFindingMapper");
@@ -55,6 +94,7 @@ public class DataRetentionDeleteExecutor {
             "githubCommentPublicationBatchItemMapper"
         );
         this.reviewTaskMapper = Objects.requireNonNull(reviewTaskMapper, "reviewTaskMapper");
+        this.githubCheckRunMapper = githubCheckRunMapper;
     }
 
     public DeletionResult delete(List<Long> taskIds) {
@@ -83,6 +123,12 @@ public class DataRetentionDeleteExecutor {
         int deletedFindings = reviewFindingMapper.delete(
             new LambdaQueryWrapper<ReviewFinding>().in(ReviewFinding::getTaskId, immutableTaskIds)
         );
+        if (githubCheckRunMapper != null) {
+            githubCheckRunMapper.delete(
+                new LambdaQueryWrapper<com.repoguard.agent.entity.GithubCheckRun>()
+                    .in(com.repoguard.agent.entity.GithubCheckRun::getTaskId, immutableTaskIds)
+            );
+        }
         int deletedTasks = reviewTaskMapper.delete(
             new LambdaQueryWrapper<ReviewTask>().in(ReviewTask::getId, immutableTaskIds)
         );

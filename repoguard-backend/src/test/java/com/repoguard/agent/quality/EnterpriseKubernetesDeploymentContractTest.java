@@ -47,7 +47,7 @@ class EnterpriseKubernetesDeploymentContractTest {
             .containsEntry("REPOGUARD_TENANCY_ENABLED", "true")
             .containsEntry("REPOGUARD_ENTERPRISE_OIDC_ENABLED", "true")
             .containsEntry("REPOGUARD_GITHUB_APP_ENABLED", "true")
-            .containsEntry("REPOGUARD_SCHEMA_EXPECTED_VERSION", "78")
+            .containsEntry("REPOGUARD_SCHEMA_EXPECTED_VERSION", "79")
             .containsEntry("REPOGUARD_SCHEDULING_LEASE_SECONDS", "900")
             .containsEntry("REPOGUARD_SCHEDULING_HEARTBEAT_SECONDS", "60")
             .containsEntry("REPOGUARD_SCHEDULING_HEARTBEAT_THREADS", "2")
