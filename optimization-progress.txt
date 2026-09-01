@@ -415,3 +415,11 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 提交/远程验收：实现提交 `01a5dfb7`（新增：实现 GitHub suggestion 一键修复建议）已推送，push Repository Governance #33528912035、Auto Create Pull Request #33528912064 成功；Pull Request Quality #33528918715 的 8 个作业全部成功，含前后端质量、真实 MySQL/RabbitMQ、Flyway 升级、边缘配置、跟踪文件治理、密钥差异和依赖审查。
 边界：当前只支持作者在 GitHub 原生评论中人工确认后应用单行/小范围替换；创建修复分支/PR、跨文件补丁、自动验证和批量应用留待后续模型评测与协作批次；未提交非 README Markdown 或测试脚本，用户既有 `ArchitectureRatchetTest.java`、OpenAPI frontend-signature snapshot 和 `.tmp/` 保持未提交。
 下一步：进入优化-55 LLM 评测与模型发布中心，先复用已有质量指标和校准队列建设版本化数据集、影子运行与发布门禁。
+
+2026-09-02 | 优化-55 | P1 LLM 评测与模型发布中心
+状态：已完成版本化评测证据、模型影子/灰度/正式发布与回滚、质量门禁、租户预算、本地门禁、中文提交、test 分支推送和远程 Actions 验收。
+变更：新增 V80 `llm_model_release` 租户隔离表与月度 token/费用预算；复用已有质量指标建立仅保存聚合指标的数据集证据（dataset id/version/fingerprint），发布前校验 precision、recall、锚定率、重复率、解析失败率和 P95 延迟阈值；支持 SHADOW、CANARY、ACTIVE、ROLLED_BACK 生命周期、确定性任务哈希路由、灰度超阈值自动回滚和预算耗尽时规则兜底。新增评测发布中心后端 API、专用仓储/质量比较端口、前端类型/API/OpenAPI 契约和租户配额界面；拆分质量比较端口以保持架构依赖单向。
+本地验证：完整后端 `mvn verify -DskipTests=false` 共 2680 项测试通过、0 失败、12 项按环境条件跳过，JaCoCo 覆盖率门禁通过；前端生成检查、`vue-tsc -b`、ESLint、Vitest 全量（40 个测试文件、162 项测试）和 Vite 构建通过；`SpringBeanConstructorSelectionTest` 1 项、`ArchitectureRatchetTest` 9 项通过；`git diff --check` 通过。Flyway/生产上下文集成测试在本地无服务变量时按条件跳过，远程真实 MySQL/RabbitMQ 已实跑。
+提交/远程验收：实现提交 `3196ab64`（新增：建设 LLM 评测与模型发布中心）及修复提交 `315fc553`（修复：校验模型发布复合唯一索引）、`4145f5ed`（修复：声明评测中心控制器注入构造器）、`726dd918`（修复：登记模型发布租户表契约）、`a72b326a`（修复：同步生产代码架构预算基线）均已推送 `origin/PRAgent-test`；最终 Pull Request Quality `33540576409` 的 8 个作业全部成功，含真实 MySQL/RabbitMQ 与 V76→V80 Flyway 升级；对应 push Repository Governance、Auto Create Pull Request 亦成功，PRAgent-test 未触发生产镜像发布。
+边界：数据库只保存可复现所需的聚合评测证据，不保存原始 prompt、源码、供应商响应或凭据；0 预算表示不限制但不绕过租户隔离；不自动改写供应商凭据、不自动提交作者分支或创建修复 PR。修复过程中未提交非 README Markdown、测试脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
+下一步：进入优化-56 动态声明式规则与 SARIF 扫描器接入，先保持规则沙箱、dry-run 和 Finding 统一模型。
