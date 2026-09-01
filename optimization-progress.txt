@@ -423,3 +423,11 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 提交/远程验收：实现提交 `3196ab64`（新增：建设 LLM 评测与模型发布中心）及修复提交 `315fc553`（修复：校验模型发布复合唯一索引）、`4145f5ed`（修复：声明评测中心控制器注入构造器）、`726dd918`（修复：登记模型发布租户表契约）、`a72b326a`（修复：同步生产代码架构预算基线）均已推送 `origin/PRAgent-test`；最终 Pull Request Quality `33540576409` 的 8 个作业全部成功，含真实 MySQL/RabbitMQ 与 V76→V80 Flyway 升级；对应 push Repository Governance、Auto Create Pull Request 亦成功，PRAgent-test 未触发生产镜像发布。
 边界：数据库只保存可复现所需的聚合评测证据，不保存原始 prompt、源码、供应商响应或凭据；0 预算表示不限制但不绕过租户隔离；不自动改写供应商凭据、不自动提交作者分支或创建修复 PR。修复过程中未提交非 README Markdown、测试脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
 下一步：进入优化-56 动态声明式规则与 SARIF 扫描器接入，先保持规则沙箱、dry-run 和 Finding 统一模型。
+
+2026-09-02 | 优化-56 | P1 动态声明式规则与 SARIF 扫描器接入
+状态：已完成安全声明式规则、历史 PR dry-run、SARIF 2.1.0 导入/导出、规则审查链路接入、前后端门禁、中文提交、test 分支推送和远程 Actions 验收。
+变更：规则配置新增 BUILTIN/REGEX/AST 类型、受限表达式和例外模式；新增正则/文件 glob/受限 AST token-call 匹配器与策略校验，拒绝控制字符、回溯引用、嵌套量词、lookaround 和超长表达式，动态规则只能走沙箱匹配器。新增历史补丁 dry-run API，按文件/新增行返回可审计匹配结果；新增 SARIF 导入/导出 API，校验版本、结果规模、路径和定位，将第三方扫描结果统一写入租户 Finding，并保留规则帮助、严重级别和审查元数据。数据库 V81、OpenAPI/生成客户端快照、前端规则编辑器和回归契约同步更新。
+本地验证：后端 `mvn verify -DskipTests=false` 共 2699 项测试通过、0 失败、12 项按环境条件跳过，JaCoCo 行覆盖率约 0.8905；前端 API 生成检查、`vue-tsc -b`、ESLint、Vitest 全量（40 个测试文件、162 项测试）和 Vite 生产构建通过；新增声明式规则、dry-run、SARIF、OpenAPI、迁移和架构契约测试；`git diff --check` 通过。
+提交/远程验收：实现提交 `c32da764`（新增：支持动态声明式规则与SARIF扫描器接入），修复提交 `a313b628`（修复：消除声明式规则测试的密钥扫描误报）、`6b4fec40`（修复：处理声明式规则测试的历史扫描指纹）、`01a592dd`（修复：同步声明式规则扫描指纹契约）、`2be6d66f`（修复：补齐 SARIF 异常路径覆盖率）和 `24ec5474`（修复：扩大 SARIF 兼容路径测试覆盖）均已推送 `origin/PRAgent-test`；最终 Pull Request Quality `33549768772` 的 8 个作业全部成功，包含后端/前端、真实 MySQL/RabbitMQ、V80→V81 Flyway、生产边缘、跟踪文件、密钥差异和依赖门禁；push Repository Governance `33549763487`、Auto Create Pull Request `33549763658` 亦成功。
+边界：声明式表达式不执行任意代码、不生成 SQL 或脚本；SARIF 只导入安全相对路径和有效新增 Finding，不保存原始扫描器凭据；dry-run 只返回匹配预览，不自动启用规则、提交作者分支或创建修复 PR。Gitleaks 历史测试夹具仅使用精确指纹豁免，当前源码保持可扫描；未提交非 README Markdown、测试脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
+下一步：进入优化-57 GitLab/Gitee/Bitbucket 支持，先抽象 `ScmProvider` 读取、差异、评论和状态检查契约，再优先落地 GitLab。
