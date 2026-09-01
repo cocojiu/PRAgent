@@ -14,6 +14,7 @@ import com.repoguard.agent.security.SecretCryptoService;
 import com.repoguard.agent.security.SecretUpdateValue;
 import com.repoguard.agent.security.SecretValueView;
 import com.repoguard.agent.service.ReviewPolicyConfigService;
+import com.repoguard.agent.tenancy.TenantContext;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -125,14 +126,15 @@ public class ReviewPolicyConfigServiceImpl implements ReviewPolicyConfigService 
     }
 
     private ReviewPolicyConfig loadReviewPolicy() {
-        ReviewPolicyConfig config = reviewPolicyConfigMapper.selectById(1L);
+        long tenantId = TenantContext.currentTenantIdOrDefault();
+        ReviewPolicyConfig config = reviewPolicyConfigMapper.selectByTenantId(tenantId);
         if (config != null) {
             return config;
         }
 
         LocalDateTime now = LocalDateTime.now();
         ReviewPolicyConfig defaultConfig = new ReviewPolicyConfig();
-        defaultConfig.setId(1L);
+        defaultConfig.setTenantId(tenantId);
         defaultConfig.setLlmEnabled(true);
         defaultConfig.setLlmProvider("dashscope");
         defaultConfig.setModelName("qwen-plus");

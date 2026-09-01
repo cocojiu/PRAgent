@@ -22,6 +22,7 @@ import com.repoguard.agent.entity.SystemSettingsConfig;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
 import com.repoguard.agent.mapper.SystemSettingLogMapper;
 import com.repoguard.agent.mapper.SystemSettingsConfigMapper;
+import com.repoguard.agent.tenancy.TenantContext;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -47,7 +48,7 @@ class SystemSettingsApplicationServiceImplTest {
 
     @Test
     void getSystemSettingsCreatesDefaultsWhenMissing() {
-        var result = service.getSystemSettings();
+        var result = withTenant(23L, service::getSystemSettings);
 
         assertThat(result.base().systemName()).isEqualTo("RepoGuard Agent");
         assertThat(result.base().language()).isEqualTo("中文");
@@ -56,16 +57,22 @@ class SystemSettingsApplicationServiceImplTest {
         assertThat(result.notification().email()).isEqualTo("ops@repoguard.dev");
         assertThat(result.security().webhookSignature()).isTrue();
         assertThat(result.logs()).isEmpty();
-        verify(systemSettingsConfigMapper).insert(any(SystemSettingsConfig.class));
-        verify(reviewPolicyConfigMapper).insert(any(ReviewPolicyConfig.class));
+        ArgumentCaptor<SystemSettingsConfig> settingsCaptor = ArgumentCaptor.forClass(SystemSettingsConfig.class);
+        ArgumentCaptor<ReviewPolicyConfig> policyCaptor = ArgumentCaptor.forClass(ReviewPolicyConfig.class);
+        verify(systemSettingsConfigMapper).insert(settingsCaptor.capture());
+        verify(reviewPolicyConfigMapper).insert(policyCaptor.capture());
+        assertThat(settingsCaptor.getValue().getId()).isNull();
+        assertThat(settingsCaptor.getValue().getTenantId()).isEqualTo(23L);
+        assertThat(policyCaptor.getValue().getId()).isNull();
+        assertThat(policyCaptor.getValue().getTenantId()).isEqualTo(23L);
     }
 
     @Test
     void updateSystemSettingsPersistsConfigAndRecordsLog() {
         SystemSettingsConfig settingsConfig = systemSettingsConfig();
         ReviewPolicyConfig reviewPolicyConfig = reviewPolicyConfig();
-        when(systemSettingsConfigMapper.selectById(1L)).thenReturn(settingsConfig);
-        when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(reviewPolicyConfig);
+        when(systemSettingsConfigMapper.selectByTenantId(1L)).thenReturn(settingsConfig);
+        when(reviewPolicyConfigMapper.selectByTenantId(1L)).thenReturn(reviewPolicyConfig);
         when(systemSettingLogMapper.selectList(any())).thenReturn(List.of(settingLog()));
 
         var result = service.updateSystemSettings(request("devops@repoguard.dev"));
@@ -99,8 +106,8 @@ class SystemSettingsApplicationServiceImplTest {
     void updateSystemSettingsNormalizesBlankEmailToNull() {
         SystemSettingsConfig settingsConfig = systemSettingsConfig();
         ReviewPolicyConfig reviewPolicyConfig = reviewPolicyConfig();
-        when(systemSettingsConfigMapper.selectById(1L)).thenReturn(settingsConfig);
-        when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(reviewPolicyConfig);
+        when(systemSettingsConfigMapper.selectByTenantId(1L)).thenReturn(settingsConfig);
+        when(reviewPolicyConfigMapper.selectByTenantId(1L)).thenReturn(reviewPolicyConfig);
 
         var result = service.updateSystemSettings(request("   "));
 
@@ -110,8 +117,8 @@ class SystemSettingsApplicationServiceImplTest {
 
     @Test
     void getSystemSettingsReturnsEmptyLogsWhenMapperReturnsNull() {
-        when(systemSettingsConfigMapper.selectById(1L)).thenReturn(systemSettingsConfig());
-        when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(reviewPolicyConfig());
+        when(systemSettingsConfigMapper.selectByTenantId(1L)).thenReturn(systemSettingsConfig());
+        when(reviewPolicyConfigMapper.selectByTenantId(1L)).thenReturn(reviewPolicyConfig());
         when(systemSettingLogMapper.selectList(any())).thenReturn(null);
 
         var result = service.getSystemSettings();
@@ -150,8 +157,8 @@ class SystemSettingsApplicationServiceImplTest {
     void updateSystemSettingsNormalizesCanonicalTimezoneAndLanguage() {
         SystemSettingsConfig settingsConfig = systemSettingsConfig();
         ReviewPolicyConfig reviewPolicyConfig = reviewPolicyConfig();
-        when(systemSettingsConfigMapper.selectById(1L)).thenReturn(settingsConfig);
-        when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(reviewPolicyConfig);
+        when(systemSettingsConfigMapper.selectByTenantId(1L)).thenReturn(settingsConfig);
+        when(reviewPolicyConfigMapper.selectByTenantId(1L)).thenReturn(reviewPolicyConfig);
 
         var result = service.updateSystemSettings(request("devops@repoguard.dev", " America/New_York "));
 
@@ -232,5 +239,11 @@ class SystemSettingsApplicationServiceImplTest {
         RabbitReviewQueueProperties properties = new RabbitReviewQueueProperties();
         properties.setWorkerConcurrency(4);
         return properties;
+    }
+
+    private <T> T withTenant(long tenantId, java.util.function.Supplier<T> action) {
+        try (TenantContext.Scope _ = TenantContext.withTenant(tenantId)) {
+            return action.get();
+        }
     }
 }

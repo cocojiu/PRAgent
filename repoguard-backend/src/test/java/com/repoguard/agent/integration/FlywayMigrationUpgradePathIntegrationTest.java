@@ -19,7 +19,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
  * Exercises the supported rolling-upgrade path against a real MySQL instance.
  *
  * <p>The test is opt-in because local unit-test runs do not provision a database. CI enables it
- * with an isolated database and verifies both the V76 expand state and the V77 contract state.
+ * with an isolated database and verifies the V76 expand state plus the V77 and V78 contract states.
  */
 @EnabledIfEnvironmentVariable(named = "REPOGUARD_RUN_INTEGRATION_TESTS", matches = "true")
 class FlywayMigrationUpgradePathIntegrationTest {
@@ -49,6 +49,7 @@ class FlywayMigrationUpgradePathIntegrationTest {
                     .isFalse();
 
                 tenantId = insertTenant(connection, suffix);
+                insertTenantSingletonConfigs(connection, tenantId);
                 taskId = insertReviewTask(connection, tenantId, suffix);
                 attemptId = insertExecutionAttempt(connection, tenantId, taskId);
                 updateCurrentAttempt(connection, taskId, attemptId);
@@ -79,8 +80,61 @@ class FlywayMigrationUpgradePathIntegrationTest {
                     deleteTenant(connection, otherTenantId);
                 }
             }
+
+            migrateTo(url, username, password, "78");
+            try (Connection connection = open(url, username, password)) {
+                assertThat(latestSuccessfulMigration(connection)).isEqualTo("78");
+                assertThat(uniqueIndexExists(
+                    connection,
+                    "review_policy_config",
+                    "uk_review_policy_config_tenant"
+                )).isTrue();
+                assertThat(uniqueIndexExists(
+                    connection,
+                    "system_settings_config",
+                    "uk_system_settings_config_tenant"
+                )).isTrue();
+                long finalTenantId = tenantId;
+                assertThatThrownBy(() -> insertTenantSingletonConfigs(connection, finalTenantId))
+                    .isInstanceOf(SQLException.class);
+            }
         } finally {
             cleanup(url, username, password, tenantId, taskId, attemptId);
+        }
+    }
+
+    private void insertTenantSingletonConfigs(Connection connection, long tenantId) throws SQLException {
+        try (PreparedStatement reviewPolicy = connection.prepareStatement("""
+            insert into review_policy_config (
+                tenant_id, llm_enabled, llm_provider, model_name, base_url, api_key_value,
+                timeout_seconds, temperature, max_tokens, fallback_to_rules, worker_concurrency,
+                chunk_file_threshold, chunk_line_threshold, chunk_max_files, chunk_max_lines,
+                input_token_price_per_million, output_token_price_per_million, created_at, updated_at
+            )
+            select ?, llm_enabled, llm_provider, model_name, base_url, null,
+                   timeout_seconds, temperature, max_tokens, fallback_to_rules, worker_concurrency,
+                   chunk_file_threshold, chunk_line_threshold, chunk_max_files, chunk_max_lines,
+                   input_token_price_per_million, output_token_price_per_million, now(), now()
+              from review_policy_config where tenant_id = 1 order by id limit 1
+            """)) {
+            reviewPolicy.setLong(1, tenantId);
+            reviewPolicy.executeUpdate();
+        }
+        try (PreparedStatement systemSettings = connection.prepareStatement("""
+            insert into system_settings_config (
+                tenant_id, system_name, language, timezone, retention_days, max_diff_lines,
+                auto_comment, auto_retry, github_comment, high_risk_pr, failed_task,
+                notification_email, webhook_signature, secret_masking, public_repo_allowed,
+                token_ttl_days, created_at, updated_at
+            )
+            select ?, system_name, language, timezone, retention_days, max_diff_lines,
+                   auto_comment, auto_retry, github_comment, high_risk_pr, failed_task,
+                   notification_email, webhook_signature, secret_masking, public_repo_allowed,
+                   token_ttl_days, now(), now()
+              from system_settings_config where tenant_id = 1 order by id limit 1
+            """)) {
+            systemSettings.setLong(1, tenantId);
+            systemSettings.executeUpdate();
         }
     }
 
@@ -234,6 +288,22 @@ class FlywayMigrationUpgradePathIntegrationTest {
         }
     }
 
+    private boolean uniqueIndexExists(Connection connection, String table, String index)
+        throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+            select count(*) as column_count, min(non_unique) as non_unique
+              from information_schema.statistics
+             where table_schema = database() and table_name = ? and index_name = ?
+            """)) {
+            statement.setString(1, table);
+            statement.setString(2, index);
+            try (ResultSet result = statement.executeQuery()) {
+                assertThat(result.next()).isTrue();
+                return result.getLong("column_count") == 1L && result.getInt("non_unique") == 0;
+            }
+        }
+    }
+
     private String latestSuccessfulMigration(Connection connection) throws SQLException {
         try (Statement statement = connection.createStatement();
              ResultSet result = statement.executeQuery("""
@@ -285,6 +355,16 @@ class FlywayMigrationUpgradePathIntegrationTest {
                 tasks.setLong(1, tenantId);
                 tasks.setLong(2, taskId);
                 tasks.executeUpdate();
+            }
+            try (PreparedStatement policies = connection.prepareStatement(
+                "delete from review_policy_config where tenant_id = ?"
+            ); PreparedStatement settings = connection.prepareStatement(
+                "delete from system_settings_config where tenant_id = ?"
+            )) {
+                policies.setLong(1, tenantId);
+                policies.executeUpdate();
+                settings.setLong(1, tenantId);
+                settings.executeUpdate();
             }
             deleteTenant(connection, tenantId);
         }

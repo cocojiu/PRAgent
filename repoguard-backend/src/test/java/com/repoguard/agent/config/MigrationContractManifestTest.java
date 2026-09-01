@@ -38,7 +38,7 @@ class MigrationContractManifestTest {
 
         assertThat(root.required("formatVersion").asInt()).isEqualTo(1);
         assertThat(root.required("futureMigrationsRequireExplicitMetadata").asBoolean()).isTrue();
-        assertThat(versions).contains(76, 77);
+        assertThat(versions).contains(76, 77, 78);
         assertThat(explicit.keySet()).doesNotHaveDuplicates();
 
         for (int version : versions) {

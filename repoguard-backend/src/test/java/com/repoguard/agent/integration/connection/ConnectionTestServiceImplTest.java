@@ -226,7 +226,7 @@ class ConnectionTestServiceImplTest {
             ReviewPolicyConfig config = reviewPolicyConfig(secretCryptoService.encrypt("sk-test-1234"));
             config.setBaseUrl(server.baseUrl());
             config.setMaxTokens(64);
-            when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);
+            when(reviewPolicyConfigMapper.selectByTenantId(1L)).thenReturn(config);
 
             var result = service.testReviewPolicy(null);
 
@@ -248,7 +248,7 @@ class ConnectionTestServiceImplTest {
         try (ProbeServer server = startLlmProbeServer(llmResponse)) {
             ReviewPolicyConfig config = reviewPolicyConfig(secretCryptoService.encrypt("sk-test-1234"));
             config.setBaseUrl(server.baseUrl());
-            when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);
+            when(reviewPolicyConfigMapper.selectByTenantId(1L)).thenReturn(config);
 
             var result = service.testReviewPolicy(null);
 
@@ -265,7 +265,7 @@ class ConnectionTestServiceImplTest {
         try (ProbeServer server = startLlmProbeServer(llmResponse)) {
             ReviewPolicyConfig config = reviewPolicyConfig(secretCryptoService.encrypt("sk-test-1234"));
             config.setBaseUrl(server.baseUrl());
-            when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);
+            when(reviewPolicyConfigMapper.selectByTenantId(1L)).thenReturn(config);
 
             var result = service.testReviewPolicy(null);
 
@@ -278,7 +278,7 @@ class ConnectionTestServiceImplTest {
     @Test
     void testReviewPolicyWithBrokenSavedApiKeyReturnsFailureInsteadOfThrowing() {
         ReviewPolicyConfig config = reviewPolicyConfig("enc:v2:local:not-base64");
-        when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);
+        when(reviewPolicyConfigMapper.selectByTenantId(1L)).thenReturn(config);
 
         var result = service.testReviewPolicy(null);
 

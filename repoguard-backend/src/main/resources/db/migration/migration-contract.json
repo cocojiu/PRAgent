@@ -7,7 +7,7 @@
     "externalDatabaseSupported": true,
     "publishedMigrationPolicy": "IMMUTABLE",
     "newInstallationStrategy": "VALIDATED_SCHEMA_SNAPSHOT_THEN_BASELINE",
-    "candidateVersion": 77,
+    "candidateVersion": 78,
     "requiredEvidence": [
       "empty database migration to the candidate version",
       "schema structure diff against the supported production shape",
@@ -16,9 +16,9 @@
     ],
     "decisionEvidence": [
       "application-prod.yml requires an externally supplied datasource",
-      "FlywayMigrationUpgradePathIntegrationTest verifies the V76 to V77 rolling path"
+      "FlywayMigrationUpgradePathIntegrationTest verifies the V76 to V77 and V77 to V78 upgrade paths"
     ],
-    "reconsiderWhen": "A V77 schema snapshot and all required rehearsal evidence are versioned together.",
+    "reconsiderWhen": "A V78 schema snapshot and all required rehearsal evidence are versioned together.",
     "rollbackStrategy": "restore a validated backup and apply a forward fix; never rewrite or delete a published migration"
   },
   "defaults": {
@@ -85,6 +85,20 @@
       "dirtyDataProbe": "flyway_v77_tenant_relation_violation",
       "interruptedRecovery": "stop writes, restore or repair dirty rows, then rerun the contract migration",
       "rollbackStrategy": "forward fix or restore the validated V77-predecessor backup; no old-binary rollback"
+    },
+    {
+      "version": 78,
+      "file": "V78__tenant_singleton_config_contract.sql",
+      "phase": "CONTRACT",
+      "estimatedRows": "all tenants and tenant-owned singleton configuration rows",
+      "lockType": "write-quiesced unique-index DDL",
+      "maxDurationSeconds": 600,
+      "maxDiskMegabytes": 1024,
+      "nMinusOneCompatible": false,
+      "maintenanceWindowRequired": true,
+      "dirtyDataProbe": "flyway_v78_tenant_singleton_config_violation",
+      "interruptedRecovery": "repair missing or duplicate tenant configuration rows, then rerun the contract migration",
+      "rollbackStrategy": "forward fix or restore the validated V78-predecessor backup; do not select an arbitrary duplicate"
     }
   ]
 }

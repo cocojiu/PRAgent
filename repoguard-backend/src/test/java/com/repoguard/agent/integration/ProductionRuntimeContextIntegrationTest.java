@@ -31,8 +31,10 @@ import com.repoguard.agent.tenancy.TenantContext;
 import com.repoguard.agent.tenancy.TenantQuotaService;
 import com.repoguard.agent.security.AuthTokenFilter;
 import com.repoguard.agent.review.task.ReviewTaskTransitionStore;
+import com.repoguard.agent.review.ReviewPolicyProvider;
 import com.repoguard.agent.review.quality.ReviewQualityBaseline;
 import com.repoguard.agent.review.quality.ReviewQualityBaselineService;
+import com.repoguard.agent.settings.SystemSettingsProvider;
 import com.repoguard.agent.worker.ReviewTaskClaimService;
 import com.repoguard.agent.worker.ReviewTaskWorker;
 import ch.qos.logback.classic.Logger;
@@ -194,6 +196,7 @@ class ProductionRuntimeContextIntegrationTest {
                 Long.class,
                 tenantKey
             );
+            insertTenantSingletonConfigs(jdbcTemplate, otherTenantId, suffix);
             Long defaultTenantTaskId = insertReviewTask(
                 jdbcTemplate,
                 organization,
@@ -228,6 +231,10 @@ class ProductionRuntimeContextIntegrationTest {
                 try (TenantContext.Scope _ = TenantContext.withTenant(otherTenantId)) {
                     assertThat(mapper.selectById(defaultTenantTaskId)).isNull();
                     assertThat(mapper.selectById(otherTenantTaskId)).isNotNull();
+                    assertThat(context.getBean(ReviewPolicyProvider.class).getSettings().modelName())
+                        .isEqualTo("tenant-model-" + suffix);
+                    assertThat(context.getBean(SystemSettingsProvider.class).getSettings().systemName())
+                        .isEqualTo("Tenant System " + suffix);
                 }
                 assertThatThrownBy(() -> jdbcTemplate.update(
                     "insert into review_timeline "
@@ -243,6 +250,8 @@ class ProductionRuntimeContextIntegrationTest {
                     defaultTenantTaskId,
                     otherTenantTaskId
                 );
+                jdbcTemplate.update("delete from review_policy_config where tenant_id = ?", otherTenantId);
+                jdbcTemplate.update("delete from system_settings_config where tenant_id = ?", otherTenantId);
                 jdbcTemplate.update("delete from tenant where id = ?", otherTenantId);
             }
         }
@@ -1613,6 +1622,52 @@ class ProductionRuntimeContextIntegrationTest {
         rabbitAdmin.deleteQueue(topology.deadLetterQueue());
         rabbitAdmin.deleteExchange(topology.exchange());
         rabbitAdmin.deleteExchange(topology.deadLetterExchange());
+    }
+
+    private void insertTenantSingletonConfigs(
+        JdbcTemplate jdbcTemplate,
+        long tenantId,
+        String suffix
+    ) {
+        int policies = jdbcTemplate.update("""
+            insert into review_policy_config (
+                tenant_id, llm_enabled, llm_provider, model_name, base_url, api_key_value,
+                timeout_seconds, temperature, max_tokens, fallback_to_rules, worker_concurrency,
+                chunk_file_threshold, chunk_line_threshold, chunk_max_files, chunk_max_lines,
+                input_token_price_per_million, output_token_price_per_million, created_at, updated_at
+            )
+            select ?, llm_enabled, llm_provider, ?, base_url, null,
+                   timeout_seconds, temperature, max_tokens, fallback_to_rules, worker_concurrency,
+                   chunk_file_threshold, chunk_line_threshold, chunk_max_files, chunk_max_lines,
+                   input_token_price_per_million, output_token_price_per_million, now(), now()
+              from review_policy_config where tenant_id = 1 order by id limit 1
+            """, tenantId, "tenant-model-" + suffix);
+        int settings = jdbcTemplate.update("""
+            insert into system_settings_config (
+                tenant_id, system_name, language, timezone, retention_days, max_diff_lines,
+                auto_comment, auto_retry, github_comment, high_risk_pr, failed_task,
+                notification_email, webhook_signature, secret_masking, public_repo_allowed,
+                token_ttl_days, created_at, updated_at
+            )
+            select ?, ?, language, timezone, retention_days, max_diff_lines,
+                   auto_comment, auto_retry, github_comment, high_risk_pr, failed_task,
+                   notification_email, webhook_signature, secret_masking, public_repo_allowed,
+                   token_ttl_days, now(), now()
+              from system_settings_config where tenant_id = 1 order by id limit 1
+            """, tenantId, "Tenant System " + suffix);
+
+        assertThat(policies).isEqualTo(1);
+        assertThat(settings).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+            "select id from review_policy_config where tenant_id = ?",
+            Long.class,
+            tenantId
+        )).isNotEqualTo(1L);
+        assertThat(jdbcTemplate.queryForObject(
+            "select id from system_settings_config where tenant_id = ?",
+            Long.class,
+            tenantId
+        )).isNotEqualTo(1L);
     }
 
     private RateLimitCapacitySample measureRateLimitCapacity(
