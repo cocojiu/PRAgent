@@ -335,3 +335,11 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 本地验证：`WorkflowCatalogContractTest`、`FrontendBrowserQualityContractTest`、`ProductionDeploymentContractTest`、`ProductionConfigurationContractTest`、`SupplyChainPolicyTest` 共 41 项通过；`git diff --check` 通过；未暂存既有契约快照和 `.tmp/`。
 提交/远程验收：实现提交 `0dab8a95`（优化：收敛 CI 发布与维护入口）已推送 `origin/PRAgent-test`；Pull Request Quality #33434537784（含 Tracked file governance）、push Repository Governance #33434531914 和 Auto Create Pull Request #33434531822 均成功。因发布入口已收敛，PRAgent-test 推送未触发 Release Images，生产部署保持手动 opt-in。
 下一步：继续 P1-03，按个人模式拆分 OpenAPI reviewed/generated DTO 边界，先盘点重复手写 DTO 和生成客户端引用，再以契约测试阻断漂移。
+
+2026-09-01 | 优化-46 | P1-03 审查详情 OpenAPI 生成 DTO 与 UI mapper 试点
+状态：已完成生成脚本、审查详情契约接线、显式 view model mapper、本地质量门禁、中文提交、test 分支推送和远程 Actions 验收。
+变更：`generate-openapi-client.mjs` 现在从 reviewed `openapi.json` 同时生成 `openapiOperations.ts` 和 `reviewDetailTypes.ts`，并在 `--check` 模式阻断任一生成物漂移；审查详情、发现、变更文件、缺失测试、时间线、状态、人工审查和反馈 API 直接使用生成 DTO。`reviewDetailTaskMappers.ts` 将可选 API DTO 统一归一化为稳定的页面 view model，分页 section loader 也在边界处执行显式 mapper；移除同名手写详情 DTO，保留列表与非详情领域类型。
+本地验证：前端生成物检查、`vue-tsc -b`、ESLint、Vite 构建和全量单元测试通过（39 个测试文件、157 项测试，语句 64.80%、分支 52.83%、函数 55.47%、行 65.18%）；后端 `OpenApiGeneratedClientContractTest`、`FrontendApiContractCatalogTest` 共 12 项通过；`git diff --check` 通过。
+提交/远程验收：实现提交 `9d1bd62c`（优化：试点审查详情 OpenAPI 生成契约）已推送 `origin/PRAgent-test`；Pull Request Quality #33462145133（含前后端、集成、Flyway、边缘配置和供应链门禁）、push Repository Governance #33462140655、Auto Create Pull Request #33462140662 均成功，PRAgent-test 未触发生产镜像发布。
+边界：生成文件仅声明 DTO 类型，无业务逻辑；当前只推进审查详情纵向切片，规则、集成、配置等领域按后续批次扩展。未修改用户已有 `openapi-generated-client.frontend-signature.snapshot` 工作区改动和 `.tmp/`。
+下一步：继续按顺序进入后续 P1/P2 优化项，保持单项实现、中文提交、Actions 验收和进度记录。
