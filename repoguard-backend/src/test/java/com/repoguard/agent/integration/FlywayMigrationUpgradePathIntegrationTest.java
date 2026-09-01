@@ -102,10 +102,11 @@ class FlywayMigrationUpgradePathIntegrationTest {
             migrateTo(url, username, password, "79");
             try (Connection connection = open(url, username, password)) {
                 assertThat(latestSuccessfulMigration(connection)).isEqualTo("79");
-                assertThat(uniqueIndexExists(
+                assertThat(compositeUniqueIndexExists(
                     connection,
                     "github_check_run",
-                    "uk_github_check_run_tenant_task_sequence"
+                    "uk_github_check_run_tenant_task_sequence",
+                    3
                 )).isTrue();
                 assertThat(constraintExists(
                     connection,
@@ -331,6 +332,16 @@ class FlywayMigrationUpgradePathIntegrationTest {
 
     private boolean uniqueIndexExists(Connection connection, String table, String index)
         throws SQLException {
+        return indexColumnCount(connection, table, index) == 1;
+    }
+
+    private boolean compositeUniqueIndexExists(Connection connection, String table, String index, int expectedColumns)
+        throws SQLException {
+        return indexColumnCount(connection, table, index) == expectedColumns;
+    }
+
+    private int indexColumnCount(Connection connection, String table, String index)
+        throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
             select count(*) as column_count, min(non_unique) as non_unique
               from information_schema.statistics
@@ -340,7 +351,9 @@ class FlywayMigrationUpgradePathIntegrationTest {
             statement.setString(2, index);
             try (ResultSet result = statement.executeQuery()) {
                 assertThat(result.next()).isTrue();
-                return result.getLong("column_count") == 1L && result.getInt("non_unique") == 0;
+                return result.getInt("non_unique") == 0
+                    ? result.getInt("column_count")
+                    : 0;
             }
         }
     }
