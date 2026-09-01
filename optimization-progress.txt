@@ -399,3 +399,11 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 提交/远程验收：实现提交 `d4287762`（优化：建设企业租户管理台与细粒度 RBAC）和修复提交 `7e4d4b81`（修复：降低租户切换控件的首屏构建开销）已推送 `origin/PRAgent-test`；最终 Pull Request Quality #33521775825 的 8 个作业全部成功，含后端单测/契约、真实 MySQL/RabbitMQ、Flyway 升级、前端类型/lint/测试/构建、密钥差异、依赖和生产边缘配置；push Repository Governance #33521555128、Auto Create Pull Request #33521555110 均成功。
 边界：架构复杂度预算按新增生产类实际值更新为 71,821 行/955 类；GitHub App、真实 OIDC、组织安装和生产配额仍需部署环境凭据与分支保护配置，不在仓库伪造。保留用户既有 `ArchitectureRatchetTest.java` 未提交改动和 `.tmp/`，未提交非 README Markdown 或测试脚本。
 下一步：进入优化-53 仓库级语义上下文，先建立默认分支符号索引和确定性调用方/测试/配置检索，再接入审查上下文并保持单项验收。
+
+2026-09-01 | 优化-53 | P1 仓库级语义上下文索引与检索
+状态：已完成默认分支语义索引、确定性关联检索、上下文接入、失败降级、预算/缓存保护、本地门禁、中文提交、test 分支推送和远程 Actions 验收。
+变更：新增源代码管理无关的 `RepositorySemanticRepository` 端口及 GitHub 默认分支适配器；按变更文件符号、目录、扩展名和配置路径对默认分支 Git tree 做确定性评分，检索调用方、实现类、关联测试、配置和迁移文件，并通过现有精确 head 内容读取器取得内容；新增 Caffeine 有界缓存、文件数/单文件/总字节/超时预算和树截断标记，任何凭据缺失、接口失败、内容过大或读取异常均降级为上下文限制，不阻断主审查；语义切片、摘要和 `[REPOSITORY_SEMANTIC_CONTEXT]` 已接入 LLM prompt，输出继续经过统一脱敏；README 与环境变量契约同步补充，明确当前不启用向量检索。
+本地验证：语义索引定向测试 19 项通过；完整后端 `mvn verify` 共 2662 项测试通过、0 失败、12 项按环境条件跳过，JaCoCo 覆盖率门禁通过，`ApplicationArchitectureTest` 44 项和 `ArchitectureRatchetTest` 9 项通过；`git diff --check` 通过。首次远程质量运行因新增分支覆盖率不足失败（#33525786854），补齐异常、预算、树过滤和规则上下文测试后复验通过。
+提交/远程验收：实现提交 `c8c9941f`（新增：建设仓库级语义上下文索引）已推送，push Repository Governance #33525560125、Auto Create Pull Request #33525560081 成功；修复提交 `de666efc`（修复：补齐语义上下文覆盖率测试）已推送，push Repository Governance #33527235941、Auto Create Pull Request #33527235974 成功；最终 Pull Request Quality #33527240746 的 8 个作业全部成功，含真实 MySQL/RabbitMQ、Flyway 升级、前端构建、边缘配置、跟踪文件治理、密钥差异和依赖审查。
+边界：索引只读取默认分支且以确定性规则检索，不伪造未取得的调用关系；GitLab/Gitee/Bitbucket 适配、向量检索和增量符号索引留待后续 SCM/模型批次；未新增数据库迁移，不提交非 README Markdown 或测试脚本；用户既有 `ArchitectureRatchetTest.java`、OpenAPI frontend-signature snapshot 和 `.tmp/` 保持未提交。
+下一步：进入优化-54 一键修复建议，先约束为可精确定位的单行/小范围 GitHub suggestion，并保留人工确认边界。
