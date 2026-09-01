@@ -12,6 +12,7 @@ import com.repoguard.agent.service.ReviewRuleConfigService;
 import java.util.Objects;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 @Service
 public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
@@ -41,10 +42,14 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
 
     @Override
     public ReviewRuleConfigDto createReviewRule(ReviewRuleConfigRequest request) {
-        throw new BusinessException(
-            ErrorCode.BAD_REQUEST,
-            "Dynamic review rule creation is disabled; only registered built-in rules can be edited"
-        );
+        if (request == null || !StringUtils.hasText(request.detectorType())
+            || "BUILTIN".equalsIgnoreCase(request.detectorType())) {
+            throw new BusinessException(
+                ErrorCode.BAD_REQUEST,
+                "Dynamic review rule creation is disabled; only registered built-in rules can be edited"
+            );
+        }
+        return commandService.createRule(request);
     }
 
     @Override

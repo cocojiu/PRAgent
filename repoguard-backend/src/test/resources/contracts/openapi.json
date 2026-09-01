@@ -567,6 +567,67 @@
         }
       }
     },
+    "/api/v1/config/declarative-rules/{id}/dry-run" : {
+      "post" : {
+        "tags" : [ "DeclarativeRule" ],
+        "operationId" : "declarativeRuleControllerDryRun",
+        "x-controller-operation" : "DeclarativeRuleController#dryRun",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 64
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "DeclarativeRuleDryRunRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/DeclarativeRuleDryRunRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "DeclarativeRuleDryRunResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/DeclarativeRuleDryRunResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/config/integrations/github" : {
       "get" : {
         "tags" : [ "SystemConfig" ],
@@ -5842,6 +5903,119 @@
         }
       }
     },
+    "/api/v1/scanners/sarif/tasks/{taskId}/export" : {
+      "get" : {
+        "tags" : [ "Sarif" ],
+        "operationId" : "sarifControllerExportFindings",
+        "x-controller-operation" : "SarifController#exportFindings",
+        "parameters" : [ {
+          "name" : "taskId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "SarifExportDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/SarifExportDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/scanners/sarif/tasks/{taskId}/import" : {
+      "post" : {
+        "tags" : [ "Sarif" ],
+        "operationId" : "sarifControllerImportFindings",
+        "x-controller-operation" : "SarifController#importFindings",
+        "parameters" : [ {
+          "name" : "taskId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "SarifImportRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SarifImportRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "SarifImportResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/SarifImportResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/system/health/summary" : {
       "get" : {
         "tags" : [ "SystemHealth" ],
@@ -7008,6 +7182,88 @@
           }
         },
         "required" : [ "executed", "cleanupBatchId", "retentionDays", "maxTasks", "candidateTasks", "selectedTasks", "deletedBatchItems", "deletedPublications", "deletedBatches", "deletedChangedFiles", "deletedTimelines", "deletedFindings", "deletedTasks" ]
+      },
+      "DeclarativeRuleDryRunFile" : {
+        "type" : "object",
+        "x-java-type" : "DeclarativeRuleDryRunFile",
+        "properties" : {
+          "filePath" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 1024
+          },
+          "patch" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 512000
+          }
+        },
+        "required" : [ "filePath", "patch" ]
+      },
+      "DeclarativeRuleDryRunRequest" : {
+        "type" : "object",
+        "x-java-type" : "DeclarativeRuleDryRunRequest",
+        "properties" : {
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          },
+          "files" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/DeclarativeRuleDryRunFile"
+            },
+            "maxItems" : 100
+          }
+        }
+      },
+      "DeclarativeRuleDryRunResponse" : {
+        "type" : "object",
+        "x-java-type" : "DeclarativeRuleDryRunResponse",
+        "properties" : {
+          "ruleId" : {
+            "type" : "string"
+          },
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "matchedFiles" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "matchedLines" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "matches" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/DeclarativeRuleMatchDto"
+            }
+          }
+        },
+        "required" : [ "matchedFiles", "matchedLines" ]
+      },
+      "DeclarativeRuleMatchDto" : {
+        "type" : "object",
+        "x-java-type" : "DeclarativeRuleMatchDto",
+        "properties" : {
+          "filePath" : {
+            "type" : "string"
+          },
+          "lineNumber" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "evidence" : {
+            "type" : "string"
+          }
+        }
       },
       "EnterpriseIdentityBindingRequest" : {
         "type" : "object",
@@ -10143,6 +10399,15 @@
           },
           "qualityGate" : {
             "$ref" : "#/components/schemas/ReviewRuleQualityGateDto"
+          },
+          "detectorType" : {
+            "type" : "string"
+          },
+          "matcherExpression" : {
+            "type" : "string"
+          },
+          "exceptionPatterns" : {
+            "type" : "string"
           }
         },
         "required" : [ "hitCount", "configVersion", "policyVersion" ]
@@ -10208,6 +10473,19 @@
             "type" : "string",
             "minLength" : 1,
             "pattern" : "(?i)observe|comment|block"
+          },
+          "detectorType" : {
+            "type" : "string",
+            "maxLength" : 16,
+            "pattern" : "(?i)builtin|regex|ast"
+          },
+          "matcherExpression" : {
+            "type" : "string",
+            "maxLength" : 1024
+          },
+          "exceptionPatterns" : {
+            "type" : "string",
+            "maxLength" : 1024
           }
         },
         "required" : [ "id", "name", "scope", "severity", "status", "description", "enforcementMode" ]
@@ -10771,6 +11049,84 @@
           }
         },
         "required" : [ "value" ]
+      },
+      "SarifExportDto" : {
+        "type" : "object",
+        "x-java-type" : "SarifExportDto",
+        "properties" : {
+          "version" : {
+            "type" : "string"
+          },
+          "schema" : {
+            "type" : "string"
+          },
+          "runs" : {
+            "type" : "array",
+            "items" : {
+              "type" : "object",
+              "x-java-type" : "Map<String,Object>"
+            }
+          }
+        }
+      },
+      "SarifImportRequest" : {
+        "type" : "object",
+        "x-java-type" : "SarifImportRequest",
+        "properties" : {
+          "content" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 2000000
+          }
+        },
+        "required" : [ "content" ]
+      },
+      "SarifImportResponse" : {
+        "type" : "object",
+        "x-java-type" : "SarifImportResponse",
+        "properties" : {
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "imported" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "skipped" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "findings" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/SarifImportedFindingDto"
+            }
+          }
+        },
+        "required" : [ "imported", "skipped" ]
+      },
+      "SarifImportedFindingDto" : {
+        "type" : "object",
+        "x-java-type" : "SarifImportedFindingDto",
+        "properties" : {
+          "ruleId" : {
+            "type" : "string"
+          },
+          "filePath" : {
+            "type" : "string"
+          },
+          "lineNumber" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "severity" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          }
+        }
       },
       "SecretReEncryptionItemDto" : {
         "type" : "object",

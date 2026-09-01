@@ -13,12 +13,14 @@ import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewRuleConfigMapper;
 import com.repoguard.agent.review.ReviewFindingProjectionAssembler;
 import com.repoguard.agent.review.ReviewRuleRegistry;
+import com.repoguard.agent.review.DeclarativeRulePolicy;
 import com.repoguard.agent.review.quality.ReviewQualityBaseline;
 import com.repoguard.agent.review.quality.ReviewQualityBaselineService;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -33,7 +35,9 @@ public class ReviewRuleQueryService {
     private final ReviewRuleRegistry reviewRuleRegistry;
     private final ReviewRuleResponseAssembler responseAssembler;
     private final ReviewStrategyPolicyService strategyPolicyService;
+    private final DeclarativeRulePolicy declarativeRulePolicy;
 
+    @Autowired
     public ReviewRuleQueryService(
         ReviewRuleConfigMapper reviewRuleConfigMapper,
         ReviewFindingMapper reviewFindingMapper,
@@ -42,7 +46,8 @@ public class ReviewRuleQueryService {
         ReviewQualityBaselineService reviewQualityBaselineService,
         ReviewRuleRegistry reviewRuleRegistry,
         ReviewRuleResponseAssembler responseAssembler,
-        ReviewStrategyPolicyService strategyPolicyService
+        ReviewStrategyPolicyService strategyPolicyService,
+        DeclarativeRulePolicy declarativeRulePolicy
     ) {
         this.reviewRuleConfigMapper = Objects.requireNonNull(reviewRuleConfigMapper, "reviewRuleConfigMapper");
         this.reviewFindingMapper = Objects.requireNonNull(reviewFindingMapper, "reviewFindingMapper");
@@ -55,6 +60,30 @@ public class ReviewRuleQueryService {
         this.reviewRuleRegistry = Objects.requireNonNull(reviewRuleRegistry, "reviewRuleRegistry");
         this.responseAssembler = Objects.requireNonNull(responseAssembler, "responseAssembler");
         this.strategyPolicyService = Objects.requireNonNull(strategyPolicyService, "strategyPolicyService");
+        this.declarativeRulePolicy = Objects.requireNonNull(declarativeRulePolicy, "declarativeRulePolicy");
+    }
+
+    public ReviewRuleQueryService(
+        ReviewRuleConfigMapper reviewRuleConfigMapper,
+        ReviewFindingMapper reviewFindingMapper,
+        ReviewRuleConfigPolicy reviewRuleConfigPolicy,
+        ReviewRuleMetricAssembler reviewRuleMetricAssembler,
+        ReviewQualityBaselineService reviewQualityBaselineService,
+        ReviewRuleRegistry reviewRuleRegistry,
+        ReviewRuleResponseAssembler responseAssembler,
+        ReviewStrategyPolicyService strategyPolicyService
+    ) {
+        this(
+            reviewRuleConfigMapper,
+            reviewFindingMapper,
+            reviewRuleConfigPolicy,
+            reviewRuleMetricAssembler,
+            reviewQualityBaselineService,
+            reviewRuleRegistry,
+            responseAssembler,
+            strategyPolicyService,
+            new DeclarativeRulePolicy()
+        );
     }
 
     ReviewRulesResponse getReviewRules() {
@@ -67,7 +96,8 @@ public class ReviewRuleQueryService {
         ReviewRuleFeedbackStat feedbackStat = loadRuleFeedbackStat();
         ReviewQualityBaseline qualityBaseline = loadBaseline();
         List<ReviewRuleConfigDto> ruleDtos = rules.stream()
-            .filter(rule -> reviewRuleRegistry.contains(rule.getId()))
+            .filter(rule -> reviewRuleRegistry.contains(rule.getId())
+                || declarativeRulePolicy.isDeclarativeType(rule.getDetectorType()))
             .map(rule -> responseAssembler.toRuleDto(
                 rule,
                 hitCountByRule.getOrDefault(rule.getId(), 0L),
@@ -88,6 +118,21 @@ public class ReviewRuleQueryService {
         return normalizedId;
     }
 
+    String normalizeRuleId(String id) {
+        String normalizedId = reviewRuleConfigPolicy.normalizeRuleId(id);
+        if (reviewRuleRegistry.contains(normalizedId)) {
+            return normalizedId;
+        }
+        ReviewRuleConfig configured = reviewRuleConfigMapper.selectById(normalizedId);
+        if (configured != null && declarativeRulePolicy.isDeclarativeType(configured.getDetectorType())) {
+            return normalizedId;
+        }
+        throw new BusinessException(
+            ErrorCode.BAD_REQUEST,
+            "Review rule has no registered detector implementation: " + normalizedId
+        );
+    }
+
     ReviewRuleConfig loadRule(String normalizedId) {
         ReviewRuleConfig rule = reviewRuleConfigMapper.selectById(normalizedId);
         if (rule == null) {
@@ -102,6 +147,21 @@ public class ReviewRuleQueryService {
 
     String detectorVersion(String ruleId) {
         return reviewRuleRegistry.detectorVersion(ruleId);
+    }
+
+    String detectorVersion(ReviewRuleConfig rule) {
+        if (rule != null && reviewRuleRegistry.contains(rule.getId())) {
+            return reviewRuleRegistry.detectorVersion(rule.getId());
+        }
+        String configured = rule == null ? "" : rule.getDetectorVersion();
+        if (StringUtils.hasText(configured)) {
+            return configured.trim();
+        }
+        return declarativeRulePolicy.detectorVersion(rule == null ? null : rule.getDetectorType());
+    }
+
+    boolean isRegistered(String ruleId) {
+        return reviewRuleRegistry.contains(ruleId);
     }
 
     ReviewRuleConfigDto toRuleDto(ReviewRuleConfig rule, ReviewQualityBaseline baseline) {

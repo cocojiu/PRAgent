@@ -9,6 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
@@ -19,15 +20,27 @@ public class ReviewRuleProvider {
     private final ReviewRuleConfigMapper reviewRuleConfigMapper;
     private final ReviewRuleRegistry reviewRuleRegistry;
     private final MeterRegistry meterRegistry;
+    private final DeclarativeRulePolicy declarativeRulePolicy;
+
+    @Autowired
+    public ReviewRuleProvider(
+        ReviewRuleConfigMapper reviewRuleConfigMapper,
+        ReviewRuleRegistry reviewRuleRegistry,
+        MeterRegistry meterRegistry,
+        DeclarativeRulePolicy declarativeRulePolicy
+    ) {
+        this.reviewRuleConfigMapper = Objects.requireNonNull(reviewRuleConfigMapper, "reviewRuleConfigMapper");
+        this.reviewRuleRegistry = Objects.requireNonNull(reviewRuleRegistry, "reviewRuleRegistry");
+        this.meterRegistry = Objects.requireNonNull(meterRegistry, "meterRegistry");
+        this.declarativeRulePolicy = Objects.requireNonNull(declarativeRulePolicy, "declarativeRulePolicy");
+    }
 
     public ReviewRuleProvider(
         ReviewRuleConfigMapper reviewRuleConfigMapper,
         ReviewRuleRegistry reviewRuleRegistry,
         MeterRegistry meterRegistry
     ) {
-        this.reviewRuleConfigMapper = Objects.requireNonNull(reviewRuleConfigMapper, "reviewRuleConfigMapper");
-        this.reviewRuleRegistry = Objects.requireNonNull(reviewRuleRegistry, "reviewRuleRegistry");
-        this.meterRegistry = Objects.requireNonNull(meterRegistry, "meterRegistry");
+        this(reviewRuleConfigMapper, reviewRuleRegistry, meterRegistry, new DeclarativeRulePolicy());
     }
 
     public Map<String, ReviewRuleSettings> getRulesById() {
@@ -47,7 +60,16 @@ public class ReviewRuleProvider {
             }
             String normalizedId = rule.getId().trim().toUpperCase(java.util.Locale.ROOT);
             boolean detectorRegistered = reviewRuleRegistry.contains(normalizedId);
-            if (!"DISABLED".equalsIgnoreCase(rule.getStatus()) && !detectorRegistered) {
+            String detectorType = declarativeRulePolicy.normalizeType(rule.getDetectorType());
+            boolean declarative = declarativeRulePolicy.isDeclarativeType(detectorType);
+            if (declarative) {
+                declarativeRulePolicy.validate(
+                    detectorType,
+                    rule.getMatcherExpression(),
+                    rule.getExceptionPatterns()
+                );
+            }
+            if (!"DISABLED".equalsIgnoreCase(rule.getStatus()) && !detectorRegistered && !declarative) {
                 meterRegistry.counter(
                     "repoguard.review.rule.configuration_error",
                     "reason",
@@ -71,9 +93,14 @@ public class ReviewRuleProvider {
                 rule.getDescription(),
                 detectorRegistered
                     ? reviewRuleRegistry.detectorVersion(normalizedId)
-                    : disabledDetectorVersion(rule, normalizedId),
+                    : declarative
+                        ? declarativeDetectorVersion(rule, detectorType)
+                        : disabledDetectorVersion(rule, normalizedId),
                 positiveVersion(rule.getConfigVersion()),
-                positiveVersion(rule.getPolicyVersion())
+                positiveVersion(rule.getPolicyVersion()),
+                detectorType,
+                defaultString(rule.getMatcherExpression()),
+                defaultString(rule.getExceptionPatterns())
             );
             if (rulesById.putIfAbsent(settings.id(), settings) != null) {
                 throw new IllegalStateException("Duplicate review rule configuration id: " + settings.id());
@@ -101,5 +128,15 @@ public class ReviewRuleProvider {
         return StringUtils.hasText(rule.getDetectorVersion())
             ? rule.getDetectorVersion().trim()
             : normalizedId.toLowerCase(java.util.Locale.ROOT) + "-detector-unavailable";
+    }
+
+    private String declarativeDetectorVersion(ReviewRuleConfig rule, String detectorType) {
+        return StringUtils.hasText(rule.getDetectorVersion())
+            ? rule.getDetectorVersion().trim()
+            : declarativeRulePolicy.detectorVersion(detectorType);
+    }
+
+    private String defaultString(String value) {
+        return value == null ? "" : value.trim();
     }
 }

@@ -47,6 +47,7 @@ GET /api/v1/reviews/{taskId}/attempts query=[] body=- bodyRequired=false
 GET /api/v1/reviews/{taskId}/attempts/{attemptId} query=[page, pageSize] body=- bodyRequired=false
 GET /api/v1/reviews/{taskId}/attempts/{attemptId}/changed-files query=[cursor, limit] body=- bodyRequired=false
 GET /api/v1/reviews/{taskId}/attempts/{attemptId}/findings query=[cursor, limit] body=- bodyRequired=false
+GET /api/v1/scanners/sarif/tasks/{taskId}/export query=[] body=- bodyRequired=false
 GET /api/v1/system/health/summary query=[] body=- bodyRequired=false
 GET /api/v1/users query=[page, pageSize, role, status, keyword] body=- bodyRequired=false
 GET /api/v1/users/audits query=[page, pageSize] body=- bodyRequired=false
@@ -57,6 +58,7 @@ POST /api/v1/auth/refresh query=[] body=AuthRefreshRequest bodyRequired=false
 POST /api/v1/auth/refresh-token/reset query=[] body=AuthRefreshTokenResetRequest bodyRequired=true
 POST /api/v1/auth/register query=[] body=AuthRegisterRequest bodyRequired=true
 POST /api/v1/config/data-retention/cleanup query=[] body=DataRetentionCleanupRequest bodyRequired=false
+POST /api/v1/config/declarative-rules/{id}/dry-run query=[] body=DeclarativeRuleDryRunRequest bodyRequired=true
 POST /api/v1/config/integrations/github/test query=[] body=GithubIntegrationConfigRequest bodyRequired=false
 POST /api/v1/config/integrations/mysql/test query=[] body=ServiceIntegrationConfigRequest bodyRequired=false
 POST /api/v1/config/integrations/rabbitmq/test query=[] body=ServiceIntegrationConfigRequest bodyRequired=false
@@ -82,6 +84,7 @@ POST /api/v1/reviews/{id}/findings/{findingId}/feedback query=[] body=FindingFee
 POST /api/v1/reviews/{id}/github-comments query=[] body=- bodyRequired=false
 POST /api/v1/reviews/{id}/human-review query=[] body=HumanReviewRequest bodyRequired=true
 POST /api/v1/reviews/{id}/retry query=[] body=- bodyRequired=false
+POST /api/v1/scanners/sarif/tasks/{taskId}/import query=[] body=SarifImportRequest bodyRequired=true
 POST /api/v1/users query=[] body=UserCreateRequest bodyRequired=true
 PUT /api/v1/config/integrations/github query=[] body=GithubIntegrationConfigRequest bodyRequired=true
 PUT /api/v1/config/integrations/mysql query=[] body=ServiceIntegrationConfigRequest bodyRequired=true

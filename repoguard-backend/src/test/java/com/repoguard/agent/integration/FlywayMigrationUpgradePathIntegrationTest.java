@@ -19,7 +19,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
  * Exercises the supported rolling-upgrade path against a real MySQL instance.
  *
  * <p>The test is opt-in because local unit-test runs do not provision a database. CI enables it
- * with an isolated database and verifies the V76 expand state plus the V77, V78, V79 and V80 states.
+ * with an isolated database and verifies the V76 expand state plus the V77, V78, V79, V80 and V81 states.
  */
 @EnabledIfEnvironmentVariable(named = "REPOGUARD_RUN_INTEGRATION_TESTS", matches = "true")
 class FlywayMigrationUpgradePathIntegrationTest {
@@ -124,9 +124,9 @@ class FlywayMigrationUpgradePathIntegrationTest {
                 }
             }
 
-            migrateTo(url, username, password, "80");
+            migrateTo(url, username, password, "81");
             try (Connection connection = open(url, username, password)) {
-                assertThat(latestSuccessfulMigration(connection)).isEqualTo("80");
+                assertThat(latestSuccessfulMigration(connection)).isEqualTo("81");
                 assertThat(columnExists(connection, "tenant_quota_config", "monthly_llm_token_budget"))
                     .isTrue();
                 assertThat(columnExists(connection, "tenant_quota_config", "monthly_llm_cost_budget"))
@@ -142,6 +142,10 @@ class FlywayMigrationUpgradePathIntegrationTest {
                     "llm_model_release",
                     "fk_llm_model_release_tenant"
                 )).isTrue();
+                assertThat(columnExists(connection, "review_rule_config", "detector_type")).isTrue();
+                assertThat(columnExists(connection, "review_rule_config", "matcher_expression")).isTrue();
+                assertThat(columnExists(connection, "review_rule_config", "exception_patterns")).isTrue();
+                assertThat(columnExists(connection, "review_rule_policy_snapshot", "detector_type")).isTrue();
             }
         } finally {
             cleanup(url, username, password, tenantId, taskId, attemptId);

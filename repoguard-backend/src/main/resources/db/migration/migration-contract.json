@@ -7,7 +7,7 @@
     "externalDatabaseSupported": true,
     "publishedMigrationPolicy": "IMMUTABLE",
     "newInstallationStrategy": "VALIDATED_SCHEMA_SNAPSHOT_THEN_BASELINE",
-    "candidateVersion": 80,
+    "candidateVersion": 81,
     "requiredEvidence": [
       "empty database migration to the candidate version",
       "schema structure diff against the supported production shape",
@@ -16,9 +16,9 @@
     ],
     "decisionEvidence": [
       "application-prod.yml requires an externally supplied datasource",
-      "FlywayMigrationUpgradePathIntegrationTest verifies the V76 to V77, V77 to V78, V78 to V79 and V79 to V80 upgrade paths"
+      "FlywayMigrationUpgradePathIntegrationTest verifies the V76 to V77, V77 to V78, V78 to V79, V79 to V80 and V80 to V81 upgrade paths"
     ],
-    "reconsiderWhen": "A V80 schema snapshot and all required rehearsal evidence are versioned together.",
+    "reconsiderWhen": "A V81 schema snapshot and all required rehearsal evidence are versioned together.",
     "rollbackStrategy": "restore a validated backup and apply a forward fix; never rewrite or delete a published migration"
   },
   "defaults": {
@@ -123,6 +123,18 @@
       "nMinusOneCompatible": true,
       "interruptedRecovery": "rerun the additive migration after checking Flyway state; release metadata remains retryable",
       "rollbackStrategy": "forward fix or restore the validated V79 predecessor backup; do not delete published migration"
+    },
+    {
+      "version": 81,
+      "file": "V81__declarative_rules_and_sarif.sql",
+      "phase": "EXPAND",
+      "estimatedRows": "one matcher metadata row per configured review rule and policy snapshot",
+      "lockType": "metadata-and-table",
+      "maxDurationSeconds": 600,
+      "maxDiskMegabytes": 1024,
+      "nMinusOneCompatible": true,
+      "interruptedRecovery": "rerun the additive migration after checking Flyway state; declarative rules remain disabled until validated",
+      "rollbackStrategy": "forward fix or restore the validated V80 predecessor backup; do not delete published migration"
     }
   ]
 }

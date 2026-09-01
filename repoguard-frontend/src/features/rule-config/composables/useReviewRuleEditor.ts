@@ -1,6 +1,6 @@
 import { reactive, ref, type Ref } from "vue";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
-import { updateReviewRule, updateReviewRuleStatus } from "@/api/config";
+import { createReviewRule, updateReviewRule, updateReviewRuleStatus } from "@/api/config";
 import type {
   ReviewRuleConfig,
   ReviewRuleConfigRequest,
@@ -26,7 +26,10 @@ const createEmptyRuleForm = (): ReviewRuleConfigRequest => ({
   description: "",
   positiveExample: "",
   falsePositiveGuidance: "",
-  enforcementMode: "comment"
+  enforcementMode: "comment",
+  detectorType: "BUILTIN",
+  matcherExpression: "",
+  exceptionPatterns: ""
 });
 
 export const useReviewRuleEditor = ({ canManage, reloadRules, rules }: ReviewRuleEditorOptions) => {
@@ -50,6 +53,9 @@ export const useReviewRuleEditor = ({ canManage, reloadRules, rules }: ReviewRul
     ruleForm.positiveExample = rule?.positiveExample ?? "";
     ruleForm.falsePositiveGuidance = rule?.falsePositiveGuidance ?? "";
     ruleForm.enforcementMode = rule?.enforcementMode ?? "comment";
+    ruleForm.detectorType = rule?.detectorType ?? "BUILTIN";
+    ruleForm.matcherExpression = rule?.matcherExpression ?? "";
+    ruleForm.exceptionPatterns = rule?.exceptionPatterns ?? "";
   };
 
   const openEditDialog = (rule: ReviewRuleConfig) => {
@@ -59,6 +65,16 @@ export const useReviewRuleEditor = ({ canManage, reloadRules, rules }: ReviewRul
     editingRuleId.value = rule.id;
     editingPolicyVersion.value = rule.policyVersion;
     resetForm(rule);
+    dialogVisible.value = true;
+  };
+
+  const openCreateDialog = () => {
+    if (!canManage.value) {
+      return;
+    }
+    editingRuleId.value = "";
+    editingPolicyVersion.value = 0;
+    resetForm();
     dialogVisible.value = true;
   };
 
@@ -84,6 +100,9 @@ export const useReviewRuleEditor = ({ canManage, reloadRules, rules }: ReviewRul
     if (!ruleForm.filePatterns.trim()) {
       return "请输入文件匹配规则";
     }
+    if (ruleForm.detectorType !== "BUILTIN" && !ruleForm.matcherExpression?.trim()) {
+      return "声明式规则必须填写匹配表达式";
+    }
     return "";
   };
 
@@ -99,7 +118,10 @@ export const useReviewRuleEditor = ({ canManage, reloadRules, rules }: ReviewRul
     description: ruleForm.description.trim(),
     positiveExample: ruleForm.positiveExample.trim(),
     falsePositiveGuidance: ruleForm.falsePositiveGuidance.trim(),
-    enforcementMode: ruleForm.enforcementMode
+    enforcementMode: ruleForm.enforcementMode,
+    detectorType: ruleForm.detectorType,
+    matcherExpression: ruleForm.matcherExpression,
+    exceptionPatterns: ruleForm.exceptionPatterns
   });
 
   const saveRule = async () => {
@@ -113,8 +135,13 @@ export const useReviewRuleEditor = ({ canManage, reloadRules, rules }: ReviewRul
     }
     saving.value = true;
     try {
-      await updateReviewRule(editingRuleId.value, editingPolicyVersion.value, normalizedPayload());
-      ElMessage.success("规则已更新");
+      if (editingRuleId.value) {
+        await updateReviewRule(editingRuleId.value, editingPolicyVersion.value, normalizedPayload());
+        ElMessage.success("规则已更新");
+      } else {
+        await createReviewRule(normalizedPayload());
+        ElMessage.success("声明式规则已创建");
+      }
       dialogVisible.value = false;
       await reloadRules();
     } catch (error) {
@@ -163,6 +190,7 @@ export const useReviewRuleEditor = ({ canManage, reloadRules, rules }: ReviewRul
     saving,
     statusSavingId,
     openEditDialog,
+    openCreateDialog,
     resetForm,
     saveRule,
     toggleRule,

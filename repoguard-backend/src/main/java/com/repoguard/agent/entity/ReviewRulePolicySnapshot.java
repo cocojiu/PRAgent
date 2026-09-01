@@ -14,6 +14,9 @@ public class ReviewRulePolicySnapshot {
     private Long policyVersion;
     private Long configVersion;
     private String detectorVersion;
+    private String detectorType;
+    private String matcherExpression;
+    private String exceptionPatterns;
     private String ruleName;
     private String scope;
     private String applicableLanguages;
@@ -39,6 +42,12 @@ public class ReviewRulePolicySnapshot {
     public void setConfigVersion(Long configVersion) { this.configVersion = configVersion; }
     public String getDetectorVersion() { return detectorVersion; }
     public void setDetectorVersion(String detectorVersion) { this.detectorVersion = detectorVersion; }
+    public String getDetectorType() { return detectorType; }
+    public void setDetectorType(String detectorType) { this.detectorType = detectorType; }
+    public String getMatcherExpression() { return matcherExpression; }
+    public void setMatcherExpression(String matcherExpression) { this.matcherExpression = matcherExpression; }
+    public String getExceptionPatterns() { return exceptionPatterns; }
+    public void setExceptionPatterns(String exceptionPatterns) { this.exceptionPatterns = exceptionPatterns; }
     public String getRuleName() { return ruleName; }
     public void setRuleName(String ruleName) { this.ruleName = ruleName; }
     public String getScope() { return scope; }

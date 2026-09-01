@@ -340,7 +340,10 @@ class ApiContractTest {
             "PUT /api/v1/enterprise/tenants/{tenantKey}/status",
             "PUT /api/v1/enterprise/tenants/{tenantKey}/quota",
             "GET /api/v1/reviews/{taskId}/attempts/{attemptId}/changed-files",
-            "GET /api/v1/reviews/{taskId}/attempts/{attemptId}/findings"
+            "GET /api/v1/reviews/{taskId}/attempts/{attemptId}/findings",
+            "POST /api/v1/config/declarative-rules/{id}/dry-run",
+            "GET /api/v1/scanners/sarif/tasks/{taskId}/export",
+            "POST /api/v1/scanners/sarif/tasks/{taskId}/import"
         );
     }
 

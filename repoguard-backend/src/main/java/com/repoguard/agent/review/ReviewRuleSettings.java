@@ -16,7 +16,10 @@ public record ReviewRuleSettings(
     String description,
     String detectorVersion,
     long configVersion,
-    long policyVersion
+    long policyVersion,
+    String detectorType,
+    String matcherExpression,
+    String exceptionPatterns
 ) {
 
     private static final Set<String> STATUSES = Set.of("ENABLED", "DISABLED");
@@ -37,6 +40,11 @@ public record ReviewRuleSettings(
         falsePositiveGuidance = falsePositiveGuidance == null ? "" : falsePositiveGuidance.trim();
         description = description == null ? "" : description.trim();
         detectorVersion = requireText(detectorVersion, "detectorVersion");
+        detectorType = detectorType == null || detectorType.isBlank()
+            ? DeclarativeRulePolicy.BUILTIN
+            : detectorType.trim().toUpperCase(Locale.ROOT);
+        matcherExpression = matcherExpression == null ? "" : matcherExpression.trim();
+        exceptionPatterns = exceptionPatterns == null ? "" : exceptionPatterns.trim();
         if (configVersion < 1 || policyVersion < 1) {
             throw new IllegalArgumentException("Review rule versions must be positive");
         }
@@ -65,7 +73,43 @@ public record ReviewRuleSettings(
             description,
             id == null ? "legacy-detector-v1" : id.trim().toLowerCase(Locale.ROOT) + "-detector-v2",
             1,
-            1
+            1,
+            DeclarativeRulePolicy.BUILTIN,
+            "",
+            ""
+        );
+    }
+
+    public ReviewRuleSettings(
+        String id,
+        String status,
+        String filePatterns,
+        String severity,
+        int confidence,
+        EnforcementMode enforcementMode,
+        String positiveExample,
+        String falsePositiveGuidance,
+        String description,
+        String detectorVersion,
+        long configVersion,
+        long policyVersion
+    ) {
+        this(
+            id,
+            status,
+            filePatterns,
+            severity,
+            confidence,
+            enforcementMode,
+            positiveExample,
+            falsePositiveGuidance,
+            description,
+            detectorVersion,
+            configVersion,
+            policyVersion,
+            DeclarativeRulePolicy.BUILTIN,
+            "",
+            ""
         );
     }
 
@@ -91,7 +135,10 @@ public record ReviewRuleSettings(
             "",
             id == null ? "legacy-detector-v1" : id.trim().toLowerCase(Locale.ROOT) + "-detector-v2",
             1,
-            1
+            1,
+            DeclarativeRulePolicy.BUILTIN,
+            "",
+            ""
         );
     }
 
@@ -105,6 +152,11 @@ public record ReviewRuleSettings(
 
     public boolean hasFilePatterns() {
         return StringUtils.hasText(filePatterns);
+    }
+
+    public boolean isDeclarative() {
+        return DeclarativeRulePolicy.REGEX.equals(detectorType)
+            || DeclarativeRulePolicy.AST.equals(detectorType);
     }
 
     public String confidenceLabel() {
