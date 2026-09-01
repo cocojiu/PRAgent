@@ -131,10 +131,11 @@ class FlywayMigrationUpgradePathIntegrationTest {
                     .isTrue();
                 assertThat(columnExists(connection, "tenant_quota_config", "monthly_llm_cost_budget"))
                     .isTrue();
-                assertThat(uniqueIndexExists(
+                assertThat(compositeUniqueIndexExists(
                     connection,
                     "llm_model_release",
-                    "uk_llm_model_release_tenant_key"
+                    "uk_llm_model_release_tenant_key",
+                    2
                 )).isTrue();
                 assertThat(constraintExists(
                     connection,
