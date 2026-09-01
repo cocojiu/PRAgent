@@ -376,10 +376,10 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 边界：本条仅记录完成度审计和准出边界，不改变运行时业务，不提交非 README Markdown 或测试脚本；后续若新增功能或优化，先更新优化方案再按单项提交、推送和 Actions 验收。
 
 2026-09-01 | 优化-50 | P0 前置：租户单例配置按 tenant 寻址
-状态：代码、迁移与本地门禁已完成，待中文提交、test 分支推送和远程 Actions 验收。
+状态：已完成代码、迁移、本地门禁、中文实现提交、test 分支推送和远程 Actions 验收。
 变更：`review_policy_config` 与 `system_settings_config` 的运行时读取统一改为当前 `TenantContext` 的 tenantId，不再依赖全局主键 1；默认配置插入使用数据库自增主键并显式绑定当前租户。新增 V78 contract migration，在加 tenant 唯一键前阻断缺失或重复配置，避免静默选择任意记录；Schema 期望版本、迁移清单、Kubernetes 配置和升级工作流同步至 V78。
 本地验证：定向配置/迁移/连接测试 67 项通过；新增非默认 tenant 23 的查询与初始化断言 23 项通过；完整后端 `mvn verify` 2600 项测试通过、0 失败、12 项按环境条件跳过，JaCoCo 覆盖率门禁通过；readiness quick（治理模式）与 `git diff --check` 通过。
 集成证据：真实 MySQL 升级测试覆盖 V76→V77→V78、唯一索引和重复插入拒绝；生产运行时集成测试覆盖非 1 自增主键下的跨租户配置读取。这两组测试由 Pull Request Quality 的独立 MySQL/RabbitMQ 作业实跑。
-提交/远程验收：待本次实现提交推送后补记提交号和 Actions run id；任一作业失败先修复，不进入优化-51。
+提交/远程验收：实现提交 `e6b7ce39`（修复：按租户寻址单例配置）已推送 `origin/PRAgent-test`，自动 PR #160；Pull Request Quality #33508881510 的 8 个作业全部成功，其中 Flyway supported upgrade path 与 Spring MySQL RabbitMQ integration 均在真实服务环境通过；push Repository Governance #33508878357 和 Auto Create Pull Request #33508878343 成功。
 边界：仅提升复杂度预算 38 行至本项实际生产净增量；`ArchitectureRatchetTest.java` 中用户原有其他未提交改动、OpenAPI frontend-signature snapshot 和 `.tmp/` 不纳入提交。不提交非 README Markdown 或测试脚本。
 下一步：远程 Actions 全部成功并补齐证据后，进入优化-51 GitHub Checks 合并门禁。
