@@ -98,6 +98,8 @@
             </div>
           </div>
 
+          <TenantSwitcher v-if="enterpriseEditionEnabled" />
+
           <div class="top-action-menu-shell" @click.stop>
             <button
               class="user"
@@ -180,6 +182,7 @@ import { canAccessRouteMeta } from "@/router/accessPolicy";
 import { canManage, currentUser, loadCurrentUser, resetCurrentUser } from "@/stores/authState";
 import { APP_VERSION } from "@/config/appVersion";
 import { enterpriseEditionEnabled } from "@/config/edition";
+import TenantSwitcher from "@/components/TenantSwitcher.vue";
 import type { NotificationCenter, NotificationItem } from "@/types";
 
 const ChangePasswordDialog = defineAsyncComponent(
@@ -207,13 +210,15 @@ const navItems = [
   { label: "消息队列", path: "/repoguard/message-queue", icon: RadioTower },
   { label: "通知运维", path: "/repoguard/notifications", icon: BellRing },
   { label: "用户管理", path: "/repoguard/users", icon: Users },
+  { label: "租户与仓库", path: "/repoguard/tenants", icon: Users },
   { label: "系统设置", path: "/repoguard/settings", icon: Cog }
 ];
 
 const canOpenPath = (path: string) => canAccessRouteMeta(router.resolve(path).meta, {
   authenticated: hasAuthToken(),
   managementAllowed: canManage.value,
-  enterpriseEnabled: enterpriseEditionEnabled
+  enterpriseEnabled: enterpriseEditionEnabled,
+  role: currentUser.value?.role
 });
 const visibleNavItems = computed(() => navItems.filter((item) => canOpenPath(item.path)));
 const currentTitle = computed(() => String(route.meta.title || "RepoGuard Agent"));

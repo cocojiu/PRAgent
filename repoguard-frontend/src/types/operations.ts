@@ -65,7 +65,7 @@ export interface DataRetentionCleanupAudit {
 }
 
 export interface UserRoleUpdateRequest {
-  role: "ADMIN" | "VIEWER";
+  role: "ADMIN" | "VIEWER" | "PLATFORM_ADMIN" | "TENANT_ADMIN" | "RULE_ADMIN" | "REVIEWER" | "READ_ONLY";
 }
 
 export interface UserStatusUpdateRequest {

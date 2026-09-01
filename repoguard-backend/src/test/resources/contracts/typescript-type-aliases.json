@@ -6,6 +6,8 @@
   "DashboardLlmQualityResponse": "DashboardLlmQuality",
   "DashboardOverviewResponse": "DashboardOverview",
   "DashboardRulesResponse": "DashboardRules",
+  "EnterpriseTenantDto": "EnterpriseTenant",
+  "EnterpriseTenantQuotaDto": "EnterpriseTenantQuota",
   "FrontendPerformanceReportRequest": "FrontendPerformanceReport",
   "GithubCommentPreviewResponse": "GithubCommentPreview",
   "GithubCommentPublicationHistoryResponse": "GithubCommentPublicationHistory",

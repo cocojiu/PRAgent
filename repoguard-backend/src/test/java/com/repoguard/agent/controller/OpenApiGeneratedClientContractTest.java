@@ -41,6 +41,8 @@ class OpenApiGeneratedClientContractTest {
         "cacheStatsController",
         "dataRetentionController",
         "dashboardController",
+        "enterpriseTenantController",
+        "enterpriseTenantQuotaController",
         "frontendPerformanceController",
         "messageQueueHealthController",
         "reviewCalibrationController",

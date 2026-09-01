@@ -22,6 +22,7 @@ const IntegrationsPage = () => import("@/pages/IntegrationsPage.vue");
 const MessageQueueHealthPage = () => import("@/pages/MessageQueueHealthPage.vue");
 const NotificationOpsPage = () => import("@/pages/NotificationOpsPage.vue");
 const UserManagementPage = () => import("@/pages/UserManagementPage.vue");
+const TenantManagementPage = () => import("@/pages/TenantManagementPage.vue");
 const SystemSettingsPage = () => import("@/pages/SystemSettingsPage.vue");
 
 type RouteComponentLoader = () => Promise<unknown>;
@@ -39,12 +40,14 @@ const managementRouteNeighbors = new Map<string, RouteComponentLoader>([
   [routeNames.messageQueue, NotificationOpsPage],
   [routeNames.notificationOps, UserManagementPage],
   [routeNames.users, SystemSettingsPage],
+  [routeNames.tenants, SystemSettingsPage],
   [routeNames.settings, RuleConfigPage]
 ]);
 const enterpriseRouteNames = new Set<string>([
   routeNames.messageQueue,
   routeNames.notificationOps,
-  routeNames.users
+  routeNames.users,
+  routeNames.tenants
 ]);
 
 let routeComponentPrefetchTimer: ReturnType<typeof setTimeout> | undefined;
@@ -182,6 +185,18 @@ export const router = createRouter({
           meta: { title: "用户管理", requiresAuth: true, requiresManage: true, requiresEnterprise: true }
         },
         {
+          path: "tenants",
+          name: routeNames.tenants,
+          component: TenantManagementPage,
+          meta: {
+            title: "租户与仓库",
+            requiresAuth: true,
+            requiresManage: true,
+            requiresEnterprise: true,
+            requiresRole: ["ADMIN", "PLATFORM_ADMIN"]
+          }
+        },
+        {
           path: "settings",
           name: routeNames.settings,
           component: SystemSettingsPage,
@@ -232,7 +247,8 @@ router.beforeEach(async (to) => {
     if (!canAccessRouteMeta(to.meta, {
       authenticated: hasAuthToken(),
       managementAllowed: canManage.value,
-      enterpriseEnabled: enterpriseEditionEnabled
+      enterpriseEnabled: enterpriseEditionEnabled,
+      role: currentUser.value?.role
     })) {
       return { name: routeNames.overview };
     }

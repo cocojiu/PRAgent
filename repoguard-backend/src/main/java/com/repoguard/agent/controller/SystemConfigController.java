@@ -140,11 +140,13 @@ public class SystemConfigController {
         return ApiResponse.ok(systemConfigService.updateSystemSettings(request));
     }
 
+    @RequireRole({"ADMIN", "PLATFORM_ADMIN", "RULE_ADMIN"})
     @GetMapping("/review-rules")
     public ApiResponse<ReviewRulesResponse> getReviewRules() {
         return ApiResponse.ok(systemConfigService.getReviewRules());
     }
 
+    @RequireRole({"ADMIN", "PLATFORM_ADMIN", "RULE_ADMIN"})
     @PostMapping("/review-rules")
     public ApiResponse<ReviewRuleConfigDto> createReviewRule(
         @Valid @RequestBody ReviewRuleConfigRequest request
@@ -152,6 +154,7 @@ public class SystemConfigController {
         return ApiResponse.ok(systemConfigService.createReviewRule(request));
     }
 
+    @RequireRole({"ADMIN", "PLATFORM_ADMIN", "RULE_ADMIN"})
     @PutMapping("/review-rules/{id}")
     public ApiResponse<ReviewRuleConfigDto> updateReviewRule(
         @PathVariable @Size(max = 64) String id,
@@ -161,6 +164,7 @@ public class SystemConfigController {
         return ApiResponse.ok(systemConfigService.updateReviewRule(id, request, expectedPolicyVersion));
     }
 
+    @RequireRole({"ADMIN", "PLATFORM_ADMIN", "RULE_ADMIN"})
     @PutMapping("/review-rules/{id}/status")
     public ApiResponse<ReviewRuleConfigDto> updateReviewRuleStatus(
         @PathVariable @Size(max = 64) String id,
@@ -173,6 +177,7 @@ public class SystemConfigController {
         ));
     }
 
+    @RequireRole({"ADMIN", "PLATFORM_ADMIN", "RULE_ADMIN"})
     @GetMapping("/review-rules/{id}/versions")
     public ApiResponse<PageResponse<ReviewRulePolicyVersionDto>> getReviewRuleVersions(
         @PathVariable @Size(max = 64) String id,
@@ -182,6 +187,7 @@ public class SystemConfigController {
         return ApiResponse.ok(systemConfigService.getReviewRuleVersions(id, cursor, pageSize));
     }
 
+    @RequireRole({"ADMIN", "PLATFORM_ADMIN", "RULE_ADMIN"})
     @PostMapping("/review-rules/{id}/versions/{policyVersion}/rollback")
     public ApiResponse<ReviewRuleConfigDto> rollbackReviewRule(
         @PathVariable @Size(max = 64) String id,

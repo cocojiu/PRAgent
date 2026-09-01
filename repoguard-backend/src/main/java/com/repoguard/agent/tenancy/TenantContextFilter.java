@@ -43,6 +43,10 @@ public class TenantContextFilter extends OncePerRequestFilter {
             filterChain.doFilter(request, response);
             return;
         }
+        if (isControlPlaneRequest(request)) {
+            filterChain.doFilter(request, response);
+            return;
+        }
         Object candidate = request.getAttribute(RequestAuthenticationAttributes.AUTHENTICATED_PRINCIPAL);
         if (!(candidate instanceof AuthenticatedPrincipal principal)) {
             filterChain.doFilter(request, response);
@@ -67,6 +71,16 @@ public class TenantContextFilter extends OncePerRequestFilter {
         try (TenantContext.Scope _ = TenantContext.withTenant(membership.tenantId())) {
             filterChain.doFilter(request, response);
         }
+    }
+
+    private boolean isControlPlaneRequest(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        String contextPath = request.getContextPath();
+        if (contextPath != null && !contextPath.isBlank() && path.startsWith(contextPath)) {
+            path = path.substring(contextPath.length());
+        }
+        return path.equals("/api/v1/enterprise/tenants")
+            || path.startsWith("/api/v1/enterprise/tenants/");
     }
 
     private void writeTenantError(HttpServletResponse response, BusinessException exception) throws IOException {

@@ -12,6 +12,14 @@ import type {
   DataRetentionCleanupAudit,
   DataRetentionCleanupRequest,
   DataRetentionCleanupResponse,
+  EnterpriseIdentityBindingRequest,
+  EnterpriseTenant,
+  EnterpriseTenantCreateRequest,
+  EnterpriseTenantMembershipRequest,
+  EnterpriseTenantQuota,
+  EnterpriseTenantQuotaRequest,
+  EnterpriseTenantRepositoryRequest,
+  EnterpriseTenantStatusRequest,
   FrontendPerformanceReport,
   GithubCommentPreview,
   GithubCommentPublicationHistory,
@@ -147,6 +155,69 @@ export type GeneratedOpenApiOperationMap = {
     query: { backupReference?: string; mode?: string; page?: number; pageSize?: number; status?: string };
     body: never;
     response: PageResponse<DataRetentionCleanupAudit>;
+  };
+  "enterpriseTenantControllerCreate": {
+    method: "POST";
+    pathParams: never;
+    query: never;
+    body: EnterpriseTenantCreateRequest;
+    response: EnterpriseTenant;
+  };
+  "enterpriseTenantControllerGet": {
+    method: "GET";
+    pathParams: { tenantKey: string };
+    query: never;
+    body: never;
+    response: EnterpriseTenant;
+  };
+  "enterpriseTenantControllerList": {
+    method: "GET";
+    pathParams: never;
+    query: { page?: number; pageSize?: number; status?: string };
+    body: never;
+    response: PageResponse<EnterpriseTenant>;
+  };
+  "enterpriseTenantControllerPutIdentity": {
+    method: "PUT";
+    pathParams: { tenantKey: string };
+    query: never;
+    body: EnterpriseIdentityBindingRequest;
+    response: void;
+  };
+  "enterpriseTenantControllerPutMembership": {
+    method: "PUT";
+    pathParams: { tenantKey: string };
+    query: never;
+    body: EnterpriseTenantMembershipRequest;
+    response: void;
+  };
+  "enterpriseTenantControllerPutRepository": {
+    method: "PUT";
+    pathParams: { tenantKey: string };
+    query: never;
+    body: EnterpriseTenantRepositoryRequest;
+    response: void;
+  };
+  "enterpriseTenantControllerUpdateStatus": {
+    method: "PUT";
+    pathParams: { tenantKey: string };
+    query: never;
+    body: EnterpriseTenantStatusRequest;
+    response: EnterpriseTenant;
+  };
+  "enterpriseTenantQuotaControllerGet": {
+    method: "GET";
+    pathParams: { tenantKey: string };
+    query: never;
+    body: never;
+    response: EnterpriseTenantQuota;
+  };
+  "enterpriseTenantQuotaControllerUpdate": {
+    method: "PUT";
+    pathParams: { tenantKey: string };
+    query: never;
+    body: EnterpriseTenantQuotaRequest;
+    response: EnterpriseTenantQuota;
   };
   "frontendPerformanceControllerRecordPerformance": {
     method: "POST";
@@ -732,6 +803,78 @@ export const generatedOpenApiOperations = {
     queryParamNames: ["backupReference", "mode", "page", "pageSize", "status"],
     hasRequestBody: false,
     requestBodyRequired: false
+  },
+  "enterpriseTenantControllerCreate": {
+    method: "POST",
+    path: "/api/v1/enterprise/tenants",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "enterpriseTenantControllerGet": {
+    method: "GET",
+    path: "/api/v1/enterprise/tenants/{tenantKey}",
+    pathParamNames: ["tenantKey"],
+    queryParamNames: [],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "enterpriseTenantControllerList": {
+    method: "GET",
+    path: "/api/v1/enterprise/tenants",
+    pathParamNames: [],
+    queryParamNames: ["page", "pageSize", "status"],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "enterpriseTenantControllerPutIdentity": {
+    method: "PUT",
+    path: "/api/v1/enterprise/tenants/{tenantKey}/identities",
+    pathParamNames: ["tenantKey"],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "enterpriseTenantControllerPutMembership": {
+    method: "PUT",
+    path: "/api/v1/enterprise/tenants/{tenantKey}/memberships",
+    pathParamNames: ["tenantKey"],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "enterpriseTenantControllerPutRepository": {
+    method: "PUT",
+    path: "/api/v1/enterprise/tenants/{tenantKey}/repositories",
+    pathParamNames: ["tenantKey"],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "enterpriseTenantControllerUpdateStatus": {
+    method: "PUT",
+    path: "/api/v1/enterprise/tenants/{tenantKey}/status",
+    pathParamNames: ["tenantKey"],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "enterpriseTenantQuotaControllerGet": {
+    method: "GET",
+    path: "/api/v1/enterprise/tenants/{tenantKey}/quota",
+    pathParamNames: ["tenantKey"],
+    queryParamNames: [],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "enterpriseTenantQuotaControllerUpdate": {
+    method: "PUT",
+    path: "/api/v1/enterprise/tenants/{tenantKey}/quota",
+    pathParamNames: ["tenantKey"],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
   },
   "frontendPerformanceControllerRecordPerformance": {
     method: "POST",

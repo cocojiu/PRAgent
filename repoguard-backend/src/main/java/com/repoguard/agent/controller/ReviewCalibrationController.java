@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/config/review-calibration")
 @ApiRuntimeEnabled
-@RequireRole("ADMIN")
+@RequireRole({"ADMIN", "PLATFORM_ADMIN", "RULE_ADMIN"})
 @Validated
 public class ReviewCalibrationController {
 

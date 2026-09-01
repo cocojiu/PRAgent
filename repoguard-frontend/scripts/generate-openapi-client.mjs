@@ -25,6 +25,8 @@ const migratedOperationPrefixes = [
   "cacheStatsController",
   "dataRetentionController",
   "dashboardController",
+  "enterpriseTenantController",
+  "enterpriseTenantQuotaController",
   "frontendPerformanceController",
   "messageQueueHealthController",
   "reviewCalibrationController",

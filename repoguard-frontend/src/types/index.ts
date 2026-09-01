@@ -1,4 +1,5 @@
 export * from "./dashboard";
+export * from "./enterpriseTenant";
 export * from "./integration";
 export * from "./messageQueue";
 export * from "./notification";

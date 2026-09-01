@@ -121,15 +121,21 @@ class AdminApiKeyAccessPolicyTest {
     private boolean requiresAdminOnlyRole(Class<?> controller, Method method) {
         RequireRole methodRole = method.getAnnotation(RequireRole.class);
         if (methodRole != null) {
-            return containsOnlyAdmin(methodRole);
+            return containsOnlyElevatedManagementRole(methodRole);
         }
         RequireRole controllerRole = controller.getAnnotation(RequireRole.class);
-        return controllerRole != null && containsOnlyAdmin(controllerRole);
+        return controllerRole != null && containsOnlyElevatedManagementRole(controllerRole);
     }
 
-    private boolean containsOnlyAdmin(RequireRole requireRole) {
+    private boolean containsOnlyElevatedManagementRole(RequireRole requireRole) {
         List<String> roles = List.of(requireRole.value());
-        return !roles.isEmpty() && roles.stream().allMatch(role -> "ADMIN".equalsIgnoreCase(role));
+        return !roles.isEmpty() && roles.stream().allMatch(this::isElevatedManagementRole);
+    }
+
+    private boolean isElevatedManagementRole(String role) {
+        return List.of("ADMIN", "PLATFORM_ADMIN", "TENANT_ADMIN", "RULE_ADMIN")
+            .stream()
+            .anyMatch(roleName -> roleName.equalsIgnoreCase(role));
     }
 
     private String concretePath(String path) {

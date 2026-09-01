@@ -1,5 +1,9 @@
+bindEnterpriseTenantIdentity -> enterpriseTenantControllerPutIdentity // PUT /api/v1/enterprise/tenants/{tenantKey}/identities
+bindEnterpriseTenantMembership -> enterpriseTenantControllerPutMembership // PUT /api/v1/enterprise/tenants/{tenantKey}/memberships
+bindEnterpriseTenantRepository -> enterpriseTenantControllerPutRepository // PUT /api/v1/enterprise/tenants/{tenantKey}/repositories
 changePassword -> authControllerChangePassword // POST /api/v1/auth/password/change
 cleanupDataRetention -> dataRetentionControllerCleanup // POST /api/v1/config/data-retention/cleanup
+createEnterpriseTenant -> enterpriseTenantControllerCreate // POST /api/v1/enterprise/tenants
 createNotificationBinding -> notificationIntegrationControllerCreateBinding // POST /api/v1/config/notification-bindings
 createReviewRule -> systemConfigControllerCreateReviewRule // POST /api/v1/config/review-rules
 createUser -> userManagementControllerCreateUser // POST /api/v1/users
@@ -13,6 +17,9 @@ fetchDashboardRiskDistribution -> dashboardControllerGetRiskDistribution // GET 
 fetchDashboardRules -> dashboardControllerGetRules // GET /api/v1/dashboard/rules
 fetchDashboardSummary -> dashboardControllerGetSummary // GET /api/v1/dashboard/summary
 fetchDataRetentionCleanupAudits -> dataRetentionControllerListCleanupAudits // GET /api/v1/config/data-retention/cleanup-audits
+fetchEnterpriseTenant -> enterpriseTenantControllerGet // GET /api/v1/enterprise/tenants/{tenantKey}
+fetchEnterpriseTenantQuota -> enterpriseTenantQuotaControllerGet // GET /api/v1/enterprise/tenants/{tenantKey}/quota
+fetchEnterpriseTenants -> enterpriseTenantControllerList // GET /api/v1/enterprise/tenants
 fetchGithubCommentPreview -> reviewControllerGetGithubCommentPreview // GET /api/v1/reviews/{id}/github-comments/preview
 fetchGithubCommentPublicationHistory -> reviewControllerGetGithubCommentPublicationHistory // GET /api/v1/reviews/{id}/github-comments/publications
 fetchGithubIntegrationConfig -> systemConfigControllerGetGithubIntegration // GET /api/v1/config/integrations/github
@@ -70,6 +77,8 @@ testNotificationBinding -> notificationIntegrationControllerTestBinding // POST 
 testRabbitMqConnection -> systemConfigControllerTestRabbitMqConnection // POST /api/v1/config/integrations/rabbitmq/test
 testReviewPolicyConnection -> systemConfigControllerTestReviewPolicy // POST /api/v1/config/review-policy/test
 triggerManualReview -> reviewControllerTriggerManualReview // POST /api/v1/reviews/manual
+updateEnterpriseTenantQuota -> enterpriseTenantQuotaControllerUpdate // PUT /api/v1/enterprise/tenants/{tenantKey}/quota
+updateEnterpriseTenantStatus -> enterpriseTenantControllerUpdateStatus // PUT /api/v1/enterprise/tenants/{tenantKey}/status
 updateFindingFeedback -> reviewControllerUpdateFindingFeedback // POST /api/v1/reviews/{id}/findings/{findingId}/feedback
 updateGithubIntegrationConfig -> systemConfigControllerUpdateGithubIntegration // PUT /api/v1/config/integrations/github
 updateMysqlIntegrationConfig -> systemConfigControllerUpdateMysqlIntegration // PUT /api/v1/config/integrations/mysql

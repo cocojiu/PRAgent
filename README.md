@@ -10,6 +10,7 @@ RepoGuard Agent 是面向 GitHub Pull Request 的代码审查辅助系统，包�
 - RabbitMQ 异步执行、发布确认、失败补偿和异常任务运维。
 - 用户认证、管理员 API Key、RBAC、审计日志和敏感配置加密。
 - Dashboard 指标、质量趋势、通知运维、消息队列健康和日志观测。
+- 企业版租户与仓库管理台：租户切换、GitHub App installation 绑定、成员/OIDC 绑定和配额管理。
 
 ## 界面预览
 
@@ -186,6 +187,12 @@ GitHub Checks 合并门禁：
 1. GitHub App 需要 `Checks: Read and write`、`Pull requests: Read and write`、`Contents: Read` 和 `Metadata: Read` 权限，并订阅 `pull_request`、`check_run` webhook。
 2. 设置 `REPOGUARD_GITHUB_CHECK_RUN_ENABLED=true`，并确保租户仓库绑定到该 App installation；系统会按 `queued → in_progress → completed` 顺序写入 Check Run。
 3. 在 GitHub 分支保护规则中，将 `REPOGUARD_GITHUB_CHECK_RUN_NAME`（默认 `RepoGuard PR Review`）设为必需状态检查。BLOCK Finding 会产生 failure annotation，人工复核期间为 `action_required`；Check Run 页面自带的 Re-run 会触发新一轮审查。
+
+企业版租户与 RBAC：
+
+1. 将前端 edition 设置为 `enterprise-experimental`，登录后平台管理员从“租户与仓库”进入控制台；所有写操作继续受服务端角色和乐观版本校验保护。
+2. `PLATFORM_ADMIN` 管理租户控制面，`TENANT_ADMIN` 管理租户成员，`RULE_ADMIN` 管理规则，`REVIEWER` 执行审查，`READ_ONLY` 只读；`ADMIN`/`VIEWER` 作为兼容角色保留。
+3. 顶部租户切换器把选择写入 `X-RepoGuard-Tenant` 请求头，不把租户标识放入 URL；启用 `REPOGUARD_TENANCY_ENABLED=true` 后，服务端只接受当前用户拥有的租户成员关系。
 
 运行角色边界：
 

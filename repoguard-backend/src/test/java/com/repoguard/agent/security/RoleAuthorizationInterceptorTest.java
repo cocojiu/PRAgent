@@ -47,6 +47,39 @@ class RoleAuthorizationInterceptorTest {
     }
 
     @Test
+    void allowsPlatformAdminWhenLegacyAdminRoleIsRequired() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/config/system-settings");
+        request.setAttribute(
+            RequestAuthenticationAttributes.AUTHENTICATED_PRINCIPAL,
+            new AuthenticatedPrincipal(1003L, "platform", "PLATFORM_ADMIN", 9999999999L)
+        );
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        assertThat(interceptor.preHandle(request, response, handlerMethod("adminOnly"))).isTrue();
+        assertThat(response.getStatus()).isEqualTo(200);
+    }
+
+    @Test
+    void allowsReadOnlyWhenEndpointAcceptsViewerCompatibilityRole() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/reviews");
+        request.setAttribute(
+            RequestAuthenticationAttributes.AUTHENTICATED_PRINCIPAL,
+            new AuthenticatedPrincipal(1004L, "reader", "READ_ONLY", 9999999999L)
+        );
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        assertThat(interceptor.preHandle(request, response, handlerMethod("adminOrViewer"))).isTrue();
+    }
+
+    @Test
+    void enforcesFineGrainedRoleBoundaries() {
+        assertThat(RolePermissionPolicy.allows("TENANT_ADMIN", "TENANT_ADMIN")).isTrue();
+        assertThat(RolePermissionPolicy.allows("TENANT_ADMIN", "ADMIN")).isFalse();
+        assertThat(RolePermissionPolicy.allows("RULE_ADMIN", "VIEWER")).isTrue();
+        assertThat(RolePermissionPolicy.allows("READ_ONLY", "ADMIN")).isFalse();
+    }
+
+    @Test
     void allowsViewerWhenEndpointExplicitlyAcceptsViewerOrAdmin() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/observability/frontend/performance");
         request.setAttribute(

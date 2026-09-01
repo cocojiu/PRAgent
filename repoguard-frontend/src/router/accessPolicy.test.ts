@@ -40,4 +40,26 @@ describe("route access policy", () => {
       enterpriseEnabled: true
     })).toBe(true);
   });
+
+  it("limits the enterprise tenant console to platform administrators", () => {
+    const tenantRoute = {
+      requiresAuth: true,
+      requiresManage: true,
+      requiresEnterprise: true,
+      requiresRole: ["ADMIN", "PLATFORM_ADMIN"]
+    };
+
+    expect(canAccessRouteMeta(tenantRoute, {
+      authenticated: true,
+      managementAllowed: true,
+      enterpriseEnabled: true,
+      role: "PLATFORM_ADMIN"
+    })).toBe(true);
+    expect(canAccessRouteMeta(tenantRoute, {
+      authenticated: true,
+      managementAllowed: true,
+      enterpriseEnabled: true,
+      role: "TENANT_ADMIN"
+    })).toBe(false);
+  });
 });

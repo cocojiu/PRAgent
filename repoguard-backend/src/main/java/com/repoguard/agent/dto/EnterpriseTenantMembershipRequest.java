@@ -7,7 +7,7 @@ import jakarta.validation.constraints.Pattern;
 
 public record EnterpriseTenantMembershipRequest(
     @NotNull @Min(1) Long userId,
-    @NotBlank @Pattern(regexp = "^(ADMIN|VIEWER)$") String role,
+    @NotBlank @Pattern(regexp = "^(ADMIN|VIEWER|TENANT_ADMIN|RULE_ADMIN|REVIEWER|READ_ONLY)$") String role,
     boolean defaultTenant
 ) {
 }

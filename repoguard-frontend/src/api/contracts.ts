@@ -44,6 +44,14 @@ import type {
   DataRetentionCleanupAudit,
   DataRetentionCleanupRequest,
   DataRetentionCleanupResponse,
+  EnterpriseIdentityBindingRequest,
+  EnterpriseTenant,
+  EnterpriseTenantCreateRequest,
+  EnterpriseTenantMembershipRequest,
+  EnterpriseTenantQuota,
+  EnterpriseTenantQuotaRequest,
+  EnterpriseTenantRepositoryRequest,
+  EnterpriseTenantStatusRequest,
   CacheStats,
   GithubCommentPreview,
   GithubCommentPublicationHistory,
@@ -149,6 +157,28 @@ type UserPageInput = {
   status?: UserStatus | "";
   keyword?: string;
 };
+
+type EnterpriseTenantPageInput = {
+  page?: number;
+  pageSize?: number;
+  status?: string;
+};
+
+type EnterpriseTenantCreateInput = EnterpriseTenantCreateRequest;
+type EnterpriseTenantStatusInput = { tenantKey: string; payload: EnterpriseTenantStatusRequest };
+type EnterpriseTenantMembershipInput = {
+  tenantKey: string;
+  payload: EnterpriseTenantMembershipRequest;
+};
+type EnterpriseTenantRepositoryInput = {
+  tenantKey: string;
+  payload: EnterpriseTenantRepositoryRequest;
+};
+type EnterpriseTenantIdentityInput = {
+  tenantKey: string;
+  payload: EnterpriseIdentityBindingRequest;
+};
+type EnterpriseTenantQuotaInput = { tenantKey: string; payload: EnterpriseTenantQuotaRequest };
 
 type DataRetentionCleanupAuditInput = {
   page?: number;
@@ -282,6 +312,15 @@ export type ApiContract = {
   createUser: ApiOperation<UserCreateRequest, ManagedUser>;
   updateUserRole: ApiOperation<UserRoleInput, ManagedUser>;
   updateUserStatus: ApiOperation<UserStatusInput, ManagedUser>;
+  fetchEnterpriseTenants: ApiOperation<EnterpriseTenantPageInput, PageResponse<EnterpriseTenant>>;
+  fetchEnterpriseTenant: ApiOperation<{ tenantKey: string }, EnterpriseTenant>;
+  createEnterpriseTenant: ApiOperation<EnterpriseTenantCreateInput, EnterpriseTenant>;
+  updateEnterpriseTenantStatus: ApiOperation<EnterpriseTenantStatusInput, EnterpriseTenant>;
+  bindEnterpriseTenantMembership: ApiOperation<EnterpriseTenantMembershipInput, void>;
+  bindEnterpriseTenantRepository: ApiOperation<EnterpriseTenantRepositoryInput, void>;
+  bindEnterpriseTenantIdentity: ApiOperation<EnterpriseTenantIdentityInput, void>;
+  fetchEnterpriseTenantQuota: ApiOperation<{ tenantKey: string }, EnterpriseTenantQuota>;
+  updateEnterpriseTenantQuota: ApiOperation<EnterpriseTenantQuotaInput, EnterpriseTenantQuota>;
   reportFrontendPerformance: ApiOperation<FrontendPerformanceReport, void>;
 };
 
@@ -689,6 +728,42 @@ const apiEndpoints: ApiEndpointMap = {
   updateUserStatus: generatedEndpoint("userManagementControllerUpdateStatus", {
     path: input => ({ id: input.id }),
     body: input => ({ status: input.status })
+  }),
+  fetchEnterpriseTenants: generatedEndpoint("enterpriseTenantControllerList", {
+    query: input => ({
+      page: input.page,
+      pageSize: input.pageSize,
+      status: input.status || undefined
+    })
+  }),
+  fetchEnterpriseTenant: generatedEndpoint("enterpriseTenantControllerGet", {
+    path: input => ({ tenantKey: input.tenantKey })
+  }),
+  createEnterpriseTenant: generatedEndpoint("enterpriseTenantControllerCreate", {
+    body: input => input
+  }),
+  updateEnterpriseTenantStatus: generatedEndpoint("enterpriseTenantControllerUpdateStatus", {
+    path: input => ({ tenantKey: input.tenantKey }),
+    body: input => input.payload
+  }),
+  bindEnterpriseTenantMembership: generatedEndpoint("enterpriseTenantControllerPutMembership", {
+    path: input => ({ tenantKey: input.tenantKey }),
+    body: input => input.payload
+  }),
+  bindEnterpriseTenantRepository: generatedEndpoint("enterpriseTenantControllerPutRepository", {
+    path: input => ({ tenantKey: input.tenantKey }),
+    body: input => input.payload
+  }),
+  bindEnterpriseTenantIdentity: generatedEndpoint("enterpriseTenantControllerPutIdentity", {
+    path: input => ({ tenantKey: input.tenantKey }),
+    body: input => input.payload
+  }),
+  fetchEnterpriseTenantQuota: generatedEndpoint("enterpriseTenantQuotaControllerGet", {
+    path: input => ({ tenantKey: input.tenantKey })
+  }),
+  updateEnterpriseTenantQuota: generatedEndpoint("enterpriseTenantQuotaControllerUpdate", {
+    path: input => ({ tenantKey: input.tenantKey }),
+    body: input => input.payload
   }),
   reportFrontendPerformance: {
     ...generatedEndpoint("frontendPerformanceControllerRecordPerformance", {

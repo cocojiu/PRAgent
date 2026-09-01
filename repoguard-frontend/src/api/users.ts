@@ -1,6 +1,13 @@
 import { apiRequest } from "@/api/contracts";
 
-export type UserRole = "ADMIN" | "VIEWER";
+export type UserRole =
+  | "ADMIN"
+  | "VIEWER"
+  | "PLATFORM_ADMIN"
+  | "TENANT_ADMIN"
+  | "RULE_ADMIN"
+  | "REVIEWER"
+  | "READ_ONLY";
 export type UserStatus = "ACTIVE" | "DISABLED";
 
 export interface ManagedUser {

@@ -60,6 +60,22 @@ class EnterpriseTenantControllerTest {
     }
 
     @Test
+    void platformAdminRoleCanUsePlatformControlPlaneWithoutApiKey() {
+        EnterpriseTenantCreateRequest request = new EnterpriseTenantCreateRequest("acme", "Acme", 12L);
+        EnterpriseTenantDto created = new EnterpriseTenantDto(
+            8L, "acme", "Acme", "ACTIVE", 1L, null, null, null, null
+        );
+        when(service.create(request)).thenReturn(created);
+
+        var response = controller.create(request, requestWithPrincipal(
+            new AuthenticatedPrincipal(12L, "platform-admin", "PLATFORM_ADMIN", Long.MAX_VALUE)
+        ));
+
+        assertThat(response.data()).isEqualTo(created);
+        verify(service).create(request);
+    }
+
+    @Test
     void platformAdminCanSuspendTenantWithExpectedVersion() {
         EnterpriseTenantStatusRequest request =
             new EnterpriseTenantStatusRequest("ACTIVE", "SUSPENDED", 3L, "maintenance");
