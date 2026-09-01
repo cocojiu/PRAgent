@@ -78,4 +78,72 @@ class SarifFindingServiceTest {
         assertThatThrownBy(() -> service.importFindings(9L, new SarifImportRequest("{")))
             .hasMessageContaining("Invalid SARIF JSON");
     }
+
+    @Test
+    void rejectsUnsupportedVersionAndEmptyRuns() {
+        when(taskMapper.selectById(9L)).thenReturn(new ReviewTask());
+
+        assertThatThrownBy(() -> service.importFindings(9L, new SarifImportRequest(
+            "{\"version\":\"1.0\",\"runs\":[]}")))
+            .hasMessageContaining("Only SARIF version 2.1.0");
+        assertThatThrownBy(() -> service.importFindings(9L, new SarifImportRequest(
+            "{\"version\":\"2.1.0\",\"runs\":[]}")))
+            .hasMessageContaining("non-empty array");
+    }
+
+    @Test
+    void skipsMalformedResultsAndUsesRuleHelpFallback() {
+        when(taskMapper.selectById(9L)).thenReturn(new ReviewTask());
+        String sarif = """
+            {
+              "version":"2.1.0",
+              "runs":[
+                {"tool":{"driver":{"rules":[{"id":"RULE-1","shortDescription":{"text":"Use a safe API"}}]}},"results":"ignored"},
+                {"tool":{"driver":{"rules":[{"id":"RULE-1","shortDescription":{"text":"Use a safe API"}}]}},"results":[
+                  {},
+                  {"ruleId":"RULE-1","locations":[]},
+                  {"ruleId":"RULE-1","locations":[{"physicalLocation":{"artifactLocation":{"uri":"./src/App.java"},"region":{"startLine":0}}}]},
+                  {"ruleId":"RULE-1","message":{},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"./src/App.java"},"region":{"startLine":3}}}]}
+                ]}
+              ]
+            }
+            """;
+
+        var result = service.importFindings(9L, new SarifImportRequest(sarif));
+
+        assertThat(result.imported()).isEqualTo(1);
+        assertThat(result.skipped()).isEqualTo(3);
+        assertThat(result.findings()).singleElement().satisfies(finding -> {
+            assertThat(finding.filePath()).isEqualTo("src/App.java");
+            assertThat(finding.message()).isEqualTo("Use a safe API");
+        });
+    }
+
+    @Test
+    void exportsFallbackFieldsAndSeverityLevels() {
+        when(taskMapper.selectById(9L)).thenReturn(new ReviewTask());
+        ReviewFinding medium = new ReviewFinding();
+        medium.setId(4L);
+        medium.setFilePath("src/Medium.java");
+        medium.setSeverity("MEDIUM");
+        medium.setCurrentAttempt(true);
+        medium.setCategory("FINDING");
+        ReviewFinding low = new ReviewFinding();
+        low.setId(5L);
+        low.setFilePath("src/Low.java");
+        low.setSeverity("LOW");
+        low.setMessage("");
+        low.setCurrentAttempt(true);
+        low.setCategory("FINDING");
+        when(findingMapper.selectList(any())).thenReturn(List.of(medium, low));
+
+        var document = service.exportFindings(9L);
+
+        assertThat(document.runs()).singleElement().satisfies(run -> {
+            var results = (List<?>) run.get("results");
+            assertThat(results).hasSize(2);
+            assertThat(results.getFirst().toString()).contains("SARIF-4", "warning");
+            assertThat(results.get(1).toString()).contains("SARIF-5", "note", "RepoGuard finding");
+        });
+    }
 }
