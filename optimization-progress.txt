@@ -343,3 +343,11 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 提交/远程验收：实现提交 `9d1bd62c`（优化：试点审查详情 OpenAPI 生成契约）已推送 `origin/PRAgent-test`；Pull Request Quality #33462145133（含前后端、集成、Flyway、边缘配置和供应链门禁）、push Repository Governance #33462140655、Auto Create Pull Request #33462140662 均成功，PRAgent-test 未触发生产镜像发布。
 边界：生成文件仅声明 DTO 类型，无业务逻辑；当前只推进审查详情纵向切片，规则、集成、配置等领域按后续批次扩展。未修改用户已有 `openapi-generated-client.frontend-signature.snapshot` 工作区改动和 `.tmp/`。
 下一步：继续按顺序进入后续 P1/P2 优化项，保持单项实现、中文提交、Actions 验收和进度记录。
+
+2026-09-01 | 优化-47 | P2-01 总复杂度预算与孤立项审计
+状态：已完成生产代码总量、类数、个人模式必填环境变量、工作流、定时任务、接口、DTO 和生产脚本的可审计预算；完成中文提交、test 分支推送和远程 Actions 验收。
+变更：保留现有单类 450 行上限，并在架构门禁中锁定已复核基线（70,036 行、941 个生产 Java 文件/类、15 个已跟踪工作流、个人默认配置 6 个必填环境变量、13 个定时任务）；新增定时任务生命周期目录，要求记录触发频率、超时、幂等、资源预算和关闭开关；新增生产脚本目录，要求记录 owner、触发入口和退出条件；每次门禁审计无调用接口、重复 DTO、孤立脚本及陈旧目录项。预算达到上限时必须伴随删除或合并证据，避免只增加一层转发或旁路。
+本地验证：`ArchitectureRatchetTest` 7 项、`ApplicationArchitectureTest` 44 项、`WorkflowCatalogContractTest` 2 项全部通过；`git diff --check` 通过。
+提交/远程验收：实现提交 `2fc7a794`（优化：建立总复杂度预算与孤立项审计）已推送 `origin/PRAgent-test`；Pull Request Quality #33471874993、push Repository Governance #33471872712、Auto Create Pull Request #33471872727 均成功，PRAgent-test 未触发生产镜像发布。
+边界：预算是个人项目的复杂度天花板，不改变运行时业务行为；生产脚本仍保留现有手动/定时入口，目录仅补齐 owner、触发和退役证据；未修改既有 `openapi-generated-client.frontend-signature.snapshot` 工作区改动和 `.tmp/`。
+下一步：按顺序评估 P2-02 Flyway 基线整理的数据库前置条件；若存在外部数据库则保持已发布 migration 不变，仅补充增量迁移和新安装 baseline 方案。
