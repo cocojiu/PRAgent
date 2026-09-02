@@ -113,6 +113,40 @@ class TenantBackgroundJobSchedulerTest {
     }
 
     @Test
+    void compatibilityConstructorsLeaveOptionalWorkflowDisabled() {
+        TenantBackgroundJobScheduler withoutCheckRun = new TenantBackgroundJobScheduler(
+            tenantRunner,
+            dashboard,
+            reviewRecovery,
+            reviewAttemptRetention,
+            operationalRetention,
+            githubComments,
+            notificationPublish,
+            notificationDelivery,
+            reviewPublish,
+            secretReEncryption,
+            qualityBaseline
+        );
+        TenantBackgroundJobScheduler withoutWorkflow = new TenantBackgroundJobScheduler(
+            tenantRunner,
+            dashboard,
+            reviewRecovery,
+            reviewAttemptRetention,
+            operationalRetention,
+            githubComments,
+            notificationPublish,
+            notificationDelivery,
+            reviewPublish,
+            secretReEncryption,
+            qualityBaseline,
+            githubCheckRuns
+        );
+
+        assertThat(withoutCheckRun).isNotNull();
+        assertThat(withoutWorkflow).isNotNull();
+    }
+
+    @Test
     void ownsExactlyTwelveScheduledMethods() {
         long scheduledMethods = Stream.of(TenantBackgroundJobScheduler.class.getDeclaredMethods())
             .filter(method -> method.isAnnotationPresent(Scheduled.class))

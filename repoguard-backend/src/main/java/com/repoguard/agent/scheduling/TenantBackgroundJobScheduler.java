@@ -14,10 +14,10 @@ import com.repoguard.agent.security.SecretReEncryptionJobWorker;
 import com.repoguard.agent.tenancy.TenantScheduledTaskRunner;
 import com.repoguard.agent.worker.ReviewTaskRecoveryCompensator;
 import com.repoguard.agent.service.ReviewWorkflowService;
+import java.util.Optional;
 import java.util.Objects;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -52,7 +52,7 @@ public class TenantBackgroundJobScheduler {
         SecretReEncryptionJobWorker secretReEncryption,
         ReviewQualityBaselineRecoveryWorker qualityBaseline,
         GithubCheckRunRecoveryWorker githubCheckRunRecovery,
-        @Nullable ReviewWorkflowService reviewWorkflow
+        Optional<ReviewWorkflowService> reviewWorkflow
     ) {
         this.tenantRunner = Objects.requireNonNull(tenantRunner, "tenantRunner");
         this.dashboardSnapshots = Objects.requireNonNull(dashboardSnapshots, "dashboardSnapshots");
@@ -66,7 +66,29 @@ public class TenantBackgroundJobScheduler {
         this.secretReEncryption = Objects.requireNonNull(secretReEncryption, "secretReEncryption");
         this.qualityBaseline = Objects.requireNonNull(qualityBaseline, "qualityBaseline");
         this.githubCheckRunRecovery = githubCheckRunRecovery;
-        this.reviewWorkflow = reviewWorkflow;
+        this.reviewWorkflow = reviewWorkflow.orElse(null);
+    }
+
+    public TenantBackgroundJobScheduler(
+        TenantScheduledTaskRunner tenantRunner,
+        DashboardDailySnapshotRecoveryWorker dashboardSnapshots,
+        ReviewTaskRecoveryCompensator reviewRecovery,
+        ReviewAttemptRetentionWorker reviewAttemptRetention,
+        OperationalDataRetentionWorker operationalRetention,
+        GithubCommentPublicationBatchRecoveryWorker githubCommentRecovery,
+        NotificationEventPublishCompensator notificationPublish,
+        NotificationDeliveryRecoveryCompensator notificationDelivery,
+        ReviewTaskPublishCompensator reviewPublish,
+        SecretReEncryptionJobWorker secretReEncryption,
+        ReviewQualityBaselineRecoveryWorker qualityBaseline,
+        GithubCheckRunRecoveryWorker githubCheckRunRecovery,
+        ReviewWorkflowService reviewWorkflow
+    ) {
+        this(
+            tenantRunner, dashboardSnapshots, reviewRecovery, reviewAttemptRetention, operationalRetention,
+            githubCommentRecovery, notificationPublish, notificationDelivery, reviewPublish,
+            secretReEncryption, qualityBaseline, githubCheckRunRecovery, Optional.ofNullable(reviewWorkflow)
+        );
     }
 
     public TenantBackgroundJobScheduler(
@@ -85,7 +107,7 @@ public class TenantBackgroundJobScheduler {
         this(
             tenantRunner, dashboardSnapshots, reviewRecovery, reviewAttemptRetention, operationalRetention,
             githubCommentRecovery, notificationPublish, notificationDelivery, reviewPublish,
-            secretReEncryption, qualityBaseline, null, null
+            secretReEncryption, qualityBaseline, null, Optional.empty()
         );
     }
 
@@ -106,7 +128,7 @@ public class TenantBackgroundJobScheduler {
         this(
             tenantRunner, dashboardSnapshots, reviewRecovery, reviewAttemptRetention, operationalRetention,
             githubCommentRecovery, notificationPublish, notificationDelivery, reviewPublish,
-            secretReEncryption, qualityBaseline, githubCheckRunRecovery, null
+            secretReEncryption, qualityBaseline, githubCheckRunRecovery, Optional.empty()
         );
     }
 

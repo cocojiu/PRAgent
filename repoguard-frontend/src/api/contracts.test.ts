@@ -7,6 +7,12 @@ const frontendPerformance = vi.hoisted(() => ({
 vi.mock("@/observability/frontendPerformanceBuffer", () => frontendPerformance);
 
 import { apiRequest } from "./contracts";
+import {
+  fetchNotificationReadKeys,
+  fetchNotificationReport,
+  fetchNotifications,
+  markNotificationRead
+} from "./notifications";
 import { clearActiveTenant, setActiveTenant } from "@/stores/tenantContext";
 
 const okResponse = (data: unknown) =>
@@ -392,7 +398,10 @@ describe("apiRequest", () => {
     });
     await apiRequest("fetchMessageQueueHealth", undefined);
     await apiRequest("requeueMessageQueueTask", { taskId: 42 });
-    await apiRequest("fetchNotifications", undefined);
+    await fetchNotifications();
+    await markNotificationRead({ notificationKey: "review-sla-overdue-42" });
+    await fetchNotificationReadKeys();
+    await fetchNotificationReport("WEEKLY");
 
     const calls = fetchMock.mock.calls as [string, RequestInit][];
     expect(calls[0][0]).toContain("/api/v1/config/notification-bindings");
@@ -418,6 +427,14 @@ describe("apiRequest", () => {
     expect(calls[5][1].method).toBe("POST");
     expect(calls[6][0]).toContain("/api/v1/notifications");
     expect(calls[6][1].method).toBeUndefined();
+    expect(calls[7][0]).toContain("/api/v1/notifications/read");
+    expect(calls[7][1].method).toBe("POST");
+    expect(calls[7][1].body).toContain("review-sla-overdue-42");
+    expect(calls[8][0]).toContain("/api/v1/notifications/read");
+    expect(calls[8][1].method).toBeUndefined();
+    expect(calls[9][0]).toContain("/api/v1/notifications/reports");
+    expect(calls[9][0]).toContain("period=WEEKLY");
+    expect(calls[9][1].method).toBeUndefined();
   });
 
   it("keeps dashboard overview and split module endpoint contracts", async () => {
