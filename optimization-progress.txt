@@ -479,3 +479,11 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 提交/远程验收：实现提交 `af63ed54`（feat(review): 建设最小模型发布中心闭环）已推送 `origin/PRAgent-test`；Pull Request Quality `33651302822` 的 8 个作业全部成功，含后端单测/契约、真实 MySQL/RabbitMQ、V76→V86 Flyway、前端质量与浏览器 E2E、生产边缘、跟踪文件治理、密钥差异和依赖审查；Repository Governance `33651298172`、Auto Create Pull Request `33651298170` 亦成功。
 边界：发布中心和 V86 迁移已有代码、契约与自动化证据，但没有真实 PR 数据集达标报告或新能力正式生产部署记录；发布审计查询/导出、按 release_key 的运行指标告警、评估报告生命周期、状态漂移修复、Canary cohort 和租户级 provider kill switch 已根据本轮代码审查补入优化方案第 14.19 节，尚未实现；本轮未提交非 README Markdown、测试相关脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
 下一步：进入 `FUNC-P1-005` GitHub App/Checks 设置向导，先补齐安装/权限/Webhook/desired-applied 诊断和安全启停，再继续按单项提交、推送和 Actions 验收。
+
+2026-09-03 | 优化-63 | FUNC-P1-005 GitHub App/Checks 设置向导
+状态：已完成设置诊断、权限与 Webhook 安全校验、稳定预览、按仓库启停策略、本地质量门禁、中文提交、test 分支推送和远程 Actions 验收。
+变更：新增 V87 `github_check_run_policy` 租户隔离配置表和 Checks 设置 API/前端向导；设置页只读展示 App 配置、安装仓库、PR head、权限、全局开关、Webhook 安全与最近投递摘要，启用前执行 fail-closed 前置检查并要求显式确认。预览会二次读取 PR head SHA，发生变化时拒绝创建 Check Run；通过后只创建 neutral 预览 Check Run，并返回 desired/applied 版本、外部 ID 和审计元数据。生命周期执行按仓库策略 fail-closed，策略写入使用租户范围 CAS；Webhook 投递只保留脱敏摘要，不保存 payload、secret 或凭据；不自动修改分支保护规则。
+本地验证：完整后端 `mvn verify -DskipTests=false` 共 2784 项测试通过、0 失败、12 项按环境条件跳过，JaCoCo、架构、迁移、授权和 OpenAPI 契约门禁通过；前端生成客户端检查、`vue-tsc -b`、ESLint、Vitest 全量（43 个测试文件、171 项测试）和 Vite 生产构建通过；`git diff --check` 通过。首次远程质量运行因干净 CI 分支覆盖率约 0.69 失败，补齐 Checks 策略服务分支测试后复验通过。
+提交/远程验收：实现提交 `b693e4e0`（新增：建设 GitHub App Checks 设置向导）及修复提交 `95a78f97`（修复：补齐 Checks 策略分支覆盖率）均已推送 `origin/PRAgent-test`；首次 Pull Request Quality `33663397008` 因覆盖率门禁失败，最终 Pull Request Quality `33664061408` 的 8 个作业全部成功；修复提交对应 Repository Governance `33664057745`、Auto Create Pull Request `33664057738` 成功，包含 V86→V87 Flyway、真实 MySQL/RabbitMQ、前后端质量、生产边缘、跟踪文件、密钥差异和依赖审查。
+边界：未使用真实生产 GitHub App 凭据或真实 PR 做外部创建验证，分支保护仍需人工配置；最近投递摘要为进程内有界状态，重启后不追溯历史；PAT 兼容路径保持不变；未提交非 README Markdown、测试相关脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
+下一步：进入 `FUNC-P1-006` 运行时发布指标、告警与可观测性，继续按单项提交、推送和 Actions 验收。
