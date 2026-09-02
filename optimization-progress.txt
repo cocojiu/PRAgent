@@ -460,6 +460,6 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 状态：已完成代码、完整本地门禁、中文提交、test 分支推送和远程 Actions 验收。
 变更：新增 V84 `llm_evaluation_report` 租户隔离不可变聚合表及 `llm_model_release.evaluation_report_id` 绑定；评估请求只接收数据集清单、匿名样本标签、版本元数据和聚合计数，不落库原始源码、补丁、prompt、供应商响应或凭据。服务端按固定/滚动切分、仓库匿名键、样本指纹、授权/匿名化/人工复核、版本可复现性执行阻断校验，并生成 precision/recall/Wilson 下界、定位锚定、重复、解析失败、P50/P95、token/费用、评论有用性/修复率和规则/LLM/verified 贡献指标。新增评估报告查询、两报告差异、JSON/HTML 导出和规则配置工作台；模型发布必须引用服务端 `evaluationReportId`，服务端重新读取报告指标和门禁，客户端伪造质量字段不能绕过发布校验；同一确定性报告键重试返回原记录，已发布聚合报告不支持覆盖。
 本地验证：后端完整 `mvn verify -DskipTests=false` 共 2752 项测试通过、0 失败、12 项按环境条件跳过，JaCoCo 行/分支覆盖率门禁通过，架构测试 44 项、架构预算 9 项、Jackson 配置、授权、迁移、OpenAPI、Kubernetes 契约均通过；前端 `vue-tsc -b`、ESLint、Vitest 全量 40 个测试文件/163 项测试（函数覆盖率 56.57%）和 Vite 构建 bundle budget 通过；`git diff --check` 通过。
-提交/远程验收：实现提交 `465814ef`（新增：建设真实 PR 质量评估工作台与可信报告）已推送 `origin/PRAgent-test`；Pull Request Quality `33629799753` 的 8 个作业全部成功，Repository Governance `33629791197`、Auto Create Pull Request `33629791095` 亦成功。
+提交/远程验收：实现提交 `465814ef`（新增：建设真实 PR 质量评估工作台与可信报告）及覆盖率补测修复提交 `c9f818e7` 已推送 `origin/PRAgent-test`；进度记录提交首次触发的 Pull Request Quality `33630422749` 因 Java 25 覆盖率边界失败，补充缺失指纹、空观察集/默认样本数和未知格式负例后本地完整验证通过；最终 Pull Request Quality `33631917263` 的 8 个作业全部成功，Repository Governance `33631913086`、Auto Create Pull Request `33631913112` 亦成功。
 边界：当前评估入口以受控管理员 API 接收已脱敏的聚合标签，原始真实 PR 数据仍需在授权评测进程中准备并按数据集指纹提交；未自动发表评论、Checks、通知、修复分支或 PR。未提交非 README Markdown、测试脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
 下一步：进入 `FUNC-P1-001` 跨次审查差异与修复追踪。
