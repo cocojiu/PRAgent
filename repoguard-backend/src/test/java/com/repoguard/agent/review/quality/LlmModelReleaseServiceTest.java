@@ -70,6 +70,13 @@ class LlmModelReleaseServiceTest {
     }
 
     @Test
+    void rejectsMissingDatasetFingerprintAfterNormalizingReleaseInput() {
+        assertThatThrownBy(() -> service.registerShadow(request(null, 0, true, 77L), "operator"))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("SHA-256");
+    }
+
+    @Test
     void promotionRequiresEvidenceAndIgnoresForgedClientMetrics() {
         LlmModelReleaseRequest withoutEvidence = request(FINGERPRINT, 0, false, null);
         assertThatThrownBy(() -> service.promote(withoutEvidence, "operator"))
@@ -129,6 +136,16 @@ class LlmModelReleaseServiceTest {
     }
 
     @Test
+    void evaluationExportDefaultsUnknownFormatToJson() {
+        when(repository.findEvaluationReport(42L, 77L)).thenReturn(evidence(true));
+
+        LlmModelReleaseDto.EvaluationExportDto exported = service.exportEvaluationReport(77L, "yaml");
+
+        assertThat(exported.format()).isEqualTo("json");
+        assertThat(exported.content()).contains("report-key");
+    }
+
+    @Test
     void evaluationWorkbenchRejectsMalformedVersionAndObservation() {
         LlmEvaluationRequest malformed = new LlmEvaluationRequest(
             "dataset-1", "v1", "BAD_KIND", 2, 1, 1, 0, true, true, true, FINGERPRINT,
@@ -138,6 +155,19 @@ class LlmModelReleaseServiceTest {
         assertThatThrownBy(() -> service.createEvaluationReport(malformed, "operator"))
             .isInstanceOf(BusinessException.class)
             .hasMessageContaining("无效");
+    }
+
+    @Test
+    void evaluationWorkbenchDefaultsMissingObservationsAndMinimumSampleCount() {
+        LlmEvaluationRequest request = new LlmEvaluationRequest(
+            "dataset-1", "v1", "REAL_PR", 2, 1, 1, 0, true, true, true, FINGERPRINT,
+            "openai", "gpt-next", "prompt-v1", "context-v1", "schema-v1", "chunk-v1",
+            new BigDecimal("0.1"), "rule-v1", "code-v1", null, null
+        );
+        when(repository.insertEvaluationReport(eq(42L), anyString(), any(LlmEvaluationReport.class), eq("operator")))
+            .thenReturn(evidence(true));
+
+        assertThat(service.createEvaluationReport(request, "operator").id()).isEqualTo(77L);
     }
 
     @Test
