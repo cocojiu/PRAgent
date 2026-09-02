@@ -32,6 +32,7 @@ public class MybatisPlusConfig {
         "notification_channel_binding",
         "notification_delivery_log",
         "notification_event",
+        "notification_read_state",
         "review_execution_attempt",
         "review_finding",
         "review_policy_config",
@@ -46,6 +47,7 @@ public class MybatisPlusConfig {
         "secret_re_encryption_job_item",
         "review_task",
         "review_task_archive_summary",
+        "review_bot_command_audit",
         "review_timeline",
         "system_setting_log",
         "system_settings_config"
