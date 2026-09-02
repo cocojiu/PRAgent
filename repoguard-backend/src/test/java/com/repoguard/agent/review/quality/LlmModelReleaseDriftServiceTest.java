@@ -9,6 +9,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -134,12 +135,105 @@ class LlmModelReleaseDriftServiceTest {
         verify(jdbcTemplate, never()).update(anyString(), any(Object[].class));
     }
 
+    @Test
+    void repairNormalizesDuplicateReleaseStatesAndQueuedAssignments() throws Exception {
+        LlmModelReleaseDto activeOld = release(1L, "active-old", "ACTIVE", 95, "gpt-old", 1);
+        LlmModelReleaseDto activeNew = release(2L, "active-new", "ACTIVE", 100, "gpt-new", 2);
+        LlmModelReleaseDto canaryOld = release(3L, "canary-old", "CANARY", 0, "gpt-canary-old", 1);
+        LlmModelReleaseDto canaryNew = release(4L, "canary-new", "CANARY", 50, "gpt-canary-new", 2);
+        when(releaseRepository.findAll(42L)).thenReturn(List.of(activeOld, activeNew, canaryOld, canaryNew));
+        when(jdbcTemplate.queryForList(contains("from review_task"), any(Object[].class))).thenReturn(List.of(
+            row(10L, "deleted", "openai", "gpt-old", "QUEUED", null, null),
+            row(11L, "active-new", "openai", "wrong-model", "QUEUED", null, null)
+        ));
+        when(auditRepository.find(42L, "op-normalize")).thenReturn(null);
+        LlmModelReleaseDriftDto preview = service.detect();
+        LlmModelReleaseDriftAuditRepository.StoredAudit stored = stored(
+            "op-normalize", preview.fingerprint(), "PREVIEW", preview, null);
+        when(auditRepository.insertPreview(eq(42L), eq("op-normalize"), eq(preview.fingerprint()),
+            eq("operator"), any())).thenReturn(stored);
+        when(auditRepository.markRunning(42L, "op-normalize")).thenReturn(stored);
+        when(auditRepository.complete(eq(42L), eq("op-normalize"), any(), anyInt(), anyInt(), anyInt()))
+            .thenReturn(stored("op-normalize", preview.fingerprint(), "COMPLETED", preview, preview));
+        when(releaseRepository.findByReleaseKey(42L, "deleted")).thenReturn(null);
+        when(releaseRepository.findByReleaseKey(42L, "active-new")).thenReturn(activeNew);
+        when(releaseRepository.findById(42L, 2L)).thenReturn(activeNew);
+
+        LlmModelReleaseDriftRepairDto result = service.repair(
+            new LlmModelReleaseDriftRepairRequest("op-normalize", preview.fingerprint(), true),
+            "operator", "ADMIN");
+
+        assertThat(result.status()).isEqualTo("COMPLETED");
+        verify(jdbcTemplate).update(contains("state = 'ROLLED_BACK'"), eq(42L), eq(1L));
+        verify(jdbcTemplate).update(contains("state = 'ROLLED_BACK'"), eq(42L), eq(3L));
+        verify(jdbcTemplate).update(contains("set traffic_percent = ?"), eq(100), eq(42L), eq(1L), eq("ACTIVE"));
+        verify(jdbcTemplate).update(contains("set traffic_percent = ?"), eq(1), eq(42L), eq(3L), eq("CANARY"));
+        verify(jdbcTemplate).update(contains("update review_task set llm_release_key"),
+            eq(activeNew.releaseKey()), eq(activeNew.provider()), eq(activeNew.modelName()), eq(42L), eq(10L));
+        verify(jdbcTemplate).update(contains("update review_task set llm_provider"),
+            eq(activeNew.provider()), eq(activeNew.modelName()), eq(42L), eq(11L));
+    }
+
+    @Test
+    void repairClearsQueuedAssignmentWhenNoDesiredReleaseExists() throws Exception {
+        when(releaseRepository.findAll(42L)).thenReturn(List.of());
+        when(jdbcTemplate.queryForList(contains("from review_task"), any(Object[].class))).thenReturn(List.of(
+            row(12L, "deleted", "openai", "gpt-old", "QUEUED", null, null)));
+        when(auditRepository.find(42L, "op-clear")).thenReturn(null);
+        LlmModelReleaseDriftDto preview = service.detect();
+        LlmModelReleaseDriftAuditRepository.StoredAudit stored = stored(
+            "op-clear", preview.fingerprint(), "PREVIEW", preview, null);
+        when(auditRepository.insertPreview(eq(42L), eq("op-clear"), eq(preview.fingerprint()),
+            eq("system"), any())).thenReturn(stored);
+        when(auditRepository.markRunning(42L, "op-clear")).thenReturn(stored);
+        when(auditRepository.complete(eq(42L), eq("op-clear"), any(), anyInt(), anyInt(), anyInt()))
+            .thenReturn(stored("op-clear", preview.fingerprint(), "COMPLETED", preview, preview));
+        when(releaseRepository.findByReleaseKey(42L, "deleted")).thenReturn(null);
+
+        service.repair(new LlmModelReleaseDriftRepairRequest("op-clear", preview.fingerprint(), true), "", "ADMIN");
+
+        verify(jdbcTemplate).update(contains("set llm_release_key = null"), eq(42L), eq(12L));
+    }
+
+    @Test
+    void repairFailureIsRecordedAndReturnedWithoutEscaping() throws Exception {
+        when(releaseRepository.findAll(42L)).thenReturn(List.of());
+        when(jdbcTemplate.queryForList(contains("from review_task"), any(Object[].class))).thenReturn(List.of());
+        when(auditRepository.find(42L, "op-fail")).thenReturn(null);
+        LlmModelReleaseDriftDto preview = service.detect();
+        LlmModelReleaseDriftAuditRepository.StoredAudit running = stored(
+            "op-fail", preview.fingerprint(), "RUNNING", preview, null);
+        LlmModelReleaseDriftAuditRepository.StoredAudit failed = stored(
+            "op-fail", preview.fingerprint(), "FAILED", preview, null, "ILLEGALSTATEEXCEPTION");
+        when(auditRepository.insertPreview(eq(42L), eq("op-fail"), eq(preview.fingerprint()),
+            eq("system"), any())).thenReturn(running);
+        when(auditRepository.markRunning(42L, "op-fail")).thenReturn(running);
+        LlmModelReleaseDriftFailureRecorder failureRecorder = org.mockito.Mockito.mock(
+            LlmModelReleaseDriftFailureRecorder.class);
+        when(failureRecorder.record(eq(42L), eq("op-fail"), eq("ILLEGALSTATEEXCEPTION"))).thenReturn(failed);
+        doThrow(new IllegalStateException("lock unavailable")).when(releaseRepository).lockTenant(42L);
+        LlmModelReleaseDriftService failingService = new LlmModelReleaseDriftService(
+            jdbcTemplate, new JacksonConfig().objectMapper(), releaseRepository, auditRepository, failureRecorder);
+
+        LlmModelReleaseDriftRepairDto result = failingService.repair(
+            new LlmModelReleaseDriftRepairRequest("op-fail", preview.fingerprint(), true), "", "ADMIN");
+
+        assertThat(result.status()).isEqualTo("FAILED");
+        assertThat(result.failureCode()).isEqualTo("ILLEGALSTATEEXCEPTION");
+        verify(failureRecorder).record(42L, "op-fail", "ILLEGALSTATEEXCEPTION");
+    }
+
     private LlmModelReleaseDriftAuditRepository.StoredAudit stored(String key, String fingerprint,
         String status, Object before, Object after) throws Exception {
+        return stored(key, fingerprint, status, before, after, null);
+    }
+
+    private LlmModelReleaseDriftAuditRepository.StoredAudit stored(String key, String fingerprint,
+        String status, Object before, Object after, String failureCode) throws Exception {
         String beforeJson = new JacksonConfig().objectMapper().writeValueAsString(before);
         String afterJson = after == null ? null : new JacksonConfig().objectMapper().writeValueAsString(after);
         return new LlmModelReleaseDriftAuditRepository.StoredAudit(1L, key, fingerprint, status, "operator",
-            beforeJson, afterJson, 0, 1, 1, null, LocalDateTime.now(), LocalDateTime.now());
+            beforeJson, afterJson, 0, 1, 1, failureCode, LocalDateTime.now(), LocalDateTime.now());
     }
 
     private LlmModelReleaseDto release(Long id, String key, String state, int traffic, String model, int updatedDay) {
