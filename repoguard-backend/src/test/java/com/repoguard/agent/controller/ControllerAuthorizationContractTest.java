@@ -40,7 +40,11 @@ class ControllerAuthorizationContractTest {
         "DataRetentionController#listCleanupAudits",
         "MessageQueueHealthController#getHealth",
         "UserManagementController#listUsers",
-        "UserManagementController#listOperationAudits"
+        "UserManagementController#listOperationAudits",
+        "ScmProviderController#providers",
+        "ScmProviderController#changeRequests",
+        "ScmProviderController#diff",
+        "ScmProviderController#head"
     );
 
     @Test

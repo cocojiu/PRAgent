@@ -67,6 +67,12 @@ reviewExecutionAttemptControllerGetResult(input: { path: { attemptId: number; ta
 reviewExecutionAttemptControllerList(input: { path: { taskId: number } }): Promise<ReviewExecutionAttempt[]>; // GET /api/v1/reviews/{taskId}/attempts
 sarifControllerExportFindings(input: { path: { taskId: number } }): Promise<SarifExport>; // GET /api/v1/scanners/sarif/tasks/{taskId}/export
 sarifControllerImportFindings(input: { path: { taskId: number }; body: SarifImportRequest }): Promise<SarifImportResponse>; // POST /api/v1/scanners/sarif/tasks/{taskId}/import
+scmProviderControllerChangeRequests(input: { path: { provider: string } }): Promise<ScmChangeRequestSummary[]>; // GET /api/v1/scm/providers/{provider}/change-requests
+scmProviderControllerComment(input: { path: { provider: string; taskId: number }; body: ScmCommentDraft }): Promise<ScmCommentResult>; // POST /api/v1/scm/providers/{provider}/tasks/{taskId}/comments
+scmProviderControllerDiff(input: { path: { provider: string; taskId: number } }): Promise<PullRequestDiff>; // GET /api/v1/scm/providers/{provider}/tasks/{taskId}/diff
+scmProviderControllerHead(input: { path: { provider: string; taskId: number } }): Promise<Map<String,String>>; // GET /api/v1/scm/providers/{provider}/tasks/{taskId}/head
+scmProviderControllerProviders(): Promise<ScmProviderDescriptor[]>; // GET /api/v1/scm/providers
+scmProviderControllerStatus(input: { path: { provider: string; taskId: number }; body: ScmStatusRequest }): Promise<ScmStatusResult>; // POST /api/v1/scm/providers/{provider}/tasks/{taskId}/status
 systemConfigControllerCreateReviewRule(input: { body: ReviewRuleConfigRequest }): Promise<ReviewRuleConfig>; // POST /api/v1/config/review-rules
 systemConfigControllerGetGithubIntegration(): Promise<GithubIntegrationConfig>; // GET /api/v1/config/integrations/github
 systemConfigControllerGetMysqlIntegration(): Promise<ServiceIntegrationConfig>; // GET /api/v1/config/integrations/mysql

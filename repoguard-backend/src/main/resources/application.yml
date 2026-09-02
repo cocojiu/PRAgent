@@ -311,11 +311,17 @@ app:
       networks: ${REPOGUARD_TRUSTED_PROXY_NETWORKS:127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
     outbound:
       github-allowed-hosts: ${REPOGUARD_OUTBOUND_GITHUB_ALLOWED_HOSTS:api.github.com}
+      gitlab-allowed-hosts: ${REPOGUARD_OUTBOUND_GITLAB_ALLOWED_HOSTS:gitlab.com}
+      gitee-allowed-hosts: ${REPOGUARD_OUTBOUND_GITEE_ALLOWED_HOSTS:gitee.com}
+      bitbucket-allowed-hosts: ${REPOGUARD_OUTBOUND_BITBUCKET_ALLOWED_HOSTS:api.bitbucket.org}
       llm-allowed-hosts: ${REPOGUARD_OUTBOUND_LLM_ALLOWED_HOSTS:dashscope.aliyuncs.com,api.openai.com}
       notification-allowed-hosts: ${REPOGUARD_OUTBOUND_NOTIFICATION_ALLOWED_HOSTS:qyapi.weixin.qq.com,oapi.dingtalk.com}
       infrastructure-allowed-hosts: ${REPOGUARD_OUTBOUND_INFRASTRUCTURE_ALLOWED_HOSTS:localhost,127.0.0.1,::1,mysql,rabbitmq}
       private-network-allowed-hosts: ${REPOGUARD_OUTBOUND_PRIVATE_NETWORK_ALLOWED_HOSTS:localhost,127.0.0.1,::1,mysql,rabbitmq}
       github-allowed-ports: ${REPOGUARD_OUTBOUND_GITHUB_ALLOWED_PORTS:443}
+      gitlab-allowed-ports: ${REPOGUARD_OUTBOUND_GITLAB_ALLOWED_PORTS:443}
+      gitee-allowed-ports: ${REPOGUARD_OUTBOUND_GITEE_ALLOWED_PORTS:443}
+      bitbucket-allowed-ports: ${REPOGUARD_OUTBOUND_BITBUCKET_ALLOWED_PORTS:443}
       llm-allowed-ports: ${REPOGUARD_OUTBOUND_LLM_ALLOWED_PORTS:443}
       notification-allowed-ports: ${REPOGUARD_OUTBOUND_NOTIFICATION_ALLOWED_PORTS:443}
       mysql-allowed-ports: ${REPOGUARD_OUTBOUND_MYSQL_ALLOWED_PORTS:3306}

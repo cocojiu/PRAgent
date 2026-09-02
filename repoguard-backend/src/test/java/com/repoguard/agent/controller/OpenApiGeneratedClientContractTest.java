@@ -42,7 +42,13 @@ class OpenApiGeneratedClientContractTest {
         "POST /api/v1/config/review-calibration/release-center/{releaseId}/rollback",
         "POST /api/v1/config/declarative-rules/{id}/dry-run",
         "GET /api/v1/scanners/sarif/tasks/{taskId}/export",
-        "POST /api/v1/scanners/sarif/tasks/{taskId}/import"
+        "POST /api/v1/scanners/sarif/tasks/{taskId}/import",
+        "GET /api/v1/scm/providers",
+        "GET /api/v1/scm/providers/{provider}/change-requests",
+        "GET /api/v1/scm/providers/{provider}/tasks/{taskId}/diff",
+        "GET /api/v1/scm/providers/{provider}/tasks/{taskId}/head",
+        "POST /api/v1/scm/providers/{provider}/tasks/{taskId}/comments",
+        "POST /api/v1/scm/providers/{provider}/tasks/{taskId}/status"
     );
     private static final List<String> MIGRATED_CLIENT_PREFIXES = List.of(
         "cacheStatsController",

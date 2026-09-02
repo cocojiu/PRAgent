@@ -48,6 +48,10 @@ GET /api/v1/reviews/{taskId}/attempts/{attemptId} query=[page, pageSize] body=- 
 GET /api/v1/reviews/{taskId}/attempts/{attemptId}/changed-files query=[cursor, limit] body=- bodyRequired=false
 GET /api/v1/reviews/{taskId}/attempts/{attemptId}/findings query=[cursor, limit] body=- bodyRequired=false
 GET /api/v1/scanners/sarif/tasks/{taskId}/export query=[] body=- bodyRequired=false
+GET /api/v1/scm/providers query=[] body=- bodyRequired=false
+GET /api/v1/scm/providers/{provider}/change-requests query=[] body=- bodyRequired=false
+GET /api/v1/scm/providers/{provider}/tasks/{taskId}/diff query=[] body=- bodyRequired=false
+GET /api/v1/scm/providers/{provider}/tasks/{taskId}/head query=[] body=- bodyRequired=false
 GET /api/v1/system/health/summary query=[] body=- bodyRequired=false
 GET /api/v1/users query=[page, pageSize, role, status, keyword] body=- bodyRequired=false
 GET /api/v1/users/audits query=[page, pageSize] body=- bodyRequired=false
@@ -85,6 +89,8 @@ POST /api/v1/reviews/{id}/github-comments query=[] body=- bodyRequired=false
 POST /api/v1/reviews/{id}/human-review query=[] body=HumanReviewRequest bodyRequired=true
 POST /api/v1/reviews/{id}/retry query=[] body=- bodyRequired=false
 POST /api/v1/scanners/sarif/tasks/{taskId}/import query=[] body=SarifImportRequest bodyRequired=true
+POST /api/v1/scm/providers/{provider}/tasks/{taskId}/comments query=[] body=ScmCommentDraft bodyRequired=true
+POST /api/v1/scm/providers/{provider}/tasks/{taskId}/status query=[] body=ScmStatusRequest bodyRequired=true
 POST /api/v1/users query=[] body=UserCreateRequest bodyRequired=true
 PUT /api/v1/config/integrations/github query=[] body=GithubIntegrationConfigRequest bodyRequired=true
 PUT /api/v1/config/integrations/mysql query=[] body=ServiceIntegrationConfigRequest bodyRequired=true

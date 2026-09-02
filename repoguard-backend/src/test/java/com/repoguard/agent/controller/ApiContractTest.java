@@ -343,7 +343,13 @@ class ApiContractTest {
             "GET /api/v1/reviews/{taskId}/attempts/{attemptId}/findings",
             "POST /api/v1/config/declarative-rules/{id}/dry-run",
             "GET /api/v1/scanners/sarif/tasks/{taskId}/export",
-            "POST /api/v1/scanners/sarif/tasks/{taskId}/import"
+            "POST /api/v1/scanners/sarif/tasks/{taskId}/import",
+            "GET /api/v1/scm/providers",
+            "GET /api/v1/scm/providers/{provider}/change-requests",
+            "GET /api/v1/scm/providers/{provider}/tasks/{taskId}/diff",
+            "GET /api/v1/scm/providers/{provider}/tasks/{taskId}/head",
+            "POST /api/v1/scm/providers/{provider}/tasks/{taskId}/comments",
+            "POST /api/v1/scm/providers/{provider}/tasks/{taskId}/status"
         );
     }
 
