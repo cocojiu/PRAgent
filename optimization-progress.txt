@@ -447,3 +447,11 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 提交/远程验收：实现提交 `373a85d0`（新增：完善协作与通知工作流）已推送；修复提交 `f29fb51e`（修复：通过协作通知工作流质量门禁）解决 Java 25 弃用警告和前端覆盖率门禁，修复提交 `5e1103e8`（修复：登记协作工作流租户表）补齐 V82 租户表注册。最终 Pull Request Quality `33596281203` 的 8 个作业全部成功，push Repository Governance `33596277981`、Auto Create Pull Request `33596277997` 亦成功；前序失败运行 `33594843740`、`33595852857` 均已按日志修复并重新验收。
 边界：机器人命令、通知渠道和升级收件人仍需部署环境配置真实 webhook、token、SMTP/Slack/Feishu 凭据；服务端已读状态只保存租户/读者/通知键，不保存敏感消息；不提交非 README Markdown、测试脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
 下一步：优化方案定义的 P0/P1/P2 优先项已全部完成并进入维护；后续新增需求须先更新优化方案，再按单项提交、推送和 Actions 验收。
+
+2026-09-02 | 优化-59 | FIX-P0-001 SARIF 导入尝试绑定与批次幂等合并
+状态：代码与本地质量门禁已完成，待本次提交推送后完成远程 Actions 验收。
+变更：SARIF 导入现在必须绑定审查任务的 current execution attempt，并从尝试记录解析 commit SHA；新增租户隔离的 SARIF 导入批次身份、工具/版本、提交 SHA、内容指纹和导入统计，使用唯一约束实现同一 payload 重试幂等；同一任务/尝试/工具/提交的新指纹导入会替换旧 SARIF 批次的当前 Finding，但不会错误地把规则或 LLM Finding 标为历史；保留 SARIF 导出及规则帮助、路径、定位和严重级别兼容行为。新增 V83 扩展迁移、MyBatis 租户表登记和重复键竞态处理。
+本地验证：SARIF 定向测试 13 项通过；后端完整 `mvn clean verify -DskipTests=false` 共 2744 项测试通过、0 失败、12 项按环境条件跳过，架构测试 44 项、架构预算 9 项和 JaCoCo 0.89 线/0.70 分支门禁均通过；迁移契约、OpenAPI 相关检查和 `git diff --check` 通过。此前一次全量构建因覆盖率 0.8894 失败，补齐批次替换、唯一键竞态、缺少任务/尝试/提交和空内容路径测试后修复。
+提交/远程验收：待提交中文信息、推送 `origin/PRAgent-test` 及 GitHub Actions 运行结果回填。
+边界：数据库不保存原始 SARIF 凭据；同一指纹重试返回已落库批次；新指纹替换仅作用于同一任务、尝试、工具、版本和提交的 SARIF 来源；未提交非 README Markdown、测试脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
+下一步：远程 Actions 通过后进入 `FUNC-P0-001`，建设真实 PR 质量评估工作台与可信报告，并继续按单项提交、推送和验收。

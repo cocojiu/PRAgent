@@ -1,55 +1,68 @@
 package com.repoguard.agent.scanner;
-
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.dto.SarifExportDto;
 import com.repoguard.agent.dto.SarifImportRequest;
 import com.repoguard.agent.dto.SarifImportResponse;
 import com.repoguard.agent.dto.SarifImportedFindingDto;
+import com.repoguard.agent.entity.ReviewExecutionAttempt;
 import com.repoguard.agent.entity.ReviewFinding;
+import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.mapper.ReviewExecutionAttemptMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.TreeSet;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-
+import org.springframework.dao.DuplicateKeyException;
+import com.repoguard.agent.mapper.ReviewFindingMapper.SarifImportBatchRow;
+import com.repoguard.agent.tenancy.TenantContext;
 @Service
 public class SarifFindingService {
-
     private static final String SARIF_VERSION = "2.1.0";
     private static final String SARIF_SCHEMA = "https://json.schemastore.org/sarif-2.1.0.json";
     private static final int MAX_RUNS = 20;
     private static final int MAX_RESULTS = 5_000;
     private static final int MAX_RULE_ID_LENGTH = 64;
-
     private final ObjectMapper objectMapper;
     private final ReviewTaskMapper reviewTaskMapper;
     private final ReviewFindingMapper reviewFindingMapper;
-
+    private final ReviewExecutionAttemptMapper reviewExecutionAttemptMapper;
     public SarifFindingService(
         ObjectMapper objectMapper,
         ReviewTaskMapper reviewTaskMapper,
-        ReviewFindingMapper reviewFindingMapper
+        ReviewFindingMapper reviewFindingMapper,
+        ReviewExecutionAttemptMapper reviewExecutionAttemptMapper
     ) {
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
         this.reviewTaskMapper = Objects.requireNonNull(reviewTaskMapper, "reviewTaskMapper");
         this.reviewFindingMapper = Objects.requireNonNull(reviewFindingMapper, "reviewFindingMapper");
+        this.reviewExecutionAttemptMapper = Objects.requireNonNull(
+            reviewExecutionAttemptMapper,
+            "reviewExecutionAttemptMapper"
+        );
     }
-
     @Transactional
     public SarifImportResponse importFindings(Long taskId, SarifImportRequest request) {
-        requireTask(taskId);
+        ReviewTask task = requireTask(taskId);
         if (request == null || !StringUtils.hasText(request.content())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "SARIF content is required");
         }
+        ReviewExecutionAttempt attempt = requireCurrentAttempt(taskId, task);
         JsonNode root = parse(request.content());
         if (!SARIF_VERSION.equals(root.path("version").asText())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Only SARIF version 2.1.0 is supported");
@@ -58,8 +71,16 @@ public class SarifFindingService {
         if (!runs.isArray() || runs.isEmpty() || runs.size() > MAX_RUNS) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "SARIF runs must be a non-empty array of at most 20 items");
         }
-        reviewFindingMapper.markCurrentAttemptHistorical(taskId);
+        String commitSha = resolveCommitSha(task, attempt);
+        ToolMetadata tool = toolMetadata(runs);
+        String fingerprint = sha256(request.content());
+        SarifImportBatchRow existing = findBatch(
+            taskId, attempt.getId(), tool.name(), tool.version(), commitSha, fingerprint);
+        if (existing != null) {
+            return responseFromBatch(taskId, existing);
+        }
         List<SarifImportedFindingDto> imported = new ArrayList<>();
+        List<ParsedResult> parsedResults = new ArrayList<>();
         int skipped = 0;
         int totalResults = 0;
         for (JsonNode run : runs) {
@@ -78,15 +99,44 @@ public class SarifFindingService {
                     skipped++;
                     continue;
                 }
-                reviewFindingMapper.insert(toEntity(taskId, parsed));
+                parsedResults.add(parsed);
                 imported.add(new SarifImportedFindingDto(
                     parsed.ruleId(), parsed.filePath(), parsed.lineNumber(), parsed.severity(), parsed.message()
                 ));
             }
         }
+        SarifImportBatchRow batch = new SarifImportBatchRow();
+        batch.setTenantId(TenantContext.currentTenantIdOrDefault());
+        batch.setTaskId(taskId);
+        batch.setAttemptId(attempt.getId());
+        batch.setToolName(tool.name());
+        batch.setToolVersion(tool.version());
+        batch.setCommitSha(commitSha);
+        batch.setContentFingerprint(fingerprint);
+        batch.setStatus("ACTIVE");
+        batch.setImportedCount(imported.size());
+        batch.setSkippedCount(skipped);
+        batch.setCreatedAt(java.time.LocalDateTime.now());
+        batch.setUpdatedAt(batch.getCreatedAt());
+        try {
+            reviewFindingMapper.insertSarifImportBatch(batch);
+        } catch (DuplicateKeyException ex) {
+            SarifImportBatchRow raced = findBatch(
+                taskId, attempt.getId(), tool.name(), tool.version(), commitSha, fingerprint);
+            if (raced != null) {
+                return responseFromBatch(taskId, raced);
+            }
+            throw ex;
+        }
+        if (batch.getId() == null) {
+            throw new IllegalStateException("SARIF import batch id was not generated");
+        }
+        supersedePreviousBatches(taskId, attempt.getId(), tool, commitSha, fingerprint);
+        for (ParsedResult parsed : parsedResults) {
+            reviewFindingMapper.insert(toEntity(taskId, attempt.getId(), batch.getId(), parsed));
+        }
         return new SarifImportResponse(taskId, imported.size(), skipped, List.copyOf(imported));
     }
-
     public SarifExportDto exportFindings(Long taskId) {
         requireTask(taskId);
         List<ReviewFinding> findings = reviewFindingMapper.selectList(
@@ -124,7 +174,6 @@ public class SarifFindingService {
             Map.of("tool", tool, "results", List.copyOf(results))
         ));
     }
-
     private JsonNode parse(String content) {
         try {
             return objectMapper.readTree(content);
@@ -132,7 +181,6 @@ public class SarifFindingService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Invalid SARIF JSON");
         }
     }
-
     private ParsedResult parseResult(JsonNode result, Map<String, String> ruleHelp) {
         String ruleId = result.path("ruleId").asText("").trim();
         if (!StringUtils.hasText(ruleId) || ruleId.length() > MAX_RULE_ID_LENGTH) {
@@ -159,10 +207,11 @@ public class SarifFindingService {
         return new ParsedResult(ruleId, filePath, line, severity(result.path("level").asText("")), message,
             ruleHelp.getOrDefault(ruleId, ""));
     }
-
-    private ReviewFinding toEntity(Long taskId, ParsedResult parsed) {
+    private ReviewFinding toEntity(Long taskId, Long attemptId, Long batchId, ParsedResult parsed) {
         ReviewFinding finding = new ReviewFinding();
         finding.setTaskId(taskId);
+        finding.setAttemptId(attemptId);
+        finding.setSourceBatchId(batchId);
         finding.setCurrentAttempt(true);
         finding.setCategory("FINDING");
         finding.setSeverity(parsed.severity());
@@ -200,7 +249,6 @@ public class SarifFindingService {
         finding.setReviewDimension("SECURITY");
         return finding;
     }
-
     private Map<String, String> ruleHelp(JsonNode rules) {
         Map<String, String> help = new LinkedHashMap<>();
         if (!rules.isArray()) {
@@ -219,7 +267,6 @@ public class SarifFindingService {
         }
         return help;
     }
-
     private String sanitizePath(String value) {
         if (!StringUtils.hasText(value)) {
             return "";
@@ -234,7 +281,6 @@ public class SarifFindingService {
         }
         return normalized.length() > 1024 ? "" : normalized;
     }
-
     private String severity(String level) {
         return switch (level == null ? "" : level.trim().toLowerCase()) {
             case "error" -> "HIGH";
@@ -243,7 +289,6 @@ public class SarifFindingService {
             default -> "INFO";
         };
     }
-
     private String sarifLevel(String severity) {
         return switch (severity == null ? "" : severity.toUpperCase()) {
             case "CRITICAL", "HIGH" -> "error";
@@ -251,17 +296,126 @@ public class SarifFindingService {
             default -> "note";
         };
     }
-
     private String text(String value, String fallback) {
         return StringUtils.hasText(value) ? value.trim() : fallback;
     }
-
-    private void requireTask(Long taskId) {
-        if (taskId == null || taskId < 1 || reviewTaskMapper.selectById(taskId) == null) {
+    private ReviewTask requireTask(Long taskId) {
+        ReviewTask task = taskId == null || taskId < 1 ? null : reviewTaskMapper.selectById(taskId);
+        if (task == null) {
             throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + taskId);
         }
+        return task;
     }
-
+    private ReviewExecutionAttempt requireCurrentAttempt(Long taskId, ReviewTask task) {
+        Long attemptId = task.getCurrentAttemptId();
+        if (attemptId == null || attemptId < 1) {
+            throw new BusinessException(
+                ErrorCode.BAD_REQUEST,
+                "SARIF import requires a current review execution attempt"
+            );
+        }
+        ReviewExecutionAttempt attempt = reviewExecutionAttemptMapper.selectById(attemptId);
+        if (attempt == null || !Objects.equals(taskId, attempt.getTaskId())) {
+            throw new BusinessException(
+                ErrorCode.BAD_REQUEST,
+                "The task current review execution attempt is missing or mismatched"
+            );
+        }
+        return attempt;
+    }
+    private String resolveCommitSha(ReviewTask task, ReviewExecutionAttempt attempt) {
+        String commitSha = text(attempt.getCommitSha(), task.getCommitSha());
+        if (!StringUtils.hasText(commitSha)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "SARIF import requires the attempt commit SHA");
+        }
+        if (commitSha.length() > 64 || commitSha.contains(" ") || commitSha.contains("\t")) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "The attempt commit SHA is invalid");
+        }
+        return commitSha;
+    }
+    private SarifImportBatchRow findBatch(Long taskId, Long attemptId, String tool, String version, String commit, String fingerprint) {
+        return reviewFindingMapper.selectSarifImportBatch(taskId, attemptId, tool, version, commit, fingerprint);
+    }
+    private SarifImportResponse responseFromBatch(Long taskId, SarifImportBatchRow batch) {
+        List<ReviewFinding> findings = batch.getId() == null ? List.of() : reviewFindingMapper.selectList(
+            new LambdaQueryWrapper<ReviewFinding>().eq(ReviewFinding::getSourceBatchId, batch.getId()).orderByAsc(ReviewFinding::getId));
+        List<SarifImportedFindingDto> imported = (findings == null ? List.<ReviewFinding>of() : findings).stream()
+            .map(SarifFindingService::toImportedDto).toList();
+        return new SarifImportResponse(taskId, batch.getImportedCount() == null ? imported.size() : batch.getImportedCount(),
+            batch.getSkippedCount() == null ? 0 : batch.getSkippedCount(), imported);
+    }
+    private void supersedePreviousBatches(Long taskId, Long attemptId, ToolMetadata tool, String commit, String fingerprint) {
+        List<SarifImportBatchRow> previous = reviewFindingMapper.selectActiveSarifImportBatches(
+            taskId, attemptId, tool.name(), tool.version(), commit, fingerprint);
+        if (previous != null) for (SarifImportBatchRow old : previous) {
+            if (old.getId() == null) continue;
+            reviewFindingMapper.update(null, new LambdaUpdateWrapper<ReviewFinding>()
+                .eq(ReviewFinding::getTaskId, taskId).eq(ReviewFinding::getAttemptId, attemptId)
+                .eq(ReviewFinding::getSourceBatchId, old.getId()).eq(ReviewFinding::getCurrentAttempt, true)
+                .set(ReviewFinding::getCurrentAttempt, false));
+            reviewFindingMapper.markSarifImportBatchSuperseded(old.getId(), java.time.LocalDateTime.now());
+        }
+        reviewFindingMapper.update(null, new LambdaUpdateWrapper<ReviewFinding>()
+            .eq(ReviewFinding::getTaskId, taskId).eq(ReviewFinding::getAttemptId, attemptId)
+            .eq(ReviewFinding::getSource, "SARIF").isNull(ReviewFinding::getSourceBatchId)
+            .eq(ReviewFinding::getCurrentAttempt, true).set(ReviewFinding::getCurrentAttempt, false));
+    }
+    private ToolMetadata toolMetadata(JsonNode runs) {
+        Set<String> names = new TreeSet<>();
+        Set<String> versions = new TreeSet<>();
+        for (JsonNode run : runs) {
+            JsonNode driver = run.path("tool").path("driver");
+            String name = metadataValue(driver.path("name").asText(""), 128);
+            String version = metadataValue(driver.path("version").asText(""), 64);
+            if (StringUtils.hasText(name)) {
+                names.add(name);
+            }
+            if (StringUtils.hasText(version)) {
+                versions.add(version);
+            }
+        }
+        return new ToolMetadata(
+            canonicalMetadata(names, "unknown", 128),
+            canonicalMetadata(versions, "", 64)
+        );
+    }
+    private String canonicalMetadata(Set<String> values, String fallback, int maxLength) {
+        if (values.isEmpty()) {
+            return fallback;
+        }
+        String normalized = String.join(",", values);
+        return normalized.length() > maxLength ? normalized.substring(0, maxLength) : normalized;
+    }
+    private String metadataValue(String value, int maxLength) {
+        if (!StringUtils.hasText(value)) {
+            return "";
+        }
+        String normalized = value.trim().replaceAll("[\\p{Cntrl}]", "");
+        return normalized.length() > maxLength ? normalized.substring(0, maxLength) : normalized;
+    }
+    private String sha256(String content) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                .digest(content.getBytes(StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 is unavailable", ex);
+        }
+    }
+    private static SarifImportedFindingDto toImportedDto(ReviewFinding finding) {
+        return new SarifImportedFindingDto(
+            finding.getRuleId(),
+            finding.getFilePath(),
+            finding.getLineNumber(),
+            finding.getSeverity(),
+            finding.getMessage()
+        );
+    }
+    private static <T> List<T> safeList(List<T> values) {
+        return values == null ? List.of() : values;
+    }
+    private record ToolMetadata(String name, String version) {
+    }
     private record ParsedResult(
         String ruleId,
         String filePath,

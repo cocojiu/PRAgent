@@ -7,7 +7,7 @@
     "externalDatabaseSupported": true,
     "publishedMigrationPolicy": "IMMUTABLE",
     "newInstallationStrategy": "VALIDATED_SCHEMA_SNAPSHOT_THEN_BASELINE",
-    "candidateVersion": 82,
+    "candidateVersion": 83,
     "requiredEvidence": [
       "empty database migration to the candidate version",
       "schema structure diff against the supported production shape",
@@ -16,7 +16,7 @@
     ],
     "decisionEvidence": [
       "application-prod.yml requires an externally supplied datasource",
-      "FlywayMigrationUpgradePathIntegrationTest verifies the V76 to V77, V77 to V78, V78 to V79, V79 to V80, V80 to V81 and V81 to V82 upgrade paths"
+      "FlywayMigrationUpgradePathIntegrationTest verifies the V76 to V77, V77 to V78, V78 to V79, V79 to V80, V80 to V81, V81 to V82 and V82 to V83 upgrade paths"
     ],
     "reconsiderWhen": "A V82 schema snapshot and all required rehearsal evidence are versioned together.",
     "rollbackStrategy": "restore a validated backup and apply a forward fix; never rewrite or delete a published migration"
@@ -147,6 +147,18 @@
       "nMinusOneCompatible": true,
       "interruptedRecovery": "rerun the additive migration after checking Flyway state; assignment and notification rows remain retryable",
       "rollbackStrategy": "forward fix or restore the validated V81 predecessor backup; do not delete published migration"
+    },
+    {
+      "version": 83,
+      "file": "V83__sarif_import_batch_identity.sql",
+      "phase": "EXPAND",
+      "estimatedRows": "one import identity row per SARIF payload and one optional source link per imported finding",
+      "lockType": "metadata-and-table",
+      "maxDurationSeconds": 600,
+      "maxDiskMegabytes": 1024,
+      "nMinusOneCompatible": true,
+      "interruptedRecovery": "rerun the additive migration after checking Flyway state; SARIF retries remain safe to replay",
+      "rollbackStrategy": "forward fix or restore the validated V82 predecessor backup; do not delete published migration"
     }
   ]
 }

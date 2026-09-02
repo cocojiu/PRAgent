@@ -43,6 +43,7 @@ public class MybatisPlusConfig {
         "review_rule_config",
         "review_rule_policy_snapshot",
         "review_strategy_policy_snapshot",
+        "sarif_import_batch",
         "secret_re_encryption_job",
         "secret_re_encryption_job_item",
         "review_task",

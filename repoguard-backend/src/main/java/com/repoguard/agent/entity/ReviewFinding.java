@@ -11,6 +11,7 @@ public class ReviewFinding {
     private Long id;
     private Long taskId;
     private Long attemptId;
+    private Long sourceBatchId;
     private Boolean currentAttempt;
     private String category;
     private String severity;
@@ -56,158 +57,46 @@ public class ReviewFinding {
     private String feedbackBy;
     private LocalDateTime feedbackAt;
 
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public Long getTaskId() {
-        return taskId;
-    }
-
-    public void setTaskId(Long taskId) {
-        this.taskId = taskId;
-    }
-
-    public Long getAttemptId() {
-        return attemptId;
-    }
-
-    public void setAttemptId(Long attemptId) {
-        this.attemptId = attemptId;
-    }
-
-    public Boolean getCurrentAttempt() {
-        return currentAttempt;
-    }
-
-    public void setCurrentAttempt(Boolean currentAttempt) {
-        this.currentAttempt = currentAttempt;
-    }
-
-    public String getCategory() {
-        return category;
-    }
-
-    public void setCategory(String category) {
-        this.category = category;
-    }
-
-    public String getSeverity() {
-        return severity;
-    }
-
-    public void setSeverity(String severity) {
-        this.severity = severity;
-    }
-
-    public String getSource() {
-        return source;
-    }
-
-    public void setSource(String source) {
-        this.source = source;
-    }
-
-    public String getRuleId() {
-        return ruleId;
-    }
-
-    public void setRuleId(String ruleId) {
-        this.ruleId = ruleId;
-    }
-
-    public String getFilePath() {
-        return filePath;
-    }
-
-    public void setFilePath(String filePath) {
-        this.filePath = filePath;
-    }
-
-    public Integer getLineNumber() {
-        return lineNumber;
-    }
-
-    public void setLineNumber(Integer lineNumber) {
-        this.lineNumber = lineNumber;
-    }
-
-    public String getMessage() {
-        return message;
-    }
-
-    public void setMessage(String message) {
-        this.message = message;
-    }
-
-    public String getRecommendation() {
-        return recommendation;
-    }
-
-    public void setRecommendation(String recommendation) {
-        this.recommendation = recommendation;
-    }
-
-    public String getConfidence() {
-        return confidence;
-    }
-
-    public void setConfidence(String confidence) {
-        this.confidence = confidence;
-    }
-
-    public String getEvidence() {
-        return evidence;
-    }
-
-    public void setEvidence(String evidence) {
-        this.evidence = evidence;
-    }
-
-    public String getImpact() {
-        return impact;
-    }
-
-    public void setImpact(String impact) {
-        this.impact = impact;
-    }
-
-    public String getFixExample() {
-        return fixExample;
-    }
-
-    public void setFixExample(String fixExample) {
-        this.fixExample = fixExample;
-    }
-
-    public Boolean getIsBlocking() {
-        return isBlocking;
-    }
-
-    public void setIsBlocking(Boolean isBlocking) {
-        this.isBlocking = isBlocking;
-    }
-
-    public String getEnforcementMode() {
-        return enforcementMode;
-    }
-
-    public void setEnforcementMode(String enforcementMode) {
-        this.enforcementMode = enforcementMode;
-    }
-
-    public String getPolicyReason() {
-        return policyReason;
-    }
-
-    public void setPolicyReason(String policyReason) {
-        this.policyReason = policyReason;
-    }
-
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    public Long getTaskId() { return taskId; }
+    public void setTaskId(Long taskId) { this.taskId = taskId; }
+    public Long getAttemptId() { return attemptId; }
+    public void setAttemptId(Long attemptId) { this.attemptId = attemptId; }
+    public Long getSourceBatchId() { return sourceBatchId; }
+    public void setSourceBatchId(Long sourceBatchId) { this.sourceBatchId = sourceBatchId; }
+    public Boolean getCurrentAttempt() { return currentAttempt; }
+    public void setCurrentAttempt(Boolean currentAttempt) { this.currentAttempt = currentAttempt; }
+    public String getCategory() { return category; }
+    public void setCategory(String category) { this.category = category; }
+    public String getSeverity() { return severity; }
+    public void setSeverity(String severity) { this.severity = severity; }
+    public String getSource() { return source; }
+    public void setSource(String source) { this.source = source; }
+    public String getRuleId() { return ruleId; }
+    public void setRuleId(String ruleId) { this.ruleId = ruleId; }
+    public String getFilePath() { return filePath; }
+    public void setFilePath(String filePath) { this.filePath = filePath; }
+    public Integer getLineNumber() { return lineNumber; }
+    public void setLineNumber(Integer lineNumber) { this.lineNumber = lineNumber; }
+    public String getMessage() { return message; }
+    public void setMessage(String message) { this.message = message; }
+    public String getRecommendation() { return recommendation; }
+    public void setRecommendation(String recommendation) { this.recommendation = recommendation; }
+    public String getConfidence() { return confidence; }
+    public void setConfidence(String confidence) { this.confidence = confidence; }
+    public String getEvidence() { return evidence; }
+    public void setEvidence(String evidence) { this.evidence = evidence; }
+    public String getImpact() { return impact; }
+    public void setImpact(String impact) { this.impact = impact; }
+    public String getFixExample() { return fixExample; }
+    public void setFixExample(String fixExample) { this.fixExample = fixExample; }
+    public Boolean getIsBlocking() { return isBlocking; }
+    public void setIsBlocking(Boolean isBlocking) { this.isBlocking = isBlocking; }
+    public String getEnforcementMode() { return enforcementMode; }
+    public void setEnforcementMode(String enforcementMode) { this.enforcementMode = enforcementMode; }
+    public String getPolicyReason() { return policyReason; }
+    public void setPolicyReason(String policyReason) { this.policyReason = policyReason; }
     public String getIssueType() { return issueType; }
     public void setIssueType(String issueType) { this.issueType = issueType; }
     public String getPreconditions() { return preconditions; }
@@ -250,60 +139,18 @@ public class ReviewFinding {
     public void setBlockReason(String blockReason) { this.blockReason = blockReason; }
     public String getAnchorType() { return anchorType; }
     public void setAnchorType(String anchorType) { this.anchorType = anchorType; }
-
-    public String getReviewDimension() {
-        return reviewDimension;
-    }
-
-    public void setReviewDimension(String reviewDimension) {
-        this.reviewDimension = reviewDimension;
-    }
-
-    public String getMethodName() {
-        return methodName;
-    }
-
-    public void setMethodName(String methodName) {
-        this.methodName = methodName;
-    }
-
-    public String getTestType() {
-        return testType;
-    }
-
-    public void setTestType(String testType) {
-        this.testType = testType;
-    }
-
-    public String getFeedbackStatus() {
-        return feedbackStatus;
-    }
-
-    public void setFeedbackStatus(String feedbackStatus) {
-        this.feedbackStatus = feedbackStatus;
-    }
-
-    public String getFeedbackNote() {
-        return feedbackNote;
-    }
-
-    public void setFeedbackNote(String feedbackNote) {
-        this.feedbackNote = feedbackNote;
-    }
-
-    public String getFeedbackBy() {
-        return feedbackBy;
-    }
-
-    public void setFeedbackBy(String feedbackBy) {
-        this.feedbackBy = feedbackBy;
-    }
-
-    public LocalDateTime getFeedbackAt() {
-        return feedbackAt;
-    }
-
-    public void setFeedbackAt(LocalDateTime feedbackAt) {
-        this.feedbackAt = feedbackAt;
-    }
+    public String getReviewDimension() { return reviewDimension; }
+    public void setReviewDimension(String reviewDimension) { this.reviewDimension = reviewDimension; }
+    public String getMethodName() { return methodName; }
+    public void setMethodName(String methodName) { this.methodName = methodName; }
+    public String getTestType() { return testType; }
+    public void setTestType(String testType) { this.testType = testType; }
+    public String getFeedbackStatus() { return feedbackStatus; }
+    public void setFeedbackStatus(String feedbackStatus) { this.feedbackStatus = feedbackStatus; }
+    public String getFeedbackNote() { return feedbackNote; }
+    public void setFeedbackNote(String feedbackNote) { this.feedbackNote = feedbackNote; }
+    public String getFeedbackBy() { return feedbackBy; }
+    public void setFeedbackBy(String feedbackBy) { this.feedbackBy = feedbackBy; }
+    public LocalDateTime getFeedbackAt() { return feedbackAt; }
+    public void setFeedbackAt(LocalDateTime feedbackAt) { this.feedbackAt = feedbackAt; }
 }
