@@ -511,3 +511,11 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 提交/远程验收：实现提交 `e6c1b466`（新增：建设评估报告生命周期与隐私治理）及修复提交 `87b12a08`（修复：登记评估报告生命周期审计租户表）均已推送 `origin/PRAgent-test`；最终 Pull Request Quality `33682952540` 的全部作业成功，含真实 MySQL/RabbitMQ、V76→V89 Flyway、后端/前端质量、浏览器 E2E、生产边缘、跟踪文件治理、密钥差异和依赖审查；Repository Governance `33682949198`、Auto Create Pull Request `33682949206` 亦成功。
 边界：报告治理只处理服务端已脱敏的聚合证据，未使用真实生产评测数据执行删除或导出；已发布引用通过外键和租户引用计数保护，幂等键跨报告重放会拒绝；保留期限扫描为每租户每次最多 100 条并可重试；未提交非 README Markdown、测试相关脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
 下一步：进入 `FUNC-P1-009` 发布状态漂移检测与人工确认修复，继续按单项提交、推送和 Actions 验收。
+
+2026-09-03 | 优化-67 | FUNC-P1-009 发布状态漂移检测与人工确认修复
+状态：已完成代码、完整本地质量门禁、中文提交、test 分支推送和远程 Actions 验收。
+变更：新增 V90 租户级发布漂移审计表和只读检测器，核对 Active/Canary 数量、流量、任务 release 引用以及 provider/model 元数据；扫描上限为 500 条并生成确定性 SHA-256 预览指纹。修复必须携带幂等键、预览指纹、显式确认和管理员角色，在租户锁与指纹 CAS 下执行；只修复未开始的 QUEUED 任务和发布状态/流量漂移，运行中任务只记录 skipped，不静默改派。失败事务回滚后通过 REQUIRES_NEW 写入 FAILED 审计，重复操作返回既有结果，避免无限重试。新增漂移检测/修复 API、定时检测、OpenAPI/前端契约和 V76→V90 升级路径。
+本地验证：后端 `mvn clean verify -DskipTests=false` 共 2834 项测试通过、0 失败、12 项按环境条件跳过，JaCoCo 行覆盖率约 0.891，架构、迁移、授权、OpenAPI 和契约门禁均通过；漂移相关定向测试通过；前端 `npm run quality`、生成客户端检查、类型检查、ESLint、Vitest 和 Vite 构建通过；`git diff --check` 通过。
+提交/远程验收：实现提交 `02bf550c`（新增：建设发布状态漂移检测与人工修复）已推送；首次 Pull Request Quality `33687978771` 暴露 Spring CGLIB 代理可见性与干净 CI 覆盖率问题；修复提交 `8ae24c8c`（修复：放开漂移审计组件的 Spring 代理可见性）和 `2270fa4f`（修复：补足发布漂移修复覆盖率门禁）均已推送。最终 Pull Request Quality `33689787892`、Repository Governance `33689783955`、Auto Create Pull Request `33689783933` 全部成功，包含真实 MySQL/RabbitMQ、前后端质量、Flyway、生产边缘、跟踪文件、密钥差异和依赖门禁。
+边界：检测/修复未连接真实生产租户或真实故障数据；扫描上限 500，操作人需按部署流程确认，运行中任务不自动修复；未提交非 README Markdown、测试相关脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
+下一步：按优化方案规则审计 P2-003/P2-004 条件项；如无真实多实验数据或生产 provider 事故证据则记录延后，不伪造完成。
