@@ -523,11 +523,13 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 2026-09-03 | 优化-68 | P2-003/P2-004 条件项审计
 状态：按优化方案规则审计后暂缓，不宣称完成。
 证据：方案明确要求真实多实验需求或供应商故障/合规事件证据后才启动；当前仓库仅有 taskId 稳定分桶、预算保护和规则降级实现及模拟/契约测试，没有真实多实验数据集达标记录、生产 provider 故障报告、指标基线或恢复演练记录。因此未引入多实验 cohort 隔离、实验互斥组或租户级 provider/model kill switch，避免伪造验收。
+提交/远程验收：审计记录提交 `b26b63f6`（记录：审计条件优化项并暂缓）已推送；Pull Request Quality `33690700247`、Repository Governance `33690702076`、Auto Create Pull Request `33690701905` 全部成功。
 后续触发：取得脱敏真实实验数据或生产事故报告、指标基线和回滚/恢复演练记录后，先更新优化方案与验收口径，再拆分实现并按单项提交、推送和 Actions 验收。
 边界：本次只记录条件项审计，不修改代码；不提交非 README Markdown、测试相关脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
 
 2026-09-03 | 优化-69 | P2-001/P2-002 条件项审计
 状态：按优化方案规则审计后暂缓，不宣称完成。
 证据：`ScmProvider` 适配器已具备 GitLab/Gitee/Bitbucket 的协议边界，但核心任务编排仍保持 GitHub-first，尚无一个真实非 GitHub 使用方完成凭证、Webhook、乱序/重放、diff、评论和状态回写 Smoke；跨次 finding 对比与任务幂等也不等于增量审查复用，当前没有按完整复用键记录 chunk shadow 命中/失效、真实回归集召回对比或成本/P95 成对基线。因此未开放 Provider-neutral 主链，也未启用跨 commit 结果复用。
+提交/远程验收：审计记录提交 `c984ad85`（记录：审计平台与增量复用条件项）已推送；Pull Request Quality `33691358234`、Repository Governance `33691354972`、Auto Create Pull Request `33691354924` 全部成功。
 后续触发：取得明确的非 GitHub 使用方或真实成本瓶颈，并提供脱敏平台 Smoke、固定真实回归集、召回/严重级别差异、成本与 P95 基线后，先更新优化方案与退出条件，再拆分实现；任一复用键变化、上下文不完整或高风险类别仍必须走完整审查。
 边界：本次只记录条件项审计，不修改代码；不提交非 README Markdown、测试相关脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
