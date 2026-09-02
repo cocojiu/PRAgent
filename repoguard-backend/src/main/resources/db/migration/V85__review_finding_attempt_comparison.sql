@@ -16,8 +16,8 @@ alter table review_finding
     add constraint fk_review_finding_previous
         foreign key (tenant_id, previous_finding_id)
         references review_finding(tenant_id, id) on delete
-        set null,
+        restrict,
     add constraint fk_review_finding_comparison_attempt
         foreign key (tenant_id, comparison_attempt_id)
         references review_execution_attempt(tenant_id, id) on delete
-        set null;
+        restrict;

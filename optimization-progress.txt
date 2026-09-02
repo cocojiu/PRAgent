@@ -465,9 +465,9 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 下一步：进入 `FUNC-P1-001` 跨次审查差异与修复追踪。
 
 2026-09-02 | 优化-61 | FUNC-P1-001 跨次审查差异与修复追踪
-状态：已完成代码、本地质量门禁，待提交并完成 test 分支远程 Actions 验收。
+状态：已完成代码、本地质量门禁；实现提交已推送，远程验收发现 V85 复合外键删除语义错误，已完成修复并待远程复验。
 变更：新增版本化 finding 指纹，按供应商、仓库、规则/问题类型、归一化路径、符号/代码锚点和语义摘要生成稳定身份，刻意忽略行号漂移；新增相邻成功 attempt 对比服务与分页 API，输出 NEW、PERSISTING、RESOLVED、REGRESSED、UNMATCHED 五类状态、匹配置信度、原因、版本和前序 Finding 关系。策略/提示词/模型/检测器元数据变化时明确标记不可直接比较；跨文件语义误匹配、重复指纹、历史数据无指纹和低置信度均保持 UNMATCHED，不自动继承 FALSE_POSITIVE 或修复反馈。规则、LLM、SARIF Finding 写入时自动初始化指纹与待比对状态；新增 V85 增量迁移、复合租户外键和索引。审查详情页增加 attempt 时间线、可比较性提示、状态统计、默认展示 NEW/REGRESSED/PERSISTING、RESOLVED 折叠和分页。
 本地验证：后端完整 `mvn clean verify -DskipTests=false` 共 2762 项测试通过、0 失败、12 项按环境条件跳过，JaCoCo 覆盖率门禁通过；后端 API/OpenAPI/生成客户端契约 25 项、指纹/对比定向测试通过；前端 `npm run quality` 通过（41 个测试文件、166 项测试，语句 65.87%、分支 53.97%、函数 56.71%、行 66.15%），`npm run build` 通过 bundle budget；架构预算、迁移、授权、`git diff --check` 均通过。
-提交/远程验收：实现提交与远程 Actions 待本项暂存后补录；前序契约快照遗漏已在本地修复并回归通过。架构复杂度评审预算更新为 77,850 行/1,030 类，单类上限仍为 450 行。
+提交/远程验收：实现提交 `8f832a5e`（新增：建设跨次审查差异与修复追踪）已推送 `origin/PRAgent-test`；Pull Request Quality `33638864823` 的前端、后端、治理和边缘作业已通过，但 Flyway V76→V85 与 Spring MySQL/RabbitMQ 集成因 V85 使用 `ON DELETE SET NULL` 作用于非空 `tenant_id` 而失败（MySQL 1830）。本修复将复合关系改为 `ON DELETE RESTRICT`，本地迁移/版本/对比定向测试 13 项通过，待修复提交远程复验。架构复杂度评审预算更新为 77,850 行/1,030 类，单类上限仍为 450 行。
 边界：只比较有成功基线且候选为 COMPLETED/PARTIAL 的 attempt；历史 Finding 采用惰性指纹补齐，未改变旧反馈；暂未把对比结果自动写回 GitHub 评论/Checks，保留到后续闭环项；未提交非 README Markdown、测试脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
 下一步：进入 `FUNC-P1-002` GitHub 修复验证与发布闭环，继续按单项提交、推送和 Actions 验收。
