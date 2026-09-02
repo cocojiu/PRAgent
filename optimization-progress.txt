@@ -519,3 +519,9 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 提交/远程验收：实现提交 `02bf550c`（新增：建设发布状态漂移检测与人工修复）已推送；首次 Pull Request Quality `33687978771` 暴露 Spring CGLIB 代理可见性与干净 CI 覆盖率问题；修复提交 `8ae24c8c`（修复：放开漂移审计组件的 Spring 代理可见性）和 `2270fa4f`（修复：补足发布漂移修复覆盖率门禁）均已推送。最终 Pull Request Quality `33689787892`、Repository Governance `33689783955`、Auto Create Pull Request `33689783933` 全部成功，包含真实 MySQL/RabbitMQ、前后端质量、Flyway、生产边缘、跟踪文件、密钥差异和依赖门禁。
 边界：检测/修复未连接真实生产租户或真实故障数据；扫描上限 500，操作人需按部署流程确认，运行中任务不自动修复；未提交非 README Markdown、测试相关脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
 下一步：按优化方案规则审计 P2-003/P2-004 条件项；如无真实多实验数据或生产 provider 事故证据则记录延后，不伪造完成。
+
+2026-09-03 | 优化-68 | P2-003/P2-004 条件项审计
+状态：按优化方案规则审计后暂缓，不宣称完成。
+证据：方案明确要求真实多实验需求或供应商故障/合规事件证据后才启动；当前仓库仅有 taskId 稳定分桶、预算保护和规则降级实现及模拟/契约测试，没有真实多实验数据集达标记录、生产 provider 故障报告、指标基线或恢复演练记录。因此未引入多实验 cohort 隔离、实验互斥组或租户级 provider/model kill switch，避免伪造验收。
+后续触发：取得脱敏真实实验数据或生产事故报告、指标基线和回滚/恢复演练记录后，先更新优化方案与验收口径，再拆分实现并按单项提交、推送和 Actions 验收。
+边界：本次只记录条件项审计，不修改代码；不提交非 README Markdown、测试相关脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
