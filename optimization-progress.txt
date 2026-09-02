@@ -503,3 +503,11 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 提交/远程验收：实现提交 `0074a91a`（新增：建设发布审计查询校验与受控导出）已推送 `origin/PRAgent-test`；Pull Request Quality `33676634928` 的 8 个作业全部成功；Repository Governance `33676630401`、Auto Create Pull Request `33676630525` 亦成功。
 架构与边界：复用 V86 审计表，通过嵌套 DTO 和独立校验服务控制类数量，架构预算保持 80,500 行/1,050 个生产类（实际 80,314 行/1,049 类），无需新增迁移；原始内部审计细节仍仅服务端保存用于校验，未使用真实生产租户审计数据或真实导出链路验证；未提交非 README Markdown、测试相关脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
 下一步：进入 `FUNC-P1-008` 评估报告生命周期、隐私与留存治理，继续按单项提交、推送和 Actions 验收。
+
+2026-09-03 | 优化-66 | FUNC-P1-008 评估报告生命周期与隐私治理
+状态：已完成评估报告保留期限、到期扫描、授权撤销阻断、冻结/软删除、受控导出、双人/管理员授权、幂等审计、本地质量门禁、中文提交、test 分支推送和远程 Actions 验收。
+变更：新增 V89 评估报告生命周期元数据和租户隔离生命周期审计表；报告默认保留 180 天（可配置且限制在 30～3650 天），后台按租户有界扫描到期报告，未被发布引用的报告转为 EXPIRED，被引用的报告转为 FROZEN。FREEZE、REVOKE_AUTHORIZATION、DELETE 均采用租户行锁与 CAS 版本更新，删除引用中的报告只记录 DELETE_BLOCKED_FREEZE，历史发布仍可追溯；撤销授权、冻结、过期或软删除报告不能作为新发布证据。导出仅允许 ADMIN/PLATFORM_ADMIN，生命周期写操作要求管理员或不同操作者二次审批，统一使用操作幂等键、失败审计重试和跨租户隔离；报告仍只保存数据集、版本、样本指纹和质量/成本等必要聚合字段，不保存原始 PR、源码、prompt、provider 响应或凭据。前端评测工作台接入状态、到期时间、冻结/撤销授权/软删除和受控导出操作，OpenAPI 与生成客户端契约同步更新。
+本地验证：后端完整 `mvn verify -DskipTests=false` 共 2824 项测试通过、0 失败、12 项按环境条件跳过，JaCoCo、架构棘轮、架构预算、迁移、授权和 OpenAPI 契约门禁通过；生命周期定向测试 13 项通过；前端 `npm run quality` 的 API 生成检查、类型检查、ESLint、43 个测试文件共 173 项测试全部通过；`git diff --check` 通过。首次远程 Pull Request Quality `33682309114` 因新增生命周期审计表未登记到 MyBatis 租户表清单而失败，已补齐登记后复验通过。
+提交/远程验收：实现提交 `e6c1b466`（新增：建设评估报告生命周期与隐私治理）及修复提交 `87b12a08`（修复：登记评估报告生命周期审计租户表）均已推送 `origin/PRAgent-test`；最终 Pull Request Quality `33682952540` 的全部作业成功，含真实 MySQL/RabbitMQ、V76→V89 Flyway、后端/前端质量、浏览器 E2E、生产边缘、跟踪文件治理、密钥差异和依赖审查；Repository Governance `33682949198`、Auto Create Pull Request `33682949206` 亦成功。
+边界：报告治理只处理服务端已脱敏的聚合证据，未使用真实生产评测数据执行删除或导出；已发布引用通过外键和租户引用计数保护，幂等键跨报告重放会拒绝；保留期限扫描为每租户每次最多 100 条并可重试；未提交非 README Markdown、测试相关脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
+下一步：进入 `FUNC-P1-009` 发布状态漂移检测与人工确认修复，继续按单项提交、推送和 Actions 验收。
