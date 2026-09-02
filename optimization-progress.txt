@@ -495,3 +495,11 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 提交/远程验收：实现提交 `b5e6af9e`（新增：建设发布运行指标与告警可观测性）及覆盖率修复提交 `05d127b0`（修复：补足运行指标服务覆盖率分支）均已推送 `origin/PRAgent-test`；首次 Pull Request Quality `33670567455` 因干净 CI 分支覆盖率边界失败，补充运行指标服务分支测试后，最终 Pull Request Quality `33671350354` 的 8 个作业全部成功；Repository Governance `33671342964`、Auto Create Pull Request `33671342950` 亦成功。
 边界：当前采集为服务端聚合快照，尚未接入真实生产 Prometheus/Alertmanager 或真实租户流量；通知继续复用现有安全出站配置，样本不足不会误报；未提交非 README Markdown、测试相关脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
 下一步：进入 `FUNC-P1-007` 发布审计查询、完整性验证与受控导出，继续按单项提交、推送和 Actions 验收。
+
+2026-09-03 | 优化-65 | FUNC-P1-007 发布审计查询、完整性验证与受控导出
+状态：已完成代码、完整本地质量门禁、中文提交、test 分支推送和远程 Actions 验收。
+变更：新增租户隔离的发布审计分页查询与筛选（releaseId、releaseKey、operator、action、时间范围），提供发布状态时间线和规范化事件哈希校验；校验结果区分 VALID、HASH_MISMATCH、MALFORMED_HASH，查询与导出均拒绝跨租户访问。新增有界 JSON/CSV 导出（单次最多 1000 条），仅输出审计元数据、状态快照、操作者、事件哈希和校验状态，不输出 provider、模型响应、prompt、源码、reason 或 details；聚合导出仅返回计数，前端发布中心接入时间线、完整性状态和下载入口。
+本地验证：完整后端 `mvn verify -DskipTests=false` 共 2810 项测试通过、0 失败、12 项按环境条件跳过，JaCoCo、架构棘轮、架构预算、迁移、授权和 OpenAPI 契约门禁通过；前端 OpenAPI 生成物检查、`vue-tsc -b`、ESLint、Vitest 全量（43 个测试文件、172 项测试）和 Vite 生产构建通过；`git diff --check` 通过。
+提交/远程验收：实现提交 `0074a91a`（新增：建设发布审计查询校验与受控导出）已推送 `origin/PRAgent-test`；Pull Request Quality `33676634928` 的 8 个作业全部成功；Repository Governance `33676630401`、Auto Create Pull Request `33676630525` 亦成功。
+架构与边界：复用 V86 审计表，通过嵌套 DTO 和独立校验服务控制类数量，架构预算保持 80,500 行/1,050 个生产类（实际 80,314 行/1,049 类），无需新增迁移；原始内部审计细节仍仅服务端保存用于校验，未使用真实生产租户审计数据或真实导出链路验证；未提交非 README Markdown、测试相关脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
+下一步：进入 `FUNC-P1-008` 评估报告生命周期、隐私与留存治理，继续按单项提交、推送和 Actions 验收。
