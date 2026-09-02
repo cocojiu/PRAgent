@@ -12,12 +12,12 @@ import org.springframework.stereotype.Repository;
 
 /** Persistence boundary for idempotent drift repair previews and outcomes. */
 @Repository
-final class LlmModelReleaseDriftAuditRepository {
+public class LlmModelReleaseDriftAuditRepository {
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
 
-    LlmModelReleaseDriftAuditRepository(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
+    public LlmModelReleaseDriftAuditRepository(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
     }

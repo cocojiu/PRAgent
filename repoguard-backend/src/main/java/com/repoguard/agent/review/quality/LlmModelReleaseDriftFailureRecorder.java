@@ -6,11 +6,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 /** Records a failed repair in a new transaction after the mutation transaction is rolled back. */
 @Service
-final class LlmModelReleaseDriftFailureRecorder {
+public class LlmModelReleaseDriftFailureRecorder {
 
     private final LlmModelReleaseDriftAuditRepository auditRepository;
 
-    LlmModelReleaseDriftFailureRecorder(LlmModelReleaseDriftAuditRepository auditRepository) {
+    public LlmModelReleaseDriftFailureRecorder(LlmModelReleaseDriftAuditRepository auditRepository) {
         this.auditRepository = auditRepository;
     }
 
