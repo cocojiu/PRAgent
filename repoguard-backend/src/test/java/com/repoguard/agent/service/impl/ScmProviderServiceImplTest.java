@@ -59,6 +59,16 @@ class ScmProviderServiceImplTest {
             .hasMessageContaining("Review task not found");
     }
 
+    @Test
+    void exposesProviderCatalogAndOpenChangeRequestsThroughApplicationBoundary() {
+        when(registry.descriptors()).thenReturn(List.of());
+        when(registry.require("gitlab")).thenReturn(provider);
+        when(provider.listOpenChangeRequests()).thenReturn(List.of());
+
+        assertThat(service.providers()).isEmpty();
+        assertThat(service.changeRequests("gitlab")).isEmpty();
+    }
+
     private ReviewTask task() {
         ReviewTask value = new ReviewTask();
         value.setId(42L);

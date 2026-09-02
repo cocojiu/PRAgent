@@ -156,6 +156,27 @@ class GitlabScmProviderTest {
             .isEqualTo("canceled");
     }
 
+    @Test
+    void publicConstructorAndMissingRequestNumberRemainValidated() {
+        ScmIntegrationSettings settings = new ScmIntegrationSettings(
+            "GITLAB", "CONFIGURED", "https://gitlab.com", "token-for-test", null, null, null, 3L
+        );
+        when(configProvider.settings("GITLAB")).thenReturn(settings);
+        GitlabScmProvider provider = new GitlabScmProvider(
+            configProvider, RestClient.builder(), new ExternalHttpJsonResponseReader(
+                new ObjectMapper(), new ExternalHttpResponseReader()
+            ), resilience, null
+        );
+
+        assertThat(provider.configuredRepository()).isNull();
+        ReviewTask invalidTask = new ReviewTask();
+        invalidTask.setOrganization("acme");
+        invalidTask.setRepository("widgets");
+        assertThatThrownBy(() -> provider.fetchPullRequestHeadSha(invalidTask))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("number is required");
+    }
+
     private GitlabScmProvider provider() {
         ExternalHttpJsonResponseReader reader = new ExternalHttpJsonResponseReader(
             new ObjectMapper(), new ExternalHttpResponseReader()

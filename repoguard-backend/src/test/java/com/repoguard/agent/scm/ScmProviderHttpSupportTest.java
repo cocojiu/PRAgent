@@ -41,6 +41,9 @@ class ScmProviderHttpSupportTest {
         assertThat(support.repository(" acme ", " widgets ", false))
             .isEqualTo(new ScmRepositoryRef("acme", "widgets"));
         assertThat(support.repository(null, "", false)).isNull();
+        assertThatThrownBy(() -> new ScmRepositoryRef(" ", "widgets"))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("namespace");
     }
 
     @Test
