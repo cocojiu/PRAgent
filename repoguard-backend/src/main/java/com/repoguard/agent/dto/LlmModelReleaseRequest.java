@@ -69,4 +69,16 @@ public record LlmModelReleaseRequest(@NotBlank @Size(max = 128) String releaseKe
         @Min(0) int changedLineCount, @NotBlank @Pattern(regexp = "[a-z0-9][a-z0-9._-]{0,63}") String fileTypeGroup,
         @Pattern(regexp = "[a-z0-9][a-z0-9._-]{0,127}") String expectedLocationKey) {
     }
+
+    /**
+     * Explicit lifecycle command for an aggregate-only evaluation report. A non-admin operator
+     * must provide a distinct second approver; the idempotency key makes retries safe.
+     */
+    public record LlmEvaluationReportLifecycleRequest(
+        @NotBlank @Pattern(regexp = "(?i)FREEZE|REVOKE_AUTHORIZATION|DELETE") String action,
+        @NotBlank @Size(max = 512) String reason,
+        @Size(max = 128) String secondApprover,
+        @NotBlank @Size(max = 128) String idempotencyKey
+    ) {
+    }
 }

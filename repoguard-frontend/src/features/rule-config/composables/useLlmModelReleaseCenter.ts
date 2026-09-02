@@ -8,7 +8,8 @@ import {
   promoteLlmModelRelease,
   registerLlmModelShadowRelease,
   verifyLlmModelReleaseAudit,
-  rollbackLlmModelRelease
+  rollbackLlmModelRelease,
+  transitionLlmEvaluationReportLifecycle
 } from "@/api/config";
 import type {
   LlmEvaluationReport,
@@ -204,6 +205,24 @@ export const useLlmModelReleaseCenter = () => {
     );
   };
 
+  const transitionReportLifecycle = async (
+    reportId: number,
+    lifecycleAction: "FREEZE" | "REVOKE_AUTHORIZATION" | "DELETE",
+    reason: string
+  ) => {
+    if (!reason.trim()) {
+      errorMessage.value = "生命周期操作必须填写原因";
+      return;
+    }
+    await runAction(`report-${lifecycleAction.toLowerCase()}-${reportId}`, () =>
+      transitionLlmEvaluationReportLifecycle(reportId, {
+        action: lifecycleAction,
+        reason: reason.trim(),
+        idempotencyKey: `${lifecycleAction.toLowerCase()}-${reportId}-${Date.now()}`
+      })
+    );
+  };
+
   return {
     action,
     auditFilterAction,
@@ -230,6 +249,7 @@ export const useLlmModelReleaseCenter = () => {
     rollback,
     selectedReport,
     selectedReportId,
-    trendDays
+    trendDays,
+    transitionReportLifecycle
   };
 };

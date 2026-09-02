@@ -83,6 +83,7 @@ POST /api/v1/config/integrations/rabbitmq/test query=[] body=ServiceIntegrationC
 POST /api/v1/config/notification-bindings query=[] body=NotificationBindingRequest bodyRequired=true
 POST /api/v1/config/notification-bindings/{id}/test query=[] body=- bodyRequired=false
 POST /api/v1/config/review-calibration/evaluation-reports query=[] body=LlmEvaluationRequest bodyRequired=true
+POST /api/v1/config/review-calibration/evaluation-reports/{reportId}/lifecycle query=[] body=LlmEvaluationReportLifecycleRequest bodyRequired=true
 POST /api/v1/config/review-calibration/release-center/promote query=[] body=LlmModelReleaseRequest bodyRequired=true
 POST /api/v1/config/review-calibration/release-center/shadow query=[] body=LlmModelReleaseRequest bodyRequired=true
 POST /api/v1/config/review-calibration/release-center/{releaseId}/rollback query=[] body=LlmModelRollbackRequest bodyRequired=true

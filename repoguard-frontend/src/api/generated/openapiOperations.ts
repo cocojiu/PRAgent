@@ -34,6 +34,7 @@ import type {
   LlmEvaluationExport,
   LlmEvaluationReport,
   LlmEvaluationReportComparison,
+  LlmEvaluationReportLifecycleRequest,
   LlmEvaluationRequest,
   LlmModelRelease,
   LlmModelReleaseAudit,
@@ -439,6 +440,13 @@ export type GeneratedOpenApiOperationMap = {
     query: never;
     body: LlmModelRollbackRequest;
     response: LlmModelRelease;
+  };
+  "reviewCalibrationControllerTransitionEvaluationReportLifecycle": {
+    method: "POST";
+    pathParams: { reportId: number };
+    query: never;
+    body: LlmEvaluationReportLifecycleRequest;
+    response: LlmEvaluationReport;
   };
   "reviewCalibrationControllerVerifyModelReleaseAudit": {
     method: "GET";
@@ -1262,6 +1270,14 @@ export const generatedOpenApiOperations = {
     method: "POST",
     path: "/api/v1/config/review-calibration/release-center/{releaseId}/rollback",
     pathParamNames: ["releaseId"],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "reviewCalibrationControllerTransitionEvaluationReportLifecycle": {
+    method: "POST",
+    path: "/api/v1/config/review-calibration/evaluation-reports/{reportId}/lifecycle",
+    pathParamNames: ["reportId"],
     queryParamNames: [],
     hasRequestBody: true,
     requestBodyRequired: true

@@ -1892,6 +1892,68 @@
         }
       }
     },
+    "/api/v1/config/review-calibration/evaluation-reports/{reportId}/lifecycle" : {
+      "post" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerTransitionEvaluationReportLifecycle",
+        "x-controller-operation" : "ReviewCalibrationController#transitionEvaluationReportLifecycle",
+        "parameters" : [ {
+          "name" : "reportId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "LlmEvaluationReportLifecycleRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/LlmEvaluationReportLifecycleRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "EvaluationReportDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/EvaluationReportDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/config/review-calibration/queue" : {
       "get" : {
         "tags" : [ "ReviewCalibration" ],
@@ -9445,6 +9507,33 @@
           "createdAt" : {
             "type" : "string",
             "format" : "date-time"
+          },
+          "lifecycleStatus" : {
+            "type" : "string"
+          },
+          "retentionDays" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "expiresAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "authorizationRevokedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "frozenAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "deletedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "lifecycleVersion" : {
+            "type" : "integer",
+            "format" : "int64"
           }
         }
       },
@@ -10559,6 +10648,32 @@
           }
         },
         "required" : [ "caseId", "category", "expectedFinding", "predictedFinding", "anchorValid", "parseSucceeded", "latencyMs", "totalTokens", "estimatedCost", "commentPublishAttempted", "ruleFindingCount", "llmFindingCount", "verifiedFindingCount", "split", "sourceRepositoryKey", "language", "changedFileCount", "changedLineCount", "fileTypeGroup" ]
+      },
+      "LlmEvaluationReportLifecycleRequest" : {
+        "type" : "object",
+        "x-java-type" : "LlmEvaluationReportLifecycleRequest",
+        "properties" : {
+          "action" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "(?i)FREEZE|REVOKE_AUTHORIZATION|DELETE"
+          },
+          "reason" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 512
+          },
+          "secondApprover" : {
+            "type" : "string",
+            "maxLength" : 128
+          },
+          "idempotencyKey" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          }
+        },
+        "required" : [ "action", "reason", "idempotencyKey" ]
       },
       "LlmEvaluationRequest" : {
         "type" : "object",

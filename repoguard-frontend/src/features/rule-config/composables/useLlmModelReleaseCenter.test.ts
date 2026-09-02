@@ -8,7 +8,8 @@ import {
   promoteLlmModelRelease,
   registerLlmModelShadowRelease,
   rollbackLlmModelRelease,
-  verifyLlmModelReleaseAudit
+  verifyLlmModelReleaseAudit,
+  transitionLlmEvaluationReportLifecycle
 } from "@/api/config";
 import type { LlmEvaluationReport, LlmModelReleaseCenter } from "@/types";
 import { buildLlmModelReleaseRequest, useLlmModelReleaseCenter } from "./useLlmModelReleaseCenter";
@@ -22,7 +23,8 @@ vi.mock("@/api/config", () => ({
   exportLlmModelReleaseAudits: vi.fn(),
   promoteLlmModelRelease: vi.fn(),
   registerLlmModelShadowRelease: vi.fn(),
-  rollbackLlmModelRelease: vi.fn()
+  rollbackLlmModelRelease: vi.fn(),
+  transitionLlmEvaluationReportLifecycle: vi.fn()
 }));
 
 describe("useLlmModelReleaseCenter", () => {
@@ -35,6 +37,7 @@ describe("useLlmModelReleaseCenter", () => {
   const registerShadow = vi.mocked(registerLlmModelShadowRelease);
   const promote = vi.mocked(promoteLlmModelRelease);
   const rollback = vi.mocked(rollbackLlmModelRelease);
+  const transitionLifecycle = vi.mocked(transitionLlmEvaluationReportLifecycle);
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -60,6 +63,7 @@ describe("useLlmModelReleaseCenter", () => {
     registerShadow.mockResolvedValue({} as never);
     promote.mockResolvedValue({} as never);
     rollback.mockResolvedValue({} as never);
+    transitionLifecycle.mockResolvedValue({} as never);
   });
 
   it("builds release requests entirely from report evidence", () => {
@@ -104,6 +108,18 @@ describe("useLlmModelReleaseCenter", () => {
     await state.load();
     await state.rollback(11, "  incident  ");
     expect(rollback).toHaveBeenCalledWith(11, { reason: "incident" });
+  });
+
+  it("submits an idempotent evaluation report lifecycle command", async () => {
+    const state = useLlmModelReleaseCenter();
+    await state.load();
+    await state.transitionReportLifecycle(77, "FREEZE", "retention review");
+
+    expect(transitionLifecycle).toHaveBeenCalledWith(77, expect.objectContaining({
+      action: "FREEZE",
+      reason: "retention review",
+      idempotencyKey: expect.stringContaining("freeze-77-")
+    }));
   });
 
   it("loads, verifies and exports the bounded audit timeline", async () => {
@@ -185,7 +201,11 @@ const report = (): LlmEvaluationReport => ({
     llmContributionRate: 0.8,
     verifiedContributionRate: 0.8
   },
-  createdBy: "tester"
+  createdBy: "tester",
+  lifecycleStatus: "ACTIVE",
+  retentionDays: 180,
+  expiresAt: "2027-03-01T00:00:00",
+  lifecycleVersion: 0
 });
 
 const center = (): LlmModelReleaseCenter => ({

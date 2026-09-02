@@ -1,8 +1,11 @@
 package com.repoguard.agent.scheduling;
 
 import com.repoguard.agent.config.SchedulerRuntimeEnabled;
+import com.repoguard.agent.review.quality.LlmModelReleaseService;
 import com.repoguard.agent.review.quality.LlmModelReleaseMetricsService;
 import com.repoguard.agent.tenancy.TenantScheduledTaskRunner;
+import java.util.Objects;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -13,17 +16,35 @@ public class LlmModelReleaseMetricsScheduler {
 
     private final TenantScheduledTaskRunner tenantRunner;
     private final LlmModelReleaseMetricsService metricsService;
+    private final LlmModelReleaseService releaseService;
+
+    @Autowired
+    public LlmModelReleaseMetricsScheduler(
+        TenantScheduledTaskRunner tenantRunner,
+        LlmModelReleaseMetricsService metricsService,
+        LlmModelReleaseService releaseService
+    ) {
+        this.tenantRunner = Objects.requireNonNull(tenantRunner, "tenantRunner");
+        this.metricsService = Objects.requireNonNull(metricsService, "metricsService");
+        this.releaseService = Objects.requireNonNull(releaseService, "releaseService");
+    }
 
     public LlmModelReleaseMetricsScheduler(
         TenantScheduledTaskRunner tenantRunner,
         LlmModelReleaseMetricsService metricsService
     ) {
-        this.tenantRunner = tenantRunner;
-        this.metricsService = metricsService;
+        this.tenantRunner = Objects.requireNonNull(tenantRunner, "tenantRunner");
+        this.metricsService = Objects.requireNonNull(metricsService, "metricsService");
+        this.releaseService = null;
     }
 
     @Scheduled(cron = "${repoguard.review.llm-release-metrics-cron:0 5 * * * *}")
     public void collectReleaseRuntimeMetrics() {
-        tenantRunner.runForEachActiveTenant("llm_release_runtime_metrics", metricsService::collectCurrentWindow);
+        tenantRunner.runForEachActiveTenant("llm_release_runtime_metrics", () -> {
+            metricsService.collectCurrentWindow();
+            if (releaseService != null) {
+                releaseService.expireDueEvaluationReports();
+            }
+        });
     }
 }

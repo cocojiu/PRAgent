@@ -78,6 +78,7 @@ management:
 
 repoguard:
   review:
+    evaluation-report-retention-days: ${REPOGUARD_EVALUATION_REPORT_RETENTION_DAYS:180}
     execution:
       # End-to-end budget starts before GitHub diff retrieval and covers rule,
       # LLM and result persistence stages. Terminal persistence may use a short
@@ -128,7 +129,7 @@ repoguard:
     # Roles that do not own Flyway migrations refuse to start below this version.
     # Keep in sync with the highest version under db/migration; the production
     # readiness check enforces the match.
-    expected-version: ${REPOGUARD_SCHEMA_EXPECTED_VERSION:88}
+    expected-version: ${REPOGUARD_SCHEMA_EXPECTED_VERSION:89}
   tenancy:
     enabled: ${REPOGUARD_TENANCY_ENABLED:false}
     header-name: ${REPOGUARD_TENANCY_HEADER_NAME:X-RepoGuard-Tenant}

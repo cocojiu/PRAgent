@@ -13,6 +13,7 @@ import com.repoguard.agent.dto.LlmModelReleaseDto.LlmModelReleaseAuditVerificati
 import com.repoguard.agent.dto.LlmModelReleaseRequest;
 import com.repoguard.agent.dto.LlmModelReleaseRequest.LlmEvaluationObservationRequest;
 import com.repoguard.agent.dto.LlmModelReleaseRequest.LlmEvaluationRequest;
+import com.repoguard.agent.dto.LlmModelReleaseRequest.LlmEvaluationReportLifecycleRequest;
 import com.repoguard.agent.dto.LlmModelRollbackRequest;
 import com.repoguard.agent.dto.LlmQualityByModelDto;
 import com.repoguard.agent.entity.ReviewTask;
@@ -22,11 +23,13 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -50,15 +53,26 @@ public class LlmModelReleaseService {
     private final ObjectMapper objectMapper;
     private final LlmModelReleaseRuntimeSupport runtimeSupport;
     private final LlmModelReleaseAuditService auditService;
+    private final LlmEvaluationReportLifecycleService lifecycleService;
 
+    /** Compatibility constructor used by lightweight unit tests and legacy callers. */
     public LlmModelReleaseService(JdbcTemplate jdbcTemplate, LlmQualityComparisonProvider qualityComparisonProvider,
         LlmModelReleaseRepository releaseRepository, ObjectMapper objectMapper) {
+        this(jdbcTemplate, qualityComparisonProvider, releaseRepository, objectMapper,
+            new LlmEvaluationReportLifecycleService(jdbcTemplate, releaseRepository));
+    }
+
+    @Autowired
+    public LlmModelReleaseService(JdbcTemplate jdbcTemplate, LlmQualityComparisonProvider qualityComparisonProvider,
+        LlmModelReleaseRepository releaseRepository, ObjectMapper objectMapper,
+        LlmEvaluationReportLifecycleService lifecycleService) {
         Objects.requireNonNull(jdbcTemplate, "jdbcTemplate");
         this.qualityComparisonProvider = Objects.requireNonNull(qualityComparisonProvider, "qualityComparisonProvider");
         this.releaseRepository = Objects.requireNonNull(releaseRepository, "releaseRepository");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
         this.runtimeSupport = new LlmModelReleaseRuntimeSupport(jdbcTemplate, this.releaseRepository, this.objectMapper);
         this.auditService = new LlmModelReleaseAuditService(this.releaseRepository, this.objectMapper);
+        this.lifecycleService = Objects.requireNonNull(lifecycleService, "lifecycleService");
     }
     @Transactional
     public LlmModelReleaseCenterDto getCenter(Integer trendDays) {
@@ -79,7 +93,10 @@ public class LlmModelReleaseService {
     public LlmModelReleaseDto.EvaluationReportDto createEvaluationReport(LlmEvaluationRequest request, String operator) {
         EvaluationInput input = normalizeEvaluation(request);
         LlmEvaluationReport report = LlmQualityEvaluator.evaluate(input.version(), input.dataset(), input.observations(), input.minimumSamples());
-        return toEvaluationDto(releaseRepository.insertEvaluationReport(TenantContext.currentTenantIdOrDefault(), reportKey(report), report, normalizeOperator(operator)));
+        return toEvaluationDto(releaseRepository.insertEvaluationReport(
+            TenantContext.currentTenantIdOrDefault(), reportKey(report), report,
+            normalizeOperator(operator), lifecycleService.defaultRetentionDays()
+        ));
     }
 
     @Transactional(readOnly = true)
@@ -112,9 +129,32 @@ public class LlmModelReleaseService {
     @Transactional(readOnly = true)
     public LlmModelReleaseDto.EvaluationExportDto exportEvaluationReport(long reportId, String format) {
         LlmModelReleaseDto.EvaluationReportDto dto = getEvaluationReport(reportId);
+        return exportEvaluationReportContent(reportId, format, dto);
+    }
+
+    @Transactional
+    public LlmModelReleaseDto.EvaluationExportDto exportEvaluationReport(
+        long reportId, String format, String operator, String role) {
+        lifecycleService.authorizeExport(reportId, format, operator, role);
+        return exportEvaluationReportContent(reportId, format, getEvaluationReport(reportId));
+    }
+
+    private LlmModelReleaseDto.EvaluationExportDto exportEvaluationReportContent(
+        long reportId, String format, LlmModelReleaseDto.EvaluationReportDto dto) {
         String normalizedFormat = "html".equalsIgnoreCase(format) ? "html" : "json";
         String content = "html".equals(normalizedFormat) ? htmlExport(dto) : jsonExport(dto);
         return new LlmModelReleaseDto.EvaluationExportDto(reportId, normalizedFormat, sha256(content), content);
+    }
+
+    @Transactional
+    public LlmModelReleaseDto.EvaluationReportDto transitionEvaluationReport(
+        long reportId, LlmEvaluationReportLifecycleRequest request, String operator, String role) {
+        return toEvaluationDto(lifecycleService.transition(reportId, request, operator, role));
+    }
+
+    /** Called by the tenant scheduler; due reports remain retryable when a batch fails. */
+    public int expireDueEvaluationReports() {
+        return lifecycleService.expireDueReports();
     }
 
     @Transactional(readOnly = true)
@@ -244,6 +284,9 @@ public class LlmModelReleaseService {
         if (request == null || request.evaluationReportId() == null || request.evaluationReportId() < 1) throw new BusinessException(ErrorCode.BAD_REQUEST, "模型发布必须绑定服务端评估报告");
         LlmModelReleaseRepository.StoredEvaluationReport evidence = releaseRepository.findEvaluationReport(TenantContext.currentTenantIdOrDefault(), request.evaluationReportId());
         if (!"COMPLETED".equalsIgnoreCase(evidence.status())) throw new BusinessException(ErrorCode.BAD_REQUEST, "评估报告未完成，不能发布模型");
+        if (!lifecycleService.usableForNewRelease(evidence, LocalDateTime.now())) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "评估报告已过期、冻结或撤销授权，不能作为新发布证据");
+        }
         if (!matches(request, evidence.report())) throw new BusinessException(ErrorCode.BAD_REQUEST, "模型发布请求与评估报告版本或数据集不一致");
         return evidence;
     }
@@ -291,7 +334,18 @@ public class LlmModelReleaseService {
         LlmEvaluationReport report = stored.report();
         LlmEvaluationDatasetMetadata dataset = report.dataset();
         LlmEvaluationVersion version = report.version();
-        return new LlmModelReleaseDto.EvaluationReportDto(stored.id(), stored.reportKey(), stored.status(), dataset.datasetId(), dataset.datasetVersion(), dataset.kind().name(), dataset.sourceRepositoryCount(), dataset.sampleCount(), dataset.fixedRegressionSamples(), dataset.rollingObservationSamples(), dataset.authorized(), dataset.anonymized(), dataset.humanReviewed(), dataset.sampleFingerprint(), version.provider(), version.model(), version.promptVersion(), version.contextVersion(), version.schemaVersion(), version.chunkPolicyVersion(), version.temperature(), version.ruleVersion(), version.codeRevision(), report.expectedFindings(), report.predictedFindings(), report.truePositives(), report.falsePositives(), report.falseNegatives(), report.precision(), report.recall(), report.precisionWilsonLowerBound(), report.anchorRate(), report.duplicateRate(), report.parseFailureRate(), report.severityConfusion(), report.totalLatencyMs(), report.totalTokens(), report.totalCost(), report.blockers(), report.eligible(), metricsDto(report.metrics()), stored.createdBy(), stored.createdAt());
+        return new LlmModelReleaseDto.EvaluationReportDto(
+            stored.id(), stored.reportKey(), stored.status(), dataset.datasetId(), dataset.datasetVersion(), dataset.kind().name(),
+            dataset.sourceRepositoryCount(), dataset.sampleCount(), dataset.fixedRegressionSamples(), dataset.rollingObservationSamples(),
+            dataset.authorized(), dataset.anonymized(), dataset.humanReviewed(), dataset.sampleFingerprint(), version.provider(), version.model(),
+            version.promptVersion(), version.contextVersion(), version.schemaVersion(), version.chunkPolicyVersion(), version.temperature(),
+            version.ruleVersion(), version.codeRevision(), report.expectedFindings(), report.predictedFindings(), report.truePositives(),
+            report.falsePositives(), report.falseNegatives(), report.precision(), report.recall(), report.precisionWilsonLowerBound(),
+            report.anchorRate(), report.duplicateRate(), report.parseFailureRate(), report.severityConfusion(), report.totalLatencyMs(),
+            report.totalTokens(), report.totalCost(), report.blockers(), report.eligible(), metricsDto(report.metrics()), stored.createdBy(),
+            stored.createdAt(), stored.lifecycleStatus(), stored.retentionDays(), stored.effectiveExpiresAt(),
+            stored.authorizationRevokedAt(), stored.frozenAt(), stored.deletedAt(), stored.lifecycleVersion()
+        );
     }
 
     private LlmModelReleaseDto.EvaluationMetricsDto metricsDto(LlmEvaluationMetrics metrics) {

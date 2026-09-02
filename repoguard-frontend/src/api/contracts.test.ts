@@ -12,7 +12,8 @@ import {
   createLlmEvaluationReport,
   exportLlmEvaluationReport,
   fetchLlmEvaluationReport,
-  fetchLlmEvaluationReports
+  fetchLlmEvaluationReports,
+  transitionLlmEvaluationReportLifecycle
 } from "./config";
 import {
   fetchNotificationReadKeys,
@@ -156,6 +157,11 @@ describe("apiRequest", () => {
     await fetchLlmEvaluationReport(7);
     await compareLlmEvaluationReports(7, 8);
     await exportLlmEvaluationReport(7, "html");
+    await transitionLlmEvaluationReportLifecycle(7, {
+      action: "FREEZE",
+      reason: "retention review",
+      idempotencyKey: "freeze-7-1"
+    });
 
     const calls = fetchMock.mock.calls as [string, RequestInit][];
     expect(calls[0][0]).toContain("/api/v1/config/review-calibration/evaluation-reports");
@@ -165,6 +171,8 @@ describe("apiRequest", () => {
     expect(calls[3][0]).toContain("/evaluation-reports/7/compare/8");
     expect(calls[4][0]).toContain("/evaluation-reports/7/export");
     expect(calls[4][0]).toContain("format=html");
+    expect(calls[5][0]).toContain("/evaluation-reports/7/lifecycle");
+    expect(calls[5][1].method).toBe("POST");
   });
 
   it("forwards cancellation signals through the typed API contract", async () => {

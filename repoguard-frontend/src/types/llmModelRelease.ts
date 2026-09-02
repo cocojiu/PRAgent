@@ -111,6 +111,13 @@ export interface LlmEvaluationRequest {
   minimumSamples?: number;
 }
 
+export interface LlmEvaluationReportLifecycleRequest {
+  action: "FREEZE" | "REVOKE_AUTHORIZATION" | "DELETE" | string;
+  reason: string;
+  secondApprover?: string;
+  idempotencyKey: string;
+}
+
 export interface LlmEvaluationMetrics {
   labeledComments: number;
   usefulComments: number;
@@ -181,6 +188,13 @@ export interface LlmEvaluationReport {
   metrics: LlmEvaluationMetrics;
   createdBy: string;
   createdAt?: string;
+  lifecycleStatus: "ACTIVE" | "EXPIRED" | "FROZEN" | "AUTHORIZATION_REVOKED" | "DELETED" | string;
+  retentionDays: number;
+  expiresAt?: string;
+  authorizationRevokedAt?: string;
+  frozenAt?: string;
+  deletedAt?: string;
+  lifecycleVersion: number;
 }
 
 export interface LlmEvaluationReportComparison {

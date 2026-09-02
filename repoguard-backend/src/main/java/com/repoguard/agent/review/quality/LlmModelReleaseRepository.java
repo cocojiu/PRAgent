@@ -25,6 +25,8 @@ import org.springframework.stereotype.Repository;
 /** Tenant-scoped persistence for model releases and aggregate-only evaluation reports. */
 @Repository
 public class LlmModelReleaseRepository {
+    static final int DEFAULT_REPORT_RETENTION_DAYS = 180;
+
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
 
@@ -35,13 +37,22 @@ public class LlmModelReleaseRepository {
     /** Inserts an immutable aggregate report; deterministic retries return the original row. */
     public StoredEvaluationReport insertEvaluationReport(long tenantId, String reportKey,
         LlmEvaluationReport report, String operator) {
+        return insertEvaluationReport(tenantId, reportKey, report, operator, DEFAULT_REPORT_RETENTION_DAYS);
+    }
+
+    /** Inserts an immutable report with a bounded server-side retention policy. */
+    public StoredEvaluationReport insertEvaluationReport(long tenantId, String reportKey,
+        LlmEvaluationReport report, String operator, int retentionDays) {
         StoredEvaluationReport existing = findEvaluationReportByKeyOrNull(tenantId, reportKey);
         if (existing != null) return existing;
+        int normalizedRetentionDays = Math.max(30, Math.min(3_650, retentionDays));
+        LocalDateTime expiresAt = LocalDateTime.now().plusDays(normalizedRetentionDays);
         try {
             KeyHolder keyHolder = new GeneratedKeyHolder();
             jdbcTemplate.update(connection -> {
                 PreparedStatement statement = connection.prepareStatement("""
-                    insert into llm_evaluation_report (tenant_id, report_key, status, dataset_id, dataset_version,
+                    insert into llm_evaluation_report (tenant_id, report_key, status, lifecycle_status, retention_days,
+                    expires_at, dataset_id, dataset_version,
                     dataset_kind, source_repository_count, sample_count, fixed_regression_samples,
                     rolling_observation_samples, authorized, anonymized, human_reviewed, manifest_fingerprint,
                     observed_sample_fingerprint, provider, model, prompt_version, context_version, schema_version,
@@ -50,14 +61,14 @@ public class LlmModelReleaseRepository {
                     precision_wilson_lower_bound, anchor_rate, duplicate_rate, parse_failure_rate, severity_confusion_json,
                     total_latency_ms, total_tokens, total_cost, blockers_json, eligible, metrics_json, created_by, created_at)
                     values (
-                        ?, ?, 'COMPLETED',
+                        ?, ?, 'COMPLETED', 'ACTIVE', ?, ?,
                         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, current_timestamp(6)
                     )
                     """, Statement.RETURN_GENERATED_KEYS);
-                bind(statement, evaluationValues(tenantId, reportKey, report, operator));
+                bind(statement, evaluationValues(tenantId, reportKey, report, operator, normalizedRetentionDays, expiresAt));
                 return statement;
             }, keyHolder);
             Number key = keyHolder.getKey();
@@ -69,10 +80,11 @@ public class LlmModelReleaseRepository {
             throw ex;
         }
     }
-    private Object[] evaluationValues(long tenantId, String reportKey, LlmEvaluationReport report, String operator) {
+    private Object[] evaluationValues(long tenantId, String reportKey, LlmEvaluationReport report, String operator,
+        int retentionDays, LocalDateTime expiresAt) {
         LlmEvaluationDatasetMetadata d = report.dataset();
         LlmEvaluationVersion v = report.version();
-        return new Object[] {tenantId, reportKey, d.datasetId(), d.datasetVersion(), d.kind().name(), d.sourceRepositoryCount(),
+        return new Object[] {tenantId, reportKey, retentionDays, expiresAt, d.datasetId(), d.datasetVersion(), d.kind().name(), d.sourceRepositoryCount(),
             d.sampleCount(), d.fixedRegressionSamples(), d.rollingObservationSamples(), d.authorized(), d.anonymized(),
             d.humanReviewed(), d.sampleFingerprint(), report.sampleFingerprint(), v.provider(), v.model(), v.promptVersion(),
             v.contextVersion(), v.schemaVersion(), v.chunkPolicyVersion(), v.temperature(), v.ruleVersion(), v.codeRevision(),
@@ -286,8 +298,14 @@ public class LlmModelReleaseRepository {
             rs.getLong("total_latency_ms"), rs.getLong("total_tokens"), rs.getBigDecimal("total_cost"), readStringList(rs.getString("blockers_json")),
             rs.getBoolean("eligible"), d, readMetrics(rs.getString("metrics_json")));
         java.sql.Timestamp createdAt = rs.getTimestamp("created_at");
+        LocalDateTime created = createdAt == null ? null : createdAt.toLocalDateTime();
+        String lifecycleStatus = rs.getString("lifecycle_status");
+        int retentionDays = rs.getInt("retention_days");
         return new StoredEvaluationReport(rs.getLong("id"), rs.getString("report_key"), rs.getString("status"), rs.getString("created_by"),
-            createdAt == null ? null : createdAt.toLocalDateTime(), report);
+            created, report, lifecycleStatus == null || lifecycleStatus.isBlank() ? "ACTIVE" : lifecycleStatus,
+            retentionDays < 30 ? DEFAULT_REPORT_RETENTION_DAYS : Math.min(3_650, retentionDays),
+            time(rs, "expires_at"), time(rs, "authorization_revoked_at"), time(rs, "frozen_at"), time(rs, "deleted_at"),
+            rs.getLong("lifecycle_version"));
     }
 
     private Map<String, Map<String, Long>> readSeverityConfusion(String value) {
@@ -335,7 +353,20 @@ public class LlmModelReleaseRepository {
 
     private String blankToNull(String value) { return value == null || value.isBlank() ? null : value; }
     public record StoredEvaluationReport(Long id, String reportKey, String status, String createdBy, LocalDateTime createdAt,
-        LlmEvaluationReport report) { }
+        LlmEvaluationReport report, String lifecycleStatus, Integer retentionDays, LocalDateTime expiresAt,
+        LocalDateTime authorizationRevokedAt, LocalDateTime frozenAt, LocalDateTime deletedAt, Long lifecycleVersion) {
+        public StoredEvaluationReport(Long id, String reportKey, String status, String createdBy, LocalDateTime createdAt,
+            LlmEvaluationReport report) {
+            this(id, reportKey, status, createdBy, createdAt, report, "ACTIVE", DEFAULT_REPORT_RETENTION_DAYS,
+                createdAt == null ? null : createdAt.plusDays(DEFAULT_REPORT_RETENTION_DAYS), null, null, null, 0L);
+        }
+
+        public LocalDateTime effectiveExpiresAt() {
+            if (expiresAt != null) return expiresAt;
+            if (createdAt == null) return null;
+            return createdAt.plusDays(retentionDays == null || retentionDays < 1 ? DEFAULT_REPORT_RETENTION_DAYS : retentionDays);
+        }
+    }
 
     public record AuditFilter(Long auditId, Long releaseId, String releaseKey, String operator, String action,
         LocalDateTime from, LocalDateTime to) {

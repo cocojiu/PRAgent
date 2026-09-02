@@ -64,6 +64,7 @@ import type {
   LlmEvaluationExport,
   LlmEvaluationReport,
   LlmEvaluationReportComparison,
+  LlmEvaluationReportLifecycleRequest,
   LlmEvaluationRequest,
   CacheStats,
   GithubCommentPreview,
@@ -328,6 +329,10 @@ export type ApiContract = {
     LlmEvaluationReportComparison
   >;
   exportLlmEvaluationReport: ApiOperation<{ reportId: number; format?: string }, LlmEvaluationExport>;
+  transitionLlmEvaluationReportLifecycle: ApiOperation<
+    { reportId: number; payload: LlmEvaluationReportLifecycleRequest },
+    LlmEvaluationReport
+  >;
   rollbackLlmModelRelease: ApiOperation<
     { releaseId: number; payload: LlmModelRollbackRequest },
     LlmModelRelease
@@ -730,6 +735,10 @@ const apiEndpoints: ApiEndpointMap = {
   exportLlmEvaluationReport: generatedEndpoint("reviewCalibrationControllerExportEvaluationReport", {
     path: input => ({ reportId: input.reportId }),
     query: input => ({ format: input.format })
+  }),
+  transitionLlmEvaluationReportLifecycle: generatedEndpoint("reviewCalibrationControllerTransitionEvaluationReportLifecycle", {
+    path: input => ({ reportId: input.reportId }),
+    body: input => input.payload
   }),
   rollbackLlmModelRelease: generatedEndpoint("reviewCalibrationControllerRollbackModelRelease", {
     path: input => ({ releaseId: input.releaseId }),

@@ -94,6 +94,7 @@ testMysqlConnection -> systemConfigControllerTestMysqlConnection // POST /api/v1
 testNotificationBinding -> notificationIntegrationControllerTestBinding // POST /api/v1/config/notification-bindings/{id}/test
 testRabbitMqConnection -> systemConfigControllerTestRabbitMqConnection // POST /api/v1/config/integrations/rabbitmq/test
 testReviewPolicyConnection -> systemConfigControllerTestReviewPolicy // POST /api/v1/config/review-policy/test
+transitionLlmEvaluationReportLifecycle -> reviewCalibrationControllerTransitionEvaluationReportLifecycle // POST /api/v1/config/review-calibration/evaluation-reports/{reportId}/lifecycle
 triggerManualReview -> reviewControllerTriggerManualReview // POST /api/v1/reviews/manual
 updateEnterpriseTenantQuota -> enterpriseTenantQuotaControllerUpdate // PUT /api/v1/enterprise/tenants/{tenantKey}/quota
 updateEnterpriseTenantStatus -> enterpriseTenantControllerUpdateStatus // PUT /api/v1/enterprise/tenants/{tenantKey}/status

@@ -6,6 +6,7 @@ import type {
   GithubChecksPolicyRequest,
   GithubChecksPreviewRequest,
   LlmEvaluationRequest,
+  LlmEvaluationReportLifecycleRequest,
   LlmModelReleaseRequest,
   LlmModelRollbackRequest,
   ReviewPolicyConfigRequest,
@@ -149,6 +150,11 @@ export const compareLlmEvaluationReports = (reportId: number, candidateReportId:
 
 export const exportLlmEvaluationReport = (reportId: number, format: "json" | "html" = "json") =>
   apiRequest("exportLlmEvaluationReport", { reportId, format });
+
+export const transitionLlmEvaluationReportLifecycle = (
+  reportId: number,
+  payload: LlmEvaluationReportLifecycleRequest
+) => apiRequest("transitionLlmEvaluationReportLifecycle", { reportId, payload });
 
 export const rollbackLlmModelRelease = (releaseId: number, payload: LlmModelRollbackRequest) =>
   apiRequest("rollbackLlmModelRelease", { releaseId, payload });

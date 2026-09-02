@@ -8,6 +8,7 @@ import com.repoguard.agent.dto.LlmModelReleaseDto.LlmModelReleaseAuditDto;
 import com.repoguard.agent.dto.LlmModelReleaseDto.LlmModelReleaseAuditExportDto;
 import com.repoguard.agent.dto.LlmModelReleaseDto.LlmModelReleaseAuditVerificationDto;
 import com.repoguard.agent.dto.LlmModelReleaseRequest;
+import com.repoguard.agent.dto.LlmModelReleaseRequest.LlmEvaluationReportLifecycleRequest;
 import com.repoguard.agent.dto.LlmModelReleaseRequest.LlmEvaluationRequest;
 import com.repoguard.agent.dto.LlmModelRollbackRequest;
 import com.repoguard.agent.dto.PageResponse;
@@ -181,11 +182,26 @@ public class ReviewCalibrationController {
     }
 
     @GetMapping("/evaluation-reports/{reportId}/export")
+    @RequireRole({"ADMIN", "PLATFORM_ADMIN"})
     public ApiResponse<LlmModelReleaseDto.EvaluationExportDto> exportEvaluationReport(
         @PathVariable @Min(1) long reportId,
-        @RequestParam(defaultValue = "json") @Size(max = 8) String format
+        @RequestParam(defaultValue = "json") @Size(max = 8) String format,
+        HttpServletRequest servletRequest
     ) {
-        return ApiResponse.ok(requireReleaseService().exportEvaluationReport(reportId, format));
+        var principal = RequestAuthentication.require(servletRequest);
+        return ApiResponse.ok(requireReleaseService().exportEvaluationReport(
+            reportId, format, principal.username(), principal.role()));
+    }
+
+    @PostMapping("/evaluation-reports/{reportId}/lifecycle")
+    public ApiResponse<LlmModelReleaseDto.EvaluationReportDto> transitionEvaluationReportLifecycle(
+        @PathVariable @Min(1) long reportId,
+        @Valid @RequestBody LlmEvaluationReportLifecycleRequest request,
+        HttpServletRequest servletRequest
+    ) {
+        var principal = RequestAuthentication.require(servletRequest);
+        return ApiResponse.ok(requireReleaseService().transitionEvaluationReport(
+            reportId, request, principal.username(), principal.role()));
     }
 
     @PostMapping("/release-center/{releaseId}/rollback")

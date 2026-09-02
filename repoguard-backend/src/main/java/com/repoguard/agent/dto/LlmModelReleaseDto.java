@@ -34,7 +34,9 @@ public record LlmModelReleaseDto(Long id, String releaseKey, String provider, St
         Integer falseNegatives, BigDecimal precision, BigDecimal recall, BigDecimal precisionWilsonLowerBound,
         BigDecimal anchorRate, BigDecimal duplicateRate, BigDecimal parseFailureRate,
         Map<String, Map<String, Long>> severityConfusion, Long totalLatencyMs, Long totalTokens, BigDecimal totalCost,
-        List<String> blockers, Boolean eligible, EvaluationMetricsDto metrics, String createdBy, LocalDateTime createdAt) {
+        List<String> blockers, Boolean eligible, EvaluationMetricsDto metrics, String createdBy, LocalDateTime createdAt,
+        String lifecycleStatus, Integer retentionDays, LocalDateTime expiresAt, LocalDateTime authorizationRevokedAt,
+        LocalDateTime frozenAt, LocalDateTime deletedAt, Long lifecycleVersion) {
     }
 
     public record EvaluationMetricsDto(Integer labeledComments, Integer usefulComments, Integer falsePositiveComments,

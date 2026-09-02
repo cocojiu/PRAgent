@@ -9,6 +9,24 @@
         <el-button :loading="loading" @click="loadReports">刷新报告</el-button>
         <el-button v-if="selectedReport" @click="downloadReport('json')">导出 JSON</el-button>
         <el-button v-if="selectedReport" @click="downloadReport('html')">导出 HTML</el-button>
+        <el-button
+          v-if="selectedReport && selectedReport.lifecycleStatus !== 'FROZEN' && selectedReport.lifecycleStatus !== 'DELETED'"
+          type="warning"
+          plain
+          @click="transitionLifecycle('FREEZE')"
+        >冻结报告</el-button>
+        <el-button
+          v-if="selectedReport && selectedReport.lifecycleStatus === 'ACTIVE'"
+          type="danger"
+          plain
+          @click="transitionLifecycle('REVOKE_AUTHORIZATION')"
+        >撤销授权</el-button>
+        <el-button
+          v-if="selectedReport && selectedReport.lifecycleStatus !== 'DELETED'"
+          type="danger"
+          plain
+          @click="transitionLifecycle('DELETE')"
+        >软删除</el-button>
       </div>
     </div>
 
@@ -55,6 +73,12 @@
           </el-tag>
         </template>
       </el-table-column>
+      <el-table-column label="生命周期" width="160">
+        <template #default="{ row }">
+          <el-tag :type="lifecycleTag(row.lifecycleStatus)">{{ row.lifecycleStatus }}</el-tag>
+          <small v-if="row.expiresAt" class="evaluation-expiry">到期 {{ formatDate(row.expiresAt) }}</small>
+        </template>
+      </el-table-column>
       <el-table-column label="操作" width="130" fixed="right">
         <template #default="{ row }">
           <el-button size="small" type="primary" plain @click.stop="selectReport(row)">查看报告</el-button>
@@ -72,7 +96,10 @@
       :closable="false"
     >
       <template #default>
-        <span>报告指纹：{{ selectedReport.reportKey }} · 版本提交：{{ selectedReport.codeRevision }}</span>
+        <span>
+          报告指纹：{{ selectedReport.reportKey }} · 版本提交：{{ selectedReport.codeRevision }} ·
+          保留 {{ selectedReport.retentionDays }} 天
+        </span>
       </template>
     </el-alert>
   </section>
@@ -81,7 +108,11 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
-import { exportLlmEvaluationReport, fetchLlmEvaluationReports } from "@/api/config";
+import {
+  exportLlmEvaluationReport,
+  fetchLlmEvaluationReports,
+  transitionLlmEvaluationReportLifecycle
+} from "@/api/config";
 import type { LlmEvaluationReport } from "@/types";
 import { getErrorMessage } from "@/utils/errors";
 
@@ -122,7 +153,32 @@ const downloadReport = async (format: "json" | "html") => {
   }
 };
 
+const transitionLifecycle = async (action: "FREEZE" | "REVOKE_AUTHORIZATION" | "DELETE") => {
+  if (!selectedReport.value) return;
+  const reason = window.prompt("请输入生命周期操作原因（最多 512 字）", "评估工作台治理操作")?.trim();
+  if (!reason) return;
+  const secondApprover = window.prompt("如需双人审批，请输入第二位管理员账号（管理员可留空）")?.trim();
+  try {
+    await transitionLlmEvaluationReportLifecycle(selectedReport.value.id, {
+      action,
+      reason,
+      secondApprover: secondApprover || undefined,
+      idempotencyKey: `${action.toLowerCase()}-${selectedReport.value.id}-${Date.now()}`
+    });
+    ElMessage.success("评估报告生命周期已更新");
+    await loadReports();
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, "评估报告生命周期操作失败"));
+  }
+};
+
 const percent = (value: number) => `${(Number(value ?? 0) * 100).toFixed(1)}%`;
+const formatDate = (value?: string) => value ? new Date(value).toLocaleString() : "";
+const lifecycleTag = (status: string) => {
+  if (status === "ACTIVE") return "success";
+  if (status === "DELETED" || status === "AUTHORIZATION_REVOKED") return "danger";
+  return "warning";
+};
 
 onMounted(loadReports);
 </script>

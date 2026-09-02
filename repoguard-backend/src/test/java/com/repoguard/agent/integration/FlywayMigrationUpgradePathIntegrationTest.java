@@ -19,7 +19,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
  * Exercises the supported rolling-upgrade path against a real MySQL instance.
  *
  * <p>The test is opt-in because local unit-test runs do not provision a database. CI enables it
- * with an isolated database and verifies the V76 expand state through the V88 runtime metrics state.
+ * with an isolated database and verifies the V76 expand state through the V89 evaluation report lifecycle state.
  */
 @EnabledIfEnvironmentVariable(named = "REPOGUARD_RUN_INTEGRATION_TESTS", matches = "true")
 class FlywayMigrationUpgradePathIntegrationTest {
@@ -124,9 +124,9 @@ class FlywayMigrationUpgradePathIntegrationTest {
                 }
             }
 
-            migrateTo(url, username, password, "88");
+            migrateTo(url, username, password, "89");
             try (Connection connection = open(url, username, password)) {
-                assertThat(latestSuccessfulMigration(connection)).isEqualTo("88");
+                assertThat(latestSuccessfulMigration(connection)).isEqualTo("89");
                 assertThat(columnExists(connection, "tenant_quota_config", "monthly_llm_token_budget"))
                     .isTrue();
                 assertThat(columnExists(connection, "tenant_quota_config", "monthly_llm_cost_budget"))
@@ -186,6 +186,20 @@ class FlywayMigrationUpgradePathIntegrationTest {
                 )).isTrue();
                 assertThat(columnIsNullable(connection, "notification_event", "task_id")).isTrue();
                 assertThat(columnIsNullable(connection, "notification_delivery_log", "task_id")).isTrue();
+                assertThat(columnExists(connection, "llm_evaluation_report", "lifecycle_status")).isTrue();
+                assertThat(columnExists(connection, "llm_evaluation_report", "retention_days")).isTrue();
+                assertThat(columnExists(connection, "llm_evaluation_report", "expires_at")).isTrue();
+                assertThat(compositeUniqueIndexExists(
+                    connection,
+                    "llm_evaluation_report_lifecycle_audit",
+                    "uk_llm_evaluation_report_lifecycle_audit_operation",
+                    2
+                )).isTrue();
+                assertThat(constraintExists(
+                    connection,
+                    "llm_evaluation_report_lifecycle_audit",
+                    "fk_llm_evaluation_report_lifecycle_audit_report"
+                )).isTrue();
             }
         } finally {
             cleanup(url, username, password, tenantId, taskId, attemptId);

@@ -113,14 +113,14 @@ class LlmModelReleaseServiceTest {
 
     @Test
     void evaluationWorkbenchCreatesComparesAndExportsAggregateReport() {
-        when(repository.insertEvaluationReport(eq(42L), anyString(), any(LlmEvaluationReport.class), eq("operator")))
+        when(repository.insertEvaluationReport(eq(42L), anyString(), any(LlmEvaluationReport.class), eq("operator"), eq(180)))
             .thenReturn(evidence(true));
 
         LlmModelReleaseDto.EvaluationReportDto created = service.createEvaluationReport(evaluationRequest(), " operator ");
 
         assertThat(created.id()).isEqualTo(77L);
         assertThat(created.metrics().p95LatencyMs()).isZero();
-        verify(repository).insertEvaluationReport(eq(42L), anyString(), any(LlmEvaluationReport.class), eq("operator"));
+        verify(repository).insertEvaluationReport(eq(42L), anyString(), any(LlmEvaluationReport.class), eq("operator"), eq(180));
 
         assertThat(service.getEvaluationReport(77L).reportKey()).isEqualTo("report-key");
         when(repository.findEvaluationReports(42L, 10)).thenReturn(List.of(evidence(true)));
@@ -169,7 +169,7 @@ class LlmModelReleaseServiceTest {
             "openai", "gpt-next", "prompt-v1", "context-v1", "schema-v1", "chunk-v1",
             new BigDecimal("0.1"), "rule-v1", "code-v1", null, null
         );
-        when(repository.insertEvaluationReport(eq(42L), anyString(), any(LlmEvaluationReport.class), eq("operator")))
+        when(repository.insertEvaluationReport(eq(42L), anyString(), any(LlmEvaluationReport.class), eq("operator"), eq(180)))
             .thenReturn(evidence(true));
 
         assertThat(service.createEvaluationReport(request, "operator").id()).isEqualTo(77L);
