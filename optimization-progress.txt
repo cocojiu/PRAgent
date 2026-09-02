@@ -431,3 +431,11 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 提交/远程验收：实现提交 `c32da764`（新增：支持动态声明式规则与SARIF扫描器接入），修复提交 `a313b628`（修复：消除声明式规则测试的密钥扫描误报）、`6b4fec40`（修复：处理声明式规则测试的历史扫描指纹）、`01a592dd`（修复：同步声明式规则扫描指纹契约）、`2be6d66f`（修复：补齐 SARIF 异常路径覆盖率）和 `24ec5474`（修复：扩大 SARIF 兼容路径测试覆盖）均已推送 `origin/PRAgent-test`；最终 Pull Request Quality `33549768772` 的 8 个作业全部成功，包含后端/前端、真实 MySQL/RabbitMQ、V80→V81 Flyway、生产边缘、跟踪文件、密钥差异和依赖门禁；push Repository Governance `33549763487`、Auto Create Pull Request `33549763658` 亦成功。
 边界：声明式表达式不执行任意代码、不生成 SQL 或脚本；SARIF 只导入安全相对路径和有效新增 Finding，不保存原始扫描器凭据；dry-run 只返回匹配预览，不自动启用规则、提交作者分支或创建修复 PR。Gitleaks 历史测试夹具仅使用精确指纹豁免，当前源码保持可扫描；未提交非 README Markdown、测试脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
 下一步：进入优化-57 GitLab/Gitee/Bitbucket 支持，先抽象 `ScmProvider` 读取、差异、评论和状态检查契约，再优先落地 GitLab。
+
+2026-09-02 | 优化-57 | P2 GitLab/Gitee/Bitbucket 多代码托管平台支持
+状态：已完成统一 SCM 端口、三种代码托管平台适配器、受控出站访问、SCM API 契约、本地门禁、中文提交、test 分支推送和远程 Actions 验收。
+变更：新增 `ScmProvider` 统一读取开放变更请求、获取差异/HEAD、发布评论和状态检查；既有 GitHub 客户端通过适配器接入，新增 GitLab Merge Requests/Notes/Commit Status、Gitee OpenAPI v5 Pull Requests/Comments/Statuses、Bitbucket Cloud v2 Pull Requests/Diffstat/Comments/Build Status 适配。新增租户隔离的 SCM 集成配置读取与 token 解密、provider 注册表、通用应用服务和受角色保护的六个 server-only API；GitLab 项目路径编码、差异文件/补丁预算、状态归一化和外部 URL/响应大小策略均纳入契约测试与 OpenAPI 快照。
+本地验证：干净 `mvn clean verify -DskipTests=false` 共 2719 项测试通过、0 失败、12 项按环境条件跳过；JaCoCo 根计数行覆盖率 24314/27313（达到 0.89）、分支覆盖率 7935/11301（达到 0.70）；架构、授权、迁移、OpenAPI 和出站访问契约均通过，`git diff --check` 通过。
+提交/远程验收：实现提交 `ef9ee36b`（新增：接入多代码托管平台统一适配）已推送；其 Pull Request Quality `33589654012` 首次只因干净 CI 覆盖率差一行失败，push Repository Governance `33589650746` 与 Auto Create Pull Request `33589650737` 成功。修复提交 `9f236739`（修复：补足多平台适配覆盖率门禁）已推送；最终 Pull Request Quality `33590409274` 的 8 个作业全部成功，含后端/前端、真实 MySQL/RabbitMQ、Flyway、边缘配置、跟踪文件、密钥差异和依赖门禁；push Repository Governance `33590406747`、Auto Create Pull Request `33590406722` 亦成功。
+边界：SCM 适配器提供统一读取/写回 API，现有审查 worker 的默认执行路径仍保持 GitHub 兼容；GitLab/Gitee/Bitbucket 的生产凭据、Webhook 注册、仓库绑定和分支保护需在部署环境配置，不在仓库写入 token 或伪造外部数据。不提交非 README Markdown、测试脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
+下一步：进入优化-58 协作与通知工作流，补齐复核任务分派、SLA/升级、机器人命令、多渠道通知、日报周报和服务端已读状态，并继续按单项提交、推送和 Actions 验收。
