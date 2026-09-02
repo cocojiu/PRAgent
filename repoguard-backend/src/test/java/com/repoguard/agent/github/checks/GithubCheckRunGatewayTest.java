@@ -163,6 +163,42 @@ class GithubCheckRunGatewayTest {
         )).isInstanceOf(IllegalStateException.class).hasMessageContaining("check run id");
     }
 
+    @Test
+    void inspectsInstallationPermissionsAndCreatesNeutralPreview() throws Exception {
+        AtomicReference<String> paths = new AtomicReference<>("");
+        AtomicReference<String> previewPayload = new AtomicReference<>("");
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/", exchange -> {
+            paths.set(paths.get() + exchange.getRequestURI().getPath() + " ");
+            String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            if (exchange.getRequestURI().getPath().contains("check-runs")) {
+                previewPayload.set(body);
+                write(exchange, 200, "{\"id\":123,\"external_id\":\"preview\",\"status\":\"completed\",\"conclusion\":\"neutral\"}");
+            } else if (exchange.getRequestURI().getPath().contains("pulls")) {
+                write(exchange, 200, "{\"head\":{\"sha\":\"sha-1\",\"ref\":\"main\"},\"updated_at\":\"2026-09-03T00:00:00Z\"}");
+            } else {
+                write(exchange, 200, "{\"repositories\":[{\"full_name\":\"octo/repo\",\"permissions\":{\"metadata\":\"read\",\"contents\":\"read\",\"pull_requests\":\"write\",\"checks\":\"write\"}}]}");
+            }
+        });
+        server.start();
+        GithubCheckRunGateway gateway = gateway();
+        GithubCheckRunGateway.InstallationInspection inspection = gateway.inspectInstallation(
+            settings(), baseUrl(), "octo", "repo"
+        );
+        GithubCheckRunGateway.RemoteCheckRun preview = gateway.createPreview(
+            settings(), baseUrl(), "octo", "repo", "RepoGuard PR Review", "sha-1", "preview",
+            new GithubCheckRunGateway.Output("title", "summary", null, List.of())
+        );
+
+        assertThat(inspection.repositoryAuthorized()).isTrue();
+        assertThat(inspection.hasPermission("metadata")).isTrue();
+        assertThat(inspection.hasPermission("checks")).isTrue();
+        assertThat(preview.id()).isEqualTo(123L);
+        assertThat(preview.conclusion()).isEqualTo("neutral");
+        assertThat(paths.get()).contains("/installation/repositories", "/repos/octo/repo/check-runs");
+        assertThat(previewPayload.get()).contains("\"conclusion\":\"neutral\"");
+    }
+
     private GithubCheckRunGateway gateway() {
         GithubAppProperties appProperties = new GithubAppProperties();
         appProperties.setApiVersion("2022-11-28");

@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.TreeMap;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -109,6 +110,104 @@ public class GithubCheckRunGateway {
         return remote(request(settings, url).patch(body));
     }
 
+    /** Reads the installation repository list so the wizard can prove access and permissions. */
+    public InstallationInspection inspectInstallation(
+        GithubIntegrationSettings settings,
+        String baseUrl,
+        String organization,
+        String repository
+    ) {
+        String url = UriComponentsBuilder.fromUriString(baseUrl)
+            .path("/installation/repositories")
+            .queryParam("per_page", 100)
+            .build()
+            .toUriString();
+        JsonNode root = request(settings, url).get();
+        JsonNode repositories = root == null ? null : root.path("repositories");
+        if (repositories == null || !repositories.isArray()) {
+            return new InstallationInspection(false, Map.of());
+        }
+        for (JsonNode candidate : repositories) {
+            String fullName = candidate.path("full_name").asText(null);
+            String owner = candidate.path("owner").path("login").asText(null);
+            String name = candidate.path("name").asText(null);
+            boolean matches = StringUtils.hasText(fullName)
+                ? fullName.equalsIgnoreCase(organization + "/" + repository)
+                : StringUtils.hasText(owner) && StringUtils.hasText(name)
+                    && owner.equalsIgnoreCase(organization) && name.equalsIgnoreCase(repository);
+            if (matches) {
+                Map<String, Boolean> permissions = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+                JsonNode permissionNode = candidate.path("permissions");
+                if (permissionNode.isObject()) {
+                    permissionNode.properties().forEach(entry -> permissions.put(
+                        entry.getKey(), permissionEnabled(entry.getValue())
+                    ));
+                }
+                return new InstallationInspection(true, Map.copyOf(permissions));
+            }
+        }
+        return new InstallationInspection(false, Map.of());
+    }
+
+    private boolean permissionEnabled(JsonNode value) {
+        if (value == null || value.isNull()) {
+            return false;
+        }
+        if (value.isBoolean()) {
+            return value.asBoolean();
+        }
+        String mode = value.asText("").trim().toLowerCase(java.util.Locale.ROOT);
+        return "read".equals(mode) || "write".equals(mode) || "admin".equals(mode);
+    }
+
+    public PullRequestHead pullRequestHead(
+        GithubIntegrationSettings settings,
+        String baseUrl,
+        String owner,
+        String repository,
+        int pullRequestNumber
+    ) {
+        String url = UriComponentsBuilder.fromUriString(baseUrl)
+            .path("/repos/{owner}/{repo}/pulls/{number}")
+            .buildAndExpand(owner, repository, pullRequestNumber)
+            .toUriString();
+        JsonNode root = request(settings, url).get();
+        String sha = root == null ? null : root.path("head").path("sha").asText(null);
+        if (!StringUtils.hasText(sha)) {
+            throw new IllegalStateException("GitHub pull request response did not contain head SHA");
+        }
+        return new PullRequestHead(
+            sha,
+            root.path("head").path("ref").asText(null),
+            root.path("updated_at").asText(null)
+        );
+    }
+
+    /** Creates a neutral, explicitly non-blocking Check Run used only by the setup preview. */
+    public RemoteCheckRun createPreview(
+        GithubIntegrationSettings settings,
+        String baseUrl,
+        String owner,
+        String repository,
+        String name,
+        String headSha,
+        String externalId,
+        Output output
+    ) {
+        String url = UriComponentsBuilder.fromUriString(baseUrl)
+            .path("/repos/{owner}/{repo}/check-runs")
+            .buildAndExpand(owner, repository)
+            .toUriString();
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("name", name);
+        body.put("head_sha", headSha);
+        body.put("status", "completed");
+        body.put("conclusion", "neutral");
+        body.put("external_id", externalId);
+        body.put("output", outputBody(output));
+        return remote(request(settings, url).post(body));
+    }
+
     private RequestBuilder request(GithubIntegrationSettings settings, String url) {
         if (settings == null || !StringUtils.hasText(settings.token())) {
             throw new IllegalStateException("GitHub token is not configured for Checks API");
@@ -185,6 +284,19 @@ public class GithubCheckRunGateway {
     }
 
     public record RemoteCheckRun(Long id, String externalId, String status, String conclusion) {
+    }
+
+    public record InstallationInspection(boolean repositoryAuthorized, Map<String, Boolean> permissions) {
+        public InstallationInspection {
+            permissions = permissions == null ? Map.of() : Map.copyOf(permissions);
+        }
+
+        public boolean hasPermission(String name) {
+            return Boolean.TRUE.equals(permissions.get(name));
+        }
+    }
+
+    public record PullRequestHead(String sha, String branch, String updatedAt) {
     }
 
     private final class RequestBuilder {

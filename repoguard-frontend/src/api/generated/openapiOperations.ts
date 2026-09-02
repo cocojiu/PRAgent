@@ -21,6 +21,9 @@ import type {
   EnterpriseTenantRepositoryRequest,
   EnterpriseTenantStatusRequest,
   FrontendPerformanceReport,
+  GithubChecksPolicyRequest,
+  GithubChecksPreviewRequest,
+  GithubChecksSetupStatus,
   GithubCommentPreview,
   GithubCommentPublicationHistory,
   GithubCommentPublish,
@@ -559,6 +562,13 @@ export type GeneratedOpenApiOperationMap = {
     body: ReviewRuleConfigRequest;
     response: ReviewRuleConfig;
   };
+  "systemConfigControllerGetGithubChecksSetup": {
+    method: "GET";
+    pathParams: never;
+    query: { organization: string; repository: string };
+    body: never;
+    response: GithubChecksSetupStatus;
+  };
   "systemConfigControllerGetGithubIntegration": {
     method: "GET";
     pathParams: never;
@@ -650,6 +660,13 @@ export type GeneratedOpenApiOperationMap = {
     body: never;
     response: SecretReEncryptionJob;
   };
+  "systemConfigControllerPreviewGithubChecks": {
+    method: "POST";
+    pathParams: never;
+    query: never;
+    body: GithubChecksPreviewRequest;
+    response: GithubChecksSetupStatus;
+  };
   "systemConfigControllerPromoteReviewStrategy": {
     method: "PUT";
     pathParams: never;
@@ -712,6 +729,13 @@ export type GeneratedOpenApiOperationMap = {
     query: never;
     body: ReviewPolicyConfigRequest | undefined;
     response: ConnectionTestResult;
+  };
+  "systemConfigControllerUpdateGithubChecksPolicy": {
+    method: "PUT";
+    pathParams: never;
+    query: never;
+    body: GithubChecksPolicyRequest;
+    response: GithubChecksSetupStatus;
   };
   "systemConfigControllerUpdateGithubIntegration": {
     method: "PUT";
@@ -1354,6 +1378,14 @@ export const generatedOpenApiOperations = {
     hasRequestBody: true,
     requestBodyRequired: true
   },
+  "systemConfigControllerGetGithubChecksSetup": {
+    method: "GET",
+    path: "/api/v1/config/integrations/github/checks",
+    pathParamNames: [],
+    queryParamNames: ["organization", "repository"],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
   "systemConfigControllerGetGithubIntegration": {
     method: "GET",
     path: "/api/v1/config/integrations/github",
@@ -1458,6 +1490,14 @@ export const generatedOpenApiOperations = {
     hasRequestBody: false,
     requestBodyRequired: false
   },
+  "systemConfigControllerPreviewGithubChecks": {
+    method: "POST",
+    path: "/api/v1/config/integrations/github/checks/preview",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
   "systemConfigControllerPromoteReviewStrategy": {
     method: "PUT",
     path: "/api/v1/config/review-strategy/enforcement",
@@ -1529,6 +1569,14 @@ export const generatedOpenApiOperations = {
     queryParamNames: [],
     hasRequestBody: true,
     requestBodyRequired: false
+  },
+  "systemConfigControllerUpdateGithubChecksPolicy": {
+    method: "PUT",
+    path: "/api/v1/config/integrations/github/checks/policy",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
   },
   "systemConfigControllerUpdateGithubIntegration": {
     method: "PUT",

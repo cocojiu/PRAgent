@@ -3,6 +3,8 @@ import type { ApiRequestOptions } from "@/api/contracts";
 import type {
   DataRetentionCleanupRequest,
   GithubIntegrationConfigRequest,
+  GithubChecksPolicyRequest,
+  GithubChecksPreviewRequest,
   LlmEvaluationRequest,
   LlmModelReleaseRequest,
   LlmModelRollbackRequest,
@@ -30,6 +32,15 @@ export const fetchGithubIntegrationConfig = () =>
 
 export const updateGithubIntegrationConfig = (payload: GithubIntegrationConfigRequest) =>
   apiRequest("updateGithubIntegrationConfig", payload);
+
+export const fetchGithubChecksSetup = (organization: string, repository: string) =>
+  apiRequest("fetchGithubChecksSetup", { organization, repository });
+
+export const previewGithubChecks = (payload: GithubChecksPreviewRequest) =>
+  apiRequest("previewGithubChecks", payload);
+
+export const updateGithubChecksPolicy = (payload: GithubChecksPolicyRequest) =>
+  apiRequest("updateGithubChecksPolicy", payload);
 
 export const fetchMysqlIntegrationConfig = () =>
   apiRequest("fetchMysqlIntegrationConfig", undefined);

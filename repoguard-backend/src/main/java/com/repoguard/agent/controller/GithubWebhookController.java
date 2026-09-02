@@ -11,6 +11,7 @@ import com.repoguard.agent.github.webhook.GithubWebhookProperties;
 import com.repoguard.agent.github.webhook.GithubWebhookRateLimiter;
 import com.repoguard.agent.github.webhook.GithubWebhookResponse;
 import com.repoguard.agent.github.webhook.GithubWebhookSignatureVerifier;
+import com.repoguard.agent.github.webhook.GithubWebhookDeliveryTracker;
 import com.repoguard.agent.github.checks.GithubCheckRunWebhookService;
 import com.repoguard.agent.security.AllowAnonymous;
 import java.io.IOException;
@@ -35,6 +36,7 @@ public class GithubWebhookController {
     private final GithubPullRequestWebhookService pullRequestWebhookService;
     private final GithubWebhookRateLimiter rateLimiter;
     private final GithubCheckRunWebhookService checkRunWebhookService;
+    private final GithubWebhookDeliveryTracker deliveryTracker;
 
     @Autowired
     public GithubWebhookController(
@@ -43,7 +45,8 @@ public class GithubWebhookController {
         GithubWebhookSignatureVerifier signatureVerifier,
         GithubPullRequestWebhookService pullRequestWebhookService,
         GithubWebhookRateLimiter rateLimiter,
-        ObjectProvider<GithubCheckRunWebhookService> checkRunWebhookServiceProvider
+        ObjectProvider<GithubCheckRunWebhookService> checkRunWebhookServiceProvider,
+        ObjectProvider<GithubWebhookDeliveryTracker> deliveryTrackerProvider
     ) {
         this.objectMapper = objectMapper;
         this.properties = properties;
@@ -51,6 +54,7 @@ public class GithubWebhookController {
         this.pullRequestWebhookService = pullRequestWebhookService;
         this.rateLimiter = rateLimiter;
         this.checkRunWebhookService = checkRunWebhookServiceProvider.getIfAvailable();
+        this.deliveryTracker = deliveryTrackerProvider.getIfAvailable();
     }
 
     public GithubWebhookController(
@@ -60,7 +64,7 @@ public class GithubWebhookController {
         GithubPullRequestWebhookService pullRequestWebhookService
     ) {
         this(objectMapper, properties, signatureVerifier, pullRequestWebhookService, null,
-            (GithubCheckRunWebhookService) null);
+            (GithubCheckRunWebhookService) null, null);
     }
 
     public GithubWebhookController(
@@ -71,7 +75,7 @@ public class GithubWebhookController {
         GithubWebhookRateLimiter rateLimiter
     ) {
         this(objectMapper, properties, signatureVerifier, pullRequestWebhookService, rateLimiter,
-            (GithubCheckRunWebhookService) null);
+            (GithubCheckRunWebhookService) null, null);
     }
 
     private GithubWebhookController(
@@ -80,7 +84,8 @@ public class GithubWebhookController {
         GithubWebhookSignatureVerifier signatureVerifier,
         GithubPullRequestWebhookService pullRequestWebhookService,
         GithubWebhookRateLimiter rateLimiter,
-        GithubCheckRunWebhookService checkRunWebhookService
+        GithubCheckRunWebhookService checkRunWebhookService,
+        GithubWebhookDeliveryTracker deliveryTracker
     ) {
         this.objectMapper = objectMapper;
         this.properties = properties;
@@ -88,6 +93,7 @@ public class GithubWebhookController {
         this.pullRequestWebhookService = pullRequestWebhookService;
         this.rateLimiter = rateLimiter;
         this.checkRunWebhookService = checkRunWebhookService;
+        this.deliveryTracker = deliveryTracker;
     }
 
     @AllowAnonymous
@@ -98,22 +104,50 @@ public class GithubWebhookController {
         @RequestHeader(name = "X-Hub-Signature-256", required = false) String signature,
         @RequestBody byte[] payload
     ) {
-        validatePayloadSize(payload);
-        signatureVerifier.verify(signature, payload);
-        if (!"pull_request".equals(event) && !"check_run".equals(event)) {
-            return ApiResponse.ok(GithubWebhookResponse.skipped("GitHub event is ignored", deliveryId, null));
-        }
-        JsonNode root = parsePayload(payload);
-        if (rateLimiter != null) {
-            rateLimiter.requireRepository(repositoryName(root));
-        }
-        if ("check_run".equals(event)) {
-            if (checkRunWebhookService == null) {
-                return ApiResponse.ok(GithubWebhookResponse.skipped("GitHub Check Run handler is unavailable", deliveryId, null));
+        JsonNode root = null;
+        String repository = null;
+        try {
+            validatePayloadSize(payload);
+            signatureVerifier.verify(signature, payload);
+            if (!"pull_request".equals(event) && !"check_run".equals(event)) {
+                GithubWebhookResponse response = GithubWebhookResponse.skipped(
+                    "GitHub event is ignored", deliveryId, null
+                );
+                recordDelivery(deliveryId, event, repository, "accepted_ignored");
+                return ApiResponse.ok(response);
             }
-            return ApiResponse.ok(checkRunWebhookService.handle(root, deliveryId));
+            root = parsePayload(payload);
+            repository = repositoryName(root);
+            if (rateLimiter != null) {
+                rateLimiter.requireRepository(repository);
+            }
+            GithubWebhookResponse response;
+            if ("check_run".equals(event)) {
+                if (checkRunWebhookService == null) {
+                    response = GithubWebhookResponse.skipped(
+                        "GitHub Check Run handler is unavailable", deliveryId, null
+                    );
+                } else {
+                    response = checkRunWebhookService.handle(root, deliveryId);
+                }
+            } else {
+                response = pullRequestWebhookService.handlePullRequest(root, deliveryId);
+            }
+            recordDelivery(deliveryId, event, repository, "accepted_" + response.status());
+            return ApiResponse.ok(response);
+        } catch (RuntimeException exception) {
+            String status = exception instanceof BusinessException businessException
+                ? "rejected_" + businessException.getErrorCode().code()
+                : "failed";
+            recordDelivery(deliveryId, event, repository, status);
+            throw exception;
         }
-        return ApiResponse.ok(pullRequestWebhookService.handlePullRequest(root, deliveryId));
+    }
+
+    private void recordDelivery(String deliveryId, String event, String repository, String status) {
+        if (deliveryTracker != null) {
+            deliveryTracker.record(deliveryId, event, repository, status);
+        }
     }
 
     private String repositoryName(JsonNode root) {

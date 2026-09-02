@@ -721,6 +721,172 @@
         }
       }
     },
+    "/api/v1/config/integrations/github/checks" : {
+      "get" : {
+        "tags" : [ "SystemConfig" ],
+        "operationId" : "systemConfigControllerGetGithubChecksSetup",
+        "x-controller-operation" : "SystemConfigController#getGithubChecksSetup",
+        "parameters" : [ {
+          "name" : "organization",
+          "in" : "query",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 255
+          }
+        }, {
+          "name" : "repository",
+          "in" : "query",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 255
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "GithubChecksSetupStatusDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/GithubChecksSetupStatusDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/integrations/github/checks/policy" : {
+      "put" : {
+        "tags" : [ "SystemConfig" ],
+        "operationId" : "systemConfigControllerUpdateGithubChecksPolicy",
+        "x-controller-operation" : "SystemConfigController#updateGithubChecksPolicy",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "GithubChecksPolicyRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/GithubChecksPolicyRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "GithubChecksSetupStatusDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/GithubChecksSetupStatusDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/integrations/github/checks/preview" : {
+      "post" : {
+        "tags" : [ "SystemConfig" ],
+        "operationId" : "systemConfigControllerPreviewGithubChecks",
+        "x-controller-operation" : "SystemConfigController#previewGithubChecks",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "GithubChecksPreviewRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/GithubChecksPreviewRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "GithubChecksSetupStatusDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/GithubChecksSetupStatusDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/config/integrations/github/test" : {
       "post" : {
         "tags" : [ "SystemConfig" ],
@@ -9121,6 +9287,241 @@
             "x-valid" : true
           }
         }
+      },
+      "GithubChecksDiagnosticDto" : {
+        "type" : "object",
+        "x-java-type" : "GithubChecksDiagnosticDto",
+        "properties" : {
+          "code" : {
+            "type" : "string"
+          },
+          "label" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "blocking" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "blocking" ]
+      },
+      "GithubChecksPolicyRequest" : {
+        "type" : "object",
+        "x-java-type" : "GithubChecksPolicyRequest",
+        "properties" : {
+          "organization" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 255
+          },
+          "repository" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 255
+          },
+          "enabled" : {
+            "type" : "boolean"
+          },
+          "expectedVersion" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 0
+          },
+          "confirmed" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "organization", "repository", "enabled", "expectedVersion", "confirmed" ]
+      },
+      "GithubChecksPreviewDto" : {
+        "type" : "object",
+        "x-java-type" : "GithubChecksPreviewDto",
+        "properties" : {
+          "attempted" : {
+            "type" : "boolean"
+          },
+          "created" : {
+            "type" : "boolean"
+          },
+          "headSha" : {
+            "type" : "string"
+          },
+          "externalId" : {
+            "type" : "string"
+          },
+          "remoteCheckRunId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "desiredStage" : {
+            "type" : "string"
+          },
+          "desiredVersion" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "appliedStage" : {
+            "type" : "string"
+          },
+          "appliedVersion" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "retryAttempts" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "annotationCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "annotationTruncated" : {
+            "type" : "boolean"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "conclusion" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "attempted", "created", "desiredVersion", "appliedVersion", "retryAttempts", "annotationCount", "annotationTruncated" ]
+      },
+      "GithubChecksPreviewRequest" : {
+        "type" : "object",
+        "x-java-type" : "GithubChecksPreviewRequest",
+        "properties" : {
+          "organization" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 255
+          },
+          "repository" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 255
+          },
+          "pullRequestNumber" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1
+          }
+        },
+        "required" : [ "organization", "repository", "pullRequestNumber" ]
+      },
+      "GithubChecksSetupStatusDto" : {
+        "type" : "object",
+        "x-java-type" : "GithubChecksSetupStatusDto",
+        "properties" : {
+          "organization" : {
+            "type" : "string"
+          },
+          "repository" : {
+            "type" : "string"
+          },
+          "appEnabled" : {
+            "type" : "boolean"
+          },
+          "appConfigured" : {
+            "type" : "boolean"
+          },
+          "installationId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "installationAllowlisted" : {
+            "type" : "boolean"
+          },
+          "repositoryAuthorized" : {
+            "type" : "boolean"
+          },
+          "metadataPermission" : {
+            "type" : "boolean"
+          },
+          "contentsPermission" : {
+            "type" : "boolean"
+          },
+          "pullRequestsPermission" : {
+            "type" : "boolean"
+          },
+          "checksPermission" : {
+            "type" : "boolean"
+          },
+          "globalCheckRunEnabled" : {
+            "type" : "boolean"
+          },
+          "repositoryCheckRunEnabled" : {
+            "type" : "boolean"
+          },
+          "effectiveCheckRunEnabled" : {
+            "type" : "boolean"
+          },
+          "policyVersion" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "webhook" : {
+            "$ref" : "#/components/schemas/GithubChecksWebhookStatusDto"
+          },
+          "diagnostics" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/GithubChecksDiagnosticDto"
+            }
+          },
+          "preview" : {
+            "$ref" : "#/components/schemas/GithubChecksPreviewDto"
+          },
+          "ready" : {
+            "type" : "boolean"
+          },
+          "mergeGateGuidance" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "appEnabled", "appConfigured", "installationAllowlisted", "repositoryAuthorized", "metadataPermission", "contentsPermission", "pullRequestsPermission", "checksPermission", "globalCheckRunEnabled", "repositoryCheckRunEnabled", "effectiveCheckRunEnabled", "policyVersion", "ready" ]
+      },
+      "GithubChecksWebhookStatusDto" : {
+        "type" : "object",
+        "x-java-type" : "GithubChecksWebhookStatusDto",
+        "properties" : {
+          "endpointUrl" : {
+            "type" : "string"
+          },
+          "enabled" : {
+            "type" : "boolean"
+          },
+          "signatureRequired" : {
+            "type" : "boolean"
+          },
+          "secretConfigured" : {
+            "type" : "boolean"
+          },
+          "repositoriesRestricted" : {
+            "type" : "boolean"
+          },
+          "branchesRestricted" : {
+            "type" : "boolean"
+          },
+          "lastDeliveryId" : {
+            "type" : "string"
+          },
+          "lastDeliveryStatus" : {
+            "type" : "string"
+          },
+          "lastDeliveryAt" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "enabled", "signatureRequired", "secretConfigured", "repositoriesRestricted", "branchesRestricted" ]
       },
       "GithubCommentPreviewItem" : {
         "type" : "object",

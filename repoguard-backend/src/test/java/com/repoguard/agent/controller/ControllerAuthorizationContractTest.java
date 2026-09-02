@@ -21,6 +21,7 @@ class ControllerAuthorizationContractTest {
         "EnterpriseTenantController#list",
         "EnterpriseTenantQuotaController#get",
         "SystemConfigController#getGithubIntegration",
+        "SystemConfigController#getGithubChecksSetup",
         "SystemConfigController#getMysqlIntegration",
         "SystemConfigController#getRabbitMqIntegration",
         "SystemConfigController#getReviewPolicy",

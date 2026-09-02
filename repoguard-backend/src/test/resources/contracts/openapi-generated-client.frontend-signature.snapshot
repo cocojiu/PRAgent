@@ -23,6 +23,7 @@ fetchDataRetentionCleanupAudits -> dataRetentionControllerListCleanupAudits(inpu
 fetchEnterpriseTenant -> enterpriseTenantControllerGet(input: { path: { tenantKey: string } }): Promise<EnterpriseTenant>; // GET /api/v1/enterprise/tenants/{tenantKey}
 fetchEnterpriseTenantQuota -> enterpriseTenantQuotaControllerGet(input: { path: { tenantKey: string } }): Promise<EnterpriseTenantQuota>; // GET /api/v1/enterprise/tenants/{tenantKey}/quota
 fetchEnterpriseTenants -> enterpriseTenantControllerList(input?: { query?: { page?: number; pageSize?: number; status?: string } }): Promise<PageResponse<EnterpriseTenant>>; // GET /api/v1/enterprise/tenants
+fetchGithubChecksSetup -> systemConfigControllerGetGithubChecksSetup(input?: { query?: { organization: string; repository: string } }): Promise<GithubChecksSetupStatus>; // GET /api/v1/config/integrations/github/checks
 fetchGithubCommentPreview -> reviewControllerGetGithubCommentPreview(input: { path: { id: number }; query?: { commentableOnly?: boolean; page?: number; pageSize?: number } }): Promise<GithubCommentPreview>; // GET /api/v1/reviews/{id}/github-comments/preview
 fetchGithubCommentPublicationHistory -> reviewControllerGetGithubCommentPublicationHistory(input: { path: { id: number }; query?: { page?: number; pageSize?: number; status?: string } }): Promise<GithubCommentPublicationHistory>; // GET /api/v1/reviews/{id}/github-comments/publications
 fetchGithubIntegrationConfig -> systemConfigControllerGetGithubIntegration(): Promise<GithubIntegrationConfig>; // GET /api/v1/config/integrations/github
@@ -69,6 +70,7 @@ login -> authControllerLogin(input: { body: AuthLoginRequest }): Promise<AuthRes
 logout -> authControllerLogout(input?: { body?: AuthLogoutRequest }): Promise<void>; // POST /api/v1/auth/logout
 markNotificationRead -> notificationControllerMarkRead(input: { body: NotificationReadRequest }): Promise<void>; // POST /api/v1/notifications/read
 pauseSecretReEncryptionJob -> systemConfigControllerPauseSecretReEncryptionJob(input: { path: { jobId: number } }): Promise<SecretReEncryptionJob>; // POST /api/v1/config/secrets/re-encryption/jobs/{jobId}/pause
+previewGithubChecks -> systemConfigControllerPreviewGithubChecks(input: { body: GithubChecksPreviewRequest }): Promise<GithubChecksSetupStatus>; // POST /api/v1/config/integrations/github/checks/preview
 promoteLlmModelRelease -> reviewCalibrationControllerPromoteModelRelease(input: { body: LlmModelReleaseRequest }): Promise<LlmModelRelease>; // POST /api/v1/config/review-calibration/release-center/promote
 publishGithubComments -> reviewControllerPublishGithubComments(input: { path: { id: number } }): Promise<GithubCommentPublish>; // POST /api/v1/reviews/{id}/github-comments
 reEncryptSecrets -> systemConfigControllerReEncryptSecrets(input: { body: SecretReEncryptionRequest }): Promise<SecretReEncryptionJob>; // POST /api/v1/config/secrets/re-encryption
@@ -93,6 +95,7 @@ triggerManualReview -> reviewControllerTriggerManualReview(input: { body: Manual
 updateEnterpriseTenantQuota -> enterpriseTenantQuotaControllerUpdate(input: { path: { tenantKey: string }; body: EnterpriseTenantQuotaRequest }): Promise<EnterpriseTenantQuota>; // PUT /api/v1/enterprise/tenants/{tenantKey}/quota
 updateEnterpriseTenantStatus -> enterpriseTenantControllerUpdateStatus(input: { path: { tenantKey: string }; body: EnterpriseTenantStatusRequest }): Promise<EnterpriseTenant>; // PUT /api/v1/enterprise/tenants/{tenantKey}/status
 updateFindingFeedback -> reviewControllerUpdateFindingFeedback(input: { path: { findingId: number; id: number }; body: FindingFeedbackRequest }): Promise<FindingFeedbackResponse>; // POST /api/v1/reviews/{id}/findings/{findingId}/feedback
+updateGithubChecksPolicy -> systemConfigControllerUpdateGithubChecksPolicy(input: { body: GithubChecksPolicyRequest }): Promise<GithubChecksSetupStatus>; // PUT /api/v1/config/integrations/github/checks/policy
 updateGithubIntegrationConfig -> systemConfigControllerUpdateGithubIntegration(input: { body: GithubIntegrationConfigRequest }): Promise<GithubIntegrationConfig>; // PUT /api/v1/config/integrations/github
 updateMysqlIntegrationConfig -> systemConfigControllerUpdateMysqlIntegration(input: { body: ServiceIntegrationConfigRequest }): Promise<ServiceIntegrationConfig>; // PUT /api/v1/config/integrations/mysql
 updateNotificationBinding -> notificationIntegrationControllerUpdateBinding(input: { path: { id: number }; body: NotificationBindingRequest }): Promise<NotificationBinding>; // PUT /api/v1/config/notification-bindings/{id}

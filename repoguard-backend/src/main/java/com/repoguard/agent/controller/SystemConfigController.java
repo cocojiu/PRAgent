@@ -5,6 +5,9 @@ import com.repoguard.agent.config.ApiRuntimeEnabled;
 import com.repoguard.agent.dto.ConnectionTestResultDto;
 import com.repoguard.agent.dto.GithubIntegrationConfigDto;
 import com.repoguard.agent.dto.GithubIntegrationConfigRequest;
+import com.repoguard.agent.dto.GithubChecksPolicyRequest;
+import com.repoguard.agent.dto.GithubChecksPreviewRequest;
+import com.repoguard.agent.dto.GithubChecksSetupStatusDto;
 import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.ReviewPolicyConfigDto;
 import com.repoguard.agent.dto.ReviewPolicyConfigRequest;
@@ -41,6 +44,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.beans.factory.annotation.Autowired;
 
 @RestController
 @RequestMapping("/api/v1/config")
@@ -50,13 +54,24 @@ public class SystemConfigController {
 
     private final SystemConfigService systemConfigService;
     private final SecretReEncryptionJobService secretReEncryptionJobService;
+    private final com.repoguard.agent.github.checks.GithubChecksSetupService githubChecksSetupService;
+
+    @Autowired
+    public SystemConfigController(
+        SystemConfigService systemConfigService,
+        SecretReEncryptionJobService secretReEncryptionJobService,
+        com.repoguard.agent.github.checks.GithubChecksSetupService githubChecksSetupService
+    ) {
+        this.systemConfigService = systemConfigService;
+        this.secretReEncryptionJobService = secretReEncryptionJobService;
+        this.githubChecksSetupService = githubChecksSetupService;
+    }
 
     public SystemConfigController(
         SystemConfigService systemConfigService,
         SecretReEncryptionJobService secretReEncryptionJobService
     ) {
-        this.systemConfigService = systemConfigService;
-        this.secretReEncryptionJobService = secretReEncryptionJobService;
+        this(systemConfigService, secretReEncryptionJobService, null);
     }
 
     @GetMapping("/integrations/github")
@@ -76,6 +91,39 @@ public class SystemConfigController {
         @Valid @RequestBody(required = false) GithubIntegrationConfigRequest request
     ) {
         return ApiResponse.ok(systemConfigService.testGithubIntegration(request));
+    }
+
+    @GetMapping("/integrations/github/checks")
+    public ApiResponse<GithubChecksSetupStatusDto> getGithubChecksSetup(
+        @RequestParam @jakarta.validation.constraints.NotBlank @Size(max = 255) String organization,
+        @RequestParam @jakarta.validation.constraints.NotBlank @Size(max = 255) String repository
+    ) {
+        return ApiResponse.ok(checksService().status(organization, repository));
+    }
+
+    @PostMapping("/integrations/github/checks/preview")
+    public ApiResponse<GithubChecksSetupStatusDto> previewGithubChecks(
+        @Valid @RequestBody GithubChecksPreviewRequest request
+    ) {
+        return ApiResponse.ok(checksService().preview(request));
+    }
+
+    @PutMapping("/integrations/github/checks/policy")
+    public ApiResponse<GithubChecksSetupStatusDto> updateGithubChecksPolicy(
+        @Valid @RequestBody GithubChecksPolicyRequest request,
+        HttpServletRequest servletRequest
+    ) {
+        return ApiResponse.ok(checksService().setPolicy(
+            request,
+            RequestAuthentication.require(servletRequest).username()
+        ));
+    }
+
+    private com.repoguard.agent.github.checks.GithubChecksSetupService checksService() {
+        if (githubChecksSetupService == null) {
+            throw new IllegalStateException("GitHub Checks setup service is unavailable");
+        }
+        return githubChecksSetupService;
     }
 
     @GetMapping("/integrations/mysql")

@@ -94,6 +94,24 @@ class GithubAppTokenServiceTest {
         verifyNoInteractions(endpointPolicy);
     }
 
+    @Test
+    void exposesSafeConfigurationAndAllowlistDecisions() {
+        GithubAppProperties properties = new GithubAppProperties();
+
+        assertThat(properties.isConfigured()).isFalse();
+        properties.setEnabled(true);
+        properties.setAppId(1L);
+        properties.setPrivateKey("private-key");
+        assertThat(properties.isConfigured()).isTrue();
+
+        properties.setAllowedInstallationIds(Set.of(77L));
+        assertThat(properties.isInstallationAllowlisted(77L)).isTrue();
+        assertThat(properties.isInstallationAllowlisted(88L)).isFalse();
+        properties.setAllowedInstallationIds(Set.of());
+        assertThat(properties.isInstallationAllowlisted(88L)).isTrue();
+        assertThat(properties.isInstallationAllowlisted(null)).isFalse();
+    }
+
     private HttpServer tokenServer(
         AtomicInteger requests,
         AtomicReference<String> authorization

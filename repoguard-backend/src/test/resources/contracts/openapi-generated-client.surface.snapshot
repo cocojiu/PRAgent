@@ -87,6 +87,7 @@ scmProviderControllerHead(input: { path: { provider: string; taskId: number } })
 scmProviderControllerProviders(): Promise<ScmProviderDescriptor[]>; // GET /api/v1/scm/providers
 scmProviderControllerStatus(input: { path: { provider: string; taskId: number }; body: ScmStatusRequest }): Promise<ScmStatusResult>; // POST /api/v1/scm/providers/{provider}/tasks/{taskId}/status
 systemConfigControllerCreateReviewRule(input: { body: ReviewRuleConfigRequest }): Promise<ReviewRuleConfig>; // POST /api/v1/config/review-rules
+systemConfigControllerGetGithubChecksSetup(input?: { query?: { organization: string; repository: string } }): Promise<GithubChecksSetupStatus>; // GET /api/v1/config/integrations/github/checks
 systemConfigControllerGetGithubIntegration(): Promise<GithubIntegrationConfig>; // GET /api/v1/config/integrations/github
 systemConfigControllerGetMysqlIntegration(): Promise<ServiceIntegrationConfig>; // GET /api/v1/config/integrations/mysql
 systemConfigControllerGetRabbitMqIntegration(): Promise<ServiceIntegrationConfig>; // GET /api/v1/config/integrations/rabbitmq
@@ -100,6 +101,7 @@ systemConfigControllerGetSystemSettings(): Promise<SystemSettings>; // GET /api/
 systemConfigControllerListSecretReEncryptionJobItems(input: { path: { jobId: number }; query?: { page?: number; pageSize?: number } }): Promise<PageResponse<SecretReEncryptionItem>>; // GET /api/v1/config/secrets/re-encryption/jobs/{jobId}/items
 systemConfigControllerListSecretReEncryptionJobs(input?: { query?: { page?: number; pageSize?: number } }): Promise<PageResponse<SecretReEncryptionJob>>; // GET /api/v1/config/secrets/re-encryption/jobs
 systemConfigControllerPauseSecretReEncryptionJob(input: { path: { jobId: number } }): Promise<SecretReEncryptionJob>; // POST /api/v1/config/secrets/re-encryption/jobs/{jobId}/pause
+systemConfigControllerPreviewGithubChecks(input: { body: GithubChecksPreviewRequest }): Promise<GithubChecksSetupStatus>; // POST /api/v1/config/integrations/github/checks/preview
 systemConfigControllerPromoteReviewStrategy(input: { body: ReviewEnforcementModeRequest }): Promise<ReviewStrategyPolicy>; // PUT /api/v1/config/review-strategy/enforcement
 systemConfigControllerReEncryptSecrets(input: { body: SecretReEncryptionRequest }): Promise<SecretReEncryptionJob>; // POST /api/v1/config/secrets/re-encryption
 systemConfigControllerResumeSecretReEncryptionJob(input: { path: { jobId: number } }): Promise<SecretReEncryptionJob>; // POST /api/v1/config/secrets/re-encryption/jobs/{jobId}/resume
@@ -109,6 +111,7 @@ systemConfigControllerTestGithubIntegration(input?: { body?: GithubIntegrationCo
 systemConfigControllerTestMysqlConnection(input?: { body?: ServiceIntegrationConfigRequest }): Promise<ConnectionTestResult>; // POST /api/v1/config/integrations/mysql/test
 systemConfigControllerTestRabbitMqConnection(input?: { body?: ServiceIntegrationConfigRequest }): Promise<ConnectionTestResult>; // POST /api/v1/config/integrations/rabbitmq/test
 systemConfigControllerTestReviewPolicy(input?: { body?: ReviewPolicyConfigRequest }): Promise<ConnectionTestResult>; // POST /api/v1/config/review-policy/test
+systemConfigControllerUpdateGithubChecksPolicy(input: { body: GithubChecksPolicyRequest }): Promise<GithubChecksSetupStatus>; // PUT /api/v1/config/integrations/github/checks/policy
 systemConfigControllerUpdateGithubIntegration(input: { body: GithubIntegrationConfigRequest }): Promise<GithubIntegrationConfig>; // PUT /api/v1/config/integrations/github
 systemConfigControllerUpdateMysqlIntegration(input: { body: ServiceIntegrationConfigRequest }): Promise<ServiceIntegrationConfig>; // PUT /api/v1/config/integrations/mysql
 systemConfigControllerUpdateRabbitMqIntegration(input: { body: ServiceIntegrationConfigRequest }): Promise<ServiceIntegrationConfig>; // PUT /api/v1/config/integrations/rabbitmq

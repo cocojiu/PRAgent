@@ -19,7 +19,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
  * Exercises the supported rolling-upgrade path against a real MySQL instance.
  *
  * <p>The test is opt-in because local unit-test runs do not provision a database. CI enables it
- * with an isolated database and verifies the V76 expand state through the V86 release-audit state.
+ * with an isolated database and verifies the V76 expand state through the V87 Check Run policy state.
  */
 @EnabledIfEnvironmentVariable(named = "REPOGUARD_RUN_INTEGRATION_TESTS", matches = "true")
 class FlywayMigrationUpgradePathIntegrationTest {
@@ -124,9 +124,9 @@ class FlywayMigrationUpgradePathIntegrationTest {
                 }
             }
 
-            migrateTo(url, username, password, "86");
+            migrateTo(url, username, password, "87");
             try (Connection connection = open(url, username, password)) {
-                assertThat(latestSuccessfulMigration(connection)).isEqualTo("86");
+                assertThat(latestSuccessfulMigration(connection)).isEqualTo("87");
                 assertThat(columnExists(connection, "tenant_quota_config", "monthly_llm_token_budget"))
                     .isTrue();
                 assertThat(columnExists(connection, "tenant_quota_config", "monthly_llm_cost_budget"))
@@ -161,6 +161,17 @@ class FlywayMigrationUpgradePathIntegrationTest {
                 )).isTrue();
                 assertThat(constraintExists(
                     connection, "llm_model_release_audit", "fk_llm_model_release_audit_release"
+                )).isTrue();
+                assertThat(compositeUniqueIndexExists(
+                    connection,
+                    "github_check_run_policy",
+                    "uk_github_check_run_policy_repository",
+                    3
+                )).isTrue();
+                assertThat(constraintExists(
+                    connection,
+                    "github_check_run_policy",
+                    "fk_github_check_run_policy_tenant"
                 )).isTrue();
             }
         } finally {

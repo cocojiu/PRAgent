@@ -3,6 +3,7 @@ GET /api/v1/auth/me query=[] body=- bodyRequired=false
 GET /api/v1/cache/stats query=[] body=- bodyRequired=false
 GET /api/v1/config/data-retention/cleanup-audits query=[page, pageSize, mode, status, backupReference] body=- bodyRequired=false
 GET /api/v1/config/integrations/github query=[] body=- bodyRequired=false
+GET /api/v1/config/integrations/github/checks query=[organization, repository] body=- bodyRequired=false
 GET /api/v1/config/integrations/mysql query=[] body=- bodyRequired=false
 GET /api/v1/config/integrations/rabbitmq query=[] body=- bodyRequired=false
 GET /api/v1/config/notification-bindings query=[page, pageSize, organization, repository, provider] body=- bodyRequired=false
@@ -71,6 +72,7 @@ POST /api/v1/auth/refresh-token/reset query=[] body=AuthRefreshTokenResetRequest
 POST /api/v1/auth/register query=[] body=AuthRegisterRequest bodyRequired=true
 POST /api/v1/config/data-retention/cleanup query=[] body=DataRetentionCleanupRequest bodyRequired=false
 POST /api/v1/config/declarative-rules/{id}/dry-run query=[] body=DeclarativeRuleDryRunRequest bodyRequired=true
+POST /api/v1/config/integrations/github/checks/preview query=[] body=GithubChecksPreviewRequest bodyRequired=true
 POST /api/v1/config/integrations/github/test query=[] body=GithubIntegrationConfigRequest bodyRequired=false
 POST /api/v1/config/integrations/mysql/test query=[] body=ServiceIntegrationConfigRequest bodyRequired=false
 POST /api/v1/config/integrations/rabbitmq/test query=[] body=ServiceIntegrationConfigRequest bodyRequired=false
@@ -105,6 +107,7 @@ POST /api/v1/scm/providers/{provider}/tasks/{taskId}/comments query=[] body=ScmC
 POST /api/v1/scm/providers/{provider}/tasks/{taskId}/status query=[] body=ScmStatusRequest bodyRequired=true
 POST /api/v1/users query=[] body=UserCreateRequest bodyRequired=true
 PUT /api/v1/config/integrations/github query=[] body=GithubIntegrationConfigRequest bodyRequired=true
+PUT /api/v1/config/integrations/github/checks/policy query=[] body=GithubChecksPolicyRequest bodyRequired=true
 PUT /api/v1/config/integrations/mysql query=[] body=ServiceIntegrationConfigRequest bodyRequired=true
 PUT /api/v1/config/integrations/rabbitmq query=[] body=ServiceIntegrationConfigRequest bodyRequired=true
 PUT /api/v1/config/notification-bindings/{id} query=[] body=NotificationBindingRequest bodyRequired=true

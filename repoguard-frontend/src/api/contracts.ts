@@ -25,6 +25,7 @@ import type { ManagedUser, UserCreateRequest, UserOperationAudit, UserRole, User
 import {
   isAuthResponse,
   isCurrentUser,
+  isGithubChecksSetupStatus,
   isGithubIntegrationConfig,
   isReviewPolicyConfig,
   isReviewTaskSummary,
@@ -64,6 +65,9 @@ import type {
   GithubCommentPreview,
   GithubCommentPublicationHistory,
   GithubCommentPublish,
+  GithubChecksPolicyRequest,
+  GithubChecksPreviewRequest,
+  GithubChecksSetupStatus,
   GithubIntegrationConfig,
   GithubIntegrationConfigRequest,
   GithubPullRequestOptions,
@@ -254,6 +258,12 @@ export type ApiContract = {
   triggerManualReview: ApiOperation<ManualReviewRequest, ManualReviewResponse>;
   fetchGithubIntegrationConfig: ApiOperation<undefined, GithubIntegrationConfig>;
   updateGithubIntegrationConfig: ApiOperation<GithubIntegrationConfigRequest, GithubIntegrationConfig>;
+  fetchGithubChecksSetup: ApiOperation<
+    { organization: string; repository: string },
+    GithubChecksSetupStatus
+  >;
+  previewGithubChecks: ApiOperation<GithubChecksPreviewRequest, GithubChecksSetupStatus>;
+  updateGithubChecksPolicy: ApiOperation<GithubChecksPolicyRequest, GithubChecksSetupStatus>;
   fetchMysqlIntegrationConfig: ApiOperation<undefined, ServiceIntegrationConfig>;
   updateMysqlIntegrationConfig: ApiOperation<ServiceIntegrationConfigRequest, ServiceIntegrationConfig>;
   fetchRabbitMqIntegrationConfig: ApiOperation<undefined, ServiceIntegrationConfig>;
@@ -541,6 +551,24 @@ const apiEndpoints: ApiEndpointMap = {
       body: input => input
     }),
     validateResponse: isGithubIntegrationConfig
+  },
+  fetchGithubChecksSetup: {
+    ...generatedEndpoint("systemConfigControllerGetGithubChecksSetup", {
+      query: input => ({ organization: input.organization, repository: input.repository })
+    }),
+    validateResponse: isGithubChecksSetupStatus
+  },
+  previewGithubChecks: {
+    ...generatedEndpoint("systemConfigControllerPreviewGithubChecks", {
+      body: input => input
+    }),
+    validateResponse: isGithubChecksSetupStatus
+  },
+  updateGithubChecksPolicy: {
+    ...generatedEndpoint("systemConfigControllerUpdateGithubChecksPolicy", {
+      body: input => input
+    }),
+    validateResponse: isGithubChecksSetupStatus
   },
   fetchMysqlIntegrationConfig: {
     ...generatedEndpoint("systemConfigControllerGetMysqlIntegration", {}),

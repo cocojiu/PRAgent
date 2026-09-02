@@ -23,6 +23,7 @@ fetchDataRetentionCleanupAudits -> dataRetentionControllerListCleanupAudits // G
 fetchEnterpriseTenant -> enterpriseTenantControllerGet // GET /api/v1/enterprise/tenants/{tenantKey}
 fetchEnterpriseTenantQuota -> enterpriseTenantQuotaControllerGet // GET /api/v1/enterprise/tenants/{tenantKey}/quota
 fetchEnterpriseTenants -> enterpriseTenantControllerList // GET /api/v1/enterprise/tenants
+fetchGithubChecksSetup -> systemConfigControllerGetGithubChecksSetup // GET /api/v1/config/integrations/github/checks
 fetchGithubCommentPreview -> reviewControllerGetGithubCommentPreview // GET /api/v1/reviews/{id}/github-comments/preview
 fetchGithubCommentPublicationHistory -> reviewControllerGetGithubCommentPublicationHistory // GET /api/v1/reviews/{id}/github-comments/publications
 fetchGithubIntegrationConfig -> systemConfigControllerGetGithubIntegration // GET /api/v1/config/integrations/github
@@ -69,6 +70,7 @@ login -> authControllerLogin // POST /api/v1/auth/login
 logout -> authControllerLogout // POST /api/v1/auth/logout
 markNotificationRead -> notificationControllerMarkRead // POST /api/v1/notifications/read
 pauseSecretReEncryptionJob -> systemConfigControllerPauseSecretReEncryptionJob // POST /api/v1/config/secrets/re-encryption/jobs/{jobId}/pause
+previewGithubChecks -> systemConfigControllerPreviewGithubChecks // POST /api/v1/config/integrations/github/checks/preview
 promoteLlmModelRelease -> reviewCalibrationControllerPromoteModelRelease // POST /api/v1/config/review-calibration/release-center/promote
 publishGithubComments -> reviewControllerPublishGithubComments // POST /api/v1/reviews/{id}/github-comments
 reEncryptSecrets -> systemConfigControllerReEncryptSecrets // POST /api/v1/config/secrets/re-encryption
@@ -93,6 +95,7 @@ triggerManualReview -> reviewControllerTriggerManualReview // POST /api/v1/revie
 updateEnterpriseTenantQuota -> enterpriseTenantQuotaControllerUpdate // PUT /api/v1/enterprise/tenants/{tenantKey}/quota
 updateEnterpriseTenantStatus -> enterpriseTenantControllerUpdateStatus // PUT /api/v1/enterprise/tenants/{tenantKey}/status
 updateFindingFeedback -> reviewControllerUpdateFindingFeedback // POST /api/v1/reviews/{id}/findings/{findingId}/feedback
+updateGithubChecksPolicy -> systemConfigControllerUpdateGithubChecksPolicy // PUT /api/v1/config/integrations/github/checks/policy
 updateGithubIntegrationConfig -> systemConfigControllerUpdateGithubIntegration // PUT /api/v1/config/integrations/github
 updateMysqlIntegrationConfig -> systemConfigControllerUpdateMysqlIntegration // PUT /api/v1/config/integrations/mysql
 updateNotificationBinding -> notificationIntegrationControllerUpdateBinding // PUT /api/v1/config/notification-bindings/{id}

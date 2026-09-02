@@ -43,6 +43,12 @@
       />
     </section>
 
+    <GithubChecksSetupWizard
+      :can-manage="canManage"
+      :initial-organization="githubConfig?.defaultOwner"
+      :initial-repository="githubConfig?.defaultRepo"
+    />
+
   </div>
 </template>
 
@@ -73,6 +79,7 @@ import {
   buildRabbitMqPayload,
   buildSpringAiPayload,
   IntegrationCard,
+  GithubChecksSetupWizard,
   serviceIcons,
   useIntegrationConfigPersistence,
   useIntegrationConnectionTest,
@@ -119,7 +126,7 @@ const { testConnection } = useIntegrationConnectionTest({
   testingConnections
 });
 
-const { loadErrorMessage, loading, savingId, reviewPolicyConfig, loadConfig, saveConfig } = useIntegrationConfigPersistence({
+const { githubConfig, loadErrorMessage, loading, savingId, reviewPolicyConfig, loadConfig, saveConfig } = useIntegrationConfigPersistence({
   applyGithubConfig,
   applyReviewPolicyConfig,
   applyServiceConfig,

@@ -7,6 +7,7 @@ import com.repoguard.agent.mapper.GithubCheckRunMapper;
 import com.repoguard.agent.review.ReviewTaskCheckRunLifecycle;
 import java.time.LocalDateTime;
 import java.util.Objects;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -17,13 +18,24 @@ public class GithubCheckRunLifecycleService implements ReviewTaskCheckRunLifecyc
 
     private final GithubCheckRunMapper mapper;
     private final GithubCheckRunProperties properties;
+    private final GithubCheckRunPolicyProvider policyProvider;
+
+    @Autowired
+    public GithubCheckRunLifecycleService(
+        GithubCheckRunMapper mapper,
+        GithubCheckRunProperties properties,
+        GithubCheckRunPolicyProvider policyProvider
+    ) {
+        this.mapper = Objects.requireNonNull(mapper, "mapper");
+        this.properties = Objects.requireNonNull(properties, "properties");
+        this.policyProvider = Objects.requireNonNull(policyProvider, "policyProvider");
+    }
 
     public GithubCheckRunLifecycleService(
         GithubCheckRunMapper mapper,
         GithubCheckRunProperties properties
     ) {
-        this.mapper = Objects.requireNonNull(mapper, "mapper");
-        this.properties = Objects.requireNonNull(properties, "properties");
+        this(mapper, properties, task -> true);
     }
 
     public void queued(ReviewTask task) {
@@ -117,6 +129,9 @@ public class GithubCheckRunLifecycleService implements ReviewTaskCheckRunLifecyc
     }
 
     private boolean enabled(ReviewTask task) {
-        return properties.isEnabled() && task != null && task.getId() != null;
+        return properties.isEnabled()
+            && task != null
+            && task.getId() != null
+            && policyProvider.isEnabled(task);
     }
 }
