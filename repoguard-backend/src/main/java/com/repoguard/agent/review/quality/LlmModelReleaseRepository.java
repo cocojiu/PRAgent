@@ -150,11 +150,43 @@ public class LlmModelReleaseRepository {
         return jdbcTemplate.query("select * from llm_model_release where tenant_id = ? and state = ? order by updated_at desc, id desc limit 10",
             this::mapRelease, tenantId, state);
     }
+
+    /** Locks the tenant row so a release transition is serialized across application instances. */
+    public void lockTenant(long tenantId) {
+        Long lockedTenant = jdbcTemplate.queryForObject(
+            "select id from tenant where id = ? for update", Long.class, tenantId
+        );
+        if (lockedTenant == null) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "租户不存在，不能变更模型发布");
+        }
+    }
+
+    public LlmModelReleaseDto findByReleaseKey(long tenantId, String releaseKey) {
+        List<LlmModelReleaseDto> releases = jdbcTemplate.query(
+            "select * from llm_model_release where tenant_id = ? and release_key = ?",
+            this::mapRelease, tenantId, releaseKey
+        );
+        return releases.isEmpty() ? null : releases.getFirst();
+    }
+
     public int markActiveReplaced(long tenantId) {
         return jdbcTemplate.update("update llm_model_release set state = 'ROLLED_BACK', traffic_percent = 0, rollback_reason = 'replaced by a newer active release' where tenant_id = ? and state = 'ACTIVE'", tenantId);
     }
     public int rollback(long tenantId, long releaseId, String reason) {
         return jdbcTemplate.update("update llm_model_release set state = 'ROLLED_BACK', traffic_percent = 0, rollback_reason = ?, updated_at = current_timestamp(6) where tenant_id = ? and id = ? and state <> 'ROLLED_BACK'", reason, tenantId, releaseId);
+    }
+
+    /** Append-only transition record; there is intentionally no update/delete path for audits. */
+    public void insertAudit(long tenantId, long releaseId, String releaseKey, String action,
+        String fromState, String toState, int trafficPercent, String operator, String reason,
+        String detailsJson, String eventHash) {
+        jdbcTemplate.update("""
+            insert into llm_model_release_audit
+                (tenant_id, release_id, release_key, action, from_state, to_state, traffic_percent,
+                 operator, reason, details_json, event_hash, created_at)
+            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, current_timestamp(6))
+            """, tenantId, releaseId, releaseKey, action, fromState, toState, trafficPercent,
+            operator, reason, detailsJson, eventHash);
     }
 
     private StoredEvaluationReport mapEvaluationReport(java.sql.ResultSet rs, int rowNum) throws SQLException {

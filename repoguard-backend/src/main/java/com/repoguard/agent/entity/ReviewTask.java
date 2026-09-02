@@ -32,6 +32,8 @@ public class ReviewTask {
     private String llmStatus;
     private String llmProvider;
     private String llmModel;
+    /** Immutable model-release assignment captured when a reviewing task is first routed. */
+    private String llmReleaseKey;
     private Integer llmDurationMs;
     private String llmParseStatus;
     private String llmFallbackReason;
@@ -106,6 +108,8 @@ public class ReviewTask {
     public void setLlmProvider(String llmProvider) { this.llmProvider = llmProvider; }
     public String getLlmModel() { return llmModel; }
     public void setLlmModel(String llmModel) { this.llmModel = llmModel; }
+    public String getLlmReleaseKey() { return llmReleaseKey; }
+    public void setLlmReleaseKey(String llmReleaseKey) { this.llmReleaseKey = llmReleaseKey; }
     public Integer getLlmDurationMs() { return llmDurationMs; }
     public void setLlmDurationMs(Integer llmDurationMs) { this.llmDurationMs = llmDurationMs; }
     public String getLlmParseStatus() { return llmParseStatus; }

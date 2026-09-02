@@ -180,6 +180,37 @@ class LlmModelReleaseServiceTest {
     }
 
     @Test
+    void shadowRegistrationRequiresTrustedReportAndUsesServerMetrics() {
+        assertThatThrownBy(() -> service.registerShadow(request(FINGERPRINT, 0, true, null), "operator"))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("服务端评估报告");
+
+        LlmModelReleaseDto saved = release(17L, "SHADOW", 0, "gpt-next", true);
+        when(repository.save(anyLong(), any(), anyString(), anyInt(), anyString(), anyString())).thenReturn(saved);
+        service.registerShadow(request(FINGERPRINT, 0, false), "operator");
+
+        verify(repository).save(eq(42L), org.mockito.ArgumentMatchers.argThat(release ->
+            release.qualityGatePassed()
+                && release.precisionRate().compareTo(new BigDecimal("0.95")) == 0
+                && release.evaluationReportId() == 77L
+        ), eq("SHADOW"), eq(0), eq("operator"), eq(""));
+    }
+
+    @Test
+    void promotionRejectsOutOfRangeTrafficAndAlreadyPromotedState() {
+        assertThatThrownBy(() -> service.promote(request(FINGERPRINT, 101, true), "operator"))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("流量比例");
+
+        when(repository.findByReleaseKey(42L, "release-1"))
+            .thenReturn(release(18L, "ACTIVE", 100, "gpt-next", true));
+        assertThatThrownBy(() -> service.promote(request(FINGERPRINT, 20, true), "operator"))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("不能重复发布");
+        verify(repository, never()).save(anyLong(), any(), anyString(), anyInt(), anyString(), anyString());
+    }
+
+    @Test
     void promotionRejectsServerQualityMetricsEvenWhenClientClaimsPass() {
         when(repository.findEvaluationReport(42L, 79L)).thenReturn(badEvidence());
 
@@ -280,6 +311,20 @@ class LlmModelReleaseServiceTest {
 
         assertThat(service.route(settings("openai"), task(2L)).modelName()).isEqualTo("gpt-canary");
         assertThat(service.route(settings("openai"), task(1L)).modelName()).isEqualTo("gpt-active");
+    }
+
+    @Test
+    void routePersistsAssignmentAndKeepsItAfterReleaseStateChanges() {
+        LlmModelReleaseDto active = release(19L, "ACTIVE", 100, "gpt-active", true);
+        when(repository.findAll(42L)).thenReturn(List.of(active));
+        ReviewTask task = task(19L);
+
+        assertThat(service.route(settings("openai"), task).modelName()).isEqualTo("gpt-active");
+        assertThat(task.getLlmReleaseKey()).isEqualTo(active.releaseKey());
+
+        LlmModelReleaseDto rolledBack = release(19L, "ROLLED_BACK", 0, "gpt-active", true);
+        when(repository.findAll(42L)).thenReturn(List.of(rolledBack));
+        assertThat(service.route(settings("openai"), task).modelName()).isEqualTo("gpt-active");
     }
 
     @Test

@@ -19,7 +19,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
  * Exercises the supported rolling-upgrade path against a real MySQL instance.
  *
  * <p>The test is opt-in because local unit-test runs do not provision a database. CI enables it
- * with an isolated database and verifies the V76 expand state through the V85 finding-comparison state.
+ * with an isolated database and verifies the V76 expand state through the V86 release-audit state.
  */
 @EnabledIfEnvironmentVariable(named = "REPOGUARD_RUN_INTEGRATION_TESTS", matches = "true")
 class FlywayMigrationUpgradePathIntegrationTest {
@@ -124,9 +124,9 @@ class FlywayMigrationUpgradePathIntegrationTest {
                 }
             }
 
-            migrateTo(url, username, password, "85");
+            migrateTo(url, username, password, "86");
             try (Connection connection = open(url, username, password)) {
-                assertThat(latestSuccessfulMigration(connection)).isEqualTo("85");
+                assertThat(latestSuccessfulMigration(connection)).isEqualTo("86");
                 assertThat(columnExists(connection, "tenant_quota_config", "monthly_llm_token_budget"))
                     .isTrue();
                 assertThat(columnExists(connection, "tenant_quota_config", "monthly_llm_cost_budget"))
@@ -155,6 +155,13 @@ class FlywayMigrationUpgradePathIntegrationTest {
                 assertThat(columnExists(connection, "llm_model_release", "evaluation_report_id")).isTrue();
                 assertThat(constraintExists(connection, "llm_model_release", "fk_llm_model_release_evaluation_report"))
                     .isTrue();
+                assertThat(columnExists(connection, "review_task", "llm_release_key")).isTrue();
+                assertThat(compositeUniqueIndexExists(
+                    connection, "llm_model_release_audit", "uk_llm_model_release_audit_tenant_id", 2
+                )).isTrue();
+                assertThat(constraintExists(
+                    connection, "llm_model_release_audit", "fk_llm_model_release_audit_release"
+                )).isTrue();
             }
         } finally {
             cleanup(url, username, password, tenantId, taskId, attemptId);

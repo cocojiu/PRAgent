@@ -146,6 +146,31 @@ class LlmModelReleaseRepositoryTest {
         assertThat(repository.rollback(42L, 7L, "reason")).isEqualTo(1);
     }
 
+    @Test
+    void lockAndLookupKeepReleaseTransitionsTenantScoped() throws Exception {
+        when(jdbcTemplate.queryForObject(contains("for update"), eq(Long.class), eq(42L))).thenReturn(42L);
+        repository.lockTenant(42L);
+        verify(jdbcTemplate).queryForObject(contains("tenant where id"), eq(Long.class), eq(42L));
+
+        ResultSet resultSet = row("SHADOW");
+        when(jdbcTemplate.query(
+            contains("release_key = ?"),
+            org.mockito.ArgumentMatchers.<RowMapper<LlmModelReleaseDto>>any(),
+            eq(new Object[] {42L, "release-7"})
+        )).thenAnswer(invocation -> List.of(invocation.<RowMapper<LlmModelReleaseDto>>getArgument(1).mapRow(resultSet, 0)));
+        assertThat(repository.findByReleaseKey(42L, "release-7").id()).isEqualTo(7L);
+    }
+
+    @Test
+    void auditIsAppendOnlyAndStoresTransitionEvidence() {
+        repository.insertAudit(42L, 7L, "release-7", "PROMOTE", "SHADOW", "CANARY", 25,
+            "operator", "reason", "{\"before\":{}}", FINGERPRINT);
+
+        verify(jdbcTemplate).update(contains("insert into llm_model_release_audit"), eq(42L), eq(7L),
+            eq("release-7"), eq("PROMOTE"), eq("SHADOW"), eq("CANARY"), eq(25), eq("operator"),
+            eq("reason"), eq("{\"before\":{}}"), eq(FINGERPRINT));
+    }
+
     private ResultSet row(String state) throws Exception {
         ResultSet resultSet = mock(ResultSet.class);
         when(resultSet.getLong("id")).thenReturn(7L);

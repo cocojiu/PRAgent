@@ -19,8 +19,6 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.time.LocalDateTime;
-import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -44,30 +42,31 @@ public class LlmModelReleaseService {
     private static final long MAX_P95_LATENCY_MS = 15_000L;
     private static final int MIN_CANARY_PERCENT = 1;
 
-    private final JdbcTemplate jdbcTemplate;
     private final LlmQualityComparisonProvider qualityComparisonProvider;
     private final LlmModelReleaseRepository releaseRepository;
     private final ObjectMapper objectMapper;
+    private final LlmModelReleaseRuntimeSupport runtimeSupport;
 
     public LlmModelReleaseService(JdbcTemplate jdbcTemplate, LlmQualityComparisonProvider qualityComparisonProvider,
         LlmModelReleaseRepository releaseRepository, ObjectMapper objectMapper) {
-        this.jdbcTemplate = Objects.requireNonNull(jdbcTemplate, "jdbcTemplate");
+        Objects.requireNonNull(jdbcTemplate, "jdbcTemplate");
         this.qualityComparisonProvider = Objects.requireNonNull(qualityComparisonProvider, "qualityComparisonProvider");
         this.releaseRepository = Objects.requireNonNull(releaseRepository, "releaseRepository");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
+        this.runtimeSupport = new LlmModelReleaseRuntimeSupport(jdbcTemplate, this.releaseRepository, this.objectMapper);
     }
     @Transactional
     public LlmModelReleaseCenterDto getCenter(Integer trendDays) {
-        reconcileCanaries();
-        int days = normalizeTrendDays(trendDays);
         long tenantId = TenantContext.currentTenantIdOrDefault();
-        Map<String, Object> configured = configuredModel(tenantId);
+        runtimeSupport.reconcileCanaries(tenantId);
+        int days = normalizeTrendDays(trendDays);
+        Map<String, Object> configured = runtimeSupport.configuredModel(tenantId);
         List<LlmModelReleaseDto> releases = releaseRepository.findAll(tenantId);
-        LlmModelReleaseDto active = firstState(releases, "ACTIVE");
-        LlmModelReleaseDto canary = firstState(releases, "CANARY");
+        LlmModelReleaseDto active = runtimeSupport.firstState(releases, "ACTIVE");
+        LlmModelReleaseDto canary = runtimeSupport.firstState(releases, "CANARY");
         var quality = qualityComparisonProvider.getLlmQuality(days);
         List<LlmQualityByModelDto> comparisons = quality == null ? List.of() : quality.byModel();
-        LlmModelBudgetDto budget = monthlyBudget(tenantId);
+        var budget = runtimeSupport.monthlyBudget(tenantId);
         return new LlmModelReleaseCenterDto(text(configured.get("llm_provider")), text(configured.get("model_name")), active, canary, releases, comparisons == null ? List.of() : List.copyOf(comparisons), budget, recommendedAction(active, canary, budget));
     }
 
@@ -115,82 +114,76 @@ public class LlmModelReleaseService {
 
     @Transactional
     public LlmModelReleaseDto registerShadow(LlmModelReleaseRequest request, String operator) {
-        NormalizedRelease normalized = normalize(request, operator);
-        return save(normalized, "SHADOW", 0, normalized.operator(), "");
+        // Shadow releases are evidence registrations, not a second path for client-supplied
+        // quality metrics.  Validate the transport shape first so malformed fingerprints keep a
+        // useful error, then replace every quality/version field with the immutable report value.
+        NormalizedRelease input = normalize(request, operator);
+        LlmModelReleaseRepository.StoredEvaluationReport evidence = trustedEvaluation(request);
+        if (input.trafficPercent() != 0) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "影子发布流量必须为 0");
+        }
+        NormalizedRelease normalized = normalizeTrusted(request, operator, evidence, 0);
+        long tenantId = TenantContext.currentTenantIdOrDefault();
+        releaseRepository.lockTenant(tenantId);
+        LlmModelReleaseDto before = releaseRepository.findByReleaseKey(tenantId, normalized.releaseKey());
+        if (before != null && ("ACTIVE".equalsIgnoreCase(before.state()) || "CANARY".equalsIgnoreCase(before.state()))) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "当前发布已进入运行态，不能降级为影子发布");
+        }
+        LlmModelReleaseDto after = save(normalized, "SHADOW", 0, normalized.operator(), "");
+        runtimeSupport.audit(tenantId, "REGISTER_SHADOW", before, after, normalized.operator(), "");
+        return after;
     }
 
     @Transactional
     public LlmModelReleaseDto promote(LlmModelReleaseRequest request, String operator) {
         LlmModelReleaseRepository.StoredEvaluationReport evidence = trustedEvaluation(request);
-        NormalizedRelease normalized = normalizeTrusted(request, operator, evidence);
+        int trafficPercent = traffic(request.trafficPercent(), MIN_CANARY_PERCENT);
+        NormalizedRelease normalized = normalizeTrusted(request, operator, evidence, trafficPercent);
         List<String> blockers = promotionBlockers(normalized);
         if (!blockers.isEmpty()) throw new BusinessException(ErrorCode.BAD_REQUEST, "模型发布未通过质量门禁: " + String.join(", ", blockers));
-        int trafficPercent = normalized.trafficPercent();
+        trafficPercent = normalized.trafficPercent();
         String state = trafficPercent == 100 ? "ACTIVE" : "CANARY";
         long tenantId = TenantContext.currentTenantIdOrDefault();
-        if ("ACTIVE".equals(state)) releaseRepository.markActiveReplaced(tenantId);
-        return save(normalized, state, trafficPercent, normalized.operator(), "");
+        releaseRepository.lockTenant(tenantId);
+        LlmModelReleaseDto before = releaseRepository.findByReleaseKey(tenantId, normalized.releaseKey());
+        if (before != null && ("ACTIVE".equalsIgnoreCase(before.state()) || "ROLLED_BACK".equalsIgnoreCase(before.state()))) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "该发布已完成状态转换，不能重复发布");
+        }
+        if ("ACTIVE".equals(state)) {
+            for (LlmModelReleaseDto active : releaseRepository.findByState(tenantId, "ACTIVE")) {
+                runtimeSupport.audit(tenantId, "REPLACE_ACTIVE", active, null, normalized.operator(), "被新版本替换");
+            }
+            releaseRepository.markActiveReplaced(tenantId);
+        }
+        LlmModelReleaseDto after = save(normalized, state, trafficPercent, normalized.operator(), "");
+        runtimeSupport.audit(tenantId, "PROMOTE", before, after, normalized.operator(), "");
+        return after;
     }
 
     @Transactional
     public LlmModelReleaseDto rollback(long releaseId, LlmModelRollbackRequest request, String operator) {
         if (releaseId < 1 || request == null || request.reason() == null || request.reason().isBlank()) throw new BusinessException(ErrorCode.BAD_REQUEST, "模型发布回滚参数不完整");
         long tenantId = TenantContext.currentTenantIdOrDefault();
-        int updated = releaseRepository.rollback(tenantId, releaseId, truncate(request.reason().trim(), 512));
+        releaseRepository.lockTenant(tenantId);
+        LlmModelReleaseDto before = releaseRepository.findById(tenantId, releaseId);
+        String reason = truncate(request.reason().trim(), 512);
+        int updated = releaseRepository.rollback(tenantId, releaseId, reason);
         if (updated != 1) throw new BusinessException(ErrorCode.BAD_REQUEST, "模型发布不存在或已回滚");
-        return releaseRepository.findById(tenantId, releaseId);
+        LlmModelReleaseDto after = releaseRepository.findById(tenantId, releaseId);
+        runtimeSupport.audit(tenantId, "ROLLBACK", before, after, normalizeOperator(operator), reason);
+        return after;
     }
 
     /** Applies budget protection and persisted canary assignment to one review task. */
     public ReviewPolicySettings route(ReviewPolicySettings settings, ReviewTask task) {
         if (settings == null || task == null || !settings.enabled()) return settings;
-        long tenantId = TenantContext.currentTenantIdOrDefault();
-        if (monthlyBudget(tenantId).exhausted()) return disableLlm(settings);
-        reconcileCanaries();
-        List<LlmModelReleaseDto> releases = releaseRepository.findAll(tenantId);
-        LlmModelReleaseDto canary = firstState(releases, "CANARY");
-        if (canary != null && inCanaryTraffic(task, canary)) return routedSettings(settings, canary);
-        LlmModelReleaseDto active = firstState(releases, "ACTIVE");
-        return active == null ? settings : routedSettings(settings, active);
+        return runtimeSupport.route(TenantContext.currentTenantIdOrDefault(), settings, task);
     }
 
     private LlmModelReleaseDto save(
         NormalizedRelease release, String state, int trafficPercent, String operator, String rollbackReason
     ) {
         return releaseRepository.save(TenantContext.currentTenantIdOrDefault(), release, state, trafficPercent, operator, rollbackReason);
-    }
-
-    private ReviewPolicySettings routedSettings(ReviewPolicySettings settings, LlmModelReleaseDto release) {
-        if (settings.llmProvider() == null || !settings.llmProvider().equalsIgnoreCase(release.provider())) return settings;
-        return new ReviewPolicySettings(settings.exists(), settings.llmEnabled(), settings.llmProvider(), release.modelName(), settings.baseUrl(), settings.apiKey(), settings.timeoutSeconds(), settings.temperature(), settings.maxTokens(), settings.fallbackToRules(), settings.workerConcurrency(), settings.chunkFileThreshold(), settings.chunkLineThreshold(), settings.chunkMaxFiles(), settings.chunkMaxLines(), settings.inputTokenPricePerMillion(), settings.outputTokenPricePerMillion(), settings.strategyRelease());
-    }
-
-    private ReviewPolicySettings disableLlm(ReviewPolicySettings settings) {
-        return new ReviewPolicySettings(settings.exists(), false, settings.llmProvider(), settings.modelName(), settings.baseUrl(), settings.apiKey(), settings.timeoutSeconds(), settings.temperature(), settings.maxTokens(), true, settings.workerConcurrency(), settings.chunkFileThreshold(), settings.chunkLineThreshold(), settings.chunkMaxFiles(), settings.chunkMaxLines(), settings.inputTokenPricePerMillion(), settings.outputTokenPricePerMillion(), settings.strategyRelease());
-    }
-
-    private void reconcileCanaries() {
-        long tenantId = TenantContext.currentTenantIdOrDefault();
-        List<LlmModelReleaseDto> canaries = releaseRepository.findByState(tenantId, "CANARY");
-        if (canaries.isEmpty()) return;
-        LlmModelBudgetDto budget = monthlyBudget(tenantId);
-        for (LlmModelReleaseDto canary : canaries) {
-            List<String> blockers = unsafeRuntimeBlockers(canary, budget);
-            if (!blockers.isEmpty()) releaseRepository.rollback(tenantId, canary.id(), truncate("自动回滚: " + String.join(", ", blockers), 512));
-        }
-    }
-
-    private List<String> unsafeRuntimeBlockers(LlmModelReleaseDto release, LlmModelBudgetDto budget) {
-        List<String> blockers = new ArrayList<>();
-        if (!Boolean.TRUE.equals(release.qualityGatePassed())) blockers.add("QUALITY_GATE_FAILED");
-        if (release.precisionRate().compareTo(MIN_PRECISION) < 0) blockers.add("PRECISION_BELOW_90");
-        if (release.recallRate().compareTo(MIN_RECALL) < 0) blockers.add("RECALL_BELOW_80");
-        if (release.anchorRate().compareTo(MIN_ANCHOR_RATE) < 0) blockers.add("ANCHOR_RATE_BELOW_95");
-        if (release.duplicateRate().compareTo(MAX_DUPLICATE_RATE) > 0) blockers.add("DUPLICATE_RATE_ABOVE_5");
-        if (release.parseFailureRate().compareTo(MAX_PARSE_FAILURE_RATE) > 0) blockers.add("PARSE_FAILURE_RATE_ABOVE_5");
-        if (release.p95LatencyMs() > MAX_P95_LATENCY_MS) blockers.add("P95_LATENCY_ABOVE_15000_MS");
-        if (budget.exhausted()) blockers.add("MONTHLY_LLM_BUDGET_EXHAUSTED");
-        return List.copyOf(blockers);
     }
 
     private List<String> promotionBlockers(NormalizedRelease release) {
@@ -217,7 +210,7 @@ public class LlmModelReleaseService {
             requireText(request.modelName(), "modelName"), requireText(request.promptVersion(), "promptVersion"),
             requireText(request.contextVersion(), "contextVersion"), requireText(request.schemaVersion(), "schemaVersion"),
             requireText(request.datasetId(), "datasetId"), requireText(request.datasetVersion(), "datasetVersion"),
-            fingerprint, bounded(request.trafficPercent()), Boolean.TRUE.equals(request.qualityGatePassed()),
+            fingerprint, traffic(request.trafficPercent(), 0), Boolean.TRUE.equals(request.qualityGatePassed()),
             decimal(request.precisionRate()), decimal(request.recallRate()), decimal(request.anchorRate()),
             decimal(request.duplicateRate()), decimal(request.parseFailureRate()), nonNegative(request.p95LatencyMs()),
             decimal(request.averageCost()), nonNegative(request.totalTokens()), normalizeBlockers(request.blockers()),
@@ -237,13 +230,14 @@ public class LlmModelReleaseService {
         return equalsIgnoreCase(request.provider(), report.version().provider()) && equalsIgnoreCase(request.modelName(), report.version().model()) && equalsText(request.promptVersion(), report.version().promptVersion()) && equalsText(request.contextVersion(), report.version().contextVersion()) && equalsText(request.schemaVersion(), report.version().schemaVersion()) && equalsText(request.datasetId(), report.dataset().datasetId()) && equalsText(request.datasetVersion(), report.dataset().datasetVersion()) && equalsIgnoreCase(request.datasetFingerprint(), report.dataset().sampleFingerprint());
     }
 
-    private NormalizedRelease normalizeTrusted(LlmModelReleaseRequest request, String operator, LlmModelReleaseRepository.StoredEvaluationReport evidence) {
+    private NormalizedRelease normalizeTrusted(LlmModelReleaseRequest request, String operator,
+        LlmModelReleaseRepository.StoredEvaluationReport evidence, int trafficPercent) {
         LlmEvaluationReport report = evidence.report();
         return new NormalizedRelease(
             requireText(request.releaseKey(), "releaseKey"), report.version().provider(), report.version().model(),
             report.version().promptVersion(), report.version().contextVersion(), report.version().schemaVersion(),
             report.dataset().datasetId(), report.dataset().datasetVersion(), report.dataset().sampleFingerprint(),
-            bounded(request.trafficPercent()), report.qualityGatePassed(), report.precision(), report.recall(),
+            trafficPercent, report.qualityGatePassed(), report.precision(), report.recall(),
             report.anchorRate(), report.duplicateRate(), report.parseFailureRate(), report.metrics().p95LatencyMs(),
             report.metrics().averageCostPerSample(), report.totalTokens(), normalizeBlockers(report.blockers()),
             normalizeOperator(operator), evidence.id()
@@ -340,45 +334,22 @@ public class LlmModelReleaseService {
         return left != null && right != null && left.trim().equalsIgnoreCase(right.trim());
     }
 
-    private LlmModelBudgetDto monthlyBudget(long tenantId) {
-        YearMonth month = YearMonth.now(); LocalDateTime start = month.atDay(1).atStartOfDay(); LocalDateTime end = month.plusMonths(1).atDay(1).atStartOfDay();
-        List<Map<String, Object>> limits = jdbcTemplate.queryForList("select monthly_llm_token_budget, monthly_llm_cost_budget from tenant_quota_config where tenant_id = ?", tenantId);
-        long tokenBudget = limits.isEmpty() ? 0L : number(limits.getFirst().get("monthly_llm_token_budget"));
-        BigDecimal costBudget = limits.isEmpty() ? BigDecimal.ZERO : decimal(limits.getFirst().get("monthly_llm_cost_budget"));
-        List<Map<String, Object>> usage = jdbcTemplate.queryForList("select coalesce(sum(llm_total_tokens), 0) as token_used, coalesce(sum(llm_estimated_cost), 0) as cost_used from review_task where tenant_id = ? and created_at >= ? and created_at < ? and llm_status_norm <> '' and llm_status_norm <> 'pending'", tenantId, start, end);
-        long tokenUsed = usage.isEmpty() ? 0L : number(usage.getFirst().get("token_used"));
-        BigDecimal costUsed = usage.isEmpty() ? BigDecimal.ZERO : decimal(usage.getFirst().get("cost_used"));
-        long tokenRemaining = tokenBudget <= 0 ? -1L : Math.max(0L, tokenBudget - tokenUsed);
-        BigDecimal costRemaining = costBudget.signum() <= 0 ? BigDecimal.valueOf(-1) : costBudget.subtract(costUsed).max(BigDecimal.ZERO);
-        return new LlmModelBudgetDto(month, tokenBudget, tokenUsed, tokenRemaining, costBudget, costUsed, costRemaining, tokenBudget > 0 && tokenUsed >= tokenBudget || costBudget.signum() > 0 && costUsed.compareTo(costBudget) >= 0);
-    }
-
-    private Map<String, Object> configuredModel(long tenantId) {
-        List<Map<String, Object>> rows = jdbcTemplate.queryForList("select llm_provider, model_name from review_policy_config where tenant_id = ?", tenantId);
-        return rows.isEmpty() ? Map.of() : rows.getFirst();
-    }
-
-    private boolean inCanaryTraffic(ReviewTask task, LlmModelReleaseDto canary) {
-        long key = task.getId() == null ? Math.max(1, task.getPrNumber() == null ? 1 : task.getPrNumber()) : task.getId();
-        long bucket = Math.floorMod(key * 1103515245L + 12345L, 100L);
-        return bucket < canary.trafficPercent();
-    }
-
-    private LlmModelReleaseDto firstState(List<LlmModelReleaseDto> releases, String state) {
-        return releases.stream().filter(release -> state.equalsIgnoreCase(release.state())).findFirst().orElse(null);
-    }
-
     private String recommendedAction(LlmModelReleaseDto active, LlmModelReleaseDto canary, LlmModelBudgetDto budget) { if (budget.exhausted()) return "BUDGET_EXHAUSTED_ROLLBACK_OR_INCREASE_LIMIT"; if (canary != null) return "OBSERVE_CANARY_QUALITY_AND_COST_BEFORE_FULL_PROMOTION"; return active == null ? "REGISTER_SHADOW_DATASET_EVALUATION" : "RUN_SHADOW_EVALUATION_FOR_NEXT_VERSION"; }
     private int normalizeTrendDays(Integer value) { return value == null ? 30 : Math.max(7, Math.min(90, value)); }
     private String requireText(String value, String field) { if (value == null || value.isBlank()) throw new BusinessException(ErrorCode.BAD_REQUEST, field + " 不能为空"); return value.trim(); }
     private String normalizeOperator(String value) { return truncate(value == null || value.isBlank() ? "system" : value.trim(), 128); }
     private List<String> normalizeBlockers(List<String> values) { if (values == null) return List.of(); return values.stream().filter(Objects::nonNull).map(String::trim).filter(value -> !value.isBlank()).map(value -> truncate(value, 128)).distinct().limit(10).toList(); }
     private BigDecimal decimal(Object value) { if (value instanceof BigDecimal decimal) return decimal.max(BigDecimal.ZERO); if (value instanceof Number number) return BigDecimal.valueOf(number.doubleValue()).max(BigDecimal.ZERO); if (value == null) return BigDecimal.ZERO; try { return new BigDecimal(value.toString()).max(BigDecimal.ZERO); } catch (NumberFormatException ex) { return BigDecimal.ZERO; } }
-    private long number(Object value) { if (value instanceof Number number) return Math.max(0L, number.longValue()); if (value == null) return 0L; try { return Math.max(0L, Long.parseLong(value.toString())); } catch (NumberFormatException ex) { return 0L; } }
-    private int bounded(Integer value) { return value == null ? 0 : Math.max(0, Math.min(100, value)); }
     private long nonNegative(Long value) { return value == null ? 0L : Math.max(0L, value); }
     private String text(Object value) { return value == null ? "" : value.toString(); }
     private String truncate(String value, int maxLength) { return value.length() <= maxLength ? value : value.substring(0, maxLength); }
+
+    private int traffic(Integer value, int minimum) {
+        if (value == null || value < minimum || value > 100) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "流量比例必须在 " + minimum + "%～100% 之间");
+        }
+        return value;
+    }
 
     record NormalizedRelease(String releaseKey, String provider, String modelName, String promptVersion, String contextVersion, String schemaVersion, String datasetId, String datasetVersion, String datasetFingerprint, int trafficPercent, boolean qualityGatePassed, BigDecimal precisionRate, BigDecimal recallRate, BigDecimal anchorRate, BigDecimal duplicateRate, BigDecimal parseFailureRate, long p95LatencyMs, BigDecimal averageCost, long totalTokens, List<String> blockers, String operator, Long evaluationReportId) {
         NormalizedRelease(String releaseKey, String provider, String modelName, String promptVersion, String contextVersion, String schemaVersion, String datasetId, String datasetVersion, String datasetFingerprint, int trafficPercent, boolean qualityGatePassed, BigDecimal precisionRate, BigDecimal recallRate, BigDecimal anchorRate, BigDecimal duplicateRate, BigDecimal parseFailureRate, long p95LatencyMs, BigDecimal averageCost, long totalTokens, List<String> blockers, String operator) { this(releaseKey, provider, modelName, promptVersion, contextVersion, schemaVersion, datasetId, datasetVersion, datasetFingerprint, trafficPercent, qualityGatePassed, precisionRate, recallRate, anchorRate, duplicateRate, parseFailureRate, p95LatencyMs, averageCost, totalTokens, blockers, operator, null); }

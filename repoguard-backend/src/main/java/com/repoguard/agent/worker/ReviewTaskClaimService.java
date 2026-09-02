@@ -125,6 +125,7 @@ public class ReviewTaskClaimService {
                 .set("llm_status", task.getLlmStatus())
                 .set("llm_provider", task.getLlmProvider())
                 .set("llm_model", task.getLlmModel())
+                .set("llm_release_key", task.getLlmReleaseKey())
                 .set("llm_duration_ms", task.getLlmDurationMs())
                 .set("llm_parse_status", task.getLlmParseStatus())
                 .set("llm_fallback_reason", task.getLlmFallbackReason())

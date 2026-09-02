@@ -7,7 +7,7 @@
     "externalDatabaseSupported": true,
     "publishedMigrationPolicy": "IMMUTABLE",
     "newInstallationStrategy": "VALIDATED_SCHEMA_SNAPSHOT_THEN_BASELINE",
-    "candidateVersion": 85,
+    "candidateVersion": 86,
     "requiredEvidence": [
       "empty database migration to the candidate version",
       "schema structure diff against the supported production shape",
@@ -16,9 +16,9 @@
     ],
     "decisionEvidence": [
       "application-prod.yml requires an externally supplied datasource",
-      "FlywayMigrationUpgradePathIntegrationTest verifies the V76 to V77, V77 to V78, V78 to V79, V79 to V80, V80 to V81, V81 to V82, V82 to V83, V83 to V84 and V84 to V85 upgrade paths"
+      "FlywayMigrationUpgradePathIntegrationTest verifies the V76 to V77, V77 to V78, V78 to V79, V79 to V80, V80 to V81, V81 to V82, V82 to V83, V83 to V84, V84 to V85 and V85 to V86 upgrade paths"
     ],
-    "reconsiderWhen": "A V85 schema snapshot and all required rehearsal evidence are versioned together.",
+    "reconsiderWhen": "A V86 schema snapshot and all required rehearsal evidence are versioned together.",
     "rollbackStrategy": "restore a validated backup and apply a forward fix; never rewrite or delete a published migration"
   },
   "defaults": {
@@ -183,6 +183,18 @@
       "nMinusOneCompatible": true,
       "interruptedRecovery": "rerun the additive migration after checking Flyway state; legacy findings remain visible and are compared lazily",
       "rollbackStrategy": "forward fix or restore the validated V84 predecessor backup; do not delete published migration"
+    },
+    {
+      "version": 86,
+      "file": "V86__llm_model_release_audit_and_assignment.sql",
+      "phase": "EXPAND",
+      "estimatedRows": "one assignment value per active review task and one immutable transition row per release change",
+      "lockType": "metadata-and-table",
+      "maxDurationSeconds": 600,
+      "maxDiskMegabytes": 1024,
+      "nMinusOneCompatible": true,
+      "interruptedRecovery": "rerun the additive migration after checking Flyway state; existing assignments and audit rows remain durable",
+      "rollbackStrategy": "forward fix or restore the validated V85 predecessor backup; do not delete published migration"
     }
   ]
 }

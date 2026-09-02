@@ -42,6 +42,103 @@
   margin-top: 14px;
 }
 
+.model-release-center-card {
+  margin-top: 18px;
+}
+
+.release-center-actions,
+.release-center-form,
+.release-center-subheading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.release-center-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.release-center-metric-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #e5eaf3;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.release-center-metric-grid span,
+.release-center-metric-grid small,
+.release-center-subheading span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.release-center-metric-grid strong {
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.release-center-recommendation,
+.release-report-evidence {
+  margin-bottom: 14px;
+}
+
+.release-center-advanced {
+  margin-bottom: 16px;
+  border-top: 1px solid #e5eaf3;
+  border-bottom: 1px solid #e5eaf3;
+}
+
+.release-center-form {
+  flex-wrap: wrap;
+  align-items: flex-end;
+  padding: 4px 0 10px;
+}
+
+.release-center-form .el-form-item {
+  margin-bottom: 0;
+}
+
+.release-report-select {
+  width: 290px;
+}
+
+.release-version-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.release-version-cell span,
+.release-version-cell small {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.release-center-subheading {
+  justify-content: space-between;
+  margin: 18px 0 10px;
+}
+
+.release-center-subheading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .policy-governance-heading {
   display: flex;
   align-items: flex-start;
@@ -323,6 +420,10 @@
   .calibration-metric-grid {
     grid-template-columns: repeat(3, minmax(120px, 1fr));
   }
+
+  .release-center-metric-grid {
+    grid-template-columns: repeat(2, minmax(140px, 1fr));
+  }
 }
 
 @media (max-width: 760px) {
@@ -361,11 +462,25 @@
 
   .calibration-progress,
   .calibration-metric-grid,
-  .calibration-evidence {
+  .calibration-evidence,
+  .release-center-metric-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .calibration-evidence {
     padding-left: 18px;
+  }
+
+  .release-center-actions,
+  .release-center-form,
+  .release-center-subheading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .release-center-actions .el-select,
+  .release-center-form .el-input,
+  .release-report-select {
+    width: 100%;
   }
 }

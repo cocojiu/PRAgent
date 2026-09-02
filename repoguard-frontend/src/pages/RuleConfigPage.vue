@@ -64,6 +64,7 @@
 
     <ReviewCalibrationQueueCard :rules="rules" />
     <LlmEvaluationWorkbench />
+    <LlmModelReleaseCenter />
 
     <section class="rule-layout">
       <article class="rule-panel">
@@ -341,6 +342,7 @@ import MetricGrid, { type MetricGridItem } from "@/components/MetricGrid.vue";
 import { useMetricIcon } from "@/composables/useMetricIcon";
 import ReviewCalibrationQueueCard from "@/features/rule-config/components/ReviewCalibrationQueueCard.vue";
 import LlmEvaluationWorkbench from "@/features/rule-config/components/LlmEvaluationWorkbench.vue";
+import LlmModelReleaseCenter from "@/features/rule-config/components/LlmModelReleaseCenter.vue";
 import { useReviewPolicyHistory } from "@/features/rule-config/composables/useReviewPolicyHistory";
 import { useReviewRuleCatalog } from "@/features/rule-config/composables/useReviewRuleCatalog";
 import { useReviewRuleEditor } from "@/features/rule-config/composables/useReviewRuleEditor";
