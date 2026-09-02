@@ -26,6 +26,20 @@ class GithubCheckRunPolicyServiceTest {
         task.setOrganization("octo");
         task.setRepository("repo");
         assertThat(service.isEnabled(task)).isFalse();
+
+        assertThat(service.isEnabled(null)).isFalse();
+        ReviewTask incomplete = new ReviewTask();
+        incomplete.setOrganization(" ");
+        incomplete.setRepository("repo");
+        assertThat(service.isEnabled(incomplete)).isFalse();
+
+        GithubCheckRunPolicy disabled = new GithubCheckRunPolicy();
+        disabled.setEnabled(false);
+        when(mapper.selectByRepository("octo", "repo")).thenReturn(disabled);
+        assertThat(service.isEnabled(task)).isFalse();
+
+        disabled.setEnabled(true);
+        assertThat(service.isEnabled(task)).isTrue();
     }
 
     @Test
@@ -53,6 +67,33 @@ class GithubCheckRunPolicyServiceTest {
         when(mapper.selectByRepository("octo", "repo")).thenReturn(current);
 
         assertThatThrownBy(() -> service.setEnabled("octo", "repo", true, 2, "admin"))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("reload");
+    }
+
+    @Test
+    void rejectsInvalidVersionsNamesAndCompareAndSetRaces() {
+        assertThatThrownBy(() -> service.setEnabled("octo", "repo", true, -1, "admin"))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("negative");
+        assertThatThrownBy(() -> service.find("octo/repo", "repo"))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("invalid format");
+        assertThatThrownBy(() -> service.find("octo", "repo\\nested"))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("invalid format");
+
+        when(mapper.selectByRepository("octo", "repo")).thenReturn(null);
+        assertThatThrownBy(() -> service.setEnabled("octo", "repo", true, 2, "admin"))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("reload");
+
+        GithubCheckRunPolicy current = new GithubCheckRunPolicy();
+        current.setId(10L);
+        current.setPolicyVersion(4L);
+        when(mapper.selectByRepository("octo", "repo")).thenReturn(current);
+        when(mapper.updateEnabled(eq(10L), eq(true), eq(4L), eq("unknown"), any())).thenReturn(0);
+        assertThatThrownBy(() -> service.setEnabled("octo", "repo", true, 4, " "))
             .isInstanceOf(BusinessException.class)
             .hasMessageContaining("reload");
     }
