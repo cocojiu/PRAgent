@@ -20,6 +20,7 @@ import com.repoguard.agent.review.quality.ReviewQualityBaselineRecoveryWorker;
 import com.repoguard.agent.security.SecretReEncryptionJobWorker;
 import com.repoguard.agent.tenancy.TenantScheduledTaskRunner;
 import com.repoguard.agent.worker.ReviewTaskRecoveryCompensator;
+import com.repoguard.agent.service.ReviewWorkflowService;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -47,6 +48,7 @@ class TenantBackgroundJobSchedulerTest {
     private final ReviewQualityBaselineRecoveryWorker qualityBaseline =
         mock(ReviewQualityBaselineRecoveryWorker.class);
     private final GithubCheckRunRecoveryWorker githubCheckRuns = mock(GithubCheckRunRecoveryWorker.class);
+    private final ReviewWorkflowService reviewWorkflow = mock(ReviewWorkflowService.class);
     private final TenantBackgroundJobScheduler scheduler = new TenantBackgroundJobScheduler(
         tenantRunner,
         dashboard,
@@ -59,7 +61,8 @@ class TenantBackgroundJobSchedulerTest {
         reviewPublish,
         secretReEncryption,
         qualityBaseline,
-        githubCheckRuns
+        githubCheckRuns,
+        reviewWorkflow
     );
 
     @Test
@@ -95,6 +98,7 @@ class TenantBackgroundJobSchedulerTest {
         verify(dashboard).recoverDirtySnapshots();
         verify(dashboard).reconcileCurrentWindows();
         verify(reviewRecovery).recoverStuckTasks();
+        verify(reviewWorkflow).escalateOverdue();
         verify(reviewAttemptRetention).cleanup();
         verify(operationalRetention).cleanupGlobalData();
         verify(operationalRetention).cleanupTenantData();

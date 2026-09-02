@@ -4279,6 +4279,153 @@
         }
       }
     },
+    "/api/v1/notifications/read" : {
+      "get" : {
+        "tags" : [ "Notification" ],
+        "operationId" : "notificationControllerReadKeys",
+        "x-controller-operation" : "NotificationController#readKeys",
+        "parameters" : [ ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "List<String>",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "array",
+                      "items" : {
+                        "type" : "string"
+                      }
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post" : {
+        "tags" : [ "Notification" ],
+        "operationId" : "notificationControllerMarkRead",
+        "x-controller-operation" : "NotificationController#markRead",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "NotificationReadRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/NotificationReadRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "Void",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "null"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/reports" : {
+      "get" : {
+        "tags" : [ "Notification" ],
+        "operationId" : "notificationControllerReport",
+        "x-controller-operation" : "NotificationController#report",
+        "parameters" : [ {
+          "name" : "period",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 16,
+            "default" : "DAILY"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "NotificationReportDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/NotificationReportDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/observability/frontend/performance" : {
       "post" : {
         "tags" : [ "FrontendPerformance" ],
@@ -4318,6 +4465,269 @@
                     },
                     "data" : {
                       "type" : "null"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/review-workflow/bot/{provider}/commands" : {
+      "post" : {
+        "tags" : [ "ReviewWorkflow" ],
+        "operationId" : "reviewWorkflowControllerCommand",
+        "x-controller-operation" : "ReviewWorkflowController#command",
+        "parameters" : [ {
+          "name" : "provider",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 32
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "ReviewBotCommandRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ReviewBotCommandRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ReviewBotCommandResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ReviewBotCommandResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/review-workflow/escalations" : {
+      "post" : {
+        "tags" : [ "ReviewWorkflow" ],
+        "operationId" : "reviewWorkflowControllerEscalate",
+        "x-controller-operation" : "ReviewWorkflowController#escalate",
+        "parameters" : [ ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ReviewEscalationResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ReviewEscalationResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/review-workflow/queue" : {
+      "get" : {
+        "tags" : [ "ReviewWorkflow" ],
+        "operationId" : "reviewWorkflowControllerQueue",
+        "x-controller-operation" : "ReviewWorkflowController#queue",
+        "parameters" : [ {
+          "name" : "page",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "default" : 1
+          }
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 100,
+            "default" : 20
+          }
+        }, {
+          "name" : "assignee",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 128
+          }
+        }, {
+          "name" : "overdue",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "boolean"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "PageResponse<ReviewWorkflowItemDto>",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "object",
+                      "x-java-type" : "PageResponse<ReviewWorkflowItemDto>",
+                      "properties" : {
+                        "items" : {
+                          "type" : "array",
+                          "items" : {
+                            "$ref" : "#/components/schemas/ReviewWorkflowItemDto"
+                          }
+                        },
+                        "total" : {
+                          "type" : "integer",
+                          "format" : "int64"
+                        },
+                        "nextCursor" : {
+                          "type" : "string"
+                        },
+                        "hasMore" : {
+                          "type" : "boolean"
+                        }
+                      },
+                      "required" : [ "total", "hasMore" ]
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/review-workflow/tasks/{taskId}/assignment" : {
+      "put" : {
+        "tags" : [ "ReviewWorkflow" ],
+        "operationId" : "reviewWorkflowControllerAssign",
+        "x-controller-operation" : "ReviewWorkflowController#assign",
+        "parameters" : [ {
+          "name" : "taskId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "ReviewAssignmentRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ReviewAssignmentRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ReviewWorkflowItemDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ReviewWorkflowItemDto"
                     },
                     "timestamp" : {
                       "type" : "string",
@@ -9498,6 +9908,58 @@
           }
         }
       },
+      "NotificationReadRequest" : {
+        "type" : "object",
+        "x-java-type" : "NotificationReadRequest",
+        "properties" : {
+          "notificationKey" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 191
+          }
+        },
+        "required" : [ "notificationKey" ]
+      },
+      "NotificationReportDto" : {
+        "type" : "object",
+        "x-java-type" : "NotificationReportDto",
+        "properties" : {
+          "period" : {
+            "type" : "string"
+          },
+          "from" : {
+            "type" : "string"
+          },
+          "to" : {
+            "type" : "string"
+          },
+          "totalReviews" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "completedReviews" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "failedReviews" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "pendingHumanReviews" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "highRiskReviews" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "overdueHumanReviews" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        },
+        "required" : [ "totalReviews", "completedReviews", "failedReviews", "pendingHumanReviews", "highRiskReviews", "overdueHumanReviews" ]
+      },
       "NotificationSettingsDto" : {
         "type" : "object",
         "x-java-type" : "NotificationSettingsDto",
@@ -9737,6 +10199,22 @@
           }
         }
       },
+      "ReviewAssignmentRequest" : {
+        "type" : "object",
+        "x-java-type" : "ReviewAssignmentRequest",
+        "properties" : {
+          "assignee" : {
+            "type" : "string",
+            "maxLength" : 128
+          },
+          "slaMinutes" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 5,
+            "maximum" : 10080
+          }
+        }
+      },
       "ReviewAttemptChangedFileDto" : {
         "type" : "object",
         "x-java-type" : "ReviewAttemptChangedFileDto",
@@ -9816,6 +10294,49 @@
             "type" : "string"
           },
           "aggregationVersion" : {
+            "type" : "string"
+          }
+        }
+      },
+      "ReviewBotCommandRequest" : {
+        "type" : "object",
+        "x-java-type" : "ReviewBotCommandRequest",
+        "properties" : {
+          "externalCommandId" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "text" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 512
+          },
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        },
+        "required" : [ "externalCommandId", "text" ]
+      },
+      "ReviewBotCommandResponse" : {
+        "type" : "object",
+        "x-java-type" : "ReviewBotCommandResponse",
+        "properties" : {
+          "provider" : {
+            "type" : "string"
+          },
+          "command" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "message" : {
             "type" : "string"
           }
         }
@@ -10031,6 +10552,24 @@
           }
         },
         "required" : [ "enforcementMode", "expectedSnapshotId" ]
+      },
+      "ReviewEscalationResponse" : {
+        "type" : "object",
+        "x-java-type" : "ReviewEscalationResponse",
+        "properties" : {
+          "escalated" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "skipped" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "executedAt" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "escalated", "skipped" ]
       },
       "ReviewExecutionAttemptDto" : {
         "type" : "object",
@@ -11406,6 +11945,49 @@
           }
         },
         "required" : [ "value" ]
+      },
+      "ReviewWorkflowItemDto" : {
+        "type" : "object",
+        "x-java-type" : "ReviewWorkflowItemDto",
+        "properties" : {
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "repository" : {
+            "type" : "string"
+          },
+          "prNumber" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "humanReviewStatus" : {
+            "type" : "string"
+          },
+          "assignee" : {
+            "type" : "string"
+          },
+          "assignedAt" : {
+            "type" : "string"
+          },
+          "slaDeadline" : {
+            "type" : "string"
+          },
+          "escalationLevel" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "overdue" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "overdue" ]
       },
       "SarifExportDto" : {
         "type" : "object",

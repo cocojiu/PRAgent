@@ -30,6 +30,8 @@ fetchMysqlIntegrationConfig -> systemConfigControllerGetMysqlIntegration // GET 
 fetchNotificationBindings -> notificationIntegrationControllerListBindings // GET /api/v1/config/notification-bindings
 fetchNotificationDeliveries -> notificationIntegrationControllerListDeliveries // GET /api/v1/notification-deliveries
 fetchNotificationEvents -> notificationIntegrationControllerListEvents // GET /api/v1/notification-events
+fetchNotificationReadKeys -> notificationControllerReadKeys // GET /api/v1/notifications/read
+fetchNotificationReport -> notificationControllerReport // GET /api/v1/notifications/reports
 fetchNotifications -> notificationControllerGetNotifications // GET /api/v1/notifications
 fetchRabbitMqIntegrationConfig -> systemConfigControllerGetRabbitMqIntegration // GET /api/v1/config/integrations/rabbitmq
 fetchReviewCalibrationQueue -> reviewCalibrationControllerGetReviewCalibrationQueue // GET /api/v1/config/review-calibration/queue
@@ -59,6 +61,7 @@ fetchUsers -> userManagementControllerListUsers // GET /api/v1/users
 getCurrentUser -> authControllerMe // GET /api/v1/auth/me
 login -> authControllerLogin // POST /api/v1/auth/login
 logout -> authControllerLogout // POST /api/v1/auth/logout
+markNotificationRead -> notificationControllerMarkRead // POST /api/v1/notifications/read
 pauseSecretReEncryptionJob -> systemConfigControllerPauseSecretReEncryptionJob // POST /api/v1/config/secrets/re-encryption/jobs/{jobId}/pause
 promoteLlmModelRelease -> reviewCalibrationControllerPromoteModelRelease // POST /api/v1/config/review-calibration/release-center/promote
 publishGithubComments -> reviewControllerPublishGithubComments // POST /api/v1/reviews/{id}/github-comments

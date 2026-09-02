@@ -43,6 +43,8 @@ import type {
   NotificationCenter,
   NotificationDelivery,
   NotificationEvent,
+  NotificationReadRequest,
+  NotificationReport,
   PageResponse,
   ReviewCalibrationQueue,
   ReviewEnforcementModeRequest,
@@ -250,6 +252,27 @@ export type GeneratedOpenApiOperationMap = {
     query: never;
     body: never;
     response: NotificationCenter;
+  };
+  "notificationControllerMarkRead": {
+    method: "POST";
+    pathParams: never;
+    query: never;
+    body: NotificationReadRequest;
+    response: void;
+  };
+  "notificationControllerReadKeys": {
+    method: "GET";
+    pathParams: never;
+    query: never;
+    body: never;
+    response: string[];
+  };
+  "notificationControllerReport": {
+    method: "GET";
+    pathParams: never;
+    query: { period?: string };
+    body: never;
+    response: NotificationReport;
   };
   "notificationIntegrationControllerCreateBinding": {
     method: "POST";
@@ -937,6 +960,30 @@ export const generatedOpenApiOperations = {
     path: "/api/v1/notifications",
     pathParamNames: [],
     queryParamNames: [],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "notificationControllerMarkRead": {
+    method: "POST",
+    path: "/api/v1/notifications/read",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "notificationControllerReadKeys": {
+    method: "GET",
+    path: "/api/v1/notifications/read",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "notificationControllerReport": {
+    method: "GET",
+    path: "/api/v1/notifications/reports",
+    pathParamNames: [],
+    queryParamNames: ["period"],
     hasRequestBody: false,
     requestBodyRequired: false
   },

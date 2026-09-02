@@ -349,7 +349,11 @@ class ApiContractTest {
             "GET /api/v1/scm/providers/{provider}/tasks/{taskId}/diff",
             "GET /api/v1/scm/providers/{provider}/tasks/{taskId}/head",
             "POST /api/v1/scm/providers/{provider}/tasks/{taskId}/comments",
-            "POST /api/v1/scm/providers/{provider}/tasks/{taskId}/status"
+            "POST /api/v1/scm/providers/{provider}/tasks/{taskId}/status",
+            "GET /api/v1/review-workflow/queue",
+            "POST /api/v1/review-workflow/escalations",
+            "POST /api/v1/review-workflow/bot/{provider}/commands",
+            "PUT /api/v1/review-workflow/tasks/{taskId}/assignment"
         );
     }
 

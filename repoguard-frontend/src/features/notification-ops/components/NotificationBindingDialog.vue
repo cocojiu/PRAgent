@@ -8,6 +8,9 @@
         <el-select v-model="form.provider">
           <el-option label="钉钉" value="DINGTALK" />
           <el-option label="企业微信" value="WECOM" />
+          <el-option label="飞书" value="FEISHU" />
+          <el-option label="Slack" value="SLACK" />
+          <el-option label="邮件网关" value="EMAIL" />
         </el-select>
       </el-form-item>
       <el-form-item label="组织">
@@ -17,10 +20,10 @@
         <el-input v-model="form.repository" />
       </el-form-item>
       <el-form-item label="Webhook">
-        <el-input v-model="form.webhookUrl" type="password" show-password placeholder="机器人 Webhook URL" />
+        <el-input v-model="form.webhookUrl" type="password" show-password placeholder="机器人 Webhook 或邮件网关 URL" />
       </el-form-item>
       <el-form-item label="签名 Secret">
-        <el-input v-model="form.secret" type="password" show-password placeholder="可选；钉钉加签 Secret" />
+        <el-input v-model="form.secret" type="password" show-password placeholder="可选；钉钉/飞书签名 Secret" />
       </el-form-item>
       <el-form-item label="启用">
         <el-switch v-model="form.enabled" />

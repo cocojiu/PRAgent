@@ -50,6 +50,11 @@ public class ReviewTask {
     private String humanReviewNote;
     private String humanReviewBy;
     private LocalDateTime humanReviewedAt;
+    private String reviewAssignee;
+    private LocalDateTime reviewAssignedAt;
+    private LocalDateTime reviewSlaDeadline;
+    private Integer reviewEscalationLevel;
+    private LocalDateTime reviewLastEscalatedAt;
     private LocalDateTime createdAt;
     private LocalDateTime startedAt;
     private LocalDateTime finishedAt;
@@ -365,6 +370,46 @@ public class ReviewTask {
 
     public void setHumanReviewedAt(LocalDateTime humanReviewedAt) {
         this.humanReviewedAt = humanReviewedAt;
+    }
+
+    public String getReviewAssignee() {
+        return reviewAssignee;
+    }
+
+    public void setReviewAssignee(String reviewAssignee) {
+        this.reviewAssignee = reviewAssignee;
+    }
+
+    public LocalDateTime getReviewAssignedAt() {
+        return reviewAssignedAt;
+    }
+
+    public void setReviewAssignedAt(LocalDateTime reviewAssignedAt) {
+        this.reviewAssignedAt = reviewAssignedAt;
+    }
+
+    public LocalDateTime getReviewSlaDeadline() {
+        return reviewSlaDeadline;
+    }
+
+    public void setReviewSlaDeadline(LocalDateTime reviewSlaDeadline) {
+        this.reviewSlaDeadline = reviewSlaDeadline;
+    }
+
+    public Integer getReviewEscalationLevel() {
+        return reviewEscalationLevel;
+    }
+
+    public void setReviewEscalationLevel(Integer reviewEscalationLevel) {
+        this.reviewEscalationLevel = reviewEscalationLevel;
+    }
+
+    public LocalDateTime getReviewLastEscalatedAt() {
+        return reviewLastEscalatedAt;
+    }
+
+    public void setReviewLastEscalatedAt(LocalDateTime reviewLastEscalatedAt) {
+        this.reviewLastEscalatedAt = reviewLastEscalatedAt;
     }
 
     public LocalDateTime getCreatedAt() {

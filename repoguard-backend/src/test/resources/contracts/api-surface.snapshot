@@ -31,6 +31,9 @@ GET /api/v1/message-queue/health query=[] body=- bodyRequired=false
 GET /api/v1/notification-deliveries query=[page, pageSize, status, taskId] body=- bodyRequired=false
 GET /api/v1/notification-events query=[page, pageSize, status, taskId] body=- bodyRequired=false
 GET /api/v1/notifications query=[] body=- bodyRequired=false
+GET /api/v1/notifications/read query=[] body=- bodyRequired=false
+GET /api/v1/notifications/reports query=[period] body=- bodyRequired=false
+GET /api/v1/review-workflow/queue query=[page, pageSize, assignee, overdue] body=- bodyRequired=false
 GET /api/v1/reviews query=[page, pageSize, repository, status, riskLevel, source, triggerSource, keyword, cursor] body=- bodyRequired=false
 GET /api/v1/reviews/github/pull-requests query=[] body=- bodyRequired=false
 GET /api/v1/reviews/repositories query=[] body=- bodyRequired=false
@@ -82,7 +85,10 @@ POST /api/v1/enterprise/tenants query=[] body=EnterpriseTenantCreateRequest body
 POST /api/v1/github/webhooks query=[] body=byte[] bodyRequired=true
 POST /api/v1/message-queue/tasks/{taskId}/requeue query=[] body=- bodyRequired=false
 POST /api/v1/notification-events/{id}/retry query=[] body=- bodyRequired=false
+POST /api/v1/notifications/read query=[] body=NotificationReadRequest bodyRequired=true
 POST /api/v1/observability/frontend/performance query=[] body=FrontendPerformanceReportRequest bodyRequired=true
+POST /api/v1/review-workflow/bot/{provider}/commands query=[] body=ReviewBotCommandRequest bodyRequired=true
+POST /api/v1/review-workflow/escalations query=[] body=- bodyRequired=false
 POST /api/v1/reviews/manual query=[] body=ManualReviewRequest bodyRequired=true
 POST /api/v1/reviews/{id}/findings/{findingId}/feedback query=[] body=FindingFeedbackRequest bodyRequired=true
 POST /api/v1/reviews/{id}/github-comments query=[] body=- bodyRequired=false
@@ -107,5 +113,6 @@ PUT /api/v1/enterprise/tenants/{tenantKey}/memberships query=[] body=EnterpriseT
 PUT /api/v1/enterprise/tenants/{tenantKey}/quota query=[] body=EnterpriseTenantQuotaRequest bodyRequired=true
 PUT /api/v1/enterprise/tenants/{tenantKey}/repositories query=[] body=EnterpriseTenantRepositoryRequest bodyRequired=true
 PUT /api/v1/enterprise/tenants/{tenantKey}/status query=[] body=EnterpriseTenantStatusRequest bodyRequired=true
+PUT /api/v1/review-workflow/tasks/{taskId}/assignment query=[] body=ReviewAssignmentRequest bodyRequired=true
 PUT /api/v1/users/{id}/role query=[] body=UserRoleUpdateRequest bodyRequired=true
 PUT /api/v1/users/{id}/status query=[] body=UserStatusUpdateRequest bodyRequired=true

@@ -72,6 +72,8 @@ import type {
   NotificationBindingRequest,
   NotificationBindingStatusRequest,
   NotificationCenter,
+  NotificationReadRequest,
+  NotificationReport,
   NotificationDelivery,
   NotificationEvent,
   PageResponse,
@@ -318,6 +320,9 @@ export type ApiContract = {
   fetchMessageQueueHealth: ApiOperation<undefined, MessageQueueHealth>;
   requeueMessageQueueTask: ApiOperation<{ taskId: number }, MessageQueueRequeueResponse>;
   fetchNotifications: ApiOperation<undefined, NotificationCenter>;
+  markNotificationRead: ApiOperation<NotificationReadRequest, void>;
+  fetchNotificationReadKeys: ApiOperation<undefined, string[]>;
+  fetchNotificationReport: ApiOperation<{ period?: string }, NotificationReport>;
   fetchUsers: ApiOperation<UserPageInput, PageResponse<ManagedUser>>;
   fetchUserOperationAudits: ApiOperation<UserPageInput, PageResponse<UserOperationAudit>>;
   createUser: ApiOperation<UserCreateRequest, ManagedUser>;
@@ -730,6 +735,13 @@ const apiEndpoints: ApiEndpointMap = {
     path: input => ({ taskId: input.taskId })
   }),
   fetchNotifications: generatedEndpoint("notificationControllerGetNotifications", {}),
+  markNotificationRead: generatedEndpoint("notificationControllerMarkRead", {
+    body: input => input
+  }),
+  fetchNotificationReadKeys: generatedEndpoint("notificationControllerReadKeys", {}),
+  fetchNotificationReport: generatedEndpoint("notificationControllerReport", {
+    query: input => ({ period: input.period })
+  }),
   fetchUsers: generatedEndpoint("userManagementControllerListUsers", {
     query: input => ({
       page: input.page,

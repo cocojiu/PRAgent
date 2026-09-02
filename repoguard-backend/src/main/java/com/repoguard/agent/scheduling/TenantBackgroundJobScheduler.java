@@ -13,9 +13,11 @@ import com.repoguard.agent.review.quality.ReviewQualityBaselineRecoveryWorker;
 import com.repoguard.agent.security.SecretReEncryptionJobWorker;
 import com.repoguard.agent.tenancy.TenantScheduledTaskRunner;
 import com.repoguard.agent.worker.ReviewTaskRecoveryCompensator;
+import com.repoguard.agent.service.ReviewWorkflowService;
 import java.util.Objects;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -34,6 +36,7 @@ public class TenantBackgroundJobScheduler {
     private final SecretReEncryptionJobWorker secretReEncryption;
     private final ReviewQualityBaselineRecoveryWorker qualityBaseline;
     private final GithubCheckRunRecoveryWorker githubCheckRunRecovery;
+    private final ReviewWorkflowService reviewWorkflow;
 
     @Autowired
     public TenantBackgroundJobScheduler(
@@ -48,7 +51,8 @@ public class TenantBackgroundJobScheduler {
         ReviewTaskPublishCompensator reviewPublish,
         SecretReEncryptionJobWorker secretReEncryption,
         ReviewQualityBaselineRecoveryWorker qualityBaseline,
-        GithubCheckRunRecoveryWorker githubCheckRunRecovery
+        GithubCheckRunRecoveryWorker githubCheckRunRecovery,
+        @Nullable ReviewWorkflowService reviewWorkflow
     ) {
         this.tenantRunner = Objects.requireNonNull(tenantRunner, "tenantRunner");
         this.dashboardSnapshots = Objects.requireNonNull(dashboardSnapshots, "dashboardSnapshots");
@@ -61,7 +65,8 @@ public class TenantBackgroundJobScheduler {
         this.reviewPublish = Objects.requireNonNull(reviewPublish, "reviewPublish");
         this.secretReEncryption = Objects.requireNonNull(secretReEncryption, "secretReEncryption");
         this.qualityBaseline = Objects.requireNonNull(qualityBaseline, "qualityBaseline");
-        this.githubCheckRunRecovery = Objects.requireNonNull(githubCheckRunRecovery, "githubCheckRunRecovery");
+        this.githubCheckRunRecovery = githubCheckRunRecovery;
+        this.reviewWorkflow = reviewWorkflow;
     }
 
     public TenantBackgroundJobScheduler(
@@ -80,7 +85,28 @@ public class TenantBackgroundJobScheduler {
         this(
             tenantRunner, dashboardSnapshots, reviewRecovery, reviewAttemptRetention, operationalRetention,
             githubCommentRecovery, notificationPublish, notificationDelivery, reviewPublish,
-            secretReEncryption, qualityBaseline, null
+            secretReEncryption, qualityBaseline, null, null
+        );
+    }
+
+    public TenantBackgroundJobScheduler(
+        TenantScheduledTaskRunner tenantRunner,
+        DashboardDailySnapshotRecoveryWorker dashboardSnapshots,
+        ReviewTaskRecoveryCompensator reviewRecovery,
+        ReviewAttemptRetentionWorker reviewAttemptRetention,
+        OperationalDataRetentionWorker operationalRetention,
+        GithubCommentPublicationBatchRecoveryWorker githubCommentRecovery,
+        NotificationEventPublishCompensator notificationPublish,
+        NotificationDeliveryRecoveryCompensator notificationDelivery,
+        ReviewTaskPublishCompensator reviewPublish,
+        SecretReEncryptionJobWorker secretReEncryption,
+        ReviewQualityBaselineRecoveryWorker qualityBaseline,
+        GithubCheckRunRecoveryWorker githubCheckRunRecovery
+    ) {
+        this(
+            tenantRunner, dashboardSnapshots, reviewRecovery, reviewAttemptRetention, operationalRetention,
+            githubCommentRecovery, notificationPublish, notificationDelivery, reviewPublish,
+            secretReEncryption, qualityBaseline, githubCheckRunRecovery, null
         );
     }
 
@@ -97,7 +123,12 @@ public class TenantBackgroundJobScheduler {
 
     @Scheduled(fixedDelayString = "${app.rabbit.review.review-recovery-interval-ms:60000}")
     public void recoverReviewTasks() {
-        run("review_execution_recovery", reviewRecovery::recoverStuckTasks);
+        run("review_execution_recovery", () -> {
+            reviewRecovery.recoverStuckTasks();
+            if (reviewWorkflow != null) {
+                reviewWorkflow.escalateOverdue();
+            }
+        });
     }
 
     @Scheduled(cron = "${repoguard.operational-data-retention.review-attempt-cron:0 45 3 * * *}")

@@ -1,7 +1,7 @@
 export interface NotificationBinding {
   id: number;
   name: string;
-  provider: "DINGTALK" | "WECOM" | string;
+  provider: "DINGTALK" | "WECOM" | "FEISHU" | "SLACK" | "EMAIL" | string;
   organization: string;
   repository: string;
   enabled: boolean;
@@ -90,4 +90,20 @@ export interface NotificationCenter {
   total: number;
   generatedAt: string;
   items: NotificationItem[];
+}
+
+export interface NotificationReadRequest {
+  notificationKey: string;
+}
+
+export interface NotificationReport {
+  period: "DAILY" | "WEEKLY" | string;
+  from: string;
+  to: string;
+  totalReviews: number;
+  completedReviews: number;
+  failedReviews: number;
+  pendingHumanReviews: number;
+  highRiskReviews: number;
+  overdueHumanReviews: number;
 }

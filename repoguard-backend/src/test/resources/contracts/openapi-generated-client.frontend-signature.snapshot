@@ -30,6 +30,8 @@ fetchMysqlIntegrationConfig -> systemConfigControllerGetMysqlIntegration(): Prom
 fetchNotificationBindings -> notificationIntegrationControllerListBindings(input?: { query?: { organization?: string; page?: number; pageSize?: number; provider?: string; repository?: string } }): Promise<PageResponse<NotificationBinding>>; // GET /api/v1/config/notification-bindings
 fetchNotificationDeliveries -> notificationIntegrationControllerListDeliveries(input?: { query?: { page?: number; pageSize?: number; status?: string; taskId?: number } }): Promise<PageResponse<NotificationDelivery>>; // GET /api/v1/notification-deliveries
 fetchNotificationEvents -> notificationIntegrationControllerListEvents(input?: { query?: { page?: number; pageSize?: number; status?: string; taskId?: number } }): Promise<PageResponse<NotificationEvent>>; // GET /api/v1/notification-events
+fetchNotificationReadKeys -> notificationControllerReadKeys(): Promise<string[]>; // GET /api/v1/notifications/read
+fetchNotificationReport -> notificationControllerReport(input?: { query?: { period?: string } }): Promise<NotificationReport>; // GET /api/v1/notifications/reports
 fetchNotifications -> notificationControllerGetNotifications(): Promise<NotificationCenter>; // GET /api/v1/notifications
 fetchRabbitMqIntegrationConfig -> systemConfigControllerGetRabbitMqIntegration(): Promise<ServiceIntegrationConfig>; // GET /api/v1/config/integrations/rabbitmq
 fetchReviewCalibrationQueue -> reviewCalibrationControllerGetReviewCalibrationQueue(input?: { query?: { includeIgnored?: boolean; limit?: number; ruleId: string } }): Promise<ReviewCalibrationQueue>; // GET /api/v1/config/review-calibration/queue
@@ -59,6 +61,7 @@ fetchUsers -> userManagementControllerListUsers(input?: { query?: { keyword?: st
 getCurrentUser -> authControllerMe(): Promise<CurrentUser>; // GET /api/v1/auth/me
 login -> authControllerLogin(input: { body: AuthLoginRequest }): Promise<AuthResponse>; // POST /api/v1/auth/login
 logout -> authControllerLogout(input?: { body?: AuthLogoutRequest }): Promise<void>; // POST /api/v1/auth/logout
+markNotificationRead -> notificationControllerMarkRead(input: { body: NotificationReadRequest }): Promise<void>; // POST /api/v1/notifications/read
 pauseSecretReEncryptionJob -> systemConfigControllerPauseSecretReEncryptionJob(input: { path: { jobId: number } }): Promise<SecretReEncryptionJob>; // POST /api/v1/config/secrets/re-encryption/jobs/{jobId}/pause
 promoteLlmModelRelease -> reviewCalibrationControllerPromoteModelRelease(input: { body: LlmModelReleaseRequest }): Promise<LlmModelRelease>; // POST /api/v1/config/review-calibration/release-center/promote
 publishGithubComments -> reviewControllerPublishGithubComments(input: { path: { id: number } }): Promise<GithubCommentPublish>; // POST /api/v1/reviews/{id}/github-comments

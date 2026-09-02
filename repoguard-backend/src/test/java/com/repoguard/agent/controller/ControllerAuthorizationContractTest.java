@@ -44,7 +44,10 @@ class ControllerAuthorizationContractTest {
         "ScmProviderController#providers",
         "ScmProviderController#changeRequests",
         "ScmProviderController#diff",
-        "ScmProviderController#head"
+        "ScmProviderController#head",
+        "NotificationController#readKeys",
+        "NotificationController#report",
+        "ReviewWorkflowController#queue"
     );
 
     @Test

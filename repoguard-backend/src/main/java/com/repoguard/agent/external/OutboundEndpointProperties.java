@@ -19,7 +19,9 @@ public class OutboundEndpointProperties {
     ));
     private List<String> notificationAllowedHosts = new ArrayList<>(List.of(
         "qyapi.weixin.qq.com",
-        "oapi.dingtalk.com"
+        "oapi.dingtalk.com",
+        "open.feishu.cn",
+        "*.slack.com"
     ));
     private List<String> infrastructureAllowedHosts = new ArrayList<>(List.of(
         "localhost",

@@ -128,7 +128,7 @@ repoguard:
     # Roles that do not own Flyway migrations refuse to start below this version.
     # Keep in sync with the highest version under db/migration; the production
     # readiness check enforces the match.
-    expected-version: ${REPOGUARD_SCHEMA_EXPECTED_VERSION:81}
+    expected-version: ${REPOGUARD_SCHEMA_EXPECTED_VERSION:82}
   tenancy:
     enabled: ${REPOGUARD_TENANCY_ENABLED:false}
     header-name: ${REPOGUARD_TENANCY_HEADER_NAME:X-RepoGuard-Tenant}
@@ -290,6 +290,9 @@ repoguard:
     secure-cookies: ${REPOGUARD_AUTH_SECURE_COOKIES:true}
     public-auth-requests-per-minute-per-ip: ${REPOGUARD_AUTH_REQUESTS_PER_MINUTE_PER_IP:30}
     public-auth-requests-per-minute-per-account-ip: ${REPOGUARD_AUTH_REQUESTS_PER_MINUTE_PER_ACCOUNT_IP:10}
+  workflow:
+    human-review-sla-minutes: ${REPOGUARD_HUMAN_REVIEW_SLA_MINUTES:120}
+    escalation-limit: ${REPOGUARD_HUMAN_REVIEW_ESCALATION_LIMIT:3}
 
 app:
   edition: ${REPOGUARD_EDITION:personal}
@@ -315,7 +318,7 @@ app:
       gitee-allowed-hosts: ${REPOGUARD_OUTBOUND_GITEE_ALLOWED_HOSTS:gitee.com}
       bitbucket-allowed-hosts: ${REPOGUARD_OUTBOUND_BITBUCKET_ALLOWED_HOSTS:api.bitbucket.org}
       llm-allowed-hosts: ${REPOGUARD_OUTBOUND_LLM_ALLOWED_HOSTS:dashscope.aliyuncs.com,api.openai.com}
-      notification-allowed-hosts: ${REPOGUARD_OUTBOUND_NOTIFICATION_ALLOWED_HOSTS:qyapi.weixin.qq.com,oapi.dingtalk.com}
+      notification-allowed-hosts: "${REPOGUARD_OUTBOUND_NOTIFICATION_ALLOWED_HOSTS:qyapi.weixin.qq.com,oapi.dingtalk.com,open.feishu.cn,*.slack.com}"
       infrastructure-allowed-hosts: ${REPOGUARD_OUTBOUND_INFRASTRUCTURE_ALLOWED_HOSTS:localhost,127.0.0.1,::1,mysql,rabbitmq}
       private-network-allowed-hosts: ${REPOGUARD_OUTBOUND_PRIVATE_NETWORK_ALLOWED_HOSTS:localhost,127.0.0.1,::1,mysql,rabbitmq}
       github-allowed-ports: ${REPOGUARD_OUTBOUND_GITHUB_ALLOWED_PORTS:443}

@@ -30,6 +30,9 @@ githubWebhookControllerReceive(input: { body: Uint8Array }): Promise<GithubWebho
 messageQueueHealthControllerGetHealth(): Promise<MessageQueueHealth>; // GET /api/v1/message-queue/health
 messageQueueHealthControllerRequeueTask(input: { path: { taskId: number } }): Promise<MessageQueueRequeueResponse>; // POST /api/v1/message-queue/tasks/{taskId}/requeue
 notificationControllerGetNotifications(): Promise<NotificationCenter>; // GET /api/v1/notifications
+notificationControllerMarkRead(input: { body: NotificationReadRequest }): Promise<void>; // POST /api/v1/notifications/read
+notificationControllerReadKeys(): Promise<string[]>; // GET /api/v1/notifications/read
+notificationControllerReport(input?: { query?: { period?: string } }): Promise<NotificationReport>; // GET /api/v1/notifications/reports
 notificationIntegrationControllerCreateBinding(input: { body: NotificationBindingRequest }): Promise<NotificationBinding>; // POST /api/v1/config/notification-bindings
 notificationIntegrationControllerDeleteBinding(input: { path: { id: number } }): Promise<void>; // DELETE /api/v1/config/notification-bindings/{id}
 notificationIntegrationControllerListBindings(input?: { query?: { organization?: string; page?: number; pageSize?: number; provider?: string; repository?: string } }): Promise<PageResponse<NotificationBinding>>; // GET /api/v1/config/notification-bindings
@@ -65,6 +68,10 @@ reviewExecutionAttemptCollectionControllerChangedFiles(input: { path: { attemptI
 reviewExecutionAttemptCollectionControllerFindings(input: { path: { attemptId: number; taskId: number }; query?: { cursor?: number; limit?: number } }): Promise<PageResponse<ReviewAttemptFinding>>; // GET /api/v1/reviews/{taskId}/attempts/{attemptId}/findings
 reviewExecutionAttemptControllerGetResult(input: { path: { attemptId: number; taskId: number }; query?: { page?: number; pageSize?: number } }): Promise<ReviewExecutionAttemptResult>; // GET /api/v1/reviews/{taskId}/attempts/{attemptId}
 reviewExecutionAttemptControllerList(input: { path: { taskId: number } }): Promise<ReviewExecutionAttempt[]>; // GET /api/v1/reviews/{taskId}/attempts
+reviewWorkflowControllerAssign(input: { path: { taskId: number }; body: ReviewAssignmentRequest }): Promise<ReviewWorkflowItem>; // PUT /api/v1/review-workflow/tasks/{taskId}/assignment
+reviewWorkflowControllerCommand(input: { path: { provider: string }; body: ReviewBotCommandRequest }): Promise<ReviewBotCommandResponse>; // POST /api/v1/review-workflow/bot/{provider}/commands
+reviewWorkflowControllerEscalate(): Promise<ReviewEscalationResponse>; // POST /api/v1/review-workflow/escalations
+reviewWorkflowControllerQueue(input?: { query?: { assignee?: string; overdue?: boolean; page?: number; pageSize?: number } }): Promise<PageResponse<ReviewWorkflowItem>>; // GET /api/v1/review-workflow/queue
 sarifControllerExportFindings(input: { path: { taskId: number } }): Promise<SarifExport>; // GET /api/v1/scanners/sarif/tasks/{taskId}/export
 sarifControllerImportFindings(input: { path: { taskId: number }; body: SarifImportRequest }): Promise<SarifImportResponse>; // POST /api/v1/scanners/sarif/tasks/{taskId}/import
 scmProviderControllerChangeRequests(input: { path: { provider: string } }): Promise<ScmChangeRequestSummary[]>; // GET /api/v1/scm/providers/{provider}/change-requests

@@ -175,7 +175,11 @@ import {
 } from "@lucide/vue";
 import { logout } from "@/api/auth";
 import { hasAuthToken } from "@/api/client";
-import { fetchNotifications } from "@/api/notifications";
+import {
+  fetchNotificationReadKeys,
+  fetchNotifications,
+  markNotificationRead as markNotificationReadOnServer
+} from "@/api/notifications";
 import { createPageAwarePoller } from "@/composables/pageAwarePoller";
 import { pruneReadNotificationIds } from "@/layouts/notificationReadState";
 import { canAccessRouteMeta } from "@/router/accessPolicy";
@@ -250,6 +254,7 @@ const markNotificationRead = (id: string) => {
   }
   readNotificationIds.value = new Set([...readNotificationIds.value, id]);
   persistReadNotificationIds();
+  void markNotificationReadOnServer({ notificationKey: id }).catch(() => undefined);
 };
 
 const isNotificationRead = (id: string) => readNotificationIds.value.has(id);
@@ -282,6 +287,19 @@ const loadNotifications = async (options: { force?: boolean } = {}) => {
   }
 };
 
+const loadServerReadNotificationIds = async () => {
+  if (!enterpriseEditionEnabled || !hasAuthToken()) {
+    return;
+  }
+  try {
+    const serverIds = await fetchNotificationReadKeys();
+    readNotificationIds.value = new Set([...readNotificationIds.value, ...serverIds]);
+    persistReadNotificationIds();
+  } catch {
+    // Local state remains the offline fallback when the read-state endpoint is unavailable.
+  }
+};
+
 const pruneReadNotifications = (items: NotificationItem[]) => {
   const pruned = pruneReadNotificationIds(readNotificationIds.value, items.map((item) => item.id));
   if (pruned.size === readNotificationIds.value.size) {
@@ -303,6 +321,9 @@ const markAllRead = () => {
   }
   readNotificationIds.value = new Set([...readNotificationIds.value, ...notifications.value.map((item) => item.id)]);
   persistReadNotificationIds();
+  notifications.value.forEach((item) => {
+    void markNotificationReadOnServer({ notificationKey: item.id }).catch(() => undefined);
+  });
   ElMessage.success("已将当前通知标记为已读");
 };
 
@@ -391,6 +412,7 @@ onMounted(() => {
   void refreshCurrentUser();
   if (enterpriseEditionEnabled) {
     loadReadNotificationIds();
+    void loadServerReadNotificationIds();
     notificationWarmupTimer = setTimeout(() => {
       notificationWarmupTimer = undefined;
       void loadNotifications();
