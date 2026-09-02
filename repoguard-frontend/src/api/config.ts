@@ -7,6 +7,7 @@ import type {
   GithubChecksPreviewRequest,
   LlmEvaluationRequest,
   LlmEvaluationReportLifecycleRequest,
+  LlmModelReleaseDriftRepairRequest,
   LlmModelReleaseRequest,
   LlmModelRollbackRequest,
   ReviewPolicyConfigRequest,
@@ -108,6 +109,11 @@ export const fetchLlmModelReleaseCenter = (trendDays = 30) =>
 export const fetchLlmModelReleaseRuntimeMetrics = (
   options: { releaseKey?: string; days?: number; limit?: number } = {}
 ) => apiRequest("fetchLlmModelReleaseRuntimeMetrics", options);
+
+export const fetchLlmModelReleaseDrift = () => apiRequest("fetchLlmModelReleaseDrift", undefined);
+
+export const repairLlmModelReleaseDrift = (payload: LlmModelReleaseDriftRepairRequest) =>
+  apiRequest("repairLlmModelReleaseDrift", payload);
 
 export type LlmModelReleaseAuditQuery = {
   releaseId?: number;

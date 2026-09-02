@@ -33,6 +33,7 @@ fetchLlmEvaluationReport -> reviewCalibrationControllerGetEvaluationReport // GE
 fetchLlmEvaluationReports -> reviewCalibrationControllerListEvaluationReports // GET /api/v1/config/review-calibration/evaluation-reports
 fetchLlmModelReleaseAudits -> reviewCalibrationControllerListModelReleaseAudits // GET /api/v1/config/review-calibration/release-center/audits
 fetchLlmModelReleaseCenter -> reviewCalibrationControllerGetModelReleaseCenter // GET /api/v1/config/review-calibration/release-center
+fetchLlmModelReleaseDrift -> reviewCalibrationControllerInspectModelReleaseDrift // GET /api/v1/config/review-calibration/release-center/drift
 fetchLlmModelReleaseRuntimeMetrics -> reviewCalibrationControllerListModelReleaseRuntimeMetrics // GET /api/v1/config/review-calibration/release-center/runtime-metrics
 fetchMessageQueueHealth -> messageQueueHealthControllerGetHealth // GET /api/v1/message-queue/health
 fetchMysqlIntegrationConfig -> systemConfigControllerGetMysqlIntegration // GET /api/v1/config/integrations/mysql
@@ -79,6 +80,7 @@ publishGithubComments -> reviewControllerPublishGithubComments // POST /api/v1/r
 reEncryptSecrets -> systemConfigControllerReEncryptSecrets // POST /api/v1/config/secrets/re-encryption
 register -> authControllerRegister // POST /api/v1/auth/register
 registerLlmModelShadowRelease -> reviewCalibrationControllerRegisterShadowRelease // POST /api/v1/config/review-calibration/release-center/shadow
+repairLlmModelReleaseDrift -> reviewCalibrationControllerRepairModelReleaseDrift // POST /api/v1/config/review-calibration/release-center/drift/repair
 reportFrontendPerformance -> frontendPerformanceControllerRecordPerformance // POST /api/v1/observability/frontend/performance
 requeueMessageQueueTask -> messageQueueHealthControllerRequeueTask // POST /api/v1/message-queue/tasks/{taskId}/requeue
 resetRefreshToken -> authControllerResetRefreshToken // POST /api/v1/auth/refresh-token/reset

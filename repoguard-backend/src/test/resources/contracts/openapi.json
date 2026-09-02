@@ -2360,6 +2360,101 @@
         }
       }
     },
+    "/api/v1/config/review-calibration/release-center/drift" : {
+      "get" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerInspectModelReleaseDrift",
+        "x-controller-operation" : "ReviewCalibrationController#inspectModelReleaseDrift",
+        "parameters" : [ ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "LlmModelReleaseDriftDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/LlmModelReleaseDriftDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-calibration/release-center/drift/repair" : {
+      "post" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerRepairModelReleaseDrift",
+        "x-controller-operation" : "ReviewCalibrationController#repairModelReleaseDrift",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "LlmModelReleaseDriftRepairRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/LlmModelReleaseDriftRepairRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "LlmModelReleaseDriftRepairDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/LlmModelReleaseDriftRepairDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/config/review-calibration/release-center/promote" : {
       "post" : {
         "tags" : [ "ReviewCalibration" ],
@@ -8209,6 +8304,65 @@
           }
         }
       },
+      "AssignmentDto" : {
+        "type" : "object",
+        "x-java-type" : "AssignmentDto",
+        "properties" : {
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "releaseKey" : {
+            "type" : "string"
+          },
+          "provider" : {
+            "type" : "string"
+          },
+          "model" : {
+            "type" : "string"
+          },
+          "taskStatus" : {
+            "type" : "string"
+          },
+          "started" : {
+            "type" : "boolean"
+          },
+          "issueCode" : {
+            "type" : "string"
+          },
+          "repairable" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "AssignmentSummary" : {
+        "type" : "object",
+        "x-java-type" : "AssignmentSummary",
+        "properties" : {
+          "assignedTaskCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "missingReleaseCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "metadataMismatchCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "runningTaskDriftCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "samples" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/AssignmentDto"
+            }
+          }
+        }
+      },
       "AuthCurrentUserDto" : {
         "type" : "object",
         "x-java-type" : "AuthCurrentUserDto",
@@ -9559,6 +9713,37 @@
           }
         },
         "required" : [ "count" ]
+      },
+      "FindingDto" : {
+        "type" : "object",
+        "x-java-type" : "FindingDto",
+        "properties" : {
+          "code" : {
+            "type" : "string"
+          },
+          "severity" : {
+            "type" : "string"
+          },
+          "resourceType" : {
+            "type" : "string"
+          },
+          "resourceId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "resourceKey" : {
+            "type" : "string"
+          },
+          "observedValue" : {
+            "type" : "string"
+          },
+          "desiredValue" : {
+            "type" : "string"
+          },
+          "repairable" : {
+            "type" : "boolean"
+          }
+        }
       },
       "FindingFeedbackRequest" : {
         "type" : "object",
@@ -10965,6 +11150,98 @@
           }
         }
       },
+      "LlmModelReleaseDriftDto" : {
+        "type" : "object",
+        "x-java-type" : "LlmModelReleaseDriftDto",
+        "properties" : {
+          "checkedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "healthy" : {
+            "type" : "boolean"
+          },
+          "fingerprint" : {
+            "type" : "string"
+          },
+          "findings" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/FindingDto"
+            }
+          },
+          "releaseSummary" : {
+            "$ref" : "#/components/schemas/ReleaseSummary"
+          },
+          "assignmentSummary" : {
+            "$ref" : "#/components/schemas/AssignmentSummary"
+          }
+        }
+      },
+      "LlmModelReleaseDriftRepairDto" : {
+        "type" : "object",
+        "x-java-type" : "LlmModelReleaseDriftRepairDto",
+        "properties" : {
+          "operationKey" : {
+            "type" : "string"
+          },
+          "previewFingerprint" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "changedReleaseCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "changedTaskCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "skippedRunningTaskCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "failureCode" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "updatedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "preview" : {
+            "$ref" : "#/components/schemas/LlmModelReleaseDriftDto"
+          },
+          "after" : {
+            "$ref" : "#/components/schemas/LlmModelReleaseDriftDto"
+          }
+        }
+      },
+      "LlmModelReleaseDriftRepairRequest" : {
+        "type" : "object",
+        "x-java-type" : "LlmModelReleaseDriftRepairRequest",
+        "properties" : {
+          "idempotencyKey" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "previewFingerprint" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "(?i)[0-9a-f]{64}"
+          },
+          "confirm" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "idempotencyKey", "previewFingerprint", "confirm" ]
+      },
       "LlmModelReleaseDto" : {
         "type" : "object",
         "x-java-type" : "LlmModelReleaseDto",
@@ -12138,6 +12415,42 @@
           },
           "deadLetterRoutingKey" : {
             "type" : "string"
+          }
+        }
+      },
+      "ReleaseSummary" : {
+        "type" : "object",
+        "x-java-type" : "ReleaseSummary",
+        "properties" : {
+          "activeCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "canaryCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "activeReleaseIds" : {
+            "type" : "array",
+            "items" : {
+              "type" : "integer",
+              "format" : "int64"
+            }
+          },
+          "canaryReleaseIds" : {
+            "type" : "array",
+            "items" : {
+              "type" : "integer",
+              "format" : "int64"
+            }
+          },
+          "desiredActiveReleaseId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "desiredCanaryReleaseId" : {
+            "type" : "integer",
+            "format" : "int64"
           }
         }
       },

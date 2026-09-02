@@ -36,6 +36,7 @@ class ControllerAuthorizationContractTest {
         "ReviewCalibrationController#getReviewCalibrationQueue",
         "ReviewCalibrationController#getModelReleaseCenter",
         "ReviewCalibrationController#listModelReleaseRuntimeMetrics",
+        "ReviewCalibrationController#inspectModelReleaseDrift",
         "ReviewCalibrationController#listModelReleaseAudits",
         "ReviewCalibrationController#verifyModelReleaseAudit",
         "ReviewCalibrationController#exportModelReleaseAudits",

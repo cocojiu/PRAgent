@@ -41,6 +41,9 @@ import type {
   LlmModelReleaseAuditExport,
   LlmModelReleaseAuditVerification,
   LlmModelReleaseCenter,
+  LlmModelReleaseDrift,
+  LlmModelReleaseDriftRepair,
+  LlmModelReleaseDriftRepairRequest,
   LlmModelReleaseMetric,
   LlmModelReleaseRequest,
   LlmModelRollbackRequest,
@@ -399,6 +402,13 @@ export type GeneratedOpenApiOperationMap = {
     body: never;
     response: ReviewCalibrationQueue;
   };
+  "reviewCalibrationControllerInspectModelReleaseDrift": {
+    method: "GET";
+    pathParams: never;
+    query: never;
+    body: never;
+    response: LlmModelReleaseDrift;
+  };
   "reviewCalibrationControllerListEvaluationReports": {
     method: "GET";
     pathParams: never;
@@ -433,6 +443,13 @@ export type GeneratedOpenApiOperationMap = {
     query: never;
     body: LlmModelReleaseRequest;
     response: LlmModelRelease;
+  };
+  "reviewCalibrationControllerRepairModelReleaseDrift": {
+    method: "POST";
+    pathParams: never;
+    query: never;
+    body: LlmModelReleaseDriftRepairRequest;
+    response: LlmModelReleaseDriftRepair;
   };
   "reviewCalibrationControllerRollbackModelRelease": {
     method: "POST";
@@ -1226,6 +1243,14 @@ export const generatedOpenApiOperations = {
     hasRequestBody: false,
     requestBodyRequired: false
   },
+  "reviewCalibrationControllerInspectModelReleaseDrift": {
+    method: "GET",
+    path: "/api/v1/config/review-calibration/release-center/drift",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
   "reviewCalibrationControllerListEvaluationReports": {
     method: "GET",
     path: "/api/v1/config/review-calibration/evaluation-reports",
@@ -1261,6 +1286,14 @@ export const generatedOpenApiOperations = {
   "reviewCalibrationControllerRegisterShadowRelease": {
     method: "POST",
     path: "/api/v1/config/review-calibration/release-center/shadow",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "reviewCalibrationControllerRepairModelReleaseDrift": {
+    method: "POST",
+    path: "/api/v1/config/review-calibration/release-center/drift/repair",
     pathParamNames: [],
     queryParamNames: [],
     hasRequestBody: true,

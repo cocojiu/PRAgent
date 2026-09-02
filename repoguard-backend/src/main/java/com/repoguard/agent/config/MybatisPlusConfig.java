@@ -47,6 +47,7 @@ public class MybatisPlusConfig {
         "llm_evaluation_report",
         "llm_evaluation_report_lifecycle_audit",
         "llm_model_release_audit",
+        "llm_model_release_drift_audit",
         "llm_model_release_metric_snapshot",
         "sarif_import_batch",
         "secret_re_encryption_job",

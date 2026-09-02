@@ -14,6 +14,10 @@ import com.repoguard.agent.dto.LlmModelRollbackRequest;
 import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.ReviewCalibrationQueueDto;
 import com.repoguard.agent.dto.LlmModelReleaseMetricDto;
+import com.repoguard.agent.dto.LlmModelReleaseDriftDto;
+import com.repoguard.agent.dto.LlmModelReleaseDriftRepairDto;
+import com.repoguard.agent.dto.LlmModelReleaseDriftRepairRequest;
+import com.repoguard.agent.review.quality.LlmModelReleaseDriftService;
 import com.repoguard.agent.review.quality.LlmModelReleaseService;
 import com.repoguard.agent.review.quality.LlmModelReleaseMetricsService;
 import com.repoguard.agent.security.RequireRole;
@@ -44,27 +48,38 @@ public class ReviewCalibrationController {
     private final ReviewCalibrationService calibrationService;
     private final LlmModelReleaseService modelReleaseService;
     private final LlmModelReleaseMetricsService modelReleaseMetricsService;
+    private final LlmModelReleaseDriftService modelReleaseDriftService;
 
     public ReviewCalibrationController(ReviewCalibrationService calibrationService) {
-        this(calibrationService, null, null);
+        this(calibrationService, null, null, null);
     }
 
     public ReviewCalibrationController(
         ReviewCalibrationService calibrationService,
         LlmModelReleaseService modelReleaseService
     ) {
-        this(calibrationService, modelReleaseService, null);
+        this(calibrationService, modelReleaseService, null, null);
+    }
+
+    public ReviewCalibrationController(
+        ReviewCalibrationService calibrationService,
+        LlmModelReleaseService modelReleaseService,
+        LlmModelReleaseMetricsService modelReleaseMetricsService
+    ) {
+        this(calibrationService, modelReleaseService, modelReleaseMetricsService, null);
     }
 
     @Autowired
     public ReviewCalibrationController(
         ReviewCalibrationService calibrationService,
         LlmModelReleaseService modelReleaseService,
-        LlmModelReleaseMetricsService modelReleaseMetricsService
+        LlmModelReleaseMetricsService modelReleaseMetricsService,
+        LlmModelReleaseDriftService modelReleaseDriftService
     ) {
         this.calibrationService = calibrationService;
         this.modelReleaseService = modelReleaseService;
         this.modelReleaseMetricsService = modelReleaseMetricsService;
+        this.modelReleaseDriftService = modelReleaseDriftService;
     }
 
     @GetMapping("/queue")
@@ -90,6 +105,21 @@ public class ReviewCalibrationController {
         @RequestParam(defaultValue = "168") @Min(1) @Max(500) int limit
     ) {
         return ApiResponse.ok(requireMetricsService().collectAndList(releaseKey, days, limit));
+    }
+
+    @GetMapping("/release-center/drift")
+    public ApiResponse<LlmModelReleaseDriftDto> inspectModelReleaseDrift() {
+        return ApiResponse.ok(requireDriftService().detect());
+    }
+
+    @PostMapping("/release-center/drift/repair")
+    @RequireRole({"ADMIN", "PLATFORM_ADMIN", "RULE_ADMIN"})
+    public ApiResponse<LlmModelReleaseDriftRepairDto> repairModelReleaseDrift(
+        @Valid @RequestBody LlmModelReleaseDriftRepairRequest request,
+        HttpServletRequest servletRequest
+    ) {
+        var principal = RequestAuthentication.require(servletRequest);
+        return ApiResponse.ok(requireDriftService().repair(request, principal.username(), principal.role()));
     }
 
     @GetMapping("/release-center/audits")
@@ -229,5 +259,12 @@ public class ReviewCalibrationController {
             throw new IllegalStateException("LLM model release runtime metrics are not available");
         }
         return modelReleaseMetricsService;
+    }
+
+    private LlmModelReleaseDriftService requireDriftService() {
+        if (modelReleaseDriftService == null) {
+            throw new IllegalStateException("LLM model release drift detection is not available");
+        }
+        return modelReleaseDriftService;
     }
 }

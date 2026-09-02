@@ -307,3 +307,71 @@ export interface LlmModelReleaseAuditExport {
   contentSha256: string;
   content: string;
 }
+
+export interface LlmModelReleaseDriftFinding {
+  code: string;
+  severity: string;
+  resourceType: string;
+  resourceId?: number;
+  resourceKey?: string;
+  observedValue: string;
+  desiredValue: string;
+  repairable: boolean;
+}
+
+export interface LlmModelReleaseDriftReleaseSummary {
+  activeCount: number;
+  canaryCount: number;
+  activeReleaseIds: number[];
+  canaryReleaseIds: number[];
+  desiredActiveReleaseId?: number;
+  desiredCanaryReleaseId?: number;
+}
+
+export interface LlmModelReleaseDriftAssignment {
+  taskId: number;
+  releaseKey: string;
+  provider: string;
+  model: string;
+  taskStatus: string;
+  started: boolean;
+  issueCode: string;
+  repairable: boolean;
+}
+
+export interface LlmModelReleaseDriftAssignmentSummary {
+  assignedTaskCount: number;
+  missingReleaseCount: number;
+  metadataMismatchCount: number;
+  runningTaskDriftCount: number;
+  samples: LlmModelReleaseDriftAssignment[];
+}
+
+export interface LlmModelReleaseDrift {
+  checkedAt: string;
+  healthy: boolean;
+  fingerprint: string;
+  findings: LlmModelReleaseDriftFinding[];
+  releaseSummary: LlmModelReleaseDriftReleaseSummary;
+  assignmentSummary: LlmModelReleaseDriftAssignmentSummary;
+}
+
+export interface LlmModelReleaseDriftRepairRequest {
+  idempotencyKey: string;
+  previewFingerprint: string;
+  confirm: boolean;
+}
+
+export interface LlmModelReleaseDriftRepair {
+  operationKey: string;
+  previewFingerprint: string;
+  status: "PREVIEW" | "RUNNING" | "COMPLETED" | "FAILED" | string;
+  changedReleaseCount: number;
+  changedTaskCount: number;
+  skippedRunningTaskCount: number;
+  failureCode?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  preview?: LlmModelReleaseDrift;
+  after?: LlmModelReleaseDrift;
+}

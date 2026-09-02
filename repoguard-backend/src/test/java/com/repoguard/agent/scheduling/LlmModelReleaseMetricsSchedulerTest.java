@@ -5,6 +5,7 @@ import static org.mockito.Mockito.verify;
 
 import com.repoguard.agent.review.quality.LlmModelReleaseMetricsService;
 import com.repoguard.agent.review.quality.LlmModelReleaseService;
+import com.repoguard.agent.review.quality.LlmModelReleaseDriftService;
 import com.repoguard.agent.tenancy.TenantScheduledTaskRunner;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -39,5 +40,20 @@ class LlmModelReleaseMetricsSchedulerTest {
         taskCaptor.getValue().run();
         verify(metricsService).collectCurrentWindow();
         verify(releaseService).expireDueEvaluationReports();
+    }
+
+    @Test
+    void scheduledCollectionRunsReadOnlyReleaseDriftDetectionWhenAvailable() {
+        LlmModelReleaseDriftService driftService = org.mockito.Mockito.mock(LlmModelReleaseDriftService.class);
+        LlmModelReleaseMetricsScheduler scheduled = new LlmModelReleaseMetricsScheduler(
+            tenantRunner, metricsService, releaseService, driftService
+        );
+
+        scheduled.collectReleaseRuntimeMetrics();
+
+        ArgumentCaptor<Runnable> taskCaptor = ArgumentCaptor.forClass(Runnable.class);
+        verify(tenantRunner).runForEachActiveTenant(eq("llm_release_runtime_metrics"), taskCaptor.capture());
+        taskCaptor.getValue().run();
+        verify(driftService).detect();
     }
 }

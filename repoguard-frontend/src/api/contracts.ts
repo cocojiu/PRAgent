@@ -59,6 +59,9 @@ import type {
   LlmModelReleaseAuditVerification,
   LlmModelReleaseCenter,
   LlmModelReleaseMetric,
+  LlmModelReleaseDrift,
+  LlmModelReleaseDriftRepair,
+  LlmModelReleaseDriftRepairRequest,
   LlmModelReleaseRequest,
   LlmModelRollbackRequest,
   LlmEvaluationExport,
@@ -299,6 +302,8 @@ export type ApiContract = {
     { releaseKey?: string; days?: number; limit?: number },
     LlmModelReleaseMetric[]
   >;
+  fetchLlmModelReleaseDrift: ApiOperation<undefined, LlmModelReleaseDrift>;
+  repairLlmModelReleaseDrift: ApiOperation<LlmModelReleaseDriftRepairRequest, LlmModelReleaseDriftRepair>;
   fetchLlmModelReleaseAudits: ApiOperation<{
     releaseId?: number;
     releaseKey?: string;
@@ -687,6 +692,10 @@ const apiEndpoints: ApiEndpointMap = {
   }),
   fetchLlmModelReleaseRuntimeMetrics: generatedEndpoint("reviewCalibrationControllerListModelReleaseRuntimeMetrics", {
     query: input => ({ releaseKey: input.releaseKey, days: input.days, limit: input.limit })
+  }),
+  fetchLlmModelReleaseDrift: generatedEndpoint("reviewCalibrationControllerInspectModelReleaseDrift", {}),
+  repairLlmModelReleaseDrift: generatedEndpoint("reviewCalibrationControllerRepairModelReleaseDrift", {
+    body: input => input
   }),
   fetchLlmModelReleaseAudits: generatedEndpoint("reviewCalibrationControllerListModelReleaseAudits", {
     query: input => ({
