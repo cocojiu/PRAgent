@@ -104,6 +104,10 @@ export const fetchReviewCalibrationQueue = (
 export const fetchLlmModelReleaseCenter = (trendDays = 30) =>
   apiRequest("fetchLlmModelReleaseCenter", { trendDays });
 
+export const fetchLlmModelReleaseRuntimeMetrics = (
+  options: { releaseKey?: string; days?: number; limit?: number } = {}
+) => apiRequest("fetchLlmModelReleaseRuntimeMetrics", options);
+
 export const registerLlmModelShadowRelease = (payload: LlmModelReleaseRequest) =>
   apiRequest("registerLlmModelShadowRelease", payload);
 

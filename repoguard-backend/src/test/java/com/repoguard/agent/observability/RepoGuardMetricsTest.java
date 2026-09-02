@@ -8,6 +8,7 @@ import com.repoguard.agent.worker.ReviewExecutionFailureClassifier;
 import io.micrometer.core.instrument.config.MeterFilter;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
+import java.math.BigDecimal;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.CannotAcquireLockException;
 
@@ -262,6 +263,33 @@ class RepoGuardMetricsTest {
             .tag("state", "dlq")
             .gauge()
             .value()).isEqualTo(7.0);
+    }
+
+    @Test
+    void recordsBoundedLlmReleaseRuntimeGaugesAndAlerts() {
+        metrics.llmReleaseSnapshot(
+            "release-next", "OpenAI", "gpt-next", 12, 1_200,
+            new BigDecimal("0.1200"), 1_500, new BigDecimal("0.08333333"),
+            new BigDecimal("0.25000000"), "ALERT"
+        );
+        metrics.llmReleaseAlert("release-next", "P95_LATENCY_ABOVE_RUNTIME_THRESHOLD", "NOTIFY");
+
+        assertThat(meterRegistry.find("repoguard.llm.release.sample_count")
+            .tag("release_key", "release-next")
+            .tag("provider", "openai")
+            .tag("model", "gpt-next")
+            .tag("alert_state", "alert")
+            .gauge().value()).isEqualTo(12.0);
+        assertThat(meterRegistry.find("repoguard.llm.release.total_cost_micros")
+            .tag("release_key", "release-next").gauge().value()).isEqualTo(120_000.0);
+        assertThat(meterRegistry.find("repoguard.llm.release.parse_failure_rate_micros")
+            .tag("release_key", "release-next").gauge().value()).isEqualTo(83_333.0);
+        assertThat(counter(
+            "repoguard.llm.release.alert",
+            "release_key", "release-next",
+            "code", "p95_latency_above_runtime_threshold",
+            "action", "notify"
+        )).isEqualTo(1.0);
     }
 
     @Test

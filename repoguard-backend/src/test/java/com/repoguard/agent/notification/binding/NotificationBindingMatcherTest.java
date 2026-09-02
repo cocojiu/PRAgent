@@ -55,6 +55,17 @@ class NotificationBindingMatcherTest {
     }
 
     @Test
+    void modelReleaseAlertUsesTheOperationalFailureNotificationSwitch() {
+        NotificationChannelBinding binding = binding();
+        binding.setNotifyReviewFailed(true);
+
+        assertThat(matcher.supports(binding, NotificationEventType.MODEL_RELEASE_ALERT.code())).isTrue();
+
+        binding.setNotifyReviewFailed(false);
+        assertThat(matcher.supports(binding, NotificationEventType.MODEL_RELEASE_ALERT.code())).isFalse();
+    }
+
+    @Test
     void unknownEventTypeIsNotSupported() {
         NotificationChannelBinding binding = binding();
         binding.setNotifyReviewCompleted(true);

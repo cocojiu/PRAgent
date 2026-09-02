@@ -2,6 +2,7 @@ import { computed, ref } from "vue";
 import {
   fetchLlmEvaluationReports,
   fetchLlmModelReleaseCenter,
+  fetchLlmModelReleaseRuntimeMetrics,
   promoteLlmModelRelease,
   registerLlmModelShadowRelease,
   rollbackLlmModelRelease
@@ -10,6 +11,7 @@ import type {
   LlmEvaluationReport,
   LlmModelRelease,
   LlmModelReleaseCenter,
+  LlmModelReleaseMetric,
   LlmModelReleaseRequest
 } from "@/types";
 import { getErrorMessage } from "@/utils/errors";
@@ -46,6 +48,7 @@ export const buildLlmModelReleaseRequest = (
 
 export const useLlmModelReleaseCenter = () => {
   const center = ref<LlmModelReleaseCenter | null>(null);
+  const runtimeMetrics = ref<LlmModelReleaseMetric[]>([]);
   const reports = ref<LlmEvaluationReport[]>([]);
   const selectedReportId = ref<number>();
   const trendDays = ref(30);
@@ -65,13 +68,15 @@ export const useLlmModelReleaseCenter = () => {
     loading.value = true;
     errorMessage.value = "";
     try {
-      const [nextCenter, nextReports] = await Promise.all([
+      const [nextCenter, nextReports, nextRuntimeMetrics] = await Promise.all([
         fetchLlmModelReleaseCenter(trendDays.value),
-        fetchLlmEvaluationReports(50)
+        fetchLlmEvaluationReports(50),
+        fetchLlmModelReleaseRuntimeMetrics({ days: trendDays.value, limit: 168 })
       ]);
       if (epoch !== requestEpoch) return;
       center.value = nextCenter;
       reports.value = nextReports;
+      runtimeMetrics.value = nextRuntimeMetrics;
       if (!nextReports.some((report) => report.id === selectedReportId.value)) {
         selectedReportId.value = nextReports[0]?.id;
       }
@@ -144,6 +149,7 @@ export const useLlmModelReleaseCenter = () => {
     registerShadow,
     releaseKey,
     reports,
+    runtimeMetrics,
     rollback,
     selectedReport,
     selectedReportId,

@@ -2067,6 +2067,81 @@
         }
       }
     },
+    "/api/v1/config/review-calibration/release-center/runtime-metrics" : {
+      "get" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerListModelReleaseRuntimeMetrics",
+        "x-controller-operation" : "ReviewCalibrationController#listModelReleaseRuntimeMetrics",
+        "parameters" : [ {
+          "name" : "releaseKey",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 128
+          }
+        }, {
+          "name" : "days",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 90,
+            "default" : 7
+          }
+        }, {
+          "name" : "limit",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 500,
+            "default" : 168
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "List<LlmModelReleaseMetricDto>",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "array",
+                      "items" : {
+                        "$ref" : "#/components/schemas/LlmModelReleaseMetricDto"
+                      }
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/config/review-calibration/release-center/shadow" : {
       "post" : {
         "tags" : [ "ReviewCalibration" ],
@@ -10485,6 +10560,87 @@
           "evaluationReportId" : {
             "type" : "integer",
             "format" : "int64"
+          }
+        }
+      },
+      "LlmModelReleaseMetricDto" : {
+        "type" : "object",
+        "x-java-type" : "LlmModelReleaseMetricDto",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "releaseId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "releaseKey" : {
+            "type" : "string"
+          },
+          "provider" : {
+            "type" : "string"
+          },
+          "modelName" : {
+            "type" : "string"
+          },
+          "windowStart" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "windowEnd" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "sampleCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "totalTokens" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "totalCost" : {
+            "type" : "number"
+          },
+          "p95LatencyMs" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "parseFailureCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "fallbackCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "rollbackCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "alertState" : {
+            "type" : "string"
+          },
+          "alertCodes" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "action" : {
+            "type" : "string"
+          },
+          "alertFingerprint" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "updatedAt" : {
+            "type" : "string",
+            "format" : "date-time"
           }
         }
       },

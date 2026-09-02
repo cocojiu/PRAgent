@@ -13,6 +13,7 @@ GET /api/v1/config/review-calibration/evaluation-reports/{reportId}/compare/{can
 GET /api/v1/config/review-calibration/evaluation-reports/{reportId}/export query=[format] body=- bodyRequired=false
 GET /api/v1/config/review-calibration/queue query=[ruleId, limit, includeIgnored] body=- bodyRequired=false
 GET /api/v1/config/review-calibration/release-center query=[trendDays] body=- bodyRequired=false
+GET /api/v1/config/review-calibration/release-center/runtime-metrics query=[releaseKey, days, limit] body=- bodyRequired=false
 GET /api/v1/config/review-policy query=[] body=- bodyRequired=false
 GET /api/v1/config/review-rules query=[] body=- bodyRequired=false
 GET /api/v1/config/review-rules/{id}/versions query=[cursor, pageSize] body=- bodyRequired=false

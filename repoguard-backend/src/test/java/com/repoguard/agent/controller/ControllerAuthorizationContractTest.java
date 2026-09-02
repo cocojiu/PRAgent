@@ -35,6 +35,7 @@ class ControllerAuthorizationContractTest {
         "SystemConfigController#listSecretReEncryptionJobItems",
         "ReviewCalibrationController#getReviewCalibrationQueue",
         "ReviewCalibrationController#getModelReleaseCenter",
+        "ReviewCalibrationController#listModelReleaseRuntimeMetrics",
         "ReviewCalibrationController#listEvaluationReports",
         "ReviewCalibrationController#getEvaluationReport",
         "ReviewCalibrationController#compareEvaluationReports",

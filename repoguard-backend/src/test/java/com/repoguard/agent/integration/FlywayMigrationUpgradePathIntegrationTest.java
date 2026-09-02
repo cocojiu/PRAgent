@@ -19,7 +19,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
  * Exercises the supported rolling-upgrade path against a real MySQL instance.
  *
  * <p>The test is opt-in because local unit-test runs do not provision a database. CI enables it
- * with an isolated database and verifies the V76 expand state through the V87 Check Run policy state.
+ * with an isolated database and verifies the V76 expand state through the V88 runtime metrics state.
  */
 @EnabledIfEnvironmentVariable(named = "REPOGUARD_RUN_INTEGRATION_TESTS", matches = "true")
 class FlywayMigrationUpgradePathIntegrationTest {
@@ -124,9 +124,9 @@ class FlywayMigrationUpgradePathIntegrationTest {
                 }
             }
 
-            migrateTo(url, username, password, "87");
+            migrateTo(url, username, password, "88");
             try (Connection connection = open(url, username, password)) {
-                assertThat(latestSuccessfulMigration(connection)).isEqualTo("87");
+                assertThat(latestSuccessfulMigration(connection)).isEqualTo("88");
                 assertThat(columnExists(connection, "tenant_quota_config", "monthly_llm_token_budget"))
                     .isTrue();
                 assertThat(columnExists(connection, "tenant_quota_config", "monthly_llm_cost_budget"))
@@ -173,6 +173,19 @@ class FlywayMigrationUpgradePathIntegrationTest {
                     "github_check_run_policy",
                     "fk_github_check_run_policy_tenant"
                 )).isTrue();
+                assertThat(compositeUniqueIndexExists(
+                    connection,
+                    "llm_model_release_metric_snapshot",
+                    "uk_llm_release_metric_window",
+                    4
+                )).isTrue();
+                assertThat(constraintExists(
+                    connection,
+                    "llm_model_release_metric_snapshot",
+                    "fk_llm_release_metric_release"
+                )).isTrue();
+                assertThat(columnIsNullable(connection, "notification_event", "task_id")).isTrue();
+                assertThat(columnIsNullable(connection, "notification_delivery_log", "task_id")).isTrue();
             }
         } finally {
             cleanup(url, username, password, tenantId, taskId, attemptId);
@@ -397,6 +410,21 @@ class FlywayMigrationUpgradePathIntegrationTest {
             try (ResultSet result = statement.executeQuery()) {
                 assertThat(result.next()).isTrue();
                 return result.getLong(1) == 1L;
+            }
+        }
+    }
+
+    private boolean columnIsNullable(Connection connection, String table, String column) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+            select is_nullable
+              from information_schema.columns
+             where table_schema = database() and table_name = ? and column_name = ?
+            """)) {
+            statement.setString(1, table);
+            statement.setString(2, column);
+            try (ResultSet result = statement.executeQuery()) {
+                assertThat(result.next()).isTrue();
+                return "YES".equalsIgnoreCase(result.getString(1));
             }
         }
     }

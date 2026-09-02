@@ -8,7 +8,9 @@ import com.repoguard.agent.dto.LlmModelReleaseRequest;
 import com.repoguard.agent.dto.LlmModelReleaseRequest.LlmEvaluationRequest;
 import com.repoguard.agent.dto.LlmModelRollbackRequest;
 import com.repoguard.agent.dto.ReviewCalibrationQueueDto;
+import com.repoguard.agent.dto.LlmModelReleaseMetricDto;
 import com.repoguard.agent.review.quality.LlmModelReleaseService;
+import com.repoguard.agent.review.quality.LlmModelReleaseMetricsService;
 import com.repoguard.agent.security.RequireRole;
 import com.repoguard.agent.service.ReviewCalibrationService;
 import com.repoguard.agent.web.RequestAuthentication;
@@ -36,18 +38,28 @@ public class ReviewCalibrationController {
 
     private final ReviewCalibrationService calibrationService;
     private final LlmModelReleaseService modelReleaseService;
+    private final LlmModelReleaseMetricsService modelReleaseMetricsService;
 
     public ReviewCalibrationController(ReviewCalibrationService calibrationService) {
-        this(calibrationService, null);
+        this(calibrationService, null, null);
+    }
+
+    public ReviewCalibrationController(
+        ReviewCalibrationService calibrationService,
+        LlmModelReleaseService modelReleaseService
+    ) {
+        this(calibrationService, modelReleaseService, null);
     }
 
     @Autowired
     public ReviewCalibrationController(
         ReviewCalibrationService calibrationService,
-        LlmModelReleaseService modelReleaseService
+        LlmModelReleaseService modelReleaseService,
+        LlmModelReleaseMetricsService modelReleaseMetricsService
     ) {
         this.calibrationService = calibrationService;
         this.modelReleaseService = modelReleaseService;
+        this.modelReleaseMetricsService = modelReleaseMetricsService;
     }
 
     @GetMapping("/queue")
@@ -64,6 +76,15 @@ public class ReviewCalibrationController {
         @RequestParam(defaultValue = "30") @Min(7) @Max(90) int trendDays
     ) {
         return ApiResponse.ok(requireReleaseService().getCenter(trendDays));
+    }
+
+    @GetMapping("/release-center/runtime-metrics")
+    public ApiResponse<java.util.List<LlmModelReleaseMetricDto>> listModelReleaseRuntimeMetrics(
+        @RequestParam(required = false) @Size(max = 128) String releaseKey,
+        @RequestParam(defaultValue = "7") @Min(1) @Max(90) int days,
+        @RequestParam(defaultValue = "168") @Min(1) @Max(500) int limit
+    ) {
+        return ApiResponse.ok(requireMetricsService().collectAndList(releaseKey, days, limit));
     }
 
     @PostMapping("/release-center/shadow")
@@ -145,5 +166,12 @@ public class ReviewCalibrationController {
             throw new IllegalStateException("LLM model release center is not available");
         }
         return modelReleaseService;
+    }
+
+    private LlmModelReleaseMetricsService requireMetricsService() {
+        if (modelReleaseMetricsService == null) {
+            throw new IllegalStateException("LLM model release runtime metrics are not available");
+        }
+        return modelReleaseMetricsService;
     }
 }

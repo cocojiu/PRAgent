@@ -147,7 +147,7 @@ class TenantBackgroundJobSchedulerTest {
     }
 
     @Test
-    void ownsExactlyTwelveScheduledMethods() {
+    void ownsExactlyThirteenScheduledMethods() {
         long scheduledMethods = Stream.of(TenantBackgroundJobScheduler.class.getDeclaredMethods())
             .filter(method -> method.isAnnotationPresent(Scheduled.class))
             .count();
@@ -172,9 +172,10 @@ class TenantBackgroundJobSchedulerTest {
             .extracting(path -> path.getFileName().toString())
             .containsExactlyInAnyOrder(
                 "ClusterCacheInvalidationPoller.java",
+                "LlmModelReleaseMetricsScheduler.java",
                 "TenantBackgroundJobScheduler.java"
             );
-        assertThat(annotationCount).isEqualTo(14L);
+        assertThat(annotationCount).isEqualTo(15L);
     }
 
     private boolean containsScheduledAnnotation(Path path) {

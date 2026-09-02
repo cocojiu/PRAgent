@@ -31,6 +31,7 @@ fetchGithubPullRequestOptions -> reviewControllerListConfiguredGithubPullRequest
 fetchLlmEvaluationReport -> reviewCalibrationControllerGetEvaluationReport(input: { path: { reportId: number } }): Promise<LlmEvaluationReport>; // GET /api/v1/config/review-calibration/evaluation-reports/{reportId}
 fetchLlmEvaluationReports -> reviewCalibrationControllerListEvaluationReports(input?: { query?: { limit?: number } }): Promise<LlmEvaluationReport[]>; // GET /api/v1/config/review-calibration/evaluation-reports
 fetchLlmModelReleaseCenter -> reviewCalibrationControllerGetModelReleaseCenter(input?: { query?: { trendDays?: number } }): Promise<LlmModelReleaseCenter>; // GET /api/v1/config/review-calibration/release-center
+fetchLlmModelReleaseRuntimeMetrics -> reviewCalibrationControllerListModelReleaseRuntimeMetrics(input?: { query?: { days?: number; limit?: number; releaseKey?: string } }): Promise<LlmModelReleaseMetric[]>; // GET /api/v1/config/review-calibration/release-center/runtime-metrics
 fetchMessageQueueHealth -> messageQueueHealthControllerGetHealth(): Promise<MessageQueueHealth>; // GET /api/v1/message-queue/health
 fetchMysqlIntegrationConfig -> systemConfigControllerGetMysqlIntegration(): Promise<ServiceIntegrationConfig>; // GET /api/v1/config/integrations/mysql
 fetchNotificationBindings -> notificationIntegrationControllerListBindings(input?: { query?: { organization?: string; page?: number; pageSize?: number; provider?: string; repository?: string } }): Promise<PageResponse<NotificationBinding>>; // GET /api/v1/config/notification-bindings

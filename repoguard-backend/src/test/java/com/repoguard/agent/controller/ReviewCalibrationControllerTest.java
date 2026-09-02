@@ -7,6 +7,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.repoguard.agent.dto.ReviewCalibrationQueueDto;
 import com.repoguard.agent.dto.ReviewCalibrationVersionDto;
 import com.repoguard.agent.dto.ReviewRuleQualityGateDto;
+import com.repoguard.agent.dto.LlmModelReleaseMetricDto;
+import com.repoguard.agent.review.quality.LlmModelReleaseMetricsService;
 import com.repoguard.agent.service.ReviewCalibrationService;
 import java.math.BigDecimal;
 import java.util.List;
@@ -31,6 +33,33 @@ class ReviewCalibrationControllerTest {
             .andExpect(jsonPath("$.data.targetLabeledSamples").value(30))
             .andExpect(jsonPath("$.data.remainingToTarget").value(30))
             .andExpect(jsonPath("$.data.samples").isArray());
+    }
+
+    @Test
+    void listsCollectedRuntimeMetricsWithBoundedQueryParameters() throws Exception {
+        LlmModelReleaseMetricsService metricsService = org.mockito.Mockito.mock(LlmModelReleaseMetricsService.class);
+        org.mockito.Mockito.when(metricsService.collectAndList("release-next", 7, 20)).thenReturn(List.of(
+            new LlmModelReleaseMetricDto(
+                8L, 7L, "release-next", "openai", "gpt-next",
+                java.time.LocalDateTime.of(2026, 9, 3, 1, 0), java.time.LocalDateTime.of(2026, 9, 3, 2, 0),
+                12L, 1200L, BigDecimal.valueOf(0.12), 1200L, 0L, 0L, 0L,
+                "NORMAL", List.of(), "NONE", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                null, null
+            )
+        ));
+        MockMvc metricsMvc = MockMvcBuilders.standaloneSetup(
+            new ReviewCalibrationController(service, null, metricsService)
+        ).build();
+
+        metricsMvc.perform(get("/api/v1/config/review-calibration/release-center/runtime-metrics")
+                .queryParam("releaseKey", "release-next")
+                .queryParam("days", "7")
+                .queryParam("limit", "20"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data[0].releaseKey").value("release-next"))
+            .andExpect(jsonPath("$.data[0].sampleCount").value(12));
+
+        org.mockito.Mockito.verify(metricsService).collectAndList("release-next", 7, 20);
     }
 
     private ReviewCalibrationQueueDto queue(String ruleId, int limit) {

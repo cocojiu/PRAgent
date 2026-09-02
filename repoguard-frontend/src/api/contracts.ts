@@ -55,6 +55,7 @@ import type {
   EnterpriseTenantStatusRequest,
   LlmModelRelease,
   LlmModelReleaseCenter,
+  LlmModelReleaseMetric,
   LlmModelReleaseRequest,
   LlmModelRollbackRequest,
   LlmEvaluationExport,
@@ -290,6 +291,10 @@ export type ApiContract = {
     ReviewCalibrationQueue
   >;
   fetchLlmModelReleaseCenter: ApiOperation<{ trendDays?: number }, LlmModelReleaseCenter>;
+  fetchLlmModelReleaseRuntimeMetrics: ApiOperation<
+    { releaseKey?: string; days?: number; limit?: number },
+    LlmModelReleaseMetric[]
+  >;
   registerLlmModelShadowRelease: ApiOperation<LlmModelReleaseRequest, LlmModelRelease>;
   promoteLlmModelRelease: ApiOperation<LlmModelReleaseRequest, LlmModelRelease>;
   createLlmEvaluationReport: ApiOperation<LlmEvaluationRequest, LlmEvaluationReport>;
@@ -651,6 +656,9 @@ const apiEndpoints: ApiEndpointMap = {
   }),
   fetchLlmModelReleaseCenter: generatedEndpoint("reviewCalibrationControllerGetModelReleaseCenter", {
     query: input => ({ trendDays: input.trendDays })
+  }),
+  fetchLlmModelReleaseRuntimeMetrics: generatedEndpoint("reviewCalibrationControllerListModelReleaseRuntimeMetrics", {
+    query: input => ({ releaseKey: input.releaseKey, days: input.days, limit: input.limit })
   }),
   registerLlmModelShadowRelease: generatedEndpoint("reviewCalibrationControllerRegisterShadowRelease", {
     body: input => input

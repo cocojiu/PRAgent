@@ -37,6 +37,7 @@ import type {
   LlmEvaluationRequest,
   LlmModelRelease,
   LlmModelReleaseCenter,
+  LlmModelReleaseMetric,
   LlmModelReleaseRequest,
   LlmModelRollbackRequest,
   ManagedUser,
@@ -393,6 +394,13 @@ export type GeneratedOpenApiOperationMap = {
     query: { limit?: number };
     body: never;
     response: LlmEvaluationReport[];
+  };
+  "reviewCalibrationControllerListModelReleaseRuntimeMetrics": {
+    method: "GET";
+    pathParams: never;
+    query: { days?: number; limit?: number; releaseKey?: string };
+    body: never;
+    response: LlmModelReleaseMetric[];
   };
   "reviewCalibrationControllerPromoteModelRelease": {
     method: "POST";
@@ -1183,6 +1191,14 @@ export const generatedOpenApiOperations = {
     path: "/api/v1/config/review-calibration/evaluation-reports",
     pathParamNames: [],
     queryParamNames: ["limit"],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "reviewCalibrationControllerListModelReleaseRuntimeMetrics": {
+    method: "GET",
+    path: "/api/v1/config/review-calibration/release-center/runtime-metrics",
+    pathParamNames: [],
+    queryParamNames: ["days", "limit", "releaseKey"],
     hasRequestBody: false,
     requestBodyRequired: false
   },

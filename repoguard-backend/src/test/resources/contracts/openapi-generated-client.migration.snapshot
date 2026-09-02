@@ -31,6 +31,7 @@ fetchGithubPullRequestOptions -> reviewControllerListConfiguredGithubPullRequest
 fetchLlmEvaluationReport -> reviewCalibrationControllerGetEvaluationReport // GET /api/v1/config/review-calibration/evaluation-reports/{reportId}
 fetchLlmEvaluationReports -> reviewCalibrationControllerListEvaluationReports // GET /api/v1/config/review-calibration/evaluation-reports
 fetchLlmModelReleaseCenter -> reviewCalibrationControllerGetModelReleaseCenter // GET /api/v1/config/review-calibration/release-center
+fetchLlmModelReleaseRuntimeMetrics -> reviewCalibrationControllerListModelReleaseRuntimeMetrics // GET /api/v1/config/review-calibration/release-center/runtime-metrics
 fetchMessageQueueHealth -> messageQueueHealthControllerGetHealth // GET /api/v1/message-queue/health
 fetchMysqlIntegrationConfig -> systemConfigControllerGetMysqlIntegration // GET /api/v1/config/integrations/mysql
 fetchNotificationBindings -> notificationIntegrationControllerListBindings // GET /api/v1/config/notification-bindings

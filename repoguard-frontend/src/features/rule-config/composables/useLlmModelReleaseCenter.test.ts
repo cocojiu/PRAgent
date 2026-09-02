@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   fetchLlmEvaluationReports,
   fetchLlmModelReleaseCenter,
+  fetchLlmModelReleaseRuntimeMetrics,
   promoteLlmModelRelease,
   registerLlmModelShadowRelease,
   rollbackLlmModelRelease
@@ -12,6 +13,7 @@ import { buildLlmModelReleaseRequest, useLlmModelReleaseCenter } from "./useLlmM
 vi.mock("@/api/config", () => ({
   fetchLlmEvaluationReports: vi.fn(),
   fetchLlmModelReleaseCenter: vi.fn(),
+  fetchLlmModelReleaseRuntimeMetrics: vi.fn(),
   promoteLlmModelRelease: vi.fn(),
   registerLlmModelShadowRelease: vi.fn(),
   rollbackLlmModelRelease: vi.fn()
@@ -20,6 +22,7 @@ vi.mock("@/api/config", () => ({
 describe("useLlmModelReleaseCenter", () => {
   const loadCenter = vi.mocked(fetchLlmModelReleaseCenter);
   const loadReports = vi.mocked(fetchLlmEvaluationReports);
+  const loadRuntimeMetrics = vi.mocked(fetchLlmModelReleaseRuntimeMetrics);
   const registerShadow = vi.mocked(registerLlmModelShadowRelease);
   const promote = vi.mocked(promoteLlmModelRelease);
   const rollback = vi.mocked(rollbackLlmModelRelease);
@@ -28,6 +31,7 @@ describe("useLlmModelReleaseCenter", () => {
     vi.clearAllMocks();
     loadCenter.mockResolvedValue(center());
     loadReports.mockResolvedValue([report()]);
+    loadRuntimeMetrics.mockResolvedValue([]);
     registerShadow.mockResolvedValue({} as never);
     promote.mockResolvedValue({} as never);
     rollback.mockResolvedValue({} as never);
@@ -55,6 +59,7 @@ describe("useLlmModelReleaseCenter", () => {
     await state.promote();
 
     expect(loadCenter).toHaveBeenCalledWith(30);
+    expect(loadRuntimeMetrics).toHaveBeenCalledWith({ days: 30, limit: 168 });
     expect(registerShadow).toHaveBeenCalledWith(expect.objectContaining({ releaseKey: "release-next", trafficPercent: 0 }));
     expect(promote).toHaveBeenCalledWith(expect.objectContaining({ releaseKey: "release-next", trafficPercent: 10 }));
     expect(state.errorMessage.value).toBe("");

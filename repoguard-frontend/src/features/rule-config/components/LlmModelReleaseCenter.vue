@@ -159,6 +159,35 @@
         <el-table-column prop="fallbackRate" label="Fallback" width="100" />
         <template #empty><el-empty description="暂无趋势数据" /></template>
       </el-table>
+
+      <div class="release-center-subheading">
+        <div><strong>发布运行指标与告警</strong><span>仅展示聚合指标；样本不足时不会触发告警或自动回滚</span></div>
+      </div>
+      <el-table :data="runtimeMetrics" class="rg-table release-runtime-metrics-table" size="small" aria-label="模型发布运行指标">
+        <el-table-column label="版本" min-width="180">
+          <template #default="{ row }">
+            <div class="release-version-cell">
+              <strong>{{ row.releaseKey }}</strong>
+              <span>{{ row.provider }} / {{ row.modelName }}</span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="窗口" min-width="165">
+          <template #default="{ row }">{{ row.windowStart }} ~ {{ row.windowEnd }}</template>
+        </el-table-column>
+        <el-table-column label="状态" width="125">
+          <template #default="{ row }"><el-tag :type="runtimeStateType(row.alertState)">{{ runtimeStateText(row.alertState) }}</el-tag></template>
+        </el-table-column>
+        <el-table-column prop="sampleCount" label="样本" width="75" />
+        <el-table-column label="P95" width="90"><template #default="{ row }">{{ row.p95LatencyMs }} ms</template></el-table-column>
+        <el-table-column label="解析失败" width="105"><template #default="{ row }">{{ rate(row.parseFailureCount, row.sampleCount) }}</template></el-table-column>
+        <el-table-column label="Fallback" width="95"><template #default="{ row }">{{ rate(row.fallbackCount, row.sampleCount) }}</template></el-table-column>
+        <el-table-column label="动作" width="115"><template #default="{ row }">{{ runtimeActionText(row.action) }}</template></el-table-column>
+        <el-table-column label="原因" min-width="240">
+          <template #default="{ row }">{{ row.alertCodes.length ? row.alertCodes.join("；") : "—" }}</template>
+        </el-table-column>
+        <template #empty><el-empty description="暂无运行指标" /></template>
+      </el-table>
     </template>
     <el-empty v-else-if="!loading && !errorMessage" description="暂无模型发布中心数据" />
   </section>
@@ -185,7 +214,8 @@ const {
   rollback,
   selectedReport,
   selectedReportId,
-  trendDays
+  trendDays,
+  runtimeMetrics
 } = useLlmModelReleaseCenter();
 const advancedOpen = ref<string[]>([]);
 
@@ -218,6 +248,20 @@ const stateType = (state: string): "success" | "warning" | "danger" | "info" => 
 };
 
 const percent = (value: number) => `${(Number(value ?? 0) * 100).toFixed(1)}%`;
+const rate = (numerator: number, denominator: number) => denominator > 0 ? percent(numerator / denominator) : "—";
+const runtimeStateText = (state: string) => ({
+  NORMAL: "正常",
+  INSUFFICIENT_SAMPLE: "样本不足",
+  ALERT: "告警",
+  AUTO_ROLLBACK: "已自动回滚"
+}[state] ?? state);
+const runtimeStateType = (state: string): "success" | "warning" | "danger" | "info" => {
+  if (state === "NORMAL") return "success";
+  if (state === "INSUFFICIENT_SAMPLE") return "info";
+  if (state === "AUTO_ROLLBACK") return "danger";
+  return "warning";
+};
+const runtimeActionText = (action: string) => ({ NONE: "无", NOTIFY: "通知", AUTO_ROLLBACK: "自动回滚" }[action] ?? action);
 const tokenText = (value: number) => value < 0 ? "未设置" : value.toLocaleString();
 const budgetText = (budget: LlmModelBudget) => budget.tokenBudget > 0
   ? `${tokenText(budget.tokenUsed)} / ${tokenText(budget.tokenBudget)}`

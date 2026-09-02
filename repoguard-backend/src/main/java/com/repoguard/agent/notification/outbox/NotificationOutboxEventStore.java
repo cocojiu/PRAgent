@@ -54,6 +54,29 @@ public class NotificationOutboxEventStore {
         }
     }
 
+    public NotificationEvent createPendingEvent(String eventType, NotificationEventPayload payload) {
+        NotificationEvent event = new NotificationEvent();
+        LocalDateTime now = LocalDateTime.now();
+        event.setEventKey(payload.eventKey());
+        event.setEventType(eventType);
+        event.setTaskId(null);
+        event.setBatchId(null);
+        event.setTraceId(truncateTraceId(LogContext.currentTraceId()));
+        event.setPayload(payload.json());
+        event.setStatus(NotificationEventStatus.PENDING.code());
+        event.setRetryCount(0);
+        event.setNextRetryAt(now);
+        event.setCreatedAt(now);
+        event.setUpdatedAt(now);
+        try {
+            eventMapper.insert(event);
+            return event;
+        } catch (DuplicateKeyException ignored) {
+            return eventMapper.selectOne(new LambdaQueryWrapper<NotificationEvent>()
+                .eq(NotificationEvent::getEventKey, event.getEventKey()));
+        }
+    }
+
     public NotificationEvent loadById(Long eventId) {
         return eventMapper.selectById(eventId);
     }

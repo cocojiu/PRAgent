@@ -14,6 +14,7 @@ class WebhookNotificationEventTextFormatterTest {
         assertThat(formatter.format("HUMAN_REVIEW_REQUIRED")).isEqualTo("待人工复核");
         assertThat(formatter.format("REVIEW_FAILED")).isEqualTo("审查失败");
         assertThat(formatter.format("GITHUB_COMMENT_PUBLISHED")).isEqualTo("GitHub 评论回写");
+        assertThat(formatter.format("MODEL_RELEASE_ALERT")).isEqualTo("模型发布告警");
     }
 
     @Test

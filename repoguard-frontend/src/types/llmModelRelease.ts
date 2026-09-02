@@ -236,3 +236,26 @@ export interface LlmModelReleaseCenter {
   monthlyBudget: LlmModelBudget;
   recommendedAction: string;
 }
+
+export interface LlmModelReleaseMetric {
+  id: number;
+  releaseId: number;
+  releaseKey: string;
+  provider: string;
+  modelName: string;
+  windowStart: string;
+  windowEnd: string;
+  sampleCount: number;
+  totalTokens: number;
+  totalCost: number;
+  p95LatencyMs: number;
+  parseFailureCount: number;
+  fallbackCount: number;
+  rollbackCount: number;
+  alertState: string;
+  alertCodes: string[];
+  action: string;
+  alertFingerprint: string;
+  createdAt?: string;
+  updatedAt?: string;
+}

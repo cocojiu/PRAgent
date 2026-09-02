@@ -46,6 +46,7 @@ public class MybatisPlusConfig {
         "review_strategy_policy_snapshot",
         "llm_evaluation_report",
         "llm_model_release_audit",
+        "llm_model_release_metric_snapshot",
         "sarif_import_batch",
         "secret_re_encryption_job",
         "secret_re_encryption_job_item",

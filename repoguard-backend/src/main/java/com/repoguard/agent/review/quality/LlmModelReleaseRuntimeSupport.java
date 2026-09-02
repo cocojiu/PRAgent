@@ -19,8 +19,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Component;
 
 /** Runtime routing, budget protection, and append-only release transition evidence. */
+@Component
 final class LlmModelReleaseRuntimeSupport {
     private static final BigDecimal MIN_PRECISION = new BigDecimal("0.90");
     private static final BigDecimal MIN_RECALL = new BigDecimal("0.80");

@@ -49,6 +49,7 @@ reviewCalibrationControllerGetEvaluationReport(input: { path: { reportId: number
 reviewCalibrationControllerGetModelReleaseCenter(input?: { query?: { trendDays?: number } }): Promise<LlmModelReleaseCenter>; // GET /api/v1/config/review-calibration/release-center
 reviewCalibrationControllerGetReviewCalibrationQueue(input?: { query?: { includeIgnored?: boolean; limit?: number; ruleId: string } }): Promise<ReviewCalibrationQueue>; // GET /api/v1/config/review-calibration/queue
 reviewCalibrationControllerListEvaluationReports(input?: { query?: { limit?: number } }): Promise<LlmEvaluationReport[]>; // GET /api/v1/config/review-calibration/evaluation-reports
+reviewCalibrationControllerListModelReleaseRuntimeMetrics(input?: { query?: { days?: number; limit?: number; releaseKey?: string } }): Promise<LlmModelReleaseMetric[]>; // GET /api/v1/config/review-calibration/release-center/runtime-metrics
 reviewCalibrationControllerPromoteModelRelease(input: { body: LlmModelReleaseRequest }): Promise<LlmModelRelease>; // POST /api/v1/config/review-calibration/release-center/promote
 reviewCalibrationControllerRegisterShadowRelease(input: { body: LlmModelReleaseRequest }): Promise<LlmModelRelease>; // POST /api/v1/config/review-calibration/release-center/shadow
 reviewCalibrationControllerRollbackModelRelease(input: { path: { releaseId: number }; body: LlmModelRollbackRequest }): Promise<LlmModelRelease>; // POST /api/v1/config/review-calibration/release-center/{releaseId}/rollback

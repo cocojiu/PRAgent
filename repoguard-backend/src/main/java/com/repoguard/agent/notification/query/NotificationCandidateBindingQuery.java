@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.repoguard.agent.entity.NotificationChannelBinding;
 import com.repoguard.agent.mapper.NotificationChannelBindingMapper;
 import com.repoguard.agent.notification.NotificationMessage;
+import com.repoguard.agent.notification.NotificationEventType;
 import java.util.List;
 import org.springframework.stereotype.Component;
 
@@ -17,11 +18,10 @@ public class NotificationCandidateBindingQuery {
     }
 
     public List<NotificationChannelBinding> load(NotificationMessage message) {
-        return bindingMapper.selectList(
-            new QueryWrapper<NotificationChannelBinding>()
-                .eq("enabled", true)
-                .eq("organization", message.organization())
-                .eq("repository", message.repository())
-        );
+        QueryWrapper<NotificationChannelBinding> query = new QueryWrapper<NotificationChannelBinding>().eq("enabled", true);
+        if (NotificationEventType.from(message.eventType()) != NotificationEventType.MODEL_RELEASE_ALERT) {
+            query.eq("organization", message.organization()).eq("repository", message.repository());
+        }
+        return bindingMapper.selectList(query);
     }
 }
