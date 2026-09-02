@@ -487,3 +487,11 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 提交/远程验收：实现提交 `b693e4e0`（新增：建设 GitHub App Checks 设置向导）及修复提交 `95a78f97`（修复：补齐 Checks 策略分支覆盖率）均已推送 `origin/PRAgent-test`；首次 Pull Request Quality `33663397008` 因覆盖率门禁失败，最终 Pull Request Quality `33664061408` 的 8 个作业全部成功；修复提交对应 Repository Governance `33664057745`、Auto Create Pull Request `33664057738` 成功，包含 V86→V87 Flyway、真实 MySQL/RabbitMQ、前后端质量、生产边缘、跟踪文件、密钥差异和依赖审查。
 边界：未使用真实生产 GitHub App 凭据或真实 PR 做外部创建验证，分支保护仍需人工配置；最近投递摘要为进程内有界状态，重启后不追溯历史；PAT 兼容路径保持不变；未提交非 README Markdown、测试相关脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
 下一步：进入 `FUNC-P1-006` 运行时发布指标、告警与可观测性，继续按单项提交、推送和 Actions 验收。
+
+2026-09-03 | 优化-64 | FUNC-P1-006 运行时发布指标、告警与可观测性
+状态：已完成代码、本地质量门禁、中文提交、test 分支推送和远程 Actions 验收。
+变更：新增租户隔离的发布运行快照表与聚合查询，按 releaseKey、时间窗口返回样本数、token、费用、P95 延迟、解析失败、fallback、回滚次数和 Canary 样本充分性；新增 Micrometer 指标、每小时幂等采集调度、运行指标查询接口和发布中心运行指标表。告警使用有界阈值、稳定指纹和通知 outbox 去重，区分样本不足、P95/费用异常与解析失败，Canary 异常可解释地触发服务端回滚；重复采集不重复发送，所有查询和写入均强制租户边界。
+本地验证：完整后端 `mvn verify -DskipTests=false` 共 2804 项测试通过、0 失败、12 项按环境条件跳过，JaCoCo 行/分支覆盖率、架构棘轮、架构预算、迁移、授权和 OpenAPI 契约门禁通过；前端 OpenAPI 生成物检查、`vue-tsc -b`、ESLint、Vitest 全量和 Vite 构建通过；`git diff --check` 通过。
+提交/远程验收：实现提交 `b5e6af9e`（新增：建设发布运行指标与告警可观测性）及覆盖率修复提交 `05d127b0`（修复：补足运行指标服务覆盖率分支）均已推送 `origin/PRAgent-test`；首次 Pull Request Quality `33670567455` 因干净 CI 分支覆盖率边界失败，补充运行指标服务分支测试后，最终 Pull Request Quality `33671350354` 的 8 个作业全部成功；Repository Governance `33671342964`、Auto Create Pull Request `33671342950` 亦成功。
+边界：当前采集为服务端聚合快照，尚未接入真实生产 Prometheus/Alertmanager 或真实租户流量；通知继续复用现有安全出站配置，样本不足不会误报；未提交非 README Markdown、测试相关脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
+下一步：进入 `FUNC-P1-007` 发布审计查询、完整性验证与受控导出，继续按单项提交、推送和 Actions 验收。
