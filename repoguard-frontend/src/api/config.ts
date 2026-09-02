@@ -108,6 +108,27 @@ export const fetchLlmModelReleaseRuntimeMetrics = (
   options: { releaseKey?: string; days?: number; limit?: number } = {}
 ) => apiRequest("fetchLlmModelReleaseRuntimeMetrics", options);
 
+export type LlmModelReleaseAuditQuery = {
+  releaseId?: number;
+  releaseKey?: string;
+  operator?: string;
+  action?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  pageSize?: number;
+};
+
+export const fetchLlmModelReleaseAudits = (options: LlmModelReleaseAuditQuery = {}) =>
+  apiRequest("fetchLlmModelReleaseAudits", options);
+
+export const verifyLlmModelReleaseAudit = (auditId: number) =>
+  apiRequest("verifyLlmModelReleaseAudit", { auditId });
+
+export const exportLlmModelReleaseAudits = (
+  options: Omit<LlmModelReleaseAuditQuery, "page" | "pageSize"> & { format?: "json" | "csv" } = {}
+) => apiRequest("exportLlmModelReleaseAudits", options);
+
 export const registerLlmModelShadowRelease = (payload: LlmModelReleaseRequest) =>
   apiRequest("registerLlmModelShadowRelease", payload);
 

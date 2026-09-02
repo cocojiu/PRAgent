@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -17,11 +18,15 @@ import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.dto.DashboardLlmQualityResponse;
 import com.repoguard.agent.dto.LlmModelReleaseCenterDto;
 import com.repoguard.agent.dto.LlmModelReleaseDto;
+import com.repoguard.agent.dto.LlmModelReleaseDto.LlmModelReleaseAuditExportDto;
+import com.repoguard.agent.dto.LlmModelReleaseDto.LlmModelReleaseAuditVerificationDto;
+import com.repoguard.agent.dto.LlmModelReleaseDto.LlmModelReleaseAuditDto;
 import com.repoguard.agent.dto.LlmModelReleaseRequest;
 import com.repoguard.agent.dto.LlmModelReleaseRequest.LlmEvaluationObservationRequest;
 import com.repoguard.agent.dto.LlmModelReleaseRequest.LlmEvaluationRequest;
 import com.repoguard.agent.dto.LlmModelRollbackRequest;
 import com.repoguard.agent.dto.LlmQualityByModelDto;
+import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.review.ReviewPolicySettings;
 import com.repoguard.agent.tenancy.TenantContext;
@@ -370,6 +375,81 @@ class LlmModelReleaseServiceTest {
         assertThat(center.monthlyBudget().exhausted()).isTrue();
         assertThat(center.recommendedAction()).isEqualTo("BUDGET_EXHAUSTED_ROLLBACK_OR_INCREASE_LIMIT");
         verify(qualityProvider).getLlmQuality(7);
+    }
+
+    @Test
+    void listsReleaseAuditsWithTenantFiltersAndComputesHashStatus() {
+        String details = "{\"before\":{},\"after\":{}}";
+        String hash = LlmModelReleaseAuditService.sha256("PROMOTE", 7L, "release-7", details, "reason");
+        LlmModelReleaseRepository.ReleaseAudit audit = new LlmModelReleaseRepository.ReleaseAudit(
+            91L, 7L, "release-7", "PROMOTE", "SHADOW", "CANARY", 25,
+            "operator", "reason", details, hash, LocalDateTime.of(2026, 9, 3, 0, 0));
+        when(repository.countAudits(eq(42L), any())).thenReturn(2L);
+        when(repository.findAudits(eq(42L), any(), eq(0), eq(1))).thenReturn(List.of(audit));
+
+        PageResponse<LlmModelReleaseAuditDto> page = service.listReleaseAudits(
+            7L, "release-7", "operator", "promote", "2026-09-01T00:00:00", "2026-09-04T00:00:00", 1, 1);
+
+        assertThat(page.total()).isEqualTo(2L);
+        assertThat(page.hasMore()).isTrue();
+        assertThat(page.items()).singleElement().satisfies(item -> {
+            assertThat(item.hashValid()).isTrue();
+            assertThat(item.hashStatus()).isEqualTo("VALID");
+            assertThat(item.detailsJson()).isEqualTo(details);
+        });
+        verify(repository).countAudits(eq(42L), argThat(filter ->
+            filter.releaseId().equals(7L) && filter.releaseKey().equals("release-7")
+                && filter.operator().equals("operator") && filter.action().equals("PROMOTE")));
+    }
+
+    @Test
+    void verifiesTamperedAndMissingReleaseAuditsWithoutMutation() {
+        LlmModelReleaseRepository.ReleaseAudit tampered = new LlmModelReleaseRepository.ReleaseAudit(
+            92L, 7L, "release-7", "ROLLBACK", "ACTIVE", "ROLLED_BACK", 0,
+            "operator", "reason", "{\"after\":{}}", "not-a-hash", LocalDateTime.now());
+        when(repository.findAuditById(42L, 92L)).thenReturn(tampered);
+
+        LlmModelReleaseAuditVerificationDto result = service.verifyReleaseAudit(92L);
+
+        assertThat(result.valid()).isFalse();
+        assertThat(result.status()).isEqualTo("MALFORMED_HASH");
+        verify(repository, never()).insertAudit(anyLong(), anyLong(), anyString(), anyString(), any(), any(), anyInt(), anyString(), anyString(), anyString(), anyString());
+        when(repository.findAuditById(42L, 93L)).thenReturn(null);
+        assertThatThrownBy(() -> service.verifyReleaseAudit(93L))
+            .isInstanceOf(BusinessException.class).hasMessageContaining("不存在");
+    }
+
+    @Test
+    void exportsBoundedJsonAndCsvAndRejectsOverRangeOrInvalidFilters() {
+        String details = "{\"after\":{\"modelName\":\"gpt-next\"}}";
+        String hash = LlmModelReleaseAuditService.sha256("ROLLBACK", 7L, "release-7", details, "security, incident");
+        LlmModelReleaseRepository.ReleaseAudit audit = new LlmModelReleaseRepository.ReleaseAudit(
+            94L, 7L, "release-7", "ROLLBACK", "ACTIVE", "ROLLED_BACK", 0,
+            "operator", "security, incident", details, hash, LocalDateTime.now());
+        when(repository.countAudits(eq(42L), any())).thenReturn(1L);
+        when(repository.findAudits(eq(42L), any(), eq(0), eq(1))).thenReturn(List.of(audit));
+
+        LlmModelReleaseAuditExportDto json = service.exportReleaseAudits(
+            null, null, null, null, null, null, "json");
+        LlmModelReleaseAuditExportDto csv = service.exportReleaseAudits(
+            null, null, null, null, null, null, "csv");
+
+        assertThat(json.format()).isEqualTo("json");
+        assertThat(json.recordCount()).isEqualTo(1L);
+        assertThat(json.content()).contains("release-7", "eventHash", "calculatedHash", hash)
+            .doesNotContain("modelName", "security, incident", "detailsJson", "provider", "promptVersion");
+        assertThat(csv.format()).isEqualTo("csv");
+        assertThat(csv.content()).contains("id,releaseId,releaseKey", "calculatedHash", hash)
+            .doesNotContain("security, incident", "detailsJson", "modelName", "provider");
+
+        when(repository.countAudits(eq(42L), any())).thenReturn(1_001L);
+        assertThatThrownBy(() -> service.exportReleaseAudits(null, null, null, null, null, null, "json"))
+            .isInstanceOf(BusinessException.class).hasMessageContaining("1000");
+        assertThatThrownBy(() -> service.exportReleaseAudits(null, null, null, "unknown", null, null, "json"))
+            .isInstanceOf(BusinessException.class).hasMessageContaining("动作");
+        assertThatThrownBy(() -> service.exportReleaseAudits(null, null, null, null,
+            "2026-09-04T00:00:00", "2026-09-03T00:00:00", "json"))
+            .isInstanceOf(BusinessException.class).hasMessageContaining("from < to");
     }
 
     private LlmModelReleaseRequest request(String fingerprint, int traffic, boolean qualityGatePassed) {

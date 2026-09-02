@@ -11,6 +11,7 @@ createReviewRule -> systemConfigControllerCreateReviewRule(input: { body: Review
 createUser -> userManagementControllerCreateUser(input: { body: UserCreateRequest }): Promise<ManagedUser>; // POST /api/v1/users
 deleteNotificationBinding -> notificationIntegrationControllerDeleteBinding(input: { path: { id: number } }): Promise<void>; // DELETE /api/v1/config/notification-bindings/{id}
 exportLlmEvaluationReport -> reviewCalibrationControllerExportEvaluationReport(input: { path: { reportId: number }; query?: { format?: string } }): Promise<LlmEvaluationExport>; // GET /api/v1/config/review-calibration/evaluation-reports/{reportId}/export
+exportLlmModelReleaseAudits -> reviewCalibrationControllerExportModelReleaseAudits(input?: { query?: { action?: string; format?: string; from?: string; operator?: string; releaseId?: number; releaseKey?: string; to?: string } }): Promise<LlmModelReleaseAuditExport>; // GET /api/v1/config/review-calibration/release-center/audits/export
 fetchCacheStats -> cacheStatsControllerGetStats(): Promise<CacheStats>; // GET /api/v1/cache/stats
 fetchDashboardHighRiskReviews -> dashboardControllerGetHighRiskReviews(): Promise<HighRiskReview[]>; // GET /api/v1/dashboard/high-risk-reviews
 fetchDashboardLlmQuality -> dashboardControllerGetLlmQuality(input?: { query?: { llmTrendDays?: number } }): Promise<DashboardLlmQuality>; // GET /api/v1/dashboard/llm-quality
@@ -30,6 +31,7 @@ fetchGithubIntegrationConfig -> systemConfigControllerGetGithubIntegration(): Pr
 fetchGithubPullRequestOptions -> reviewControllerListConfiguredGithubPullRequests(): Promise<GithubPullRequestOptions>; // GET /api/v1/reviews/github/pull-requests
 fetchLlmEvaluationReport -> reviewCalibrationControllerGetEvaluationReport(input: { path: { reportId: number } }): Promise<LlmEvaluationReport>; // GET /api/v1/config/review-calibration/evaluation-reports/{reportId}
 fetchLlmEvaluationReports -> reviewCalibrationControllerListEvaluationReports(input?: { query?: { limit?: number } }): Promise<LlmEvaluationReport[]>; // GET /api/v1/config/review-calibration/evaluation-reports
+fetchLlmModelReleaseAudits -> reviewCalibrationControllerListModelReleaseAudits(input?: { query?: { action?: string; from?: string; operator?: string; page?: number; pageSize?: number; releaseId?: number; releaseKey?: string; to?: string } }): Promise<PageResponse<LlmModelReleaseAudit>>; // GET /api/v1/config/review-calibration/release-center/audits
 fetchLlmModelReleaseCenter -> reviewCalibrationControllerGetModelReleaseCenter(input?: { query?: { trendDays?: number } }): Promise<LlmModelReleaseCenter>; // GET /api/v1/config/review-calibration/release-center
 fetchLlmModelReleaseRuntimeMetrics -> reviewCalibrationControllerListModelReleaseRuntimeMetrics(input?: { query?: { days?: number; limit?: number; releaseKey?: string } }): Promise<LlmModelReleaseMetric[]>; // GET /api/v1/config/review-calibration/release-center/runtime-metrics
 fetchMessageQueueHealth -> messageQueueHealthControllerGetHealth(): Promise<MessageQueueHealth>; // GET /api/v1/message-queue/health
@@ -109,3 +111,4 @@ updateReviewStrategyEnforcement -> systemConfigControllerPromoteReviewStrategy(i
 updateSystemSettings -> systemConfigControllerUpdateSystemSettings(input: { body: SystemSettingsRequest }): Promise<SystemSettings>; // PUT /api/v1/config/system-settings
 updateUserRole -> userManagementControllerUpdateRole(input: { path: { id: number }; body: UserRoleUpdateRequest }): Promise<ManagedUser>; // PUT /api/v1/users/{id}/role
 updateUserStatus -> userManagementControllerUpdateStatus(input: { path: { id: number }; body: UserStatusUpdateRequest }): Promise<ManagedUser>; // PUT /api/v1/users/{id}/status
+verifyLlmModelReleaseAudit -> reviewCalibrationControllerVerifyModelReleaseAudit(input: { path: { auditId: number } }): Promise<LlmModelReleaseAuditVerification>; // GET /api/v1/config/review-calibration/release-center/audits/{auditId}/verify

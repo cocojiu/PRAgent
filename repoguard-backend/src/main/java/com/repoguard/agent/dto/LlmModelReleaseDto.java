@@ -54,4 +54,19 @@ public record LlmModelReleaseDto(Long id, String releaseKey, String provider, St
 
     public record EvaluationExportDto(Long reportId, String format, String contentSha256, String content) {
     }
+
+    /** Tenant-scoped, aggregate-only evidence for a release state transition. */
+    public record LlmModelReleaseAuditDto(Long id, Long releaseId, String releaseKey, String action,
+        String fromState, String toState, Integer trafficPercent, String operator, String reason,
+        String detailsJson, String eventHash, LocalDateTime createdAt, Boolean hashValid, String hashStatus) {
+    }
+
+    /** Bounded audit export payload; it deliberately excludes source/provider secrets. */
+    public record LlmModelReleaseAuditExportDto(String format, Long recordCount, String contentSha256, String content) {
+    }
+
+    /** Result of verifying one append-only audit event hash. */
+    public record LlmModelReleaseAuditVerificationDto(Long auditId, Long releaseId, String releaseKey,
+        String storedHash, String calculatedHash, Boolean valid, String status) {
+    }
 }

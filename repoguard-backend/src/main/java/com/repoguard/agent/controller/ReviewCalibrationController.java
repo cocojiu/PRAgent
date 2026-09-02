@@ -4,9 +4,13 @@ import com.repoguard.agent.common.ApiResponse;
 import com.repoguard.agent.config.ApiRuntimeEnabled;
 import com.repoguard.agent.dto.LlmModelReleaseCenterDto;
 import com.repoguard.agent.dto.LlmModelReleaseDto;
+import com.repoguard.agent.dto.LlmModelReleaseDto.LlmModelReleaseAuditDto;
+import com.repoguard.agent.dto.LlmModelReleaseDto.LlmModelReleaseAuditExportDto;
+import com.repoguard.agent.dto.LlmModelReleaseDto.LlmModelReleaseAuditVerificationDto;
 import com.repoguard.agent.dto.LlmModelReleaseRequest;
 import com.repoguard.agent.dto.LlmModelReleaseRequest.LlmEvaluationRequest;
 import com.repoguard.agent.dto.LlmModelRollbackRequest;
+import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.ReviewCalibrationQueueDto;
 import com.repoguard.agent.dto.LlmModelReleaseMetricDto;
 import com.repoguard.agent.review.quality.LlmModelReleaseService;
@@ -85,6 +89,42 @@ public class ReviewCalibrationController {
         @RequestParam(defaultValue = "168") @Min(1) @Max(500) int limit
     ) {
         return ApiResponse.ok(requireMetricsService().collectAndList(releaseKey, days, limit));
+    }
+
+    @GetMapping("/release-center/audits")
+    public ApiResponse<PageResponse<LlmModelReleaseAuditDto>> listModelReleaseAudits(
+        @RequestParam(required = false) @Min(1) Long releaseId,
+        @RequestParam(required = false) @Size(max = 128) String releaseKey,
+        @RequestParam(required = false) @Size(max = 128) String operator,
+        @RequestParam(required = false) @Size(max = 32) String action,
+        @RequestParam(required = false) @Size(max = 40) String from,
+        @RequestParam(required = false) @Size(max = 40) String to,
+        @RequestParam(defaultValue = "1") @Min(1) @Max(10_000) int page,
+        @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize
+    ) {
+        return ApiResponse.ok(requireReleaseService().listReleaseAudits(
+            releaseId, releaseKey, operator, action, from, to, page, pageSize));
+    }
+
+    @GetMapping("/release-center/audits/{auditId}/verify")
+    public ApiResponse<LlmModelReleaseAuditVerificationDto> verifyModelReleaseAudit(
+        @PathVariable @Min(1) long auditId
+    ) {
+        return ApiResponse.ok(requireReleaseService().verifyReleaseAudit(auditId));
+    }
+
+    @GetMapping("/release-center/audits/export")
+    public ApiResponse<LlmModelReleaseAuditExportDto> exportModelReleaseAudits(
+        @RequestParam(required = false) @Min(1) Long releaseId,
+        @RequestParam(required = false) @Size(max = 128) String releaseKey,
+        @RequestParam(required = false) @Size(max = 128) String operator,
+        @RequestParam(required = false) @Size(max = 32) String action,
+        @RequestParam(required = false) @Size(max = 40) String from,
+        @RequestParam(required = false) @Size(max = 40) String to,
+        @RequestParam(defaultValue = "json") @Size(max = 8) String format
+    ) {
+        return ApiResponse.ok(requireReleaseService().exportReleaseAudits(
+            releaseId, releaseKey, operator, action, from, to, format));
     }
 
     @PostMapping("/release-center/shadow")

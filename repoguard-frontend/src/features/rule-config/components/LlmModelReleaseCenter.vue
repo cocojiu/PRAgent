@@ -188,6 +188,72 @@
         </el-table-column>
         <template #empty><el-empty description="暂无运行指标" /></template>
       </el-table>
+
+      <el-collapse v-model="auditOpen" class="release-center-advanced release-audit-panel">
+        <el-collapse-item name="audit" title="发布审计时间线与完整性（高级）">
+          <div class="release-audit-toolbar">
+            <el-input v-model="auditOperator" clearable placeholder="按操作者筛选" aria-label="审计操作者" />
+            <el-select v-model="auditFilterAction" clearable placeholder="全部动作" aria-label="审计动作">
+              <el-option value="REGISTER_SHADOW" label="注册 Shadow" />
+              <el-option value="PROMOTE" label="发布 / 更新" />
+              <el-option value="REPLACE_ACTIVE" label="替换 Active" />
+              <el-option value="ROLLBACK" label="人工回滚" />
+              <el-option value="AUTO_ROLLBACK" label="自动回滚" />
+            </el-select>
+            <el-button :loading="auditLoading" @click="loadAudits(1)">刷新审计</el-button>
+            <el-button
+              :loading="auditOperation === 'export-csv'"
+              :disabled="auditLoading"
+              type="primary"
+              plain
+              @click="downloadAudits('csv')"
+            >导出 CSV</el-button>
+          </div>
+          <el-table :data="audits" class="rg-table release-audit-table" size="small" row-key="id" aria-label="模型发布审计时间线">
+            <el-table-column label="时间 / 动作" min-width="185">
+              <template #default="{ row }">
+                <div class="release-version-cell">
+                  <strong>{{ row.createdAt || "—" }}</strong>
+                  <span>{{ auditActionText(row.action) }}</span>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="状态转换" min-width="145">
+              <template #default="{ row }">{{ row.fromState || "—" }} → {{ row.toState }}</template>
+            </el-table-column>
+            <el-table-column prop="operator" label="操作者" width="125" />
+            <el-table-column prop="reason" label="原因" min-width="210" show-overflow-tooltip />
+            <el-table-column label="事件哈希" min-width="150">
+              <template #default="{ row }">
+                <el-tag :type="row.hashValid ? 'success' : 'danger'" size="small">
+                  {{ row.hashValid ? "VALID" : row.hashStatus }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="105" fixed="right">
+              <template #default="{ row }">
+                <el-button
+                  size="small"
+                  link
+                  :loading="auditOperation === `verify-${row.id}`"
+                  @click="verifyAudit(row.id)"
+                >校验哈希</el-button>
+              </template>
+            </el-table-column>
+            <template #empty><el-empty description="暂无发布审计记录" /></template>
+          </el-table>
+          <el-pagination
+            v-if="auditTotal > 20"
+            class="release-audit-pagination"
+            background
+            layout="prev, pager, next, total"
+            :current-page="auditPage"
+            :page-size="20"
+            :total="auditTotal"
+            @current-change="loadAudits"
+          />
+        </el-collapse-item>
+      </el-collapse>
     </template>
     <el-empty v-else-if="!loading && !errorMessage" description="暂无模型发布中心数据" />
   </section>
@@ -202,11 +268,19 @@ import { useLlmModelReleaseCenter } from "@/features/rule-config/composables/use
 
 const {
   action,
+  auditFilterAction,
+  auditLoading,
+  auditOperation,
+  auditOperator,
+  auditPage,
+  auditTotal,
+  audits,
   canaryTraffic,
   center,
   errorMessage,
   loading,
   load,
+  loadAudits,
   promote,
   registerShadow,
   releaseKey,
@@ -215,9 +289,12 @@ const {
   selectedReport,
   selectedReportId,
   trendDays,
-  runtimeMetrics
+  runtimeMetrics,
+  exportAudits,
+  verifyAudit
 } = useLlmModelReleaseCenter();
 const advancedOpen = ref<string[]>([]);
+const auditOpen = ref<string[]>([]);
 
 const requestRollback = async (releaseId: number) => {
   try {
@@ -262,10 +339,31 @@ const runtimeStateType = (state: string): "success" | "warning" | "danger" | "in
   return "warning";
 };
 const runtimeActionText = (action: string) => ({ NONE: "无", NOTIFY: "通知", AUTO_ROLLBACK: "自动回滚" }[action] ?? action);
+const auditActionText = (action: string) => ({
+  REGISTER_SHADOW: "注册 Shadow",
+  PROMOTE: "发布 / 更新",
+  REPLACE_ACTIVE: "替换 Active",
+  ROLLBACK: "人工回滚",
+  AUTO_ROLLBACK: "自动回滚"
+}[action] ?? action);
 const tokenText = (value: number) => value < 0 ? "未设置" : value.toLocaleString();
 const budgetText = (budget: LlmModelBudget) => budget.tokenBudget > 0
   ? `${tokenText(budget.tokenUsed)} / ${tokenText(budget.tokenBudget)}`
   : budget.costBudget > 0 ? `$${Number(budget.costUsed).toFixed(2)} / $${Number(budget.costBudget).toFixed(2)}` : "未设置";
+
+const downloadAudits = async (format: "json" | "csv") => {
+  const exported = await exportAudits(format);
+  if (!exported) return;
+  const blob = new Blob([exported.content], { type: format === "csv" ? "text/csv;charset=utf-8" : "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `repoguard-release-audits.${format}`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+};
 
 onMounted(load);
 </script>

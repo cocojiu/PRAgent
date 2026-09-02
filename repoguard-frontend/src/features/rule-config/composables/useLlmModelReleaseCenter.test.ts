@@ -1,11 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  exportLlmModelReleaseAudits,
   fetchLlmEvaluationReports,
+  fetchLlmModelReleaseAudits,
   fetchLlmModelReleaseCenter,
   fetchLlmModelReleaseRuntimeMetrics,
   promoteLlmModelRelease,
   registerLlmModelShadowRelease,
-  rollbackLlmModelRelease
+  rollbackLlmModelRelease,
+  verifyLlmModelReleaseAudit
 } from "@/api/config";
 import type { LlmEvaluationReport, LlmModelReleaseCenter } from "@/types";
 import { buildLlmModelReleaseRequest, useLlmModelReleaseCenter } from "./useLlmModelReleaseCenter";
@@ -14,6 +17,9 @@ vi.mock("@/api/config", () => ({
   fetchLlmEvaluationReports: vi.fn(),
   fetchLlmModelReleaseCenter: vi.fn(),
   fetchLlmModelReleaseRuntimeMetrics: vi.fn(),
+  fetchLlmModelReleaseAudits: vi.fn(),
+  verifyLlmModelReleaseAudit: vi.fn(),
+  exportLlmModelReleaseAudits: vi.fn(),
   promoteLlmModelRelease: vi.fn(),
   registerLlmModelShadowRelease: vi.fn(),
   rollbackLlmModelRelease: vi.fn()
@@ -23,6 +29,9 @@ describe("useLlmModelReleaseCenter", () => {
   const loadCenter = vi.mocked(fetchLlmModelReleaseCenter);
   const loadReports = vi.mocked(fetchLlmEvaluationReports);
   const loadRuntimeMetrics = vi.mocked(fetchLlmModelReleaseRuntimeMetrics);
+  const loadAudits = vi.mocked(fetchLlmModelReleaseAudits);
+  const verifyAudit = vi.mocked(verifyLlmModelReleaseAudit);
+  const exportAudits = vi.mocked(exportLlmModelReleaseAudits);
   const registerShadow = vi.mocked(registerLlmModelShadowRelease);
   const promote = vi.mocked(promoteLlmModelRelease);
   const rollback = vi.mocked(rollbackLlmModelRelease);
@@ -32,6 +41,22 @@ describe("useLlmModelReleaseCenter", () => {
     loadCenter.mockResolvedValue(center());
     loadReports.mockResolvedValue([report()]);
     loadRuntimeMetrics.mockResolvedValue([]);
+    loadAudits.mockResolvedValue({ items: [], total: 0, nextCursor: null, hasMore: false });
+    verifyAudit.mockResolvedValue({
+      auditId: 1,
+      releaseId: 7,
+      releaseKey: "release-next",
+      eventHash: "hash",
+      calculatedHash: "hash",
+      valid: true,
+      status: "VALID"
+    });
+    exportAudits.mockResolvedValue({
+      format: "csv",
+      recordCount: 0,
+      contentSha256: "hash",
+      content: ""
+    });
     registerShadow.mockResolvedValue({} as never);
     promote.mockResolvedValue({} as never);
     rollback.mockResolvedValue({} as never);
@@ -60,6 +85,7 @@ describe("useLlmModelReleaseCenter", () => {
 
     expect(loadCenter).toHaveBeenCalledWith(30);
     expect(loadRuntimeMetrics).toHaveBeenCalledWith({ days: 30, limit: 168 });
+    expect(loadAudits).toHaveBeenCalledWith(expect.objectContaining({ page: 1, pageSize: 20 }));
     expect(registerShadow).toHaveBeenCalledWith(expect.objectContaining({ releaseKey: "release-next", trafficPercent: 0 }));
     expect(promote).toHaveBeenCalledWith(expect.objectContaining({ releaseKey: "release-next", trafficPercent: 10 }));
     expect(state.errorMessage.value).toBe("");
@@ -78,6 +104,18 @@ describe("useLlmModelReleaseCenter", () => {
     await state.load();
     await state.rollback(11, "  incident  ");
     expect(rollback).toHaveBeenCalledWith(11, { reason: "incident" });
+  });
+
+  it("loads, verifies and exports the bounded audit timeline", async () => {
+    const state = useLlmModelReleaseCenter();
+    await state.loadAudits(2);
+    await state.verifyAudit(91);
+    const exported = await state.exportAudits("csv");
+
+    expect(loadAudits).toHaveBeenCalledWith(expect.objectContaining({ page: 2, pageSize: 20 }));
+    expect(verifyAudit).toHaveBeenCalledWith(91);
+    expect(exportAudits).toHaveBeenCalledWith(expect.objectContaining({ format: "csv" }));
+    expect(exported?.format).toBe("csv");
   });
 });
 

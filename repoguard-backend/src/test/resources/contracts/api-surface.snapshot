@@ -13,6 +13,9 @@ GET /api/v1/config/review-calibration/evaluation-reports/{reportId}/compare/{can
 GET /api/v1/config/review-calibration/evaluation-reports/{reportId}/export query=[format] body=- bodyRequired=false
 GET /api/v1/config/review-calibration/queue query=[ruleId, limit, includeIgnored] body=- bodyRequired=false
 GET /api/v1/config/review-calibration/release-center query=[trendDays] body=- bodyRequired=false
+GET /api/v1/config/review-calibration/release-center/audits query=[releaseId, releaseKey, operator, action, from, to, page, pageSize] body=- bodyRequired=false
+GET /api/v1/config/review-calibration/release-center/audits/export query=[releaseId, releaseKey, operator, action, from, to, format] body=- bodyRequired=false
+GET /api/v1/config/review-calibration/release-center/audits/{auditId}/verify query=[] body=- bodyRequired=false
 GET /api/v1/config/review-calibration/release-center/runtime-metrics query=[releaseKey, days, limit] body=- bodyRequired=false
 GET /api/v1/config/review-policy query=[] body=- bodyRequired=false
 GET /api/v1/config/review-rules query=[] body=- bodyRequired=false

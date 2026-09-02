@@ -7,6 +7,9 @@ import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.dto.LlmModelBudgetDto;
 import com.repoguard.agent.dto.LlmModelReleaseCenterDto;
 import com.repoguard.agent.dto.LlmModelReleaseDto;
+import com.repoguard.agent.dto.LlmModelReleaseDto.LlmModelReleaseAuditDto;
+import com.repoguard.agent.dto.LlmModelReleaseDto.LlmModelReleaseAuditExportDto;
+import com.repoguard.agent.dto.LlmModelReleaseDto.LlmModelReleaseAuditVerificationDto;
 import com.repoguard.agent.dto.LlmModelReleaseRequest;
 import com.repoguard.agent.dto.LlmModelReleaseRequest.LlmEvaluationObservationRequest;
 import com.repoguard.agent.dto.LlmModelReleaseRequest.LlmEvaluationRequest;
@@ -46,6 +49,7 @@ public class LlmModelReleaseService {
     private final LlmModelReleaseRepository releaseRepository;
     private final ObjectMapper objectMapper;
     private final LlmModelReleaseRuntimeSupport runtimeSupport;
+    private final LlmModelReleaseAuditService auditService;
 
     public LlmModelReleaseService(JdbcTemplate jdbcTemplate, LlmQualityComparisonProvider qualityComparisonProvider,
         LlmModelReleaseRepository releaseRepository, ObjectMapper objectMapper) {
@@ -54,6 +58,7 @@ public class LlmModelReleaseService {
         this.releaseRepository = Objects.requireNonNull(releaseRepository, "releaseRepository");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
         this.runtimeSupport = new LlmModelReleaseRuntimeSupport(jdbcTemplate, this.releaseRepository, this.objectMapper);
+        this.auditService = new LlmModelReleaseAuditService(this.releaseRepository, this.objectMapper);
     }
     @Transactional
     public LlmModelReleaseCenterDto getCenter(Integer trendDays) {
@@ -110,6 +115,23 @@ public class LlmModelReleaseService {
         String normalizedFormat = "html".equalsIgnoreCase(format) ? "html" : "json";
         String content = "html".equals(normalizedFormat) ? htmlExport(dto) : jsonExport(dto);
         return new LlmModelReleaseDto.EvaluationExportDto(reportId, normalizedFormat, sha256(content), content);
+    }
+
+    @Transactional(readOnly = true)
+    public com.repoguard.agent.dto.PageResponse<LlmModelReleaseAuditDto> listReleaseAudits(
+        Long releaseId, String releaseKey, String operator, String action, String from, String to, int page, int pageSize) {
+        return auditService.list(releaseId, releaseKey, operator, action, from, to, page, pageSize);
+    }
+
+    @Transactional(readOnly = true)
+    public LlmModelReleaseAuditVerificationDto verifyReleaseAudit(long auditId) {
+        return auditService.verify(auditId);
+    }
+
+    @Transactional(readOnly = true)
+    public LlmModelReleaseAuditExportDto exportReleaseAudits(
+        Long releaseId, String releaseKey, String operator, String action, String from, String to, String format) {
+        return auditService.export(releaseId, releaseKey, operator, action, from, to, format);
     }
 
     @Transactional
@@ -293,6 +315,7 @@ public class LlmModelReleaseService {
         return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
             .replace("\"", "&quot;").replace("'", "&#39;");
     }
+
     private String reportKey(LlmEvaluationReport report) {
         return sha256(report.version().versionKey() + "|" + report.dataset().sampleFingerprint() + "|"
             + report.sampleFingerprint() + "|" + report.totalSamples() + "|" + report.expectedFindings() + "|"

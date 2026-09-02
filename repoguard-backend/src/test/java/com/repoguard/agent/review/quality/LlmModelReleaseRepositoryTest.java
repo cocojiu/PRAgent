@@ -171,6 +171,35 @@ class LlmModelReleaseRepositoryTest {
             eq("reason"), eq("{\"before\":{}}"), eq(FINGERPRINT));
     }
 
+    @Test
+    void releaseAuditQueriesMapRowsAndKeepTenantScopedFilters() throws Exception {
+        ResultSet resultSet = auditRow();
+        when(jdbcTemplate.queryForObject(contains("count(*) from llm_model_release_audit"), eq(Long.class), any(Object[].class)))
+            .thenReturn(2L);
+        when(jdbcTemplate.query(contains("order by created_at desc"),
+            org.mockito.ArgumentMatchers.<RowMapper<LlmModelReleaseRepository.ReleaseAudit>>any(), any(Object[].class)))
+            .thenAnswer(invocation -> List.of(invocation.<RowMapper<LlmModelReleaseRepository.ReleaseAudit>>getArgument(1)
+                .mapRow(resultSet, 0)));
+
+        LlmModelReleaseRepository.AuditFilter filter = new LlmModelReleaseRepository.AuditFilter(
+            7L, "release-7", "operator", "PROMOTE",
+            java.time.LocalDateTime.of(2026, 9, 1, 0, 0), java.time.LocalDateTime.of(2026, 9, 4, 0, 0));
+
+        assertThat(repository.countAudits(42L, filter)).isEqualTo(2L);
+        assertThat(repository.findAudits(42L, filter, 0, 20)).singleElement()
+            .extracting(LlmModelReleaseRepository.ReleaseAudit::eventHash).isEqualTo(FINGERPRINT);
+        verify(jdbcTemplate).queryForObject(contains("where tenant_id = ? and release_id = ?"), eq(Long.class), any(Object[].class));
+    }
+
+    @Test
+    void releaseAuditLookupReturnsNullForMissingTenantScopedId() {
+        when(jdbcTemplate.query(contains("and id = ?"),
+            org.mockito.ArgumentMatchers.<RowMapper<LlmModelReleaseRepository.ReleaseAudit>>any(),
+            eq(new Object[] {42L, 99L}))).thenReturn(List.of());
+
+        assertThat(repository.findAuditById(42L, 99L)).isNull();
+    }
+
     private ResultSet row(String state) throws Exception {
         ResultSet resultSet = mock(ResultSet.class);
         when(resultSet.getLong("id")).thenReturn(7L);
@@ -248,6 +277,23 @@ class LlmModelReleaseRepositoryTest {
         when(resultSet.getString("blockers_json")).thenReturn("[]");
         when(resultSet.getBoolean("eligible")).thenReturn(true);
         when(resultSet.getString("metrics_json")).thenReturn(new JacksonConfig().objectMapper().writeValueAsString(LlmEvaluationMetrics.empty()));
+        return resultSet;
+    }
+
+    private ResultSet auditRow() throws Exception {
+        ResultSet resultSet = mock(ResultSet.class);
+        when(resultSet.getLong("id")).thenReturn(91L);
+        when(resultSet.getLong("release_id")).thenReturn(7L);
+        when(resultSet.getString("release_key")).thenReturn("release-7");
+        when(resultSet.getString("action")).thenReturn("PROMOTE");
+        when(resultSet.getString("from_state")).thenReturn("SHADOW");
+        when(resultSet.getString("to_state")).thenReturn("CANARY");
+        when(resultSet.getInt("traffic_percent")).thenReturn(25);
+        when(resultSet.getString("operator")).thenReturn("operator");
+        when(resultSet.getString("reason")).thenReturn("reason");
+        when(resultSet.getString("details_json")).thenReturn("{\"before\":{}}");
+        when(resultSet.getString("event_hash")).thenReturn(FINGERPRINT);
+        when(resultSet.getTimestamp("created_at")).thenReturn(Timestamp.valueOf("2026-09-03 00:00:00"));
         return resultSet;
     }
 

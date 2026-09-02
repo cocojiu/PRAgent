@@ -10,7 +10,9 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Objects;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -189,6 +191,86 @@ public class LlmModelReleaseRepository {
             operator, reason, detailsJson, eventHash);
     }
 
+    /** Returns a tenant-scoped count for the bounded release-audit query. */
+    public long countAudits(long tenantId, AuditFilter filter) {
+        AuditQuery query = auditQuery("select count(*) from llm_model_release_audit", tenantId, filter, null, null);
+        Long count = jdbcTemplate.queryForObject(query.sql(), Long.class, query.args());
+        return count == null ? 0L : Math.max(0L, count);
+    }
+
+    /** Lists immutable audit rows in newest-first order with a caller-supplied bounded page. */
+    public List<ReleaseAudit> findAudits(long tenantId, AuditFilter filter, int offset, int limit) {
+        int safeOffset = Math.max(0, offset);
+        int safeLimit = Math.max(1, Math.min(1_000, limit));
+        AuditQuery query = auditQuery("""
+            select id, release_id, release_key, action, from_state, to_state, traffic_percent,
+                   operator, reason, details_json, event_hash, created_at
+              from llm_model_release_audit
+            """, tenantId, filter, safeOffset, safeLimit);
+        return jdbcTemplate.query(query.sql(), this::mapAudit, query.args());
+    }
+
+    /** Looks up one audit row under the current tenant; cross-tenant ids intentionally return null. */
+    public ReleaseAudit findAuditById(long tenantId, long auditId) {
+        AuditQuery query = auditQuery("""
+            select id, release_id, release_key, action, from_state, to_state, traffic_percent,
+                   operator, reason, details_json, event_hash, created_at
+              from llm_model_release_audit
+            """, tenantId, new AuditFilter(auditId, null, null, null, null, null), null, null);
+        List<ReleaseAudit> rows = jdbcTemplate.query(query.sql(), this::mapAudit, query.args());
+        return rows.isEmpty() ? null : rows.getFirst();
+    }
+
+    private AuditQuery auditQuery(String select, long tenantId, AuditFilter filter, Integer offset, Integer limit) {
+        AuditFilter safeFilter = filter == null ? AuditFilter.empty() : filter;
+        StringBuilder sql = new StringBuilder(select).append(" where tenant_id = ?");
+        List<Object> args = new ArrayList<>();
+        args.add(tenantId);
+        if (safeFilter.auditId() != null) {
+            sql.append(" and id = ?");
+            args.add(safeFilter.auditId());
+        }
+        if (safeFilter.releaseId() != null) {
+            sql.append(" and release_id = ?");
+            args.add(safeFilter.releaseId());
+        }
+        if (safeFilter.releaseKey() != null && !safeFilter.releaseKey().isBlank()) {
+            sql.append(" and release_key = ?");
+            args.add(safeFilter.releaseKey());
+        }
+        if (safeFilter.operator() != null && !safeFilter.operator().isBlank()) {
+            sql.append(" and operator = ?");
+            args.add(safeFilter.operator());
+        }
+        if (safeFilter.action() != null && !safeFilter.action().isBlank()) {
+            sql.append(" and action = ?");
+            args.add(safeFilter.action());
+        }
+        if (safeFilter.from() != null) {
+            sql.append(" and created_at >= ?");
+            args.add(safeFilter.from());
+        }
+        if (safeFilter.to() != null) {
+            sql.append(" and created_at < ?");
+            args.add(safeFilter.to());
+        }
+        if (offset != null && limit != null) {
+            sql.append(" order by created_at desc, id desc limit ? offset ?");
+            args.add(limit);
+            args.add(offset);
+        }
+        return new AuditQuery(sql.toString(), args.toArray());
+    }
+
+    private ReleaseAudit mapAudit(java.sql.ResultSet rs, int rowNum) throws SQLException {
+        return new ReleaseAudit(
+            rs.getLong("id"), rs.getLong("release_id"), rs.getString("release_key"), rs.getString("action"),
+            rs.getString("from_state"), rs.getString("to_state"), rs.getInt("traffic_percent"),
+            rs.getString("operator"), rs.getString("reason"), rs.getString("details_json"),
+            rs.getString("event_hash"), time(rs, "created_at")
+        );
+    }
+
     private StoredEvaluationReport mapEvaluationReport(java.sql.ResultSet rs, int rowNum) throws SQLException {
         LlmEvaluationVersion v = new LlmEvaluationVersion(rs.getString("provider"), rs.getString("model"), rs.getString("prompt_version"),
             rs.getString("context_version"), rs.getString("schema_version"), rs.getString("chunk_policy_version"), rs.getBigDecimal("temperature"),
@@ -254,4 +336,28 @@ public class LlmModelReleaseRepository {
     private String blankToNull(String value) { return value == null || value.isBlank() ? null : value; }
     public record StoredEvaluationReport(Long id, String reportKey, String status, String createdBy, LocalDateTime createdAt,
         LlmEvaluationReport report) { }
+
+    public record AuditFilter(Long auditId, Long releaseId, String releaseKey, String operator, String action,
+        LocalDateTime from, LocalDateTime to) {
+        public AuditFilter(Long releaseId, String releaseKey, String operator, String action,
+            LocalDateTime from, LocalDateTime to) {
+            this(null, releaseId, releaseKey, operator, action, from, to);
+        }
+
+        public static AuditFilter empty() {
+            return new AuditFilter(null, null, null, null, null, null, null);
+        }
+    }
+
+    public record ReleaseAudit(Long id, Long releaseId, String releaseKey, String action, String fromState,
+        String toState, Integer trafficPercent, String operator, String reason, String detailsJson,
+        String eventHash, LocalDateTime createdAt) {
+        public ReleaseAudit {
+            Objects.requireNonNull(id, "id");
+            Objects.requireNonNull(releaseId, "releaseId");
+        }
+    }
+
+    private record AuditQuery(String sql, Object[] args) {
+    }
 }

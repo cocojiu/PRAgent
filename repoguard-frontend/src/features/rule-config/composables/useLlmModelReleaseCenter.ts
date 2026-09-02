@@ -1,14 +1,19 @@
 import { computed, ref } from "vue";
 import {
   fetchLlmEvaluationReports,
+  fetchLlmModelReleaseAudits,
   fetchLlmModelReleaseCenter,
   fetchLlmModelReleaseRuntimeMetrics,
+  exportLlmModelReleaseAudits,
   promoteLlmModelRelease,
   registerLlmModelShadowRelease,
+  verifyLlmModelReleaseAudit,
   rollbackLlmModelRelease
 } from "@/api/config";
 import type {
   LlmEvaluationReport,
+  LlmModelReleaseAudit,
+  LlmModelReleaseAuditExport,
   LlmModelRelease,
   LlmModelReleaseCenter,
   LlmModelReleaseMetric,
@@ -50,6 +55,14 @@ export const useLlmModelReleaseCenter = () => {
   const center = ref<LlmModelReleaseCenter | null>(null);
   const runtimeMetrics = ref<LlmModelReleaseMetric[]>([]);
   const reports = ref<LlmEvaluationReport[]>([]);
+  const audits = ref<LlmModelReleaseAudit[]>([]);
+  const auditTotal = ref(0);
+  const auditPage = ref(1);
+  const auditLoading = ref(false);
+  const auditOperation = ref("");
+  const auditFilterAction = ref("");
+  const auditOperator = ref("");
+  const auditVerification = ref<Record<number, string>>({});
   const selectedReportId = ref<number>();
   const trendDays = ref(30);
   const releaseKey = ref("");
@@ -71,7 +84,8 @@ export const useLlmModelReleaseCenter = () => {
       const [nextCenter, nextReports, nextRuntimeMetrics] = await Promise.all([
         fetchLlmModelReleaseCenter(trendDays.value),
         fetchLlmEvaluationReports(50),
-        fetchLlmModelReleaseRuntimeMetrics({ days: trendDays.value, limit: 168 })
+        fetchLlmModelReleaseRuntimeMetrics({ days: trendDays.value, limit: 168 }),
+        loadAudits(1)
       ]);
       if (epoch !== requestEpoch) return;
       center.value = nextCenter;
@@ -84,6 +98,58 @@ export const useLlmModelReleaseCenter = () => {
       if (epoch === requestEpoch) errorMessage.value = getErrorMessage(error, "模型发布中心加载失败");
     } finally {
       if (epoch === requestEpoch) loading.value = false;
+    }
+  };
+
+  const loadAudits = async (page = auditPage.value) => {
+    auditLoading.value = true;
+    try {
+      const result = await fetchLlmModelReleaseAudits({
+        releaseKey: releaseKey.value.trim() || undefined,
+        operator: auditOperator.value.trim() || undefined,
+        action: auditFilterAction.value || undefined,
+        page,
+        pageSize: 20
+      });
+      audits.value = result.items;
+      auditTotal.value = result.total;
+      auditPage.value = page;
+    } catch (error) {
+      errorMessage.value = getErrorMessage(error, "发布审计加载失败");
+    } finally {
+      auditLoading.value = false;
+    }
+  };
+
+  const verifyAudit = async (auditId: number) => {
+    auditOperation.value = `verify-${auditId}`;
+    try {
+      const result = await verifyLlmModelReleaseAudit(auditId);
+      auditVerification.value = { ...auditVerification.value, [auditId]: result.status };
+      await loadAudits(auditPage.value);
+      return result;
+    } catch (error) {
+      errorMessage.value = getErrorMessage(error, "发布审计校验失败");
+      return null;
+    } finally {
+      auditOperation.value = "";
+    }
+  };
+
+  const exportAudits = async (format: "json" | "csv" = "csv"): Promise<LlmModelReleaseAuditExport | null> => {
+    auditOperation.value = `export-${format}`;
+    try {
+      return await exportLlmModelReleaseAudits({
+        releaseKey: releaseKey.value.trim() || undefined,
+        operator: auditOperator.value.trim() || undefined,
+        action: auditFilterAction.value || undefined,
+        format
+      });
+    } catch (error) {
+      errorMessage.value = getErrorMessage(error, "发布审计导出失败");
+      return null;
+    } finally {
+      auditOperation.value = "";
     }
   };
 
@@ -140,16 +206,27 @@ export const useLlmModelReleaseCenter = () => {
 
   return {
     action,
+    auditFilterAction,
+    auditLoading,
+    auditOperation,
+    auditOperator,
+    auditPage,
+    auditTotal,
+    auditVerification,
+    audits,
     canaryTraffic,
     center,
     errorMessage,
     loading,
     load,
+    loadAudits,
     promote,
     registerShadow,
     releaseKey,
     reports,
     runtimeMetrics,
+    exportAudits,
+    verifyAudit,
     rollback,
     selectedReport,
     selectedReportId,

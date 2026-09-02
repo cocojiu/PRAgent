@@ -139,6 +139,31 @@
   gap: 4px;
 }
 
+.release-audit-panel {
+  margin-top: 16px;
+}
+
+.release-audit-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 12px;
+}
+
+.release-audit-toolbar .el-input {
+  width: 190px;
+}
+
+.release-audit-toolbar .el-select {
+  width: 170px;
+}
+
+.release-audit-pagination {
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
 .policy-governance-heading {
   display: flex;
   align-items: flex-start;

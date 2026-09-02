@@ -259,3 +259,37 @@ export interface LlmModelReleaseMetric {
   createdAt?: string;
   updatedAt?: string;
 }
+
+export interface LlmModelReleaseAudit {
+  id: number;
+  releaseId: number;
+  releaseKey: string;
+  action: string;
+  fromState?: string;
+  toState: string;
+  trafficPercent: number;
+  operator: string;
+  reason: string;
+  detailsJson: string;
+  eventHash: string;
+  createdAt?: string;
+  hashValid: boolean;
+  hashStatus: string;
+}
+
+export interface LlmModelReleaseAuditVerification {
+  auditId: number;
+  releaseId: number;
+  releaseKey: string;
+  eventHash: string;
+  calculatedHash: string;
+  valid: boolean;
+  status: string;
+}
+
+export interface LlmModelReleaseAuditExport {
+  format: "json" | "csv" | string;
+  recordCount: number;
+  contentSha256: string;
+  content: string;
+}

@@ -36,6 +36,9 @@ import type {
   LlmEvaluationReportComparison,
   LlmEvaluationRequest,
   LlmModelRelease,
+  LlmModelReleaseAudit,
+  LlmModelReleaseAuditExport,
+  LlmModelReleaseAuditVerification,
   LlmModelReleaseCenter,
   LlmModelReleaseMetric,
   LlmModelReleaseRequest,
@@ -367,6 +370,13 @@ export type GeneratedOpenApiOperationMap = {
     body: never;
     response: LlmEvaluationExport;
   };
+  "reviewCalibrationControllerExportModelReleaseAudits": {
+    method: "GET";
+    pathParams: never;
+    query: { action?: string; format?: string; from?: string; operator?: string; releaseId?: number; releaseKey?: string; to?: string };
+    body: never;
+    response: LlmModelReleaseAuditExport;
+  };
   "reviewCalibrationControllerGetEvaluationReport": {
     method: "GET";
     pathParams: { reportId: number };
@@ -395,6 +405,13 @@ export type GeneratedOpenApiOperationMap = {
     body: never;
     response: LlmEvaluationReport[];
   };
+  "reviewCalibrationControllerListModelReleaseAudits": {
+    method: "GET";
+    pathParams: never;
+    query: { action?: string; from?: string; operator?: string; page?: number; pageSize?: number; releaseId?: number; releaseKey?: string; to?: string };
+    body: never;
+    response: PageResponse<LlmModelReleaseAudit>;
+  };
   "reviewCalibrationControllerListModelReleaseRuntimeMetrics": {
     method: "GET";
     pathParams: never;
@@ -422,6 +439,13 @@ export type GeneratedOpenApiOperationMap = {
     query: never;
     body: LlmModelRollbackRequest;
     response: LlmModelRelease;
+  };
+  "reviewCalibrationControllerVerifyModelReleaseAudit": {
+    method: "GET";
+    pathParams: { auditId: number };
+    query: never;
+    body: never;
+    response: LlmModelReleaseAuditVerification;
   };
   "reviewControllerGetGithubCommentPreview": {
     method: "GET";
@@ -1162,6 +1186,14 @@ export const generatedOpenApiOperations = {
     hasRequestBody: false,
     requestBodyRequired: false
   },
+  "reviewCalibrationControllerExportModelReleaseAudits": {
+    method: "GET",
+    path: "/api/v1/config/review-calibration/release-center/audits/export",
+    pathParamNames: [],
+    queryParamNames: ["action", "format", "from", "operator", "releaseId", "releaseKey", "to"],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
   "reviewCalibrationControllerGetEvaluationReport": {
     method: "GET",
     path: "/api/v1/config/review-calibration/evaluation-reports/{reportId}",
@@ -1191,6 +1223,14 @@ export const generatedOpenApiOperations = {
     path: "/api/v1/config/review-calibration/evaluation-reports",
     pathParamNames: [],
     queryParamNames: ["limit"],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "reviewCalibrationControllerListModelReleaseAudits": {
+    method: "GET",
+    path: "/api/v1/config/review-calibration/release-center/audits",
+    pathParamNames: [],
+    queryParamNames: ["action", "from", "operator", "page", "pageSize", "releaseId", "releaseKey", "to"],
     hasRequestBody: false,
     requestBodyRequired: false
   },
@@ -1225,6 +1265,14 @@ export const generatedOpenApiOperations = {
     queryParamNames: [],
     hasRequestBody: true,
     requestBodyRequired: true
+  },
+  "reviewCalibrationControllerVerifyModelReleaseAudit": {
+    method: "GET",
+    path: "/api/v1/config/review-calibration/release-center/audits/{auditId}/verify",
+    pathParamNames: ["auditId"],
+    queryParamNames: [],
+    hasRequestBody: false,
+    requestBodyRequired: false
   },
   "reviewControllerGetGithubCommentPreview": {
     method: "GET",

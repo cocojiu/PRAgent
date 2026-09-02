@@ -11,6 +11,7 @@ createReviewRule -> systemConfigControllerCreateReviewRule // POST /api/v1/confi
 createUser -> userManagementControllerCreateUser // POST /api/v1/users
 deleteNotificationBinding -> notificationIntegrationControllerDeleteBinding // DELETE /api/v1/config/notification-bindings/{id}
 exportLlmEvaluationReport -> reviewCalibrationControllerExportEvaluationReport // GET /api/v1/config/review-calibration/evaluation-reports/{reportId}/export
+exportLlmModelReleaseAudits -> reviewCalibrationControllerExportModelReleaseAudits // GET /api/v1/config/review-calibration/release-center/audits/export
 fetchCacheStats -> cacheStatsControllerGetStats // GET /api/v1/cache/stats
 fetchDashboardHighRiskReviews -> dashboardControllerGetHighRiskReviews // GET /api/v1/dashboard/high-risk-reviews
 fetchDashboardLlmQuality -> dashboardControllerGetLlmQuality // GET /api/v1/dashboard/llm-quality
@@ -30,6 +31,7 @@ fetchGithubIntegrationConfig -> systemConfigControllerGetGithubIntegration // GE
 fetchGithubPullRequestOptions -> reviewControllerListConfiguredGithubPullRequests // GET /api/v1/reviews/github/pull-requests
 fetchLlmEvaluationReport -> reviewCalibrationControllerGetEvaluationReport // GET /api/v1/config/review-calibration/evaluation-reports/{reportId}
 fetchLlmEvaluationReports -> reviewCalibrationControllerListEvaluationReports // GET /api/v1/config/review-calibration/evaluation-reports
+fetchLlmModelReleaseAudits -> reviewCalibrationControllerListModelReleaseAudits // GET /api/v1/config/review-calibration/release-center/audits
 fetchLlmModelReleaseCenter -> reviewCalibrationControllerGetModelReleaseCenter // GET /api/v1/config/review-calibration/release-center
 fetchLlmModelReleaseRuntimeMetrics -> reviewCalibrationControllerListModelReleaseRuntimeMetrics // GET /api/v1/config/review-calibration/release-center/runtime-metrics
 fetchMessageQueueHealth -> messageQueueHealthControllerGetHealth // GET /api/v1/message-queue/health
@@ -109,3 +111,4 @@ updateReviewStrategyEnforcement -> systemConfigControllerPromoteReviewStrategy /
 updateSystemSettings -> systemConfigControllerUpdateSystemSettings // PUT /api/v1/config/system-settings
 updateUserRole -> userManagementControllerUpdateRole // PUT /api/v1/users/{id}/role
 updateUserStatus -> userManagementControllerUpdateStatus // PUT /api/v1/users/{id}/status
+verifyLlmModelReleaseAudit -> reviewCalibrationControllerVerifyModelReleaseAudit // GET /api/v1/config/review-calibration/release-center/audits/{auditId}/verify

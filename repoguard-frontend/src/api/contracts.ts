@@ -54,6 +54,9 @@ import type {
   EnterpriseTenantRepositoryRequest,
   EnterpriseTenantStatusRequest,
   LlmModelRelease,
+  LlmModelReleaseAudit,
+  LlmModelReleaseAuditExport,
+  LlmModelReleaseAuditVerification,
   LlmModelReleaseCenter,
   LlmModelReleaseMetric,
   LlmModelReleaseRequest,
@@ -295,6 +298,26 @@ export type ApiContract = {
     { releaseKey?: string; days?: number; limit?: number },
     LlmModelReleaseMetric[]
   >;
+  fetchLlmModelReleaseAudits: ApiOperation<{
+    releaseId?: number;
+    releaseKey?: string;
+    operator?: string;
+    action?: string;
+    from?: string;
+    to?: string;
+    page?: number;
+    pageSize?: number;
+  }, PageResponse<LlmModelReleaseAudit>>;
+  verifyLlmModelReleaseAudit: ApiOperation<{ auditId: number }, LlmModelReleaseAuditVerification>;
+  exportLlmModelReleaseAudits: ApiOperation<{
+    releaseId?: number;
+    releaseKey?: string;
+    operator?: string;
+    action?: string;
+    from?: string;
+    to?: string;
+    format?: string;
+  }, LlmModelReleaseAuditExport>;
   registerLlmModelShadowRelease: ApiOperation<LlmModelReleaseRequest, LlmModelRelease>;
   promoteLlmModelRelease: ApiOperation<LlmModelReleaseRequest, LlmModelRelease>;
   createLlmEvaluationReport: ApiOperation<LlmEvaluationRequest, LlmEvaluationReport>;
@@ -659,6 +682,32 @@ const apiEndpoints: ApiEndpointMap = {
   }),
   fetchLlmModelReleaseRuntimeMetrics: generatedEndpoint("reviewCalibrationControllerListModelReleaseRuntimeMetrics", {
     query: input => ({ releaseKey: input.releaseKey, days: input.days, limit: input.limit })
+  }),
+  fetchLlmModelReleaseAudits: generatedEndpoint("reviewCalibrationControllerListModelReleaseAudits", {
+    query: input => ({
+      releaseId: input.releaseId,
+      releaseKey: input.releaseKey,
+      operator: input.operator,
+      action: input.action,
+      from: input.from,
+      to: input.to,
+      page: input.page,
+      pageSize: input.pageSize
+    })
+  }),
+  verifyLlmModelReleaseAudit: generatedEndpoint("reviewCalibrationControllerVerifyModelReleaseAudit", {
+    path: input => ({ auditId: input.auditId })
+  }),
+  exportLlmModelReleaseAudits: generatedEndpoint("reviewCalibrationControllerExportModelReleaseAudits", {
+    query: input => ({
+      releaseId: input.releaseId,
+      releaseKey: input.releaseKey,
+      operator: input.operator,
+      action: input.action,
+      from: input.from,
+      to: input.to,
+      format: input.format
+    })
   }),
   registerLlmModelShadowRelease: generatedEndpoint("reviewCalibrationControllerRegisterShadowRelease", {
     body: input => input

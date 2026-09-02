@@ -9,9 +9,6 @@ import com.repoguard.agent.dto.LlmModelReleaseDto;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.review.ReviewPolicySettings;
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.ArrayList;
@@ -130,7 +127,7 @@ final class LlmModelReleaseRuntimeSupport {
         releaseRepository.insertAudit(tenantId, release.id(), release.releaseKey(), action,
             before == null ? null : before.state(), after == null ? "ROLLED_BACK" : after.state(),
             after == null ? 0 : after.trafficPercent(), normalizeOperator(operator), normalizedReason,
-            details, sha256(action + "|" + release.id() + "|" + release.releaseKey() + "|" + details + "|" + reason));
+            details, LlmModelReleaseAuditService.sha256(action, release.id(), release.releaseKey(), details, normalizedReason));
     }
 
     LlmModelReleaseDto firstState(List<LlmModelReleaseDto> releases, String state) {
@@ -251,14 +248,4 @@ final class LlmModelReleaseRuntimeSupport {
         return value.length() <= maxLength ? value : value.substring(0, maxLength);
     }
 
-    private String sha256(String value) {
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
-            StringBuilder result = new StringBuilder(64);
-            for (byte item : digest) result.append(String.format("%02x", item));
-            return result.toString();
-        } catch (NoSuchAlgorithmException ex) {
-            throw new IllegalStateException("SHA-256 is required for release audits", ex);
-        }
-    }
 }
