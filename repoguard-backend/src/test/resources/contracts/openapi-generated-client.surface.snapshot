@@ -42,8 +42,13 @@ notificationIntegrationControllerRetryEvent(input: { path: { id: number } }): Pr
 notificationIntegrationControllerTestBinding(input: { path: { id: number } }): Promise<ConnectionTestResult>; // POST /api/v1/config/notification-bindings/{id}/test
 notificationIntegrationControllerUpdateBinding(input: { path: { id: number }; body: NotificationBindingRequest }): Promise<NotificationBinding>; // PUT /api/v1/config/notification-bindings/{id}
 notificationIntegrationControllerUpdateBindingStatus(input: { path: { id: number }; body: NotificationBindingStatusRequest }): Promise<NotificationBinding>; // PUT /api/v1/config/notification-bindings/{id}/status
+reviewCalibrationControllerCompareEvaluationReports(input: { path: { candidateReportId: number; reportId: number } }): Promise<LlmEvaluationReportComparison>; // GET /api/v1/config/review-calibration/evaluation-reports/{reportId}/compare/{candidateReportId}
+reviewCalibrationControllerCreateEvaluationReport(input: { body: LlmEvaluationRequest }): Promise<LlmEvaluationReport>; // POST /api/v1/config/review-calibration/evaluation-reports
+reviewCalibrationControllerExportEvaluationReport(input: { path: { reportId: number }; query?: { format?: string } }): Promise<LlmEvaluationExport>; // GET /api/v1/config/review-calibration/evaluation-reports/{reportId}/export
+reviewCalibrationControllerGetEvaluationReport(input: { path: { reportId: number } }): Promise<LlmEvaluationReport>; // GET /api/v1/config/review-calibration/evaluation-reports/{reportId}
 reviewCalibrationControllerGetModelReleaseCenter(input?: { query?: { trendDays?: number } }): Promise<LlmModelReleaseCenter>; // GET /api/v1/config/review-calibration/release-center
 reviewCalibrationControllerGetReviewCalibrationQueue(input?: { query?: { includeIgnored?: boolean; limit?: number; ruleId: string } }): Promise<ReviewCalibrationQueue>; // GET /api/v1/config/review-calibration/queue
+reviewCalibrationControllerListEvaluationReports(input?: { query?: { limit?: number } }): Promise<LlmEvaluationReport[]>; // GET /api/v1/config/review-calibration/evaluation-reports
 reviewCalibrationControllerPromoteModelRelease(input: { body: LlmModelReleaseRequest }): Promise<LlmModelRelease>; // POST /api/v1/config/review-calibration/release-center/promote
 reviewCalibrationControllerRegisterShadowRelease(input: { body: LlmModelReleaseRequest }): Promise<LlmModelRelease>; // POST /api/v1/config/review-calibration/release-center/shadow
 reviewCalibrationControllerRollbackModelRelease(input: { path: { releaseId: number }; body: LlmModelRollbackRequest }): Promise<LlmModelRelease>; // POST /api/v1/config/review-calibration/release-center/{releaseId}/rollback

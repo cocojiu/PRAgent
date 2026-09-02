@@ -3,6 +3,7 @@ import type { ApiRequestOptions } from "@/api/contracts";
 import type {
   DataRetentionCleanupRequest,
   GithubIntegrationConfigRequest,
+  LlmEvaluationRequest,
   LlmModelReleaseRequest,
   LlmModelRollbackRequest,
   ReviewPolicyConfigRequest,
@@ -97,6 +98,21 @@ export const registerLlmModelShadowRelease = (payload: LlmModelReleaseRequest) =
 
 export const promoteLlmModelRelease = (payload: LlmModelReleaseRequest) =>
   apiRequest("promoteLlmModelRelease", payload);
+
+export const createLlmEvaluationReport = (payload: LlmEvaluationRequest) =>
+  apiRequest("createLlmEvaluationReport", payload);
+
+export const fetchLlmEvaluationReports = (limit = 30) =>
+  apiRequest("fetchLlmEvaluationReports", { limit });
+
+export const fetchLlmEvaluationReport = (reportId: number) =>
+  apiRequest("fetchLlmEvaluationReport", { reportId });
+
+export const compareLlmEvaluationReports = (reportId: number, candidateReportId: number) =>
+  apiRequest("compareLlmEvaluationReports", { reportId, candidateReportId });
+
+export const exportLlmEvaluationReport = (reportId: number, format: "json" | "html" = "json") =>
+  apiRequest("exportLlmEvaluationReport", { reportId, format });
 
 export const rollbackLlmModelRelease = (releaseId: number, payload: LlmModelRollbackRequest) =>
   apiRequest("rollbackLlmModelRelease", { releaseId, payload });

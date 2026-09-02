@@ -63,6 +63,7 @@
     </section>
 
     <ReviewCalibrationQueueCard :rules="rules" />
+    <LlmEvaluationWorkbench />
 
     <section class="rule-layout">
       <article class="rule-panel">
@@ -339,6 +340,7 @@ import { canManage } from "@/stores/authState";
 import MetricGrid, { type MetricGridItem } from "@/components/MetricGrid.vue";
 import { useMetricIcon } from "@/composables/useMetricIcon";
 import ReviewCalibrationQueueCard from "@/features/rule-config/components/ReviewCalibrationQueueCard.vue";
+import LlmEvaluationWorkbench from "@/features/rule-config/components/LlmEvaluationWorkbench.vue";
 import { useReviewPolicyHistory } from "@/features/rule-config/composables/useReviewPolicyHistory";
 import { useReviewRuleCatalog } from "@/features/rule-config/composables/useReviewRuleCatalog";
 import { useReviewRuleEditor } from "@/features/rule-config/composables/useReviewRuleEditor";

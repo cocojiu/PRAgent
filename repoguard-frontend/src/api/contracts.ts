@@ -56,6 +56,10 @@ import type {
   LlmModelReleaseCenter,
   LlmModelReleaseRequest,
   LlmModelRollbackRequest,
+  LlmEvaluationExport,
+  LlmEvaluationReport,
+  LlmEvaluationReportComparison,
+  LlmEvaluationRequest,
   CacheStats,
   GithubCommentPreview,
   GithubCommentPublicationHistory,
@@ -273,6 +277,14 @@ export type ApiContract = {
   fetchLlmModelReleaseCenter: ApiOperation<{ trendDays?: number }, LlmModelReleaseCenter>;
   registerLlmModelShadowRelease: ApiOperation<LlmModelReleaseRequest, LlmModelRelease>;
   promoteLlmModelRelease: ApiOperation<LlmModelReleaseRequest, LlmModelRelease>;
+  createLlmEvaluationReport: ApiOperation<LlmEvaluationRequest, LlmEvaluationReport>;
+  fetchLlmEvaluationReports: ApiOperation<{ limit?: number }, LlmEvaluationReport[]>;
+  fetchLlmEvaluationReport: ApiOperation<{ reportId: number }, LlmEvaluationReport>;
+  compareLlmEvaluationReports: ApiOperation<
+    { reportId: number; candidateReportId: number },
+    LlmEvaluationReportComparison
+  >;
+  exportLlmEvaluationReport: ApiOperation<{ reportId: number; format?: string }, LlmEvaluationExport>;
   rollbackLlmModelRelease: ApiOperation<
     { releaseId: number; payload: LlmModelRollbackRequest },
     LlmModelRelease
@@ -604,6 +616,22 @@ const apiEndpoints: ApiEndpointMap = {
   }),
   promoteLlmModelRelease: generatedEndpoint("reviewCalibrationControllerPromoteModelRelease", {
     body: input => input
+  }),
+  createLlmEvaluationReport: generatedEndpoint("reviewCalibrationControllerCreateEvaluationReport", {
+    body: input => input
+  }),
+  fetchLlmEvaluationReports: generatedEndpoint("reviewCalibrationControllerListEvaluationReports", {
+    query: input => ({ limit: input.limit })
+  }),
+  fetchLlmEvaluationReport: generatedEndpoint("reviewCalibrationControllerGetEvaluationReport", {
+    path: input => ({ reportId: input.reportId })
+  }),
+  compareLlmEvaluationReports: generatedEndpoint("reviewCalibrationControllerCompareEvaluationReports", {
+    path: input => ({ reportId: input.reportId, candidateReportId: input.candidateReportId })
+  }),
+  exportLlmEvaluationReport: generatedEndpoint("reviewCalibrationControllerExportEvaluationReport", {
+    path: input => ({ reportId: input.reportId }),
+    query: input => ({ format: input.format })
   }),
   rollbackLlmModelRelease: generatedEndpoint("reviewCalibrationControllerRollbackModelRelease", {
     path: input => ({ releaseId: input.releaseId }),

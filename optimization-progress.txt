@@ -455,3 +455,10 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 提交/远程验收：实现提交 `f911d0fe`（修复：绑定 SARIF 导入审查尝试并实现批次幂等合并）已推送 `origin/PRAgent-test`；Pull Request Quality `33620586551` 的 8 个作业全部成功，含真实 MySQL/RabbitMQ、V82→V83 Flyway、前后端质量、覆盖率、迁移契约和安全门禁；Repository Governance `33620582428`、Auto Create Pull Request `33620582491` 亦成功。覆盖率修复后的最终远程验收通过。
 边界：数据库不保存原始 SARIF 凭据；同一指纹重试返回已落库批次；新指纹替换仅作用于同一任务、尝试、工具、版本和提交的 SARIF 来源；未提交非 README Markdown、测试脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
 下一步：远程 Actions 通过后进入 `FUNC-P0-001`，建设真实 PR 质量评估工作台与可信报告，并继续按单项提交、推送和验收。
+
+2026-09-02 | 优化-60 | FUNC-P0-001 真实 PR 质量评估工作台与可信报告
+状态：已完成评估输入校验、确定性聚合报告、报告对比/导出、发布证据绑定、本地质量门禁；实现提交和远程 Actions 验收待本轮推送后补录。
+变更：新增 V84 `llm_evaluation_report` 租户隔离不可变聚合表及 `llm_model_release.evaluation_report_id` 绑定；评估请求只接收数据集清单、匿名样本标签、版本元数据和聚合计数，不落库原始源码、补丁、prompt、供应商响应或凭据。服务端按固定/滚动切分、仓库匿名键、样本指纹、授权/匿名化/人工复核、版本可复现性执行阻断校验，并生成 precision/recall/Wilson 下界、定位锚定、重复、解析失败、P50/P95、token/费用、评论有用性/修复率和规则/LLM/verified 贡献指标。新增评估报告查询、两报告差异、JSON/HTML 导出和规则配置工作台；模型发布必须引用服务端 `evaluationReportId`，服务端重新读取报告指标和门禁，客户端伪造质量字段不能绕过发布校验；同一确定性报告键重试返回原记录，已发布聚合报告不支持覆盖。
+本地验证：后端完整 `mvn verify -DskipTests=false` 共 2752 项测试通过、0 失败、12 项按环境条件跳过，JaCoCo 行/分支覆盖率门禁通过，架构测试 44 项、架构预算 9 项、Jackson 配置、授权、迁移、OpenAPI、Kubernetes 契约均通过；前端 `vue-tsc -b`、ESLint、Vitest 全量 40 个测试文件/163 项测试（函数覆盖率 56.57%）和 Vite 构建 bundle budget 通过；`git diff --check` 通过。
+边界：当前评估入口以受控管理员 API 接收已脱敏的聚合标签，原始真实 PR 数据仍需在授权评测进程中准备并按数据集指纹提交；未自动发表评论、Checks、通知、修复分支或 PR。未提交非 README Markdown、测试脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
+下一步：完成本项中文提交、推送并验收 Pull Request Quality、Repository Governance、Auto Create Pull Request 三组 Actions；通过后进入 `FUNC-P1-001` 跨次审查差异与修复追踪。

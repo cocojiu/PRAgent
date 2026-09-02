@@ -8,6 +8,13 @@ vi.mock("@/observability/frontendPerformanceBuffer", () => frontendPerformance);
 
 import { apiRequest } from "./contracts";
 import {
+  compareLlmEvaluationReports,
+  createLlmEvaluationReport,
+  exportLlmEvaluationReport,
+  fetchLlmEvaluationReport,
+  fetchLlmEvaluationReports
+} from "./config";
+import {
   fetchNotificationReadKeys,
   fetchNotificationReport,
   fetchNotifications,
@@ -115,6 +122,49 @@ describe("apiRequest", () => {
     expect(url).toContain("limit=30");
     expect(url).toContain("includeIgnored=false");
     expect(init.method).toBeUndefined();
+  });
+
+  it("exposes aggregate evaluation report endpoints through typed config wrappers", async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(okResponse({})));
+    vi.stubGlobal("fetch", fetchMock);
+    const request = {
+      datasetId: "real-pr",
+      datasetVersion: "2026-09-02",
+      datasetKind: "REAL_PR" as const,
+      sourceRepositoryCount: 2,
+      sampleCount: 1,
+      fixedRegressionSamples: 1,
+      rollingObservationSamples: 0,
+      authorized: true,
+      anonymized: true,
+      humanReviewed: true,
+      sampleFingerprint: "a".repeat(64),
+      provider: "openai",
+      model: "gpt-5",
+      promptVersion: "prompt-1",
+      contextVersion: "context-1",
+      schemaVersion: "schema-1",
+      chunkPolicyVersion: "chunk-1",
+      temperature: 0.2,
+      ruleVersion: "rules-1",
+      codeRevision: "0123456789abcdef0123456789abcdef01234567",
+      observations: [],
+      minimumSamples: 1
+    };
+    await createLlmEvaluationReport(request);
+    await fetchLlmEvaluationReports(10);
+    await fetchLlmEvaluationReport(7);
+    await compareLlmEvaluationReports(7, 8);
+    await exportLlmEvaluationReport(7, "html");
+
+    const calls = fetchMock.mock.calls as [string, RequestInit][];
+    expect(calls[0][0]).toContain("/api/v1/config/review-calibration/evaluation-reports");
+    expect(calls[0][1].method).toBe("POST");
+    expect(calls[1][0]).toContain("limit=10");
+    expect(calls[2][0]).toContain("/evaluation-reports/7");
+    expect(calls[3][0]).toContain("/evaluation-reports/7/compare/8");
+    expect(calls[4][0]).toContain("/evaluation-reports/7/export");
+    expect(calls[4][0]).toContain("format=html");
   });
 
   it("forwards cancellation signals through the typed API contract", async () => {

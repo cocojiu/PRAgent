@@ -12,11 +12,14 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.repoguard.agent.config.JacksonConfig;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.dto.DashboardLlmQualityResponse;
 import com.repoguard.agent.dto.LlmModelReleaseCenterDto;
 import com.repoguard.agent.dto.LlmModelReleaseDto;
 import com.repoguard.agent.dto.LlmModelReleaseRequest;
+import com.repoguard.agent.dto.LlmModelReleaseRequest.LlmEvaluationObservationRequest;
+import com.repoguard.agent.dto.LlmModelReleaseRequest.LlmEvaluationRequest;
 import com.repoguard.agent.dto.LlmModelRollbackRequest;
 import com.repoguard.agent.dto.LlmQualityByModelDto;
 import com.repoguard.agent.entity.ReviewTask;
@@ -36,7 +39,7 @@ class LlmModelReleaseServiceTest {
     private final JdbcTemplate jdbcTemplate = org.mockito.Mockito.mock(JdbcTemplate.class);
     private final LlmQualityComparisonProvider qualityProvider = org.mockito.Mockito.mock(LlmQualityComparisonProvider.class);
     private final LlmModelReleaseRepository repository = org.mockito.Mockito.mock(LlmModelReleaseRepository.class);
-    private final LlmModelReleaseService service = new LlmModelReleaseService(jdbcTemplate, qualityProvider, repository);
+    private final LlmModelReleaseService service = new LlmModelReleaseService(jdbcTemplate, qualityProvider, repository, new JacksonConfig().objectMapper());
     private TenantContext.Scope tenantScope;
 
     @BeforeEach
@@ -45,6 +48,7 @@ class LlmModelReleaseServiceTest {
         when(jdbcTemplate.queryForList(anyString(), any(Object[].class))).thenReturn(List.of());
         when(repository.findAll(anyLong())).thenReturn(List.of());
         when(repository.findByState(anyLong(), anyString())).thenReturn(List.of());
+        when(repository.findEvaluationReport(eq(42L), anyLong())).thenReturn(evidence(true));
     }
 
     @AfterEach
@@ -66,20 +70,114 @@ class LlmModelReleaseServiceTest {
     }
 
     @Test
-    void promotionQualityGateRejectsUnsafeReleaseAndAcceptsCanaryRelease() {
-        LlmModelReleaseRequest unsafe = request(FINGERPRINT, 0, false);
-        assertThatThrownBy(() -> service.promote(unsafe, "operator"))
+    void promotionRequiresEvidenceAndIgnoresForgedClientMetrics() {
+        LlmModelReleaseRequest withoutEvidence = request(FINGERPRINT, 0, false, null);
+        assertThatThrownBy(() -> service.promote(withoutEvidence, "operator"))
             .isInstanceOf(BusinessException.class)
-            .hasMessageContaining("QUALITY_GATE_FAILED")
-            .hasMessageContaining("TRAFFIC_PERCENT_MUST_BE_1_TO_100");
+            .hasMessageContaining("服务端评估报告");
 
+        LlmModelReleaseRequest forged = request(FINGERPRINT, 20, false, 77L);
         LlmModelReleaseDto saved = release(7L, "CANARY", 20, "gpt-canary", true);
         when(repository.save(anyLong(), any(), anyString(), anyInt(), anyString(), anyString())).thenReturn(saved);
 
-        LlmModelReleaseDto result = service.promote(request(FINGERPRINT, 20, true), "operator");
+        LlmModelReleaseDto result = service.promote(forged, "operator");
 
         assertThat(result).isEqualTo(saved);
-        verify(repository).save(eq(42L), any(), eq("CANARY"), eq(20), eq("operator"), eq(""));
+        verify(repository).save(eq(42L), org.mockito.ArgumentMatchers.argThat(release ->
+            release.evaluationReportId() == 77L
+                && release.qualityGatePassed()
+                && release.precisionRate().compareTo(new BigDecimal("0.95")) == 0
+        ), eq("CANARY"), eq(20), eq("operator"), eq(""));
+    }
+
+    @Test
+    void promotionRejectsFailedEvaluationReport() {
+        when(repository.findEvaluationReport(42L, 78L)).thenReturn(evidence(false));
+
+        assertThatThrownBy(() -> service.promote(request(FINGERPRINT, 20, true, 78L), "operator"))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("评估报告未完成");
+    }
+
+    @Test
+    void evaluationWorkbenchCreatesComparesAndExportsAggregateReport() {
+        when(repository.insertEvaluationReport(eq(42L), anyString(), any(LlmEvaluationReport.class), eq("operator")))
+            .thenReturn(evidence(true));
+
+        LlmModelReleaseDto.EvaluationReportDto created = service.createEvaluationReport(evaluationRequest(), " operator ");
+
+        assertThat(created.id()).isEqualTo(77L);
+        assertThat(created.metrics().p95LatencyMs()).isZero();
+        verify(repository).insertEvaluationReport(eq(42L), anyString(), any(LlmEvaluationReport.class), eq("operator"));
+
+        assertThat(service.getEvaluationReport(77L).reportKey()).isEqualTo("report-key");
+        when(repository.findEvaluationReports(42L, 10)).thenReturn(List.of(evidence(true)));
+        assertThat(service.listEvaluationReports(10)).singleElement().extracting(LlmModelReleaseDto.EvaluationReportDto::status)
+            .isEqualTo("COMPLETED");
+
+        LlmModelReleaseDto.EvaluationReportComparisonDto comparison = service.compareEvaluationReports(77L, 77L);
+        assertThat(comparison.candidateImproved()).isTrue();
+        assertThat(comparison.precisionDelta()).isZero();
+
+        LlmModelReleaseDto.EvaluationExportDto json = service.exportEvaluationReport(77L, "json");
+        assertThat(json.format()).isEqualTo("json");
+        assertThat(json.contentSha256()).hasSize(64);
+        assertThat(json.content()).contains("report-key");
+        LlmModelReleaseDto.EvaluationExportDto html = service.exportEvaluationReport(77L, "HTML");
+        assertThat(html.format()).isEqualTo("html");
+        assertThat(html.content()).startsWith("<!doctype html>");
+    }
+
+    @Test
+    void evaluationWorkbenchRejectsMalformedVersionAndObservation() {
+        LlmEvaluationRequest malformed = new LlmEvaluationRequest(
+            "dataset-1", "v1", "BAD_KIND", 2, 1, 1, 0, true, true, true, FINGERPRINT,
+            "openai", "gpt-next", "prompt-v1", "context-v1", "schema-v1", "chunk-v1",
+            new BigDecimal("0.1"), "rule-v1", "code-v1", List.of(observationRequest()), 1
+        );
+        assertThatThrownBy(() -> service.createEvaluationReport(malformed, "operator"))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("无效");
+    }
+
+    @Test
+    void registerShadowNormalizesValidRequestAndUsesShadowState() {
+        LlmModelReleaseDto saved = release(16L, "SHADOW", 0, "gpt-next", true);
+        when(repository.save(anyLong(), any(), anyString(), anyInt(), anyString(), anyString())).thenReturn(saved);
+
+        assertThat(service.registerShadow(request(FINGERPRINT, 0, true), " operator ")).isEqualTo(saved);
+        verify(repository).save(eq(42L), any(), eq("SHADOW"), eq(0), eq("operator"), eq(""));
+    }
+
+    @Test
+    void promotionRejectsServerQualityMetricsEvenWhenClientClaimsPass() {
+        when(repository.findEvaluationReport(42L, 79L)).thenReturn(badEvidence());
+
+        assertThatThrownBy(() -> service.promote(request(FINGERPRINT, 20, true, 79L), "operator"))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("PRECISION_BELOW_90")
+            .hasMessageContaining("P95_LATENCY_ABOVE_15000_MS");
+    }
+
+    @Test
+    void comparisonMarksCandidateRegression() {
+        when(repository.findEvaluationReport(42L, 80L)).thenReturn(badEvidence());
+
+        LlmModelReleaseDto.EvaluationReportComparisonDto comparison = service.compareEvaluationReports(77L, 80L);
+
+        assertThat(comparison.candidateImproved()).isFalse();
+        assertThat(comparison.precisionDelta()).isNegative();
+    }
+
+    @Test
+    void routeReturnsDisabledOrNullInputWithoutDatabaseCalls() {
+        assertThat(service.route(null, null)).isNull();
+        ReviewPolicySettings disabled = new ReviewPolicySettings(
+            true, false, "openai", "gpt", "https://llm.example", "secret", 30,
+            new BigDecimal("0.1"), 1000, true, 2, 5, 500, 20, 5000,
+            new BigDecimal("1"), new BigDecimal("2")
+        );
+        assertThat(service.route(disabled, task(3L))).isSameAs(disabled);
     }
 
     @Test
@@ -87,7 +185,7 @@ class LlmModelReleaseServiceTest {
         LlmModelReleaseDto saved = release(8L, "ACTIVE", 100, "gpt-next", true);
         when(repository.save(anyLong(), any(), anyString(), anyInt(), anyString(), anyString())).thenReturn(saved);
 
-        assertThat(service.promote(request(FINGERPRINT, 100, true), "owner")).isEqualTo(saved);
+        assertThat(service.promote(request(FINGERPRINT, 100, true, 77L), "owner")).isEqualTo(saved);
 
         verify(repository).markActiveReplaced(42L);
         verify(repository).save(eq(42L), any(), eq("ACTIVE"), eq(100), eq("owner"), eq(""));
@@ -200,12 +298,75 @@ class LlmModelReleaseServiceTest {
     }
 
     private LlmModelReleaseRequest request(String fingerprint, int traffic, boolean qualityGatePassed) {
+        return request(fingerprint, traffic, qualityGatePassed, 77L);
+    }
+
+    private LlmModelReleaseRequest request(String fingerprint, int traffic, boolean qualityGatePassed, Long reportId) {
         return new LlmModelReleaseRequest(
             "release-1", "openai", "gpt-next", "prompt-v1", "context-v1", "schema-v1", "dataset-1", "v1",
             fingerprint, traffic, qualityGatePassed, new BigDecimal("0.95"), new BigDecimal("0.85"),
             new BigDecimal("0.98"), new BigDecimal("0.01"), new BigDecimal("0.01"), 1000L,
-            new BigDecimal("0.01"), 1000L, List.of()
+            new BigDecimal("0.01"), 1000L, List.of(), reportId
         );
+    }
+
+    private LlmEvaluationRequest evaluationRequest() {
+        return new LlmEvaluationRequest(
+            "dataset-1", "v1", "REAL_PR", 2, 1, 1, 0, true, true, true, FINGERPRINT,
+            "openai", "gpt-next", "prompt-v1", "context-v1", "schema-v1", "chunk-v1",
+            new BigDecimal("0.1"), "rule-v1", "code-v1", List.of(observationRequest()), 1
+        );
+    }
+
+    private LlmEvaluationObservationRequest observationRequest() {
+        return new LlmEvaluationObservationRequest(
+            "case-1", "security", true, "HIGH", true, "HIGH", true, "finding-1", true,
+            1000L, 100L, new BigDecimal("0.01"), true, true, true, true, false,
+            1L, 1L, 1L, "FIXED_REGRESSION", "repo-a", "java", 1, 20, "backend", "src-main"
+        );
+    }
+
+    private LlmModelReleaseRepository.StoredEvaluationReport evidence(boolean eligible) {
+        LlmEvaluationVersion version = new LlmEvaluationVersion(
+            "openai", "gpt-next", "prompt-v1", "context-v1", "schema-v1", "chunk-v1",
+            new BigDecimal("0.1"), "rule-v1", "code-v1"
+        );
+        LlmEvaluationDatasetMetadata dataset = new LlmEvaluationDatasetMetadata(
+            "dataset-1", "v1", LlmEvaluationDatasetMetadata.DatasetKind.REAL_PR, 2, 50, 25, 25,
+            true, true, true, FINGERPRINT
+        );
+        LlmEvaluationReport report = new LlmEvaluationReport(
+            version, FINGERPRINT, 50, 10, 10, 10, 0, 0, new BigDecimal("0.95"), new BigDecimal("0.85"),
+            new BigDecimal("0.91"), new BigDecimal("0.98"), new BigDecimal("0.01"), new BigDecimal("0.01"),
+            Map.of(), 1000L, 1000L, new BigDecimal("0.01"), eligible ? List.of() : List.of("QUALITY_GATE_FAILED"),
+            eligible, dataset, LlmEvaluationMetrics.empty()
+        );
+        return new LlmModelReleaseRepository.StoredEvaluationReport(
+            77L, "report-key", eligible ? "COMPLETED" : "FAILED", "tester", LocalDateTime.now(), report
+        );
+    }
+
+    private LlmModelReleaseRepository.StoredEvaluationReport badEvidence() {
+        LlmEvaluationVersion version = new LlmEvaluationVersion(
+            "openai", "gpt-next", "prompt-v1", "context-v1", "schema-v1", "chunk-v1",
+            new BigDecimal("0.1"), "rule-v1", "code-v1"
+        );
+        LlmEvaluationDatasetMetadata dataset = new LlmEvaluationDatasetMetadata(
+            "dataset-1", "v1", LlmEvaluationDatasetMetadata.DatasetKind.REAL_PR, 2, 50, 25, 25,
+            true, true, true, FINGERPRINT
+        );
+        LlmEvaluationMetrics metrics = new LlmEvaluationMetrics(
+            1, 1, 0, 1, 1, 1, 0, new BigDecimal("1"), BigDecimal.ZERO, new BigDecimal("1"),
+            new BigDecimal("1"), BigDecimal.ZERO, 16000L, 16000L, new BigDecimal("16000"),
+            new BigDecimal("100"), new BigDecimal("1"), 1L, 1L, 1L,
+            new BigDecimal(".33"), new BigDecimal(".33"), new BigDecimal(".34")
+        );
+        LlmEvaluationReport report = new LlmEvaluationReport(
+            version, FINGERPRINT, 50, 10, 10, 8, 2, 2, new BigDecimal("0.80"), new BigDecimal("0.70"),
+            new BigDecimal("0.70"), new BigDecimal("0.50"), new BigDecimal("0.10"), new BigDecimal("0.10"),
+            Map.of(), 800000L, 5000L, new BigDecimal("50"), List.of(), true, dataset, metrics
+        );
+        return new LlmModelReleaseRepository.StoredEvaluationReport(79L, "bad-report", "COMPLETED", "tester", LocalDateTime.now(), report);
     }
 
     private LlmModelReleaseDto release(long id, String state, int traffic, String model, boolean qualityGatePassed) {

@@ -12,8 +12,34 @@
 
 .policy-governance-card,
 .quality-groups-card,
-.calibration-card {
+.calibration-card,
+.evaluation-workbench-card {
   overflow: hidden;
+}
+
+.evaluation-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.evaluation-report-table {
+  margin-bottom: 14px;
+}
+
+.evaluation-report-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.evaluation-report-cell span,
+.evaluation-report-detail span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.evaluation-report-detail {
+  margin-top: 14px;
 }
 
 .policy-governance-heading {
@@ -315,7 +341,8 @@
   .policy-governance-heading,
   .policy-governance-actions,
   .calibration-actions,
-  .calibration-version-banner {
+  .calibration-version-banner,
+  .evaluation-actions {
     flex-direction: column;
     align-items: stretch;
   }

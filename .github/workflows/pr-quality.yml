@@ -289,7 +289,7 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
-      - name: Run V76 to V81 upgrade-path test
+      - name: Run V76 to V84 upgrade-path test
         working-directory: repoguard-backend
         run: ./mvnw -B -Dtest=FlywayMigrationUpgradePathIntegrationTest test
 

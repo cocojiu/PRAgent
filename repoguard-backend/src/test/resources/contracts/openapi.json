@@ -1448,6 +1448,284 @@
         }
       }
     },
+    "/api/v1/config/review-calibration/evaluation-reports" : {
+      "get" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerListEvaluationReports",
+        "x-controller-operation" : "ReviewCalibrationController#listEvaluationReports",
+        "parameters" : [ {
+          "name" : "limit",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 100,
+            "default" : 30
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "List<EvaluationReportDto>",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "array",
+                      "items" : {
+                        "$ref" : "#/components/schemas/EvaluationReportDto"
+                      }
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerCreateEvaluationReport",
+        "x-controller-operation" : "ReviewCalibrationController#createEvaluationReport",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "LlmEvaluationRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/LlmEvaluationRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "EvaluationReportDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/EvaluationReportDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-calibration/evaluation-reports/{reportId}" : {
+      "get" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerGetEvaluationReport",
+        "x-controller-operation" : "ReviewCalibrationController#getEvaluationReport",
+        "parameters" : [ {
+          "name" : "reportId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "EvaluationReportDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/EvaluationReportDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-calibration/evaluation-reports/{reportId}/compare/{candidateReportId}" : {
+      "get" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerCompareEvaluationReports",
+        "x-controller-operation" : "ReviewCalibrationController#compareEvaluationReports",
+        "parameters" : [ {
+          "name" : "reportId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        }, {
+          "name" : "candidateReportId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "EvaluationReportComparisonDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/EvaluationReportComparisonDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-calibration/evaluation-reports/{reportId}/export" : {
+      "get" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerExportEvaluationReport",
+        "x-controller-operation" : "ReviewCalibrationController#exportEvaluationReport",
+        "parameters" : [ {
+          "name" : "reportId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        }, {
+          "name" : "format",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 8,
+            "default" : "json"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "EvaluationExportDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/EvaluationExportDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/config/review-calibration/queue" : {
       "get" : {
         "tags" : [ "ReviewCalibration" ],
@@ -8252,6 +8530,309 @@
         },
         "required" : [ "expectedStatus", "targetStatus", "expectedVersion", "reason" ]
       },
+      "EvaluationExportDto" : {
+        "type" : "object",
+        "x-java-type" : "EvaluationExportDto",
+        "properties" : {
+          "reportId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "format" : {
+            "type" : "string"
+          },
+          "contentSha256" : {
+            "type" : "string"
+          },
+          "content" : {
+            "type" : "string"
+          }
+        }
+      },
+      "EvaluationMetricsDto" : {
+        "type" : "object",
+        "x-java-type" : "EvaluationMetricsDto",
+        "properties" : {
+          "labeledComments" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "usefulComments" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "falsePositiveComments" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "publishAttempts" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "publishedComments" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "fixedComments" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "ignoredComments" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "usefulCommentRate" : {
+            "type" : "number"
+          },
+          "falsePositiveCommentRate" : {
+            "type" : "number"
+          },
+          "publishSuccessRate" : {
+            "type" : "number"
+          },
+          "fixRate" : {
+            "type" : "number"
+          },
+          "ignoredRate" : {
+            "type" : "number"
+          },
+          "p50LatencyMs" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "p95LatencyMs" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "averageLatencyMs" : {
+            "type" : "number"
+          },
+          "averageTokensPerSample" : {
+            "type" : "number"
+          },
+          "averageCostPerSample" : {
+            "type" : "number"
+          },
+          "ruleFindings" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "llmFindings" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "verifiedFindings" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "ruleContributionRate" : {
+            "type" : "number"
+          },
+          "llmContributionRate" : {
+            "type" : "number"
+          },
+          "verifiedContributionRate" : {
+            "type" : "number"
+          }
+        }
+      },
+      "EvaluationReportComparisonDto" : {
+        "type" : "object",
+        "x-java-type" : "EvaluationReportComparisonDto",
+        "properties" : {
+          "baselineReportId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "candidateReportId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "precisionDelta" : {
+            "type" : "number"
+          },
+          "recallDelta" : {
+            "type" : "number"
+          },
+          "anchorRateDelta" : {
+            "type" : "number"
+          },
+          "duplicateRateDelta" : {
+            "type" : "number"
+          },
+          "parseFailureRateDelta" : {
+            "type" : "number"
+          },
+          "p95LatencyDeltaMs" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "costDelta" : {
+            "type" : "number"
+          },
+          "candidateImproved" : {
+            "type" : "boolean"
+          },
+          "blockers" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          }
+        }
+      },
+      "EvaluationReportDto" : {
+        "type" : "object",
+        "x-java-type" : "EvaluationReportDto",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "reportKey" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "datasetId" : {
+            "type" : "string"
+          },
+          "datasetVersion" : {
+            "type" : "string"
+          },
+          "datasetKind" : {
+            "type" : "string"
+          },
+          "sourceRepositoryCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "sampleCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "fixedRegressionSamples" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "rollingObservationSamples" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "authorized" : {
+            "type" : "boolean"
+          },
+          "anonymized" : {
+            "type" : "boolean"
+          },
+          "humanReviewed" : {
+            "type" : "boolean"
+          },
+          "sampleFingerprint" : {
+            "type" : "string"
+          },
+          "provider" : {
+            "type" : "string"
+          },
+          "model" : {
+            "type" : "string"
+          },
+          "promptVersion" : {
+            "type" : "string"
+          },
+          "contextVersion" : {
+            "type" : "string"
+          },
+          "schemaVersion" : {
+            "type" : "string"
+          },
+          "chunkPolicyVersion" : {
+            "type" : "string"
+          },
+          "temperature" : {
+            "type" : "number"
+          },
+          "ruleVersion" : {
+            "type" : "string"
+          },
+          "codeRevision" : {
+            "type" : "string"
+          },
+          "expectedFindings" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "predictedFindings" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "truePositives" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "falsePositives" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "falseNegatives" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "precision" : {
+            "type" : "number"
+          },
+          "recall" : {
+            "type" : "number"
+          },
+          "precisionWilsonLowerBound" : {
+            "type" : "number"
+          },
+          "anchorRate" : {
+            "type" : "number"
+          },
+          "duplicateRate" : {
+            "type" : "number"
+          },
+          "parseFailureRate" : {
+            "type" : "number"
+          },
+          "severityConfusion" : {
+            "type" : "object",
+            "x-java-type" : "Map<String,Map<String,Long>>"
+          },
+          "totalLatencyMs" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "totalTokens" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "totalCost" : {
+            "type" : "number"
+          },
+          "blockers" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "eligible" : {
+            "type" : "boolean"
+          },
+          "metrics" : {
+            "$ref" : "#/components/schemas/EvaluationMetricsDto"
+          },
+          "createdBy" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
       "FailedRuleStatDto" : {
         "type" : "object",
         "x-java-type" : "FailedRuleStatDto",
@@ -9010,6 +9591,244 @@
           }
         }
       },
+      "LlmEvaluationObservationRequest" : {
+        "type" : "object",
+        "x-java-type" : "LlmEvaluationObservationRequest",
+        "properties" : {
+          "caseId" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "category" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 64
+          },
+          "expectedFinding" : {
+            "type" : "boolean"
+          },
+          "expectedSeverity" : {
+            "type" : "string",
+            "maxLength" : 32
+          },
+          "predictedFinding" : {
+            "type" : "boolean"
+          },
+          "predictedSeverity" : {
+            "type" : "string",
+            "maxLength" : 32
+          },
+          "anchorValid" : {
+            "type" : "boolean"
+          },
+          "predictionKey" : {
+            "type" : "string",
+            "maxLength" : 256
+          },
+          "parseSucceeded" : {
+            "type" : "boolean"
+          },
+          "latencyMs" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 0
+          },
+          "totalTokens" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 0
+          },
+          "estimatedCost" : {
+            "type" : "number",
+            "minimum" : 0.0
+          },
+          "usefulComment" : {
+            "type" : "boolean"
+          },
+          "commentPublishAttempted" : {
+            "type" : "boolean"
+          },
+          "commentPublished" : {
+            "type" : "boolean"
+          },
+          "commentFixed" : {
+            "type" : "boolean"
+          },
+          "commentIgnored" : {
+            "type" : "boolean"
+          },
+          "ruleFindingCount" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 0
+          },
+          "llmFindingCount" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 0
+          },
+          "verifiedFindingCount" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 0
+          },
+          "split" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "(?i)FIXED_REGRESSION|ROLLING_OBSERVATION|UNSPECIFIED"
+          },
+          "sourceRepositoryKey" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "[a-z0-9][a-z0-9._-]{0,63}"
+          },
+          "language" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "[a-z0-9][a-z0-9._-]{0,63}"
+          },
+          "changedFileCount" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 0
+          },
+          "changedLineCount" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 0
+          },
+          "fileTypeGroup" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "[a-z0-9][a-z0-9._-]{0,63}"
+          },
+          "expectedLocationKey" : {
+            "type" : "string",
+            "pattern" : "[a-z0-9][a-z0-9._-]{0,127}"
+          }
+        },
+        "required" : [ "caseId", "category", "expectedFinding", "predictedFinding", "anchorValid", "parseSucceeded", "latencyMs", "totalTokens", "estimatedCost", "commentPublishAttempted", "ruleFindingCount", "llmFindingCount", "verifiedFindingCount", "split", "sourceRepositoryKey", "language", "changedFileCount", "changedLineCount", "fileTypeGroup" ]
+      },
+      "LlmEvaluationRequest" : {
+        "type" : "object",
+        "x-java-type" : "LlmEvaluationRequest",
+        "properties" : {
+          "datasetId" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "datasetVersion" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 64
+          },
+          "datasetKind" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "(?i)REAL_PR|OFFLINE_SYNTHETIC"
+          },
+          "sourceRepositoryCount" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 0,
+            "maximum" : 3
+          },
+          "sampleCount" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 0,
+            "maximum" : 100
+          },
+          "fixedRegressionSamples" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 0,
+            "maximum" : 100
+          },
+          "rollingObservationSamples" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 0,
+            "maximum" : 100
+          },
+          "authorized" : {
+            "type" : "boolean"
+          },
+          "anonymized" : {
+            "type" : "boolean"
+          },
+          "humanReviewed" : {
+            "type" : "boolean"
+          },
+          "sampleFingerprint" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "(?i)[0-9a-f]{64}"
+          },
+          "provider" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 64
+          },
+          "model" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "promptVersion" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 96
+          },
+          "contextVersion" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 96
+          },
+          "schemaVersion" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 96
+          },
+          "chunkPolicyVersion" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "temperature" : {
+            "type" : "number",
+            "minimum" : 0.0,
+            "maximum" : 2.0
+          },
+          "ruleVersion" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 96
+          },
+          "codeRevision" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "observations" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/LlmEvaluationObservationRequest"
+            },
+            "minItems" : 1,
+            "maxItems" : 100
+          },
+          "minimumSamples" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 30,
+            "maximum" : 100
+          }
+        },
+        "required" : [ "datasetId", "datasetVersion", "datasetKind", "sourceRepositoryCount", "sampleCount", "fixedRegressionSamples", "rollingObservationSamples", "authorized", "anonymized", "humanReviewed", "sampleFingerprint", "provider", "model", "promptVersion", "contextVersion", "schemaVersion", "chunkPolicyVersion", "temperature", "ruleVersion", "codeRevision", "observations" ]
+      },
       "LlmModelBudgetDto" : {
         "type" : "object",
         "x-java-type" : "LlmModelBudgetDto",
@@ -9171,6 +9990,10 @@
           "updatedAt" : {
             "type" : "string",
             "format" : "date-time"
+          },
+          "evaluationReportId" : {
+            "type" : "integer",
+            "format" : "int64"
           }
         }
       },
@@ -9277,6 +10100,11 @@
               "type" : "string"
             },
             "maxItems" : 10
+          },
+          "evaluationReportId" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
           }
         },
         "required" : [ "releaseKey", "provider", "modelName", "promptVersion", "contextVersion", "schemaVersion", "datasetId", "datasetVersion", "datasetFingerprint", "trafficPercent", "qualityGatePassed", "precisionRate", "recallRate", "anchorRate", "duplicateRate", "parseFailureRate", "p95LatencyMs", "averageCost", "totalTokens" ]

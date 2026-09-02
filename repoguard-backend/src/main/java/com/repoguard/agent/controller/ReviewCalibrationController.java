@@ -5,6 +5,7 @@ import com.repoguard.agent.config.ApiRuntimeEnabled;
 import com.repoguard.agent.dto.LlmModelReleaseCenterDto;
 import com.repoguard.agent.dto.LlmModelReleaseDto;
 import com.repoguard.agent.dto.LlmModelReleaseRequest;
+import com.repoguard.agent.dto.LlmModelReleaseRequest.LlmEvaluationRequest;
 import com.repoguard.agent.dto.LlmModelRollbackRequest;
 import com.repoguard.agent.dto.ReviewCalibrationQueueDto;
 import com.repoguard.agent.review.quality.LlmModelReleaseService;
@@ -85,6 +86,45 @@ public class ReviewCalibrationController {
             request,
             RequestAuthentication.require(servletRequest).username()
         ));
+    }
+
+    @PostMapping("/evaluation-reports")
+    public ApiResponse<LlmModelReleaseDto.EvaluationReportDto> createEvaluationReport(
+        @Valid @RequestBody LlmEvaluationRequest request,
+        HttpServletRequest servletRequest
+    ) {
+        return ApiResponse.ok(requireReleaseService().createEvaluationReport(request,
+            RequestAuthentication.require(servletRequest).username()));
+    }
+
+    @GetMapping("/evaluation-reports")
+    public ApiResponse<java.util.List<LlmModelReleaseDto.EvaluationReportDto>> listEvaluationReports(
+        @RequestParam(defaultValue = "30") @Min(1) @Max(100) int limit
+    ) {
+        return ApiResponse.ok(requireReleaseService().listEvaluationReports(limit));
+    }
+
+    @GetMapping("/evaluation-reports/{reportId}")
+    public ApiResponse<LlmModelReleaseDto.EvaluationReportDto> getEvaluationReport(
+        @PathVariable @Min(1) long reportId
+    ) {
+        return ApiResponse.ok(requireReleaseService().getEvaluationReport(reportId));
+    }
+
+    @GetMapping("/evaluation-reports/{reportId}/compare/{candidateReportId}")
+    public ApiResponse<LlmModelReleaseDto.EvaluationReportComparisonDto> compareEvaluationReports(
+        @PathVariable @Min(1) long reportId,
+        @PathVariable @Min(1) long candidateReportId
+    ) {
+        return ApiResponse.ok(requireReleaseService().compareEvaluationReports(reportId, candidateReportId));
+    }
+
+    @GetMapping("/evaluation-reports/{reportId}/export")
+    public ApiResponse<LlmModelReleaseDto.EvaluationExportDto> exportEvaluationReport(
+        @PathVariable @Min(1) long reportId,
+        @RequestParam(defaultValue = "json") @Size(max = 8) String format
+    ) {
+        return ApiResponse.ok(requireReleaseService().exportEvaluationReport(reportId, format));
     }
 
     @PostMapping("/release-center/{releaseId}/rollback")

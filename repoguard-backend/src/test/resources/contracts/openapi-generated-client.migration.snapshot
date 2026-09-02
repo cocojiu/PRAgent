@@ -3,11 +3,14 @@ bindEnterpriseTenantMembership -> enterpriseTenantControllerPutMembership // PUT
 bindEnterpriseTenantRepository -> enterpriseTenantControllerPutRepository // PUT /api/v1/enterprise/tenants/{tenantKey}/repositories
 changePassword -> authControllerChangePassword // POST /api/v1/auth/password/change
 cleanupDataRetention -> dataRetentionControllerCleanup // POST /api/v1/config/data-retention/cleanup
+compareLlmEvaluationReports -> reviewCalibrationControllerCompareEvaluationReports // GET /api/v1/config/review-calibration/evaluation-reports/{reportId}/compare/{candidateReportId}
 createEnterpriseTenant -> enterpriseTenantControllerCreate // POST /api/v1/enterprise/tenants
+createLlmEvaluationReport -> reviewCalibrationControllerCreateEvaluationReport // POST /api/v1/config/review-calibration/evaluation-reports
 createNotificationBinding -> notificationIntegrationControllerCreateBinding // POST /api/v1/config/notification-bindings
 createReviewRule -> systemConfigControllerCreateReviewRule // POST /api/v1/config/review-rules
 createUser -> userManagementControllerCreateUser // POST /api/v1/users
 deleteNotificationBinding -> notificationIntegrationControllerDeleteBinding // DELETE /api/v1/config/notification-bindings/{id}
+exportLlmEvaluationReport -> reviewCalibrationControllerExportEvaluationReport // GET /api/v1/config/review-calibration/evaluation-reports/{reportId}/export
 fetchCacheStats -> cacheStatsControllerGetStats // GET /api/v1/cache/stats
 fetchDashboardHighRiskReviews -> dashboardControllerGetHighRiskReviews // GET /api/v1/dashboard/high-risk-reviews
 fetchDashboardLlmQuality -> dashboardControllerGetLlmQuality // GET /api/v1/dashboard/llm-quality
@@ -24,6 +27,8 @@ fetchGithubCommentPreview -> reviewControllerGetGithubCommentPreview // GET /api
 fetchGithubCommentPublicationHistory -> reviewControllerGetGithubCommentPublicationHistory // GET /api/v1/reviews/{id}/github-comments/publications
 fetchGithubIntegrationConfig -> systemConfigControllerGetGithubIntegration // GET /api/v1/config/integrations/github
 fetchGithubPullRequestOptions -> reviewControllerListConfiguredGithubPullRequests // GET /api/v1/reviews/github/pull-requests
+fetchLlmEvaluationReport -> reviewCalibrationControllerGetEvaluationReport // GET /api/v1/config/review-calibration/evaluation-reports/{reportId}
+fetchLlmEvaluationReports -> reviewCalibrationControllerListEvaluationReports // GET /api/v1/config/review-calibration/evaluation-reports
 fetchLlmModelReleaseCenter -> reviewCalibrationControllerGetModelReleaseCenter // GET /api/v1/config/review-calibration/release-center
 fetchMessageQueueHealth -> messageQueueHealthControllerGetHealth // GET /api/v1/message-queue/health
 fetchMysqlIntegrationConfig -> systemConfigControllerGetMysqlIntegration // GET /api/v1/config/integrations/mysql

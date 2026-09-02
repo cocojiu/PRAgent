@@ -28,6 +28,10 @@ import type {
   GithubIntegrationConfigRequest,
   GithubPullRequestOptions,
   HighRiskReview,
+  LlmEvaluationExport,
+  LlmEvaluationReport,
+  LlmEvaluationReportComparison,
+  LlmEvaluationRequest,
   LlmModelRelease,
   LlmModelReleaseCenter,
   LlmModelReleaseRequest,
@@ -337,6 +341,34 @@ export type GeneratedOpenApiOperationMap = {
     body: NotificationBindingStatusRequest;
     response: NotificationBinding;
   };
+  "reviewCalibrationControllerCompareEvaluationReports": {
+    method: "GET";
+    pathParams: { candidateReportId: number; reportId: number };
+    query: never;
+    body: never;
+    response: LlmEvaluationReportComparison;
+  };
+  "reviewCalibrationControllerCreateEvaluationReport": {
+    method: "POST";
+    pathParams: never;
+    query: never;
+    body: LlmEvaluationRequest;
+    response: LlmEvaluationReport;
+  };
+  "reviewCalibrationControllerExportEvaluationReport": {
+    method: "GET";
+    pathParams: { reportId: number };
+    query: { format?: string };
+    body: never;
+    response: LlmEvaluationExport;
+  };
+  "reviewCalibrationControllerGetEvaluationReport": {
+    method: "GET";
+    pathParams: { reportId: number };
+    query: never;
+    body: never;
+    response: LlmEvaluationReport;
+  };
   "reviewCalibrationControllerGetModelReleaseCenter": {
     method: "GET";
     pathParams: never;
@@ -350,6 +382,13 @@ export type GeneratedOpenApiOperationMap = {
     query: { includeIgnored?: boolean; limit?: number; ruleId: string };
     body: never;
     response: ReviewCalibrationQueue;
+  };
+  "reviewCalibrationControllerListEvaluationReports": {
+    method: "GET";
+    pathParams: never;
+    query: { limit?: number };
+    body: never;
+    response: LlmEvaluationReport[];
   };
   "reviewCalibrationControllerPromoteModelRelease": {
     method: "POST";
@@ -1059,6 +1098,38 @@ export const generatedOpenApiOperations = {
     hasRequestBody: true,
     requestBodyRequired: true
   },
+  "reviewCalibrationControllerCompareEvaluationReports": {
+    method: "GET",
+    path: "/api/v1/config/review-calibration/evaluation-reports/{reportId}/compare/{candidateReportId}",
+    pathParamNames: ["candidateReportId", "reportId"],
+    queryParamNames: [],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "reviewCalibrationControllerCreateEvaluationReport": {
+    method: "POST",
+    path: "/api/v1/config/review-calibration/evaluation-reports",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "reviewCalibrationControllerExportEvaluationReport": {
+    method: "GET",
+    path: "/api/v1/config/review-calibration/evaluation-reports/{reportId}/export",
+    pathParamNames: ["reportId"],
+    queryParamNames: ["format"],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "reviewCalibrationControllerGetEvaluationReport": {
+    method: "GET",
+    path: "/api/v1/config/review-calibration/evaluation-reports/{reportId}",
+    pathParamNames: ["reportId"],
+    queryParamNames: [],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
   "reviewCalibrationControllerGetModelReleaseCenter": {
     method: "GET",
     path: "/api/v1/config/review-calibration/release-center",
@@ -1072,6 +1143,14 @@ export const generatedOpenApiOperations = {
     path: "/api/v1/config/review-calibration/queue",
     pathParamNames: [],
     queryParamNames: ["includeIgnored", "limit", "ruleId"],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "reviewCalibrationControllerListEvaluationReports": {
+    method: "GET",
+    path: "/api/v1/config/review-calibration/evaluation-reports",
+    pathParamNames: [],
+    queryParamNames: ["limit"],
     hasRequestBody: false,
     requestBodyRequired: false
   },

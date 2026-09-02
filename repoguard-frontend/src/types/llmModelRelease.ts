@@ -19,6 +19,7 @@ export interface LlmModelReleaseRequest {
   averageCost: number;
   totalTokens: number;
   blockers?: string[];
+  evaluationReportId?: number;
 }
 
 export interface LlmModelRollbackRequest {
@@ -52,6 +53,155 @@ export interface LlmModelRelease {
   createdBy: string;
   createdAt?: string;
   updatedAt?: string;
+  evaluationReportId?: number;
+}
+
+export interface LlmEvaluationObservationRequest {
+  caseId: string;
+  category: string;
+  expectedFinding: boolean;
+  expectedSeverity?: string;
+  predictedFinding: boolean;
+  predictedSeverity?: string;
+  anchorValid: boolean;
+  predictionKey?: string;
+  parseSucceeded: boolean;
+  latencyMs: number;
+  totalTokens: number;
+  estimatedCost: number;
+  usefulComment?: boolean;
+  commentPublishAttempted: boolean;
+  commentPublished?: boolean;
+  commentFixed?: boolean;
+  commentIgnored?: boolean;
+  ruleFindingCount: number;
+  llmFindingCount: number;
+  verifiedFindingCount: number;
+  split: "FIXED_REGRESSION" | "ROLLING_OBSERVATION" | "UNSPECIFIED" | string;
+  sourceRepositoryKey: string;
+  language: string;
+  changedFileCount: number;
+  changedLineCount: number;
+  fileTypeGroup: string;
+  expectedLocationKey?: string;
+}
+
+export interface LlmEvaluationRequest {
+  datasetId: string;
+  datasetVersion: string;
+  datasetKind: "REAL_PR" | "OFFLINE_SYNTHETIC" | string;
+  sourceRepositoryCount: number;
+  sampleCount: number;
+  fixedRegressionSamples: number;
+  rollingObservationSamples: number;
+  authorized: boolean;
+  anonymized: boolean;
+  humanReviewed: boolean;
+  sampleFingerprint: string;
+  provider: string;
+  model: string;
+  promptVersion: string;
+  contextVersion: string;
+  schemaVersion: string;
+  chunkPolicyVersion: string;
+  temperature: number;
+  ruleVersion: string;
+  codeRevision: string;
+  observations: LlmEvaluationObservationRequest[];
+  minimumSamples?: number;
+}
+
+export interface LlmEvaluationMetrics {
+  labeledComments: number;
+  usefulComments: number;
+  falsePositiveComments: number;
+  publishAttempts: number;
+  publishedComments: number;
+  fixedComments: number;
+  ignoredComments: number;
+  usefulCommentRate: number;
+  falsePositiveCommentRate: number;
+  publishSuccessRate: number;
+  fixRate: number;
+  ignoredRate: number;
+  p50LatencyMs: number;
+  p95LatencyMs: number;
+  averageLatencyMs: number;
+  averageTokensPerSample: number;
+  averageCostPerSample: number;
+  ruleFindings: number;
+  llmFindings: number;
+  verifiedFindings: number;
+  ruleContributionRate: number;
+  llmContributionRate: number;
+  verifiedContributionRate: number;
+}
+
+export interface LlmEvaluationReport {
+  id: number;
+  reportKey: string;
+  status: string;
+  datasetId: string;
+  datasetVersion: string;
+  datasetKind: string;
+  sourceRepositoryCount: number;
+  sampleCount: number;
+  fixedRegressionSamples: number;
+  rollingObservationSamples: number;
+  authorized: boolean;
+  anonymized: boolean;
+  humanReviewed: boolean;
+  sampleFingerprint: string;
+  provider: string;
+  model: string;
+  promptVersion: string;
+  contextVersion: string;
+  schemaVersion: string;
+  chunkPolicyVersion: string;
+  temperature: number;
+  ruleVersion: string;
+  codeRevision: string;
+  expectedFindings: number;
+  predictedFindings: number;
+  truePositives: number;
+  falsePositives: number;
+  falseNegatives: number;
+  precision: number;
+  recall: number;
+  precisionWilsonLowerBound: number;
+  anchorRate: number;
+  duplicateRate: number;
+  parseFailureRate: number;
+  severityConfusion: Record<string, Record<string, number>>;
+  totalLatencyMs: number;
+  totalTokens: number;
+  totalCost: number;
+  blockers: string[];
+  eligible: boolean;
+  metrics: LlmEvaluationMetrics;
+  createdBy: string;
+  createdAt?: string;
+}
+
+export interface LlmEvaluationReportComparison {
+  baselineReportId: number;
+  candidateReportId: number;
+  precisionDelta: number;
+  recallDelta: number;
+  anchorRateDelta: number;
+  duplicateRateDelta: number;
+  parseFailureRateDelta: number;
+  p95LatencyDeltaMs: number;
+  costDelta: number;
+  candidateImproved: boolean;
+  blockers: string[];
+}
+
+export interface LlmEvaluationExport {
+  reportId: number;
+  format: "json" | "html" | string;
+  contentSha256: string;
+  content: string;
 }
 
 export interface LlmModelBudget {
