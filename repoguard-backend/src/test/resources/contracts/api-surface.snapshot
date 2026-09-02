@@ -54,6 +54,7 @@ GET /api/v1/reviews/{taskId}/attempts query=[] body=- bodyRequired=false
 GET /api/v1/reviews/{taskId}/attempts/{attemptId} query=[page, pageSize] body=- bodyRequired=false
 GET /api/v1/reviews/{taskId}/attempts/{attemptId}/changed-files query=[cursor, limit] body=- bodyRequired=false
 GET /api/v1/reviews/{taskId}/attempts/{attemptId}/findings query=[cursor, limit] body=- bodyRequired=false
+GET /api/v1/reviews/{taskId}/attempts/{candidateAttemptId}/comparison query=[baselineAttemptId, page, pageSize] body=- bodyRequired=false
 GET /api/v1/scanners/sarif/tasks/{taskId}/export query=[] body=- bodyRequired=false
 GET /api/v1/scm/providers query=[] body=- bodyRequired=false
 GET /api/v1/scm/providers/{provider}/change-requests query=[] body=- bodyRequired=false

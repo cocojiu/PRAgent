@@ -86,6 +86,7 @@ import type {
   ReviewQuery,
   ReviewExecutionAttempt,
   ReviewExecutionAttemptResult,
+  ReviewAttemptComparison,
   ReviewCalibrationQueue,
   ReviewRuleConfig,
   ReviewRuleConfigRequest,
@@ -230,6 +231,10 @@ export type ApiContract = {
   fetchReviewExecutionAttemptResult: ApiOperation<
     { taskId: number; attemptId: number; page?: number; pageSize?: number },
     ReviewExecutionAttemptResult
+  >;
+  fetchReviewAttemptComparison: ApiOperation<
+    { taskId: number; candidateAttemptId: number; baselineAttemptId?: number; page?: number; pageSize?: number },
+    ReviewAttemptComparison
   >;
   fetchReviewRepositories: ApiOperation<undefined, string[]>;
   fetchReviewStatus: ApiOperation<{ id: number }, ReviewTaskStatus>;
@@ -478,6 +483,14 @@ const apiEndpoints: ApiEndpointMap = {
   fetchReviewExecutionAttemptResult: generatedEndpoint("reviewExecutionAttemptControllerGetResult", {
     path: input => ({ taskId: input.taskId, attemptId: input.attemptId }),
     query: input => ({ page: input.page, pageSize: input.pageSize })
+  }),
+  fetchReviewAttemptComparison: generatedEndpoint("reviewExecutionAttemptComparisonControllerCompare", {
+    path: input => ({ taskId: input.taskId, candidateAttemptId: input.candidateAttemptId }),
+    query: input => ({
+      baselineAttemptId: input.baselineAttemptId,
+      page: input.page,
+      pageSize: input.pageSize
+    })
   }),
   fetchReviewRepositories: generatedEndpoint("reviewControllerListRepositories", {}),
   fetchReviewStatus: generatedEndpoint("reviewControllerGetReviewStatus", {

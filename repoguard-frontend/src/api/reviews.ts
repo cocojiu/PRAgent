@@ -56,6 +56,12 @@ export const fetchReviewExecutionAttemptResult = (
   params?: { page?: number; pageSize?: number }
 ) => apiRequest("fetchReviewExecutionAttemptResult", { taskId, attemptId, ...params });
 
+export const fetchReviewAttemptComparison = (
+  taskId: number,
+  candidateAttemptId: number,
+  params?: { baselineAttemptId?: number; page?: number; pageSize?: number }
+) => apiRequest("fetchReviewAttemptComparison", { taskId, candidateAttemptId, ...params });
+
 export const fetchReviewRepositories = () =>
   apiRequest("fetchReviewRepositories", undefined);
 

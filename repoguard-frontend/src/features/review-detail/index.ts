@@ -5,7 +5,9 @@ export { default as ReviewDetailHumanReviewCard } from "./components/ReviewDetai
 export { default as ReviewDetailKpiGrid } from "./components/ReviewDetailKpiGrid.vue";
 export { default as ReviewDetailSidePanel } from "./components/ReviewDetailSidePanel.vue";
 export { default as ReviewDetailSummaryCard } from "./components/ReviewDetailSummaryCard.vue";
+export { default as ReviewDetailAttemptComparisonCard } from "./components/ReviewDetailAttemptComparisonCard.vue";
 export { useReviewDetailDerivedCollections } from "./composables/useReviewDetailDerivedCollections";
+export { useReviewDetailAttemptComparison } from "./composables/useReviewDetailAttemptComparison";
 export { useReviewDetailFindingFeedback } from "./composables/useReviewDetailFindingFeedback";
 export { useReviewDetailGithubCommentPublishConfirm } from "./composables/useReviewDetailGithubCommentPublishConfirm";
 export { useReviewDetailGithubComments } from "./composables/useReviewDetailGithubComments";

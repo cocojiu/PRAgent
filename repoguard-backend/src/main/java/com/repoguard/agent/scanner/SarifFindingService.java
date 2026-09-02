@@ -14,6 +14,8 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ReviewExecutionAttemptMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
+import com.repoguard.agent.review.ReviewFindingIdentity;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -247,6 +249,11 @@ public class SarifFindingService {
         finding.setBlockReason("");
         finding.setAnchorType("ADDED_LINE");
         finding.setReviewDimension("SECURITY");
+        finding.setFindingFingerprint(ReviewFindingIdentity.fingerprint(taskId, finding));
+        finding.setComparisonStatus("UNMATCHED");
+        finding.setComparisonConfidence(BigDecimal.ZERO);
+        finding.setComparisonReason("PENDING_COMPARISON");
+        finding.setComparisonVersion(ReviewFindingIdentity.VERSION);
         return finding;
     }
     private Map<String, String> ruleHelp(JsonNode rules) {

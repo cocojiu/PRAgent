@@ -244,7 +244,14 @@ public class ReviewExecutionAttemptQueryService {
             finding.getContextVersion(),
             finding.getSchemaVersion(),
             finding.getVerifierVersion(),
-            finding.getAggregationVersion()
+            finding.getAggregationVersion(),
+            finding.getFindingFingerprint(),
+            finding.getPreviousFindingId(),
+            finding.getComparisonStatus(),
+            finding.getComparisonConfidence(),
+            finding.getComparisonReason(),
+            finding.getComparisonVersion(),
+            finding.getComparisonAttemptId()
         );
     }
 }

@@ -39,6 +39,7 @@ fetchNotificationReadKeys -> notificationControllerReadKeys(): Promise<string[]>
 fetchNotificationReport -> notificationControllerReport(input?: { query?: { period?: string } }): Promise<NotificationReport>; // GET /api/v1/notifications/reports
 fetchNotifications -> notificationControllerGetNotifications(): Promise<NotificationCenter>; // GET /api/v1/notifications
 fetchRabbitMqIntegrationConfig -> systemConfigControllerGetRabbitMqIntegration(): Promise<ServiceIntegrationConfig>; // GET /api/v1/config/integrations/rabbitmq
+fetchReviewAttemptComparison -> reviewExecutionAttemptComparisonControllerCompare(input: { path: { candidateAttemptId: number; taskId: number }; query?: { baselineAttemptId?: number; page?: number; pageSize?: number } }): Promise<ReviewAttemptComparison>; // GET /api/v1/reviews/{taskId}/attempts/{candidateAttemptId}/comparison
 fetchReviewCalibrationQueue -> reviewCalibrationControllerGetReviewCalibrationQueue(input?: { query?: { includeIgnored?: boolean; limit?: number; ruleId: string } }): Promise<ReviewCalibrationQueue>; // GET /api/v1/config/review-calibration/queue
 fetchReviewChangedFiles -> reviewControllerListChangedFiles(input: { path: { id: number }; query?: { hasFinding?: boolean; page?: number; pageSize?: number } }): Promise<PageResponse<ChangedFile>>; // GET /api/v1/reviews/{id}/changed-files
 fetchReviewDetail -> reviewControllerGetReviewDetail(input: { path: { id: number } }): Promise<ReviewTaskSummary>; // GET /api/v1/reviews/{id}

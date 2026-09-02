@@ -39,6 +39,7 @@ fetchNotificationReadKeys -> notificationControllerReadKeys // GET /api/v1/notif
 fetchNotificationReport -> notificationControllerReport // GET /api/v1/notifications/reports
 fetchNotifications -> notificationControllerGetNotifications // GET /api/v1/notifications
 fetchRabbitMqIntegrationConfig -> systemConfigControllerGetRabbitMqIntegration // GET /api/v1/config/integrations/rabbitmq
+fetchReviewAttemptComparison -> reviewExecutionAttemptComparisonControllerCompare // GET /api/v1/reviews/{taskId}/attempts/{candidateAttemptId}/comparison
 fetchReviewCalibrationQueue -> reviewCalibrationControllerGetReviewCalibrationQueue // GET /api/v1/config/review-calibration/queue
 fetchReviewChangedFiles -> reviewControllerListChangedFiles // GET /api/v1/reviews/{id}/changed-files
 fetchReviewDetail -> reviewControllerGetReviewDetail // GET /api/v1/reviews/{id}

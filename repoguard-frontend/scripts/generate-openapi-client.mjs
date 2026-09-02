@@ -32,6 +32,7 @@ const migratedOperationPrefixes = [
   "reviewCalibrationController",
   "reviewController",
   "reviewExecutionAttemptController",
+  "reviewExecutionAttemptComparisonController",
   "notificationController",
   "notificationIntegrationController",
   "systemConfigController",

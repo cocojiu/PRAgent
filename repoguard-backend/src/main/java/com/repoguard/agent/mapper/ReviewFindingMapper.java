@@ -16,6 +16,41 @@ import org.apache.ibatis.annotations.Update;
 
 public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
 
+    @Select("""
+        select *
+        from review_finding
+        where task_id = #{taskId}
+          and category = 'FINDING'
+        order by attempt_id asc, id asc
+        """)
+    List<ReviewFinding> selectByTaskIdForComparison(@Param("taskId") Long taskId);
+
+    @Update("""
+        update review_finding
+        set finding_fingerprint = #{findingFingerprint},
+            previous_finding_id = #{previousFindingId},
+            comparison_status = #{comparisonStatus},
+            comparison_confidence = #{comparisonConfidence},
+            comparison_reason = #{comparisonReason},
+            comparison_version = #{comparisonVersion},
+            comparison_attempt_id = #{comparisonAttemptId}
+        where id = #{findingId}
+          and task_id = #{taskId}
+          and attempt_id = #{attemptId}
+        """)
+    int updateComparison(
+        @Param("findingId") Long findingId,
+        @Param("taskId") Long taskId,
+        @Param("attemptId") Long attemptId,
+        @Param("findingFingerprint") String findingFingerprint,
+        @Param("previousFindingId") Long previousFindingId,
+        @Param("comparisonStatus") String comparisonStatus,
+        @Param("comparisonConfidence") java.math.BigDecimal comparisonConfidence,
+        @Param("comparisonReason") String comparisonReason,
+        @Param("comparisonVersion") String comparisonVersion,
+        @Param("comparisonAttemptId") Long comparisonAttemptId
+    );
+
     @Update("""
         update review_finding
         set current_attempt = 0

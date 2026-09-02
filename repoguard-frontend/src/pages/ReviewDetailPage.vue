@@ -114,6 +114,16 @@
             :change-type-text="changeTypeText"
           />
 
+          <ReviewDetailAttemptComparisonCard
+            :attempts="attemptComparisonAttempts"
+            :comparison="attemptComparisonResult"
+            :error="attemptComparisonError"
+            :loading="attemptComparisonLoading"
+            :page="attemptComparisonPage"
+            :page-size="attemptComparisonPageSize"
+            @page-change="loadAttemptComparison"
+          />
+
           <ReviewDetailHumanReviewCard
             :can-manage="canManageHotTask"
             :can-submit-human-review="canSubmitHumanReview && !isArchivedTask"
@@ -250,6 +260,7 @@ import {
   ReviewDetailKpiGrid,
   ReviewDetailSidePanel,
   ReviewDetailSummaryCard,
+  ReviewDetailAttemptComparisonCard,
   changeTypeText,
   chunkAggregateRiskText,
   chunkReasonText,
@@ -270,6 +281,7 @@ import {
   repositoryText,
   sourceText,
   useReviewDetailDerivedCollections,
+  useReviewDetailAttemptComparison,
   useReviewDetailFindingFeedback,
   useReviewDetailGithubCommentPublishConfirm,
   useReviewDetailGithubComments,
@@ -334,9 +346,11 @@ const {
 let stopPolling = () => {};
 let syncPolling = () => {};
 let resetDetailSections = () => {};
+let loadAttemptComparison: (page?: number) => Promise<void> = async () => {};
 
 function afterDetailSummaryLoaded() {
   resetDetailSections();
+  void loadAttemptComparison();
 }
 
 const {
@@ -381,6 +395,16 @@ const isSupersededTask = computed(() => selectedTask.value?.status === "supersed
 const canLoadGithubComments = computed(() =>
   isTerminalTask.value && !isSupersededTask.value && !isArchivedTask.value
 );
+const attemptComparison = useReviewDetailAttemptComparison({ selectedTask, isArchivedTask });
+const {
+  attempts: attemptComparisonAttempts,
+  comparison: attemptComparisonResult,
+  error: attemptComparisonError,
+  loading: attemptComparisonLoading,
+  page: attemptComparisonPage,
+  pageSize: attemptComparisonPageSize
+} = attemptComparison;
+loadAttemptComparison = attemptComparison.load;
 const sectionLoaders = useReviewDetailSectionLoaders({ isArchivedTask, selectedTask });
 const {
   changedFilesLoaded,

@@ -2,6 +2,7 @@ package com.repoguard.agent.entity;
 
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @TableName("review_finding")
@@ -11,6 +12,13 @@ public class ReviewFinding {
     private Long id;
     private Long taskId;
     private Long attemptId;
+    private String findingFingerprint;
+    private Long previousFindingId;
+    private String comparisonStatus;
+    private BigDecimal comparisonConfidence;
+    private String comparisonReason;
+    private String comparisonVersion;
+    private Long comparisonAttemptId;
     private Long sourceBatchId;
     private Boolean currentAttempt;
     private String category;
@@ -63,6 +71,20 @@ public class ReviewFinding {
     public void setTaskId(Long taskId) { this.taskId = taskId; }
     public Long getAttemptId() { return attemptId; }
     public void setAttemptId(Long attemptId) { this.attemptId = attemptId; }
+    public String getFindingFingerprint() { return findingFingerprint; }
+    public void setFindingFingerprint(String findingFingerprint) { this.findingFingerprint = findingFingerprint; }
+    public Long getPreviousFindingId() { return previousFindingId; }
+    public void setPreviousFindingId(Long previousFindingId) { this.previousFindingId = previousFindingId; }
+    public String getComparisonStatus() { return comparisonStatus; }
+    public void setComparisonStatus(String comparisonStatus) { this.comparisonStatus = comparisonStatus; }
+    public BigDecimal getComparisonConfidence() { return comparisonConfidence; }
+    public void setComparisonConfidence(BigDecimal comparisonConfidence) { this.comparisonConfidence = comparisonConfidence; }
+    public String getComparisonReason() { return comparisonReason; }
+    public void setComparisonReason(String comparisonReason) { this.comparisonReason = comparisonReason; }
+    public String getComparisonVersion() { return comparisonVersion; }
+    public void setComparisonVersion(String comparisonVersion) { this.comparisonVersion = comparisonVersion; }
+    public Long getComparisonAttemptId() { return comparisonAttemptId; }
+    public void setComparisonAttemptId(Long comparisonAttemptId) { this.comparisonAttemptId = comparisonAttemptId; }
     public Long getSourceBatchId() { return sourceBatchId; }
     public void setSourceBatchId(Long sourceBatchId) { this.sourceBatchId = sourceBatchId; }
     public Boolean getCurrentAttempt() { return currentAttempt; }

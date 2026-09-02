@@ -50,6 +50,7 @@ import type {
   NotificationReadRequest,
   NotificationReport,
   PageResponse,
+  ReviewAttemptComparison,
   ReviewCalibrationQueue,
   ReviewEnforcementModeRequest,
   ReviewExecutionAttempt,
@@ -529,6 +530,13 @@ export type GeneratedOpenApiOperationMap = {
     query: never;
     body: FindingFeedbackRequest;
     response: FindingFeedbackResponse;
+  };
+  "reviewExecutionAttemptComparisonControllerCompare": {
+    method: "GET";
+    pathParams: { candidateAttemptId: number; taskId: number };
+    query: { baselineAttemptId?: number; page?: number; pageSize?: number };
+    body: never;
+    response: ReviewAttemptComparison;
   };
   "reviewExecutionAttemptControllerGetResult": {
     method: "GET";
@@ -1313,6 +1321,14 @@ export const generatedOpenApiOperations = {
     queryParamNames: [],
     hasRequestBody: true,
     requestBodyRequired: true
+  },
+  "reviewExecutionAttemptComparisonControllerCompare": {
+    method: "GET",
+    path: "/api/v1/reviews/{taskId}/attempts/{candidateAttemptId}/comparison",
+    pathParamNames: ["candidateAttemptId", "taskId"],
+    queryParamNames: ["baselineAttemptId", "page", "pageSize"],
+    hasRequestBody: false,
+    requestBodyRequired: false
   },
   "reviewExecutionAttemptControllerGetResult": {
     method: "GET",
