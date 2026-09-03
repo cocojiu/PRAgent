@@ -1,5 +1,6 @@
 package com.repoguard.agent.testsupport;
 
+import jakarta.servlet.http.HttpServletRequest;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.util.ArrayList;
@@ -146,12 +147,13 @@ public final class ControllerEndpointCatalog {
             .filter(parameter -> parameter.isAnnotationPresent(RequestBody.class))
             .map(parameter -> simpleTypeName(parameter.getType()))
             .findFirst()
-            .orElse("-");
+            .orElse(isStreamingRequestBody(method) ? "byte[]" : "-");
     }
 
     public static boolean hasRequestBody(Method method) {
         return List.of(method.getParameters()).stream()
-            .anyMatch(parameter -> parameter.isAnnotationPresent(RequestBody.class));
+            .anyMatch(parameter -> parameter.isAnnotationPresent(RequestBody.class))
+            || isStreamingRequestBody(method);
     }
 
     public static boolean requestBodyRequired(Method method) {
@@ -159,7 +161,24 @@ public final class ControllerEndpointCatalog {
             .filter(parameter -> parameter.isAnnotationPresent(RequestBody.class))
             .map(parameter -> parameter.getAnnotation(RequestBody.class).required())
             .findFirst()
-            .orElse(false);
+            .orElse(isStreamingRequestBody(method));
+    }
+
+    /**
+     * A servlet request parameter is Spring MVC's streaming body access path. Keep the
+     * externally reviewed contract as byte[] even though the implementation deliberately avoids
+     * @RequestBody byte[] buffering for this endpoint.
+     */
+    private static boolean isStreamingRequestBody(Method method) {
+        if (!method.isAnnotationPresent(PostMapping.class)) {
+            return false;
+        }
+        PostMapping mapping = method.getAnnotation(PostMapping.class);
+        if (mapping.consumes().length == 0) {
+            return false;
+        }
+        return List.of(method.getParameters()).stream()
+            .anyMatch(parameter -> parameter.getType() == HttpServletRequest.class);
     }
 
     public static String endpointId(Class<?> controller, Method method) {

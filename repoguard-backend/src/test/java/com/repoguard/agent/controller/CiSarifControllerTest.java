@@ -10,8 +10,10 @@ import com.repoguard.agent.dto.CiSarifCredentialResponse;
 import com.repoguard.agent.dto.CiSarifUploadResponse;
 import com.repoguard.agent.scanner.CiSarifUploadCredentialService;
 import com.repoguard.agent.scanner.CiSarifUploadService;
+import java.io.InputStream;
 import java.time.OffsetDateTime;
 import org.junit.jupiter.api.Test;
+import org.springframework.mock.web.MockHttpServletRequest;
 
 class CiSarifControllerTest {
 
@@ -54,6 +56,32 @@ class CiSarifControllerTest {
         verify(uploadService).upload(
             eq(9L), eq("credential"), eq("codeql"), eq("2.1"), eq("run-17"), eq("abc123"),
             eq("2026-09-03T10:00:00Z"), eq("application/json"), any()
+        );
+    }
+
+    @Test
+    void streamsHttpPayloadWithoutCreatingControllerByteArray() throws Exception {
+        var expected = new CiSarifUploadResponse(
+            9L, 17L, "codeql", "2.1", "run-stream", "abc123", "f".repeat(64),
+            OffsetDateTime.parse("2026-09-03T10:00:00Z"), "ACTIVE", 1, 0
+        );
+        when(uploadService.upload(
+            eq(9L), eq("credential"), eq("codeql"), eq("2.1"), eq("run-stream"), eq("abc123"),
+            eq("2026-09-03T10:00:00Z"), eq("application/json"), any(InputStream.class), eq(2L)
+        )).thenReturn(expected);
+
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setContentType("application/json");
+        request.setContent(new byte[] {1, 2});
+        var response = controller.upload(
+            9L, "credential", "codeql", "2.1", "run-stream", "abc123",
+            "2026-09-03T10:00:00Z", "application/json", request
+        );
+
+        assertThat(response.data()).isEqualTo(expected);
+        verify(uploadService).upload(
+            eq(9L), eq("credential"), eq("codeql"), eq("2.1"), eq("run-stream"), eq("abc123"),
+            eq("2026-09-03T10:00:00Z"), eq("application/json"), any(InputStream.class), eq(2L)
         );
     }
 }

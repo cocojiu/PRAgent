@@ -1,20 +1,23 @@
 package com.repoguard.agent.controller;
 
 import com.repoguard.agent.common.ApiResponse;
+import com.repoguard.agent.common.BusinessException;
+import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.config.ApiRuntimeEnabled;
 import com.repoguard.agent.dto.CiSarifCredentialResponse;
 import com.repoguard.agent.dto.CiSarifUploadResponse;
 import com.repoguard.agent.scanner.CiSarifUploadCredentialService;
 import com.repoguard.agent.scanner.CiSarifUploadService;
-import com.repoguard.agent.security.RequireRole;
 import com.repoguard.agent.security.AllowAnonymous;
+import com.repoguard.agent.security.RequireRole;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import java.io.IOException;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -75,7 +78,37 @@ public class CiSarifController {
         @RequestHeader("X-RepoGuard-CI-Commit-SHA") @NotBlank @Size(max = 64) String commitSha,
         @RequestHeader("X-RepoGuard-CI-Completed-At") @NotBlank @Size(max = 64) String completedAt,
         @RequestHeader(value = "Content-Type", required = false) String contentType,
-        @RequestBody byte[] payload
+        HttpServletRequest request
+    ) {
+        try {
+            return ApiResponse.ok(uploadService.upload(
+                taskId,
+                credential,
+                toolName,
+                toolVersion,
+                scanRunId,
+                commitSha,
+                completedAt,
+                contentType,
+                request.getInputStream(),
+                request.getContentLengthLong()
+            ));
+        } catch (IOException ex) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Unable to read CI SARIF upload");
+        }
+    }
+
+    /** Compatibility helper for callers that already hold a bounded byte array. */
+    ApiResponse<CiSarifUploadResponse> upload(
+        Long taskId,
+        String credential,
+        String toolName,
+        String toolVersion,
+        String scanRunId,
+        String commitSha,
+        String completedAt,
+        String contentType,
+        byte[] payload
     ) {
         return ApiResponse.ok(uploadService.upload(
             taskId,

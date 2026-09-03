@@ -14,6 +14,8 @@ import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.SarifCiUploadMapper;
 import com.repoguard.agent.mapper.SarifCiUploadMapper.SarifCiUploadRow;
 import com.repoguard.agent.tenancy.TenantContext;
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -70,6 +72,37 @@ public class CiSarifUploadService {
         String contentType,
         byte[] payload
     ) {
+        return upload(
+            taskId,
+            credential,
+            toolName,
+            toolVersion,
+            scanRunId,
+            commitSha,
+            completedAt,
+            contentType,
+            payload == null ? null : new ByteArrayInputStream(payload),
+            payload == null ? -1 : payload.length
+        );
+    }
+
+    /**
+     * Streams the bounded CI payload into the decoder. The byte-array overload remains for
+     * internal callers and compatibility tests; HTTP requests use this overload directly.
+     */
+    @Transactional
+    public CiSarifUploadResponse upload(
+        Long taskId,
+        String credential,
+        String toolName,
+        String toolVersion,
+        String scanRunId,
+        String commitSha,
+        String completedAt,
+        String contentType,
+        InputStream payload,
+        long contentLength
+    ) {
         CiSarifUploadCredentialService.Claims claims = credentialService.verify(credential);
         if (taskId == null || taskId < 1 || claims.taskId() != taskId) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "CI credential is not bound to this task");
@@ -83,7 +116,7 @@ public class CiSarifUploadService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "CI commit SHA does not match the credential");
         }
         OffsetDateTime completion = parseCompletion(completedAt);
-        String content = payloadDecoder.decode(payload, contentType);
+        String content = payloadDecoder.decode(payload, contentLength, contentType);
         String fingerprint = sarifFindingService.contentFingerprint(content);
 
         try (TenantContext.Scope _ = TenantContext.withTenant(claims.tenantId())) {

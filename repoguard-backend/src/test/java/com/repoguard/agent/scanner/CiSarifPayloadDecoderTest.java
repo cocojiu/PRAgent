@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -19,8 +21,25 @@ class CiSarifPayloadDecoderTest {
     void acceptsRawSarifJsonAndZipArtifact() throws Exception {
         assertThat(decoder.decode(SARIF.getBytes(StandardCharsets.UTF_8), "application/json"))
             .isEqualTo(SARIF);
+        byte[] sarifBytes = SARIF.getBytes(StandardCharsets.UTF_8);
+        assertThat(decoder.decode(new ByteArrayInputStream(sarifBytes), sarifBytes.length, "application/json"))
+            .isEqualTo(SARIF);
         byte[] zip = zip(MapEntry.of("results.sarif", SARIF));
         assertThat(decoder.decode(zip, "application/zip")).isEqualTo(SARIF);
+        assertThat(decoder.decode(new ByteArrayInputStream(zip), zip.length, "application/zip"))
+            .isEqualTo(SARIF);
+    }
+
+    @Test
+    void rejectsUnknownLengthRawStreamAfterReadingConfiguredLimit() {
+        InputStream overLimit = new InputStream() {
+            @Override
+            public int read() {
+                return 'x';
+            }
+        };
+        assertThatThrownBy(() -> decoder.decode(overLimit, -1, "application/json"))
+            .hasMessageContaining("2,000,000 bytes");
     }
 
     @Test
