@@ -592,3 +592,8 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 证据：`e05686c6` 已将 CI SARIF 上传改为受限流式读取，兼容既有 byte[] 契约，并通过后端定向 17 项、API/OpenAPI 定向 33 项、完整 `mvn clean verify -DskipTests=false`（2904 通过、0 失败、12 项环境跳过）和前端 `npm run quality`（43 个测试文件/174 项测试）；其 Pull Request Quality `33753675168`、Repository Governance `33753670218`、Auto Create Pull Request `33753670524` 全部成功。进度提交 `60f3364e` 的 Pull Request Quality `33754109737`、Repository Governance `33754106301`、Auto Create Pull Request `33754106348` 亦全部成功；`PRAgent-test` 与 `origin/PRAgent-test` 指向同一提交。
 外部验收缺口：尚无 50～100 个跨 2～3 个授权仓库的真实脱敏 PR、人工标签和可重复报告；尚无真实 GitHub App/Checks、OIDC/短期凭据、CodeQL/Semgrep 标准样例导入及中断恢复；尚无 Prometheus/Alertmanager 与租户流量、审计导出、报告生命周期和发布漂移故障演练证据；P2 条件项仍分别缺真实非 GitHub 使用方/成本瓶颈、固定回归集、多实验需求或供应商事故/合规事件。不能用 mock、合成数据或 Actions 绿灯替代这些证据。
 工作区与边界：仅保留用户已有 `ArchitectureRatchetTest.java`、两个前端 fixture 测试文件和 `.tmp/` 未提交；未提交非 README Markdown 或测试相关脚本。获得相应授权数据/凭据后，应先补真实验收证据，再逐条更新状态；在此之前不新增 P2 功能、不宣称企业生产准出。
+
+2026-09-03 | 优化-78 | 外部验收与生产可用性复核
+状态：外部验收仍未闭环，且发现真实生产探测阻塞；不修改探测规则掩盖故障，也不把该故障误判为代码门禁失败。
+证据：只读核查 GitHub 授权账号可访问的仓库仅有 `PRAgent`、`gpt-auto-register` 和无 PR 的公开 fork；没有满足 2～3 个授权仓库、50～100 个人工标注样本的评测数据集。当前环境没有 `semgrep`、`codeql`、`docker`、`kubectl` 或 `promtool` 可执行文件，也没有可用于真实评测的 LLM/OIDC/Prometheus 环境变量。`Production Availability` 最新定时运行 `33741385450`（以及此前连续运行）对 `https://pragent.top` 的 liveness、readiness、页面和匿名 API 均以 curl 28 连接超时失败，告警 Issue #151 仍为 open；`real-chain-smoke.yml` 没有成功运行记录。
+处理边界：PR 质量、仓库治理和自动建 PR 仍保持全绿；生产主机恢复、GitHub App/OIDC 配置、真实 scanner/LLM 凭据、评测数据授权及生产观测需要用户/运维明确授权后才能执行，不能通过改为跳过探测、使用 bot PR、合成样例或伪造指标关闭。未提交非 README Markdown、测试相关脚本或用户既有测试改动和 `.tmp/`。
