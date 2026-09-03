@@ -268,7 +268,7 @@ jobs:
           echo "REPOGUARD_ADMIN_API_KEY=${admin_api_key}" >> "$GITHUB_ENV"
       - name: Run production-like context tests
         working-directory: repoguard-backend
-        run: ./mvnw -B -Dtest=ProductionRuntimeContextIntegrationTest test
+        run: ./mvnw -B -Dtest=ProductionRuntimeContextIntegrationTest test 2>&1
 
   migration-upgrade:
     name: Flyway supported upgrade path
