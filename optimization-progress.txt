@@ -630,3 +630,9 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 变更：`.github/workflows/pr-quality.yml` 的集成测试改为先在 shell 变量中生成临时加密密钥、认证密钥和管理 API key，逐项调用 GitHub Actions `add-mask` 后再写入 `$GITHUB_ENV`，避免环境回显或失败日志暴露凭据；保留契约测试要求的变量赋值兼容形式，旧的可复用固定凭据仍未引入。
 处理与证据：首次脱敏实现提交 `e1f8bb91` 触发 Pull Request Quality `33782771829`，后端配置契约仍断言旧文本而失败；未提交测试文件，改以工作流兼容赋值修复提交 `445d69f8`。重新运行的 Pull Request Quality `33783414909`、Repository Governance `33783410552`、Auto Create Pull Request `33783410537` 全部成功，后端 2903 项测试、MySQL/RabbitMQ 集成、Flyway、前端浏览器 E2E、生产边缘、密钥差异和依赖门禁均通过。
 边界与回滚：本项只改 CI 工作流，回退 `e1f8bb91`/`445d69f8` 可恢复旧实现；保留用户已有 `ArchitectureRatchetTest.java`、两个前端 fixture 测试文件和 `.tmp/` 未提交，未提交非 README Markdown 或测试相关脚本。真实隔离 Smoke 及其他方案外部验收缺口仍按优化-83和第 14.18 节等待授权，不以本次 Actions 绿灯替代。
+
+2026-09-04 | 优化-85 | 集成负例 stderr 注释误报收敛
+状态：完成预期 RabbitMQ 负例日志的 GitHub Actions 注释收敛，并通过 test 分支完整远程门禁；真实失败仍保留非零退出码，不屏蔽质量门禁。
+变更：`.github/workflows/pr-quality.yml` 将 `ProductionRuntimeContextIntegrationTest` 的 stderr 合并到 stdout，使故意删除 exchange 触发的 `PublisherCallbackChannel is closed` 线程栈不再被 Actions 解析成失败注释；Maven 的实际退出码保持不变，测试失败仍会使 job 失败。
+验收证据：修复提交 `03ed702e` 的 Pull Request Quality `33784509234`、Repository Governance `33784504070`、Auto Create Pull Request `33784504098` 全部成功；集成测试 job 成功，复核其日志 `##[error]` 命令注释计数为 0，后端单元/契约、MySQL/RabbitMQ、Flyway、前端 E2E、生产边缘、密钥和依赖门禁均通过。
+边界与回滚：本项只调整 CI 输出流，不修改业务代码、测试文件或生产保护；回退 `03ed702e` 可恢复原输出行为。保留用户已有测试改动和 `.tmp/` 未提交，未提交非 README Markdown 或测试相关脚本；真实 Smoke 和其余外部验收缺口仍按第 14.18 节等待授权。
