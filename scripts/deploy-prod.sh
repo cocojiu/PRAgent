@@ -15,6 +15,10 @@ DEPLOY_STATE_DIR="${DEPLOY_STATE_DIR:-.deploy-state}"
 PREFLIGHT_ONLY="${PREFLIGHT_ONLY:-false}"
 MIGRATE_LEGACY_SECRET_FILES="${MIGRATE_LEGACY_SECRET_FILES:-false}"
 INITIALIZE_MISSING_ENCRYPTION_SALT="${INITIALIZE_MISSING_ENCRYPTION_SALT:-false}"
+# The split Worker starts after the API and RabbitMQ are ready.  On the small
+# production host its queue negotiation can take longer than the API health
+# check, so keep a dedicated 180-second window for this service.
+BACKEND_WORKER_HEALTH_ATTEMPTS=90
 
 if [ ! -f "$COMPOSE_FILE" ]; then
   echo "Missing compose file: $COMPOSE_FILE" >&2
@@ -764,7 +768,7 @@ rollback_deployment() {
   fi
   if has_compose_service backend-worker; then
     compose up -d --no-deps backend-worker
-    if ! wait_service_health backend-worker 45; then
+    if ! wait_service_health backend-worker "$BACKEND_WORKER_HEALTH_ATTEMPTS"; then
       rollback_healthy=false
     fi
   fi
@@ -828,7 +832,7 @@ verify_deployment() {
   wait_http_health "${2:-30}"
   assert_service_image backend "$BACKEND_IMAGE"
   if has_compose_service backend-worker; then
-    wait_service_health backend-worker "${1:-30}"
+    wait_service_health backend-worker "$BACKEND_WORKER_HEALTH_ATTEMPTS"
     assert_service_image backend-worker "$BACKEND_IMAGE"
     assert_same_image_id backend backend-worker
     assert_same_release_identity backend backend-worker
@@ -921,7 +925,7 @@ wait_backend_health 45
 
 if has_compose_service backend-worker; then
   compose up -d --no-deps backend-worker
-  wait_service_health backend-worker 45
+  wait_service_health backend-worker "$BACKEND_WORKER_HEALTH_ATTEMPTS"
 fi
 
 recreate_edge_proxy_chain
