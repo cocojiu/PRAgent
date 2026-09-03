@@ -19,7 +19,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
  * Exercises the supported rolling-upgrade path against a real MySQL instance.
  *
  * <p>The test is opt-in because local unit-test runs do not provision a database. CI enables it
- * with an isolated database and verifies the V76 expand state through the V90 release drift repair state.
+ * with an isolated database and verifies the V76 expand state through the V91 evaluation provenance state.
  */
 @EnabledIfEnvironmentVariable(named = "REPOGUARD_RUN_INTEGRATION_TESTS", matches = "true")
 class FlywayMigrationUpgradePathIntegrationTest {
@@ -124,9 +124,9 @@ class FlywayMigrationUpgradePathIntegrationTest {
                 }
             }
 
-            migrateTo(url, username, password, "90");
+            migrateTo(url, username, password, "91");
             try (Connection connection = open(url, username, password)) {
-                assertThat(latestSuccessfulMigration(connection)).isEqualTo("90");
+                assertThat(latestSuccessfulMigration(connection)).isEqualTo("91");
                 assertThat(columnExists(connection, "tenant_quota_config", "monthly_llm_token_budget"))
                     .isTrue();
                 assertThat(columnExists(connection, "tenant_quota_config", "monthly_llm_cost_budget"))
@@ -152,6 +152,8 @@ class FlywayMigrationUpgradePathIntegrationTest {
                 assertThat(constraintExists(connection, "review_finding", "fk_review_finding_source_batch"))
                     .isTrue();
                 assertThat(columnExists(connection, "llm_evaluation_report", "manifest_fingerprint")).isTrue();
+                assertThat(columnExists(connection, "llm_evaluation_report", "verifier_version")).isTrue();
+                assertThat(columnExists(connection, "llm_evaluation_report", "aggregation_version")).isTrue();
                 assertThat(columnExists(connection, "llm_model_release", "evaluation_report_id")).isTrue();
                 assertThat(constraintExists(connection, "llm_model_release", "fk_llm_model_release_evaluation_report"))
                     .isTrue();

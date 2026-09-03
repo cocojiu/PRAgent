@@ -36,6 +36,8 @@ import type {
   LlmEvaluationReportComparison,
   LlmEvaluationReportLifecycleRequest,
   LlmEvaluationRequest,
+  LlmEvaluationRun,
+  LlmEvaluationRunRequest,
   LlmModelRelease,
   LlmModelReleaseAudit,
   LlmModelReleaseAuditExport,
@@ -353,6 +355,13 @@ export type GeneratedOpenApiOperationMap = {
     body: NotificationBindingStatusRequest;
     response: NotificationBinding;
   };
+  "reviewCalibrationControllerCancelEvaluationRun": {
+    method: "POST";
+    pathParams: { runId: string };
+    query: never;
+    body: never;
+    response: LlmEvaluationRun;
+  };
   "reviewCalibrationControllerCompareEvaluationReports": {
     method: "GET";
     pathParams: { candidateReportId: number; reportId: number };
@@ -387,6 +396,13 @@ export type GeneratedOpenApiOperationMap = {
     query: never;
     body: never;
     response: LlmEvaluationReport;
+  };
+  "reviewCalibrationControllerGetEvaluationRun": {
+    method: "GET";
+    pathParams: { runId: string };
+    query: never;
+    body: never;
+    response: LlmEvaluationRun;
   };
   "reviewCalibrationControllerGetModelReleaseCenter": {
     method: "GET";
@@ -457,6 +473,13 @@ export type GeneratedOpenApiOperationMap = {
     query: never;
     body: LlmModelRollbackRequest;
     response: LlmModelRelease;
+  };
+  "reviewCalibrationControllerStartEvaluationRun": {
+    method: "POST";
+    pathParams: never;
+    query: never;
+    body: LlmEvaluationRunRequest;
+    response: LlmEvaluationRun;
   };
   "reviewCalibrationControllerTransitionEvaluationReportLifecycle": {
     method: "POST";
@@ -1187,6 +1210,14 @@ export const generatedOpenApiOperations = {
     hasRequestBody: true,
     requestBodyRequired: true
   },
+  "reviewCalibrationControllerCancelEvaluationRun": {
+    method: "POST",
+    path: "/api/v1/config/review-calibration/evaluation-runs/{runId}/cancel",
+    pathParamNames: ["runId"],
+    queryParamNames: [],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
   "reviewCalibrationControllerCompareEvaluationReports": {
     method: "GET",
     path: "/api/v1/config/review-calibration/evaluation-reports/{reportId}/compare/{candidateReportId}",
@@ -1223,6 +1254,14 @@ export const generatedOpenApiOperations = {
     method: "GET",
     path: "/api/v1/config/review-calibration/evaluation-reports/{reportId}",
     pathParamNames: ["reportId"],
+    queryParamNames: [],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "reviewCalibrationControllerGetEvaluationRun": {
+    method: "GET",
+    path: "/api/v1/config/review-calibration/evaluation-runs/{runId}",
+    pathParamNames: ["runId"],
     queryParamNames: [],
     hasRequestBody: false,
     requestBodyRequired: false
@@ -1303,6 +1342,14 @@ export const generatedOpenApiOperations = {
     method: "POST",
     path: "/api/v1/config/review-calibration/release-center/{releaseId}/rollback",
     pathParamNames: ["releaseId"],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "reviewCalibrationControllerStartEvaluationRun": {
+    method: "POST",
+    path: "/api/v1/config/review-calibration/evaluation-runs",
+    pathParamNames: [],
     queryParamNames: [],
     hasRequestBody: true,
     requestBodyRequired: true

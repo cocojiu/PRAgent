@@ -30,6 +30,45 @@
       </div>
     </div>
 
+    <div class="evaluation-run-panel" aria-label="启动真实 PR 评估">
+      <div class="evaluation-run-heading">
+        <strong>运行外部真实 PR 评估</strong>
+        <span>数据目录必须由平台管理员预置在受控根目录下，系统不会上传或持久化源码。</span>
+      </div>
+      <div class="evaluation-run-form">
+        <el-input v-model="runForm.runKey" placeholder="运行幂等键" aria-label="运行幂等键" />
+        <el-input v-model="runForm.dataDirectory" placeholder="受控数据目录相对路径" aria-label="受控数据目录" />
+        <el-input-number v-model="runForm.maxConcurrency" :min="1" :max="8" controls-position="right" aria-label="最大并发" />
+        <el-input-number v-model="runForm.maxTokens" :min="1" :max="1000000" controls-position="right" aria-label="最大令牌数" />
+        <el-input-number v-model="runForm.maxCost" :min="0" :precision="4" :step="1" controls-position="right" aria-label="最大费用" />
+        <el-input-number v-model="runForm.maxDurationSeconds" :min="1" :max="3600" controls-position="right" aria-label="最大时长秒数" />
+        <el-button type="primary" :loading="runLoading" @click="startRun">启动评估</el-button>
+      </div>
+      <el-alert
+        v-if="activeRun"
+        class="evaluation-run-status"
+        :type="runAlertType(activeRun.status)"
+        :title="`运行 ${activeRun.runKey}：${activeRun.status}`"
+        :closable="false"
+      >
+        <template #default>
+          <span>
+            {{ activeRun.completedSamples }} / {{ activeRun.totalSamples || "待加载" }} 个样本，
+            {{ activeRun.totalTokens }} tokens，费用 {{ Number(activeRun.totalCost ?? 0).toFixed(4) }}
+            <span v-if="activeRun.failureCode"> · {{ activeRun.failureCode }}</span>
+            <span v-if="activeRun.reportId"> · 报告 #{{ activeRun.reportId }}</span>
+          </span>
+          <el-button
+            v-if="activeRun.status === 'QUEUED' || activeRun.status === 'RUNNING'"
+            size="small"
+            type="danger"
+            plain
+            @click="cancelRun"
+          >取消运行</el-button>
+        </template>
+      </el-alert>
+    </div>
+
     <el-alert
       v-if="errorMessage"
       class="page-alert"
@@ -106,20 +145,34 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { onMounted, onUnmounted, ref } from "vue";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import {
+  cancelLlmEvaluationRun,
   exportLlmEvaluationReport,
+  fetchLlmEvaluationRun,
   fetchLlmEvaluationReports,
+  startLlmEvaluationRun,
   transitionLlmEvaluationReportLifecycle
 } from "@/api/config";
-import type { LlmEvaluationReport } from "@/types";
+import type { LlmEvaluationReport, LlmEvaluationRun, LlmEvaluationRunRequest } from "@/types";
 import { getErrorMessage } from "@/utils/errors";
 
 const reports = ref<LlmEvaluationReport[]>([]);
 const selectedReport = ref<LlmEvaluationReport | null>(null);
 const loading = ref(false);
 const errorMessage = ref("");
+const runLoading = ref(false);
+const activeRun = ref<LlmEvaluationRun | null>(null);
+const runForm = ref<LlmEvaluationRunRequest>({
+  runKey: "",
+  dataDirectory: "",
+  maxConcurrency: 2,
+  maxTokens: 100000,
+  maxCost: 100,
+  maxDurationSeconds: 1800
+});
+let pollTimer: number | undefined;
 
 const loadReports = async () => {
   loading.value = true;
@@ -136,6 +189,66 @@ const loadReports = async () => {
 
 const selectReport = (report: LlmEvaluationReport | null) => {
   selectedReport.value = report;
+};
+
+const startRun = async () => {
+  runLoading.value = true;
+  errorMessage.value = "";
+  try {
+    activeRun.value = await startLlmEvaluationRun(runForm.value);
+    beginPolling();
+  } catch (error) {
+    errorMessage.value = getErrorMessage(error, "评估运行启动失败");
+  } finally {
+    runLoading.value = false;
+  }
+};
+
+const refreshRun = async () => {
+  if (!activeRun.value) return;
+  try {
+    activeRun.value = await fetchLlmEvaluationRun(activeRun.value.runId);
+    if (!["QUEUED", "RUNNING"].includes(activeRun.value.status)) {
+      stopPolling();
+      if (activeRun.value.status === "COMPLETE") {
+        ElMessage.success("评估运行完成，报告已生成");
+        await loadReports();
+      }
+    }
+  } catch (error) {
+    stopPolling();
+    errorMessage.value = getErrorMessage(error, "评估运行状态加载失败");
+  }
+};
+
+const beginPolling = () => {
+  stopPolling();
+  void refreshRun();
+  pollTimer = window.setInterval(() => void refreshRun(), 2000);
+};
+
+const stopPolling = () => {
+  if (pollTimer !== undefined) {
+    window.clearInterval(pollTimer);
+    pollTimer = undefined;
+  }
+};
+
+const cancelRun = async () => {
+  if (!activeRun.value) return;
+  try {
+    activeRun.value = await cancelLlmEvaluationRun(activeRun.value.runId);
+    stopPolling();
+    ElMessage.success("评估运行已取消");
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, "评估运行取消失败"));
+  }
+};
+
+const runAlertType = (status: string) => {
+  if (status === "COMPLETE") return "success";
+  if (status === "FAILED" || status === "CANCELLED") return "warning";
+  return "info";
 };
 
 const downloadReport = async (format: "json" | "html") => {
@@ -181,4 +294,5 @@ const lifecycleTag = (status: string) => {
 };
 
 onMounted(loadReports);
+onUnmounted(stopPolling);
 </script>

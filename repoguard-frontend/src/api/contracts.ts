@@ -69,6 +69,8 @@ import type {
   LlmEvaluationReportComparison,
   LlmEvaluationReportLifecycleRequest,
   LlmEvaluationRequest,
+  LlmEvaluationRun,
+  LlmEvaluationRunRequest,
   CacheStats,
   GithubCommentPreview,
   GithubCommentPublicationHistory,
@@ -327,6 +329,9 @@ export type ApiContract = {
   registerLlmModelShadowRelease: ApiOperation<LlmModelReleaseRequest, LlmModelRelease>;
   promoteLlmModelRelease: ApiOperation<LlmModelReleaseRequest, LlmModelRelease>;
   createLlmEvaluationReport: ApiOperation<LlmEvaluationRequest, LlmEvaluationReport>;
+  startLlmEvaluationRun: ApiOperation<LlmEvaluationRunRequest, LlmEvaluationRun>;
+  fetchLlmEvaluationRun: ApiOperation<{ runId: string }, LlmEvaluationRun>;
+  cancelLlmEvaluationRun: ApiOperation<{ runId: string }, LlmEvaluationRun>;
   fetchLlmEvaluationReports: ApiOperation<{ limit?: number }, LlmEvaluationReport[]>;
   fetchLlmEvaluationReport: ApiOperation<{ reportId: number }, LlmEvaluationReport>;
   compareLlmEvaluationReports: ApiOperation<
@@ -731,6 +736,15 @@ const apiEndpoints: ApiEndpointMap = {
   }),
   createLlmEvaluationReport: generatedEndpoint("reviewCalibrationControllerCreateEvaluationReport", {
     body: input => input
+  }),
+  startLlmEvaluationRun: generatedEndpoint("reviewCalibrationControllerStartEvaluationRun", {
+    body: input => input
+  }),
+  fetchLlmEvaluationRun: generatedEndpoint("reviewCalibrationControllerGetEvaluationRun", {
+    path: input => ({ runId: input.runId })
+  }),
+  cancelLlmEvaluationRun: generatedEndpoint("reviewCalibrationControllerCancelEvaluationRun", {
+    path: input => ({ runId: input.runId })
   }),
   fetchLlmEvaluationReports: generatedEndpoint("reviewCalibrationControllerListEvaluationReports", {
     query: input => ({ limit: input.limit })

@@ -1,5 +1,7 @@
 package com.repoguard.agent.review.quality;
 
+import com.repoguard.agent.review.LlmReviewVersions;
+import com.repoguard.agent.review.ServerRiskAggregator;
 import java.math.BigDecimal;
 import org.springframework.util.StringUtils;
 
@@ -13,7 +15,9 @@ public record LlmEvaluationVersion(
     String chunkPolicyVersion,
     BigDecimal temperature,
     String ruleVersion,
-    String codeRevision
+    String codeRevision,
+    String verifierVersion,
+    String aggregationVersion
 ) {
 
     public LlmEvaluationVersion(
@@ -33,7 +37,36 @@ public record LlmEvaluationVersion(
             chunkPolicyVersion,
             null,
             "unspecified",
-            "unspecified"
+            "unspecified",
+            LlmReviewVersions.VERIFIER,
+            ServerRiskAggregator.VERSION
+        );
+    }
+
+    /** Compatibility constructor for callers that already supplied temperature/rule/commit. */
+    public LlmEvaluationVersion(
+        String provider,
+        String model,
+        String promptVersion,
+        String contextVersion,
+        String schemaVersion,
+        String chunkPolicyVersion,
+        BigDecimal temperature,
+        String ruleVersion,
+        String codeRevision
+    ) {
+        this(
+            provider,
+            model,
+            promptVersion,
+            contextVersion,
+            schemaVersion,
+            chunkPolicyVersion,
+            temperature,
+            ruleVersion,
+            codeRevision,
+            LlmReviewVersions.VERIFIER,
+            ServerRiskAggregator.VERSION
         );
     }
 
@@ -52,6 +85,8 @@ public record LlmEvaluationVersion(
         temperature = temperature == null ? null : temperature.stripTrailingZeros();
         ruleVersion = requireText(ruleVersion, "ruleVersion");
         codeRevision = requireText(codeRevision, "codeRevision");
+        verifierVersion = requireText(verifierVersion, "verifierVersion");
+        aggregationVersion = requireText(aggregationVersion, "aggregationVersion");
     }
 
     public String versionKey() {
@@ -60,6 +95,8 @@ public record LlmEvaluationVersion(
             + "|context=" + contextVersion
             + "|schema=" + schemaVersion
             + "|chunk=" + chunkPolicyVersion
+            + "|verifier=" + verifierVersion
+            + "|aggregation=" + aggregationVersion
             + "|temperature=" + (temperature == null ? "unspecified" : temperature.toPlainString())
             + "|rules=" + ruleVersion
             + "|commit=" + codeRevision;
@@ -73,11 +110,14 @@ public record LlmEvaluationVersion(
     public boolean reproducible() {
         return temperature != null
             && !isPlaceholder(ruleVersion)
-            && !isPlaceholder(codeRevision);
+            && !isPlaceholder(codeRevision)
+            && !isPlaceholder(verifierVersion)
+            && !isPlaceholder(aggregationVersion);
     }
 
     private boolean isPlaceholder(String value) {
-        return "unspecified".equalsIgnoreCase(value) || "unknown".equalsIgnoreCase(value);
+        return "unspecified".equalsIgnoreCase(value) || "unknown".equalsIgnoreCase(value)
+            || "legacy-unknown".equalsIgnoreCase(value);
     }
 
     private static String requireText(String value, String field) {

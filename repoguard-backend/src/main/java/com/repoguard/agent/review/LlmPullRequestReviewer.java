@@ -127,13 +127,65 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
 
     @Override
     public ReviewResult review(ReviewTask task, PullRequestDiff diff, ReviewDeadline deadline) {
-        long startedAt = System.nanoTime();
-        if (deadline != null) {
-            deadline.requireRemaining("review_context");
-        }
         ReviewPolicySettings settings = reviewPolicyProvider.getSettings();
         if (modelReleaseService != null) {
             settings = modelReleaseService.route(settings, task);
+        }
+        return reviewWithSettings(task, diff, deadline, settings);
+    }
+
+    /**
+     * Executes one evaluation case against the configured provider using the candidate model.
+     * Evaluation deliberately bypasses canary routing: a dataset run must compare exactly one
+     * immutable model version and must never persist a release assignment or publish side effects.
+     */
+    public ReviewResult reviewForEvaluation(
+        ReviewTask task,
+        PullRequestDiff diff,
+        ReviewDeadline deadline,
+        String provider,
+        String model
+    ) {
+        ReviewPolicySettings configured = reviewPolicyProvider.getSettings();
+        if (!configured.enabled() || !configured.readyForLlmReview()) {
+            throw new IllegalStateException("LLM 评估运行需要已启用且配置完整的模型服务");
+        }
+        if (provider == null || provider.isBlank() || model == null || model.isBlank()
+            || !provider.trim().equalsIgnoreCase(configured.llmProvider())) {
+            throw new IllegalArgumentException("评估版本与当前 LLM 配置不一致");
+        }
+        ReviewPolicySettings evaluationSettings = new ReviewPolicySettings(
+            configured.exists(),
+            configured.llmEnabled(),
+            configured.llmProvider(),
+            model.trim(),
+            configured.baseUrl(),
+            configured.apiKey(),
+            configured.timeoutSeconds(),
+            configured.temperature(),
+            configured.maxTokens(),
+            configured.fallbackToRules(),
+            configured.workerConcurrency(),
+            configured.chunkFileThreshold(),
+            configured.chunkLineThreshold(),
+            configured.chunkMaxFiles(),
+            configured.chunkMaxLines(),
+            configured.inputTokenPricePerMillion(),
+            configured.outputTokenPricePerMillion(),
+            configured.strategyRelease()
+        );
+        return reviewWithSettings(task, diff, deadline, evaluationSettings);
+    }
+
+    private ReviewResult reviewWithSettings(
+        ReviewTask task,
+        PullRequestDiff diff,
+        ReviewDeadline deadline,
+        ReviewPolicySettings settings
+    ) {
+        long startedAt = System.nanoTime();
+        if (deadline != null) {
+            deadline.requireRemaining("review_context");
         }
         LlmReviewContext promptContext = promptBuilder.buildContext(diff);
         String promptSummary = promptBuilder.promptSummary(diff, promptContext);

@@ -47,7 +47,6 @@ public class LlmModelReleaseService {
     private static final BigDecimal MAX_PARSE_FAILURE_RATE = new BigDecimal("0.05");
     private static final long MAX_P95_LATENCY_MS = 15_000L;
     private static final int MIN_CANARY_PERCENT = 1;
-
     private final LlmQualityComparisonProvider qualityComparisonProvider;
     private final LlmModelReleaseRepository releaseRepository;
     private final ObjectMapper objectMapper;
@@ -92,18 +91,33 @@ public class LlmModelReleaseService {
     @Transactional
     public LlmModelReleaseDto.EvaluationReportDto createEvaluationReport(LlmEvaluationRequest request, String operator) {
         EvaluationInput input = normalizeEvaluation(request);
-        LlmEvaluationReport report = LlmQualityEvaluator.evaluate(input.version(), input.dataset(), input.observations(), input.minimumSamples());
+        return createEvaluationReport(input.version(), input.dataset(), input.observations(), input.minimumSamples(), operator);
+    }
+    /**
+     * Persists an evaluation report produced by the server-side dataset runner. The runner passes
+     * only aggregate observations here; source files and prompts never enter the release store.
+     */
+    @Transactional
+    public LlmModelReleaseDto.EvaluationReportDto createEvaluationReport(
+        LlmEvaluationVersion version,
+        LlmEvaluationDatasetMetadata dataset,
+        List<LlmEvaluationObservation> observations,
+        int minimumSamples,
+        String operator
+    ) {
+        if (version == null || dataset == null || observations == null) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "评估报告输入不能为空");
+        }
+        LlmEvaluationReport report = LlmQualityEvaluator.evaluate(version, dataset, List.copyOf(observations), minimumSamples);
         return toEvaluationDto(releaseRepository.insertEvaluationReport(
             TenantContext.currentTenantIdOrDefault(), reportKey(report), report,
             normalizeOperator(operator), lifecycleService.defaultRetentionDays()
         ));
     }
-
     @Transactional(readOnly = true)
     public LlmModelReleaseDto.EvaluationReportDto getEvaluationReport(long reportId) {
         return toEvaluationDto(releaseRepository.findEvaluationReport(TenantContext.currentTenantIdOrDefault(), reportId));
     }
-
     @Transactional(readOnly = true)
     public List<LlmModelReleaseDto.EvaluationReportDto> listEvaluationReports(int limit) {
         return releaseRepository.findEvaluationReports(TenantContext.currentTenantIdOrDefault(), limit).stream().map(this::toEvaluationDto).toList();
@@ -314,7 +328,7 @@ public class LlmModelReleaseService {
         try {
             LlmEvaluationDatasetMetadata.DatasetKind kind = LlmEvaluationDatasetMetadata.DatasetKind.valueOf(request.datasetKind().trim().toUpperCase(Locale.ROOT));
             LlmEvaluationDatasetMetadata dataset = new LlmEvaluationDatasetMetadata(requireText(request.datasetId(), "datasetId"), requireText(request.datasetVersion(), "datasetVersion"), kind, required(request.sourceRepositoryCount(), "sourceRepositoryCount"), required(request.sampleCount(), "sampleCount"), required(request.fixedRegressionSamples(), "fixedRegressionSamples"), required(request.rollingObservationSamples(), "rollingObservationSamples"), Boolean.TRUE.equals(request.authorized()), Boolean.TRUE.equals(request.anonymized()), Boolean.TRUE.equals(request.humanReviewed()), requireFingerprint(request.sampleFingerprint()));
-            LlmEvaluationVersion version = new LlmEvaluationVersion(requireText(request.provider(), "provider"), requireText(request.model(), "model"), requireText(request.promptVersion(), "promptVersion"), requireText(request.contextVersion(), "contextVersion"), requireText(request.schemaVersion(), "schemaVersion"), requireText(request.chunkPolicyVersion(), "chunkPolicyVersion"), request.temperature(), requireText(request.ruleVersion(), "ruleVersion"), requireText(request.codeRevision(), "codeRevision"));
+            LlmEvaluationVersion version = new LlmEvaluationVersion(requireText(request.provider(), "provider"), requireText(request.model(), "model"), requireText(request.promptVersion(), "promptVersion"), requireText(request.contextVersion(), "contextVersion"), requireText(request.schemaVersion(), "schemaVersion"), requireText(request.chunkPolicyVersion(), "chunkPolicyVersion"), request.temperature(), requireText(request.ruleVersion(), "ruleVersion"), requireText(request.codeRevision(), "codeRevision"), requireText(request.verifierVersion(), "verifierVersion"), requireText(request.aggregationVersion(), "aggregationVersion"));
             List<LlmEvaluationObservation> observations = (request.observations() == null ? List.<LlmEvaluationObservationRequest>of() : request.observations()).stream().map(this::observation).toList();
             return new EvaluationInput(version, dataset, observations, request.minimumSamples() == null ? 50 : request.minimumSamples());
         } catch (BusinessException ex) {
@@ -339,7 +353,7 @@ public class LlmModelReleaseService {
             dataset.sourceRepositoryCount(), dataset.sampleCount(), dataset.fixedRegressionSamples(), dataset.rollingObservationSamples(),
             dataset.authorized(), dataset.anonymized(), dataset.humanReviewed(), dataset.sampleFingerprint(), version.provider(), version.model(),
             version.promptVersion(), version.contextVersion(), version.schemaVersion(), version.chunkPolicyVersion(), version.temperature(),
-            version.ruleVersion(), version.codeRevision(), report.expectedFindings(), report.predictedFindings(), report.truePositives(),
+            version.ruleVersion(), version.codeRevision(), version.verifierVersion(), version.aggregationVersion(), report.expectedFindings(), report.predictedFindings(), report.truePositives(),
             report.falsePositives(), report.falseNegatives(), report.precision(), report.recall(), report.precisionWilsonLowerBound(),
             report.anchorRate(), report.duplicateRate(), report.parseFailureRate(), report.severityConfusion(), report.totalLatencyMs(),
             report.totalTokens(), report.totalCost(), report.blockers(), report.eligible(), metricsDto(report.metrics()), stored.createdBy(),

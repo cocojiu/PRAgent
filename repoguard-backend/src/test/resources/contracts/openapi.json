@@ -1954,6 +1954,159 @@
         }
       }
     },
+    "/api/v1/config/review-calibration/evaluation-runs" : {
+      "post" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerStartEvaluationRun",
+        "x-controller-operation" : "ReviewCalibrationController#startEvaluationRun",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "LlmEvaluationRunRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/LlmEvaluationRunRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "LlmEvaluationRunDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/LlmEvaluationRunDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-calibration/evaluation-runs/{runId}" : {
+      "get" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerGetEvaluationRun",
+        "x-controller-operation" : "ReviewCalibrationController#getEvaluationRun",
+        "parameters" : [ {
+          "name" : "runId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 64
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "LlmEvaluationRunDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/LlmEvaluationRunDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-calibration/evaluation-runs/{runId}/cancel" : {
+      "post" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerCancelEvaluationRun",
+        "x-controller-operation" : "ReviewCalibrationController#cancelEvaluationRun",
+        "parameters" : [ {
+          "name" : "runId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 64
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "LlmEvaluationRunDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/LlmEvaluationRunDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/config/review-calibration/queue" : {
       "get" : {
         "tags" : [ "ReviewCalibration" ],
@@ -9590,6 +9743,12 @@
           "codeRevision" : {
             "type" : "string"
           },
+          "verifierVersion" : {
+            "type" : "string"
+          },
+          "aggregationVersion" : {
+            "type" : "string"
+          },
           "expectedFindings" : {
             "type" : "integer",
             "format" : "int32"
@@ -10962,6 +11121,16 @@
             "minLength" : 1,
             "maxLength" : 128
           },
+          "verifierVersion" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 96
+          },
+          "aggregationVersion" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 96
+          },
           "observations" : {
             "type" : "array",
             "items" : {
@@ -10977,7 +11146,96 @@
             "maximum" : 100
           }
         },
-        "required" : [ "datasetId", "datasetVersion", "datasetKind", "sourceRepositoryCount", "sampleCount", "fixedRegressionSamples", "rollingObservationSamples", "authorized", "anonymized", "humanReviewed", "sampleFingerprint", "provider", "model", "promptVersion", "contextVersion", "schemaVersion", "chunkPolicyVersion", "temperature", "ruleVersion", "codeRevision", "observations" ]
+        "required" : [ "datasetId", "datasetVersion", "datasetKind", "sourceRepositoryCount", "sampleCount", "fixedRegressionSamples", "rollingObservationSamples", "authorized", "anonymized", "humanReviewed", "sampleFingerprint", "provider", "model", "promptVersion", "contextVersion", "schemaVersion", "chunkPolicyVersion", "temperature", "ruleVersion", "codeRevision", "verifierVersion", "aggregationVersion", "observations" ]
+      },
+      "LlmEvaluationRunDto" : {
+        "type" : "object",
+        "x-java-type" : "LlmEvaluationRunDto",
+        "properties" : {
+          "runId" : {
+            "type" : "string"
+          },
+          "runKey" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "totalSamples" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "completedSamples" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "totalTokens" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "totalCost" : {
+            "type" : "number"
+          },
+          "reportId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "failureCode" : {
+            "type" : "string"
+          },
+          "submittedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "startedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "finishedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        },
+        "required" : [ "totalSamples", "completedSamples", "totalTokens" ]
+      },
+      "LlmEvaluationRunRequest" : {
+        "type" : "object",
+        "x-java-type" : "LlmEvaluationRunRequest",
+        "properties" : {
+          "runKey" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "dataDirectory" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 512
+          },
+          "maxConcurrency" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 8
+          },
+          "maxTokens" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1,
+            "maximum" : 1000000
+          },
+          "maxCost" : {
+            "type" : "number",
+            "minimum" : 0.0
+          },
+          "maxDurationSeconds" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 3600
+          }
+        },
+        "required" : [ "runKey", "dataDirectory", "maxConcurrency", "maxTokens", "maxCost", "maxDurationSeconds" ]
       },
       "LlmModelBudgetDto" : {
         "type" : "object",

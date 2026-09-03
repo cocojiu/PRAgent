@@ -44,6 +44,7 @@ class ControllerAuthorizationContractTest {
         "ReviewCalibrationController#getEvaluationReport",
         "ReviewCalibrationController#compareEvaluationReports",
         "ReviewCalibrationController#exportEvaluationReport",
+        "ReviewCalibrationController#getEvaluationRun",
         "NotificationIntegrationController#listBindings",
         "NotificationIntegrationController#listEvents",
         "NotificationIntegrationController#listDeliveries",

@@ -30,6 +30,7 @@ public record LlmModelReleaseDto(Long id, String releaseKey, String provider, St
         Integer rollingObservationSamples, Boolean authorized, Boolean anonymized, Boolean humanReviewed,
         String sampleFingerprint, String provider, String model, String promptVersion, String contextVersion,
         String schemaVersion, String chunkPolicyVersion, BigDecimal temperature, String ruleVersion, String codeRevision,
+        String verifierVersion, String aggregationVersion,
         Integer expectedFindings, Integer predictedFindings, Integer truePositives, Integer falsePositives,
         Integer falseNegatives, BigDecimal precision, BigDecimal recall, BigDecimal precisionWilsonLowerBound,
         BigDecimal anchorRate, BigDecimal duplicateRate, BigDecimal parseFailureRate,

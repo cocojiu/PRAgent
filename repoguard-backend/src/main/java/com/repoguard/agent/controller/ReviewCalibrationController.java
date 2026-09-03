@@ -4,6 +4,8 @@ import com.repoguard.agent.common.ApiResponse;
 import com.repoguard.agent.config.ApiRuntimeEnabled;
 import com.repoguard.agent.dto.LlmModelReleaseCenterDto;
 import com.repoguard.agent.dto.LlmModelReleaseDto;
+import com.repoguard.agent.dto.LlmEvaluationRunDto;
+import com.repoguard.agent.dto.LlmEvaluationRunRequest;
 import com.repoguard.agent.dto.LlmModelReleaseDto.LlmModelReleaseAuditDto;
 import com.repoguard.agent.dto.LlmModelReleaseDto.LlmModelReleaseAuditExportDto;
 import com.repoguard.agent.dto.LlmModelReleaseDto.LlmModelReleaseAuditVerificationDto;
@@ -20,6 +22,7 @@ import com.repoguard.agent.dto.LlmModelReleaseDriftRepairRequest;
 import com.repoguard.agent.review.quality.LlmModelReleaseDriftService;
 import com.repoguard.agent.review.quality.LlmModelReleaseService;
 import com.repoguard.agent.review.quality.LlmModelReleaseMetricsService;
+import com.repoguard.agent.review.quality.LlmEvaluationRunService;
 import com.repoguard.agent.security.RequireRole;
 import com.repoguard.agent.service.ReviewCalibrationService;
 import com.repoguard.agent.web.RequestAuthentication;
@@ -49,16 +52,17 @@ public class ReviewCalibrationController {
     private final LlmModelReleaseService modelReleaseService;
     private final LlmModelReleaseMetricsService modelReleaseMetricsService;
     private final LlmModelReleaseDriftService modelReleaseDriftService;
+    private final LlmEvaluationRunService evaluationRunService;
 
     public ReviewCalibrationController(ReviewCalibrationService calibrationService) {
-        this(calibrationService, null, null, null);
+        this(calibrationService, null, null, null, null);
     }
 
     public ReviewCalibrationController(
         ReviewCalibrationService calibrationService,
         LlmModelReleaseService modelReleaseService
     ) {
-        this(calibrationService, modelReleaseService, null, null);
+        this(calibrationService, modelReleaseService, null, null, null);
     }
 
     public ReviewCalibrationController(
@@ -66,7 +70,16 @@ public class ReviewCalibrationController {
         LlmModelReleaseService modelReleaseService,
         LlmModelReleaseMetricsService modelReleaseMetricsService
     ) {
-        this(calibrationService, modelReleaseService, modelReleaseMetricsService, null);
+        this(calibrationService, modelReleaseService, modelReleaseMetricsService, null, null);
+    }
+
+    public ReviewCalibrationController(
+        ReviewCalibrationService calibrationService,
+        LlmModelReleaseService modelReleaseService,
+        LlmModelReleaseMetricsService modelReleaseMetricsService,
+        LlmModelReleaseDriftService modelReleaseDriftService
+    ) {
+        this(calibrationService, modelReleaseService, modelReleaseMetricsService, modelReleaseDriftService, null);
     }
 
     @Autowired
@@ -74,12 +87,14 @@ public class ReviewCalibrationController {
         ReviewCalibrationService calibrationService,
         LlmModelReleaseService modelReleaseService,
         LlmModelReleaseMetricsService modelReleaseMetricsService,
-        LlmModelReleaseDriftService modelReleaseDriftService
+        LlmModelReleaseDriftService modelReleaseDriftService,
+        LlmEvaluationRunService evaluationRunService
     ) {
         this.calibrationService = calibrationService;
         this.modelReleaseService = modelReleaseService;
         this.modelReleaseMetricsService = modelReleaseMetricsService;
         this.modelReleaseDriftService = modelReleaseDriftService;
+        this.evaluationRunService = evaluationRunService;
     }
 
     @GetMapping("/queue")
@@ -189,6 +204,30 @@ public class ReviewCalibrationController {
             RequestAuthentication.require(servletRequest).username()));
     }
 
+    @PostMapping("/evaluation-runs")
+    @RequireRole({"ADMIN", "PLATFORM_ADMIN"})
+    public ApiResponse<LlmEvaluationRunDto> startEvaluationRun(
+        @Valid @RequestBody LlmEvaluationRunRequest request,
+        HttpServletRequest servletRequest
+    ) {
+        return ApiResponse.ok(requireEvaluationRunService().start(
+            request,
+            RequestAuthentication.require(servletRequest).username()
+        ));
+    }
+
+    @GetMapping("/evaluation-runs/{runId}")
+    @RequireRole({"ADMIN", "PLATFORM_ADMIN"})
+    public ApiResponse<LlmEvaluationRunDto> getEvaluationRun(@PathVariable @Size(max = 64) String runId) {
+        return ApiResponse.ok(requireEvaluationRunService().get(runId));
+    }
+
+    @PostMapping("/evaluation-runs/{runId}/cancel")
+    @RequireRole({"ADMIN", "PLATFORM_ADMIN"})
+    public ApiResponse<LlmEvaluationRunDto> cancelEvaluationRun(@PathVariable @Size(max = 64) String runId) {
+        return ApiResponse.ok(requireEvaluationRunService().cancel(runId));
+    }
+
     @GetMapping("/evaluation-reports")
     public ApiResponse<java.util.List<LlmModelReleaseDto.EvaluationReportDto>> listEvaluationReports(
         @RequestParam(defaultValue = "30") @Min(1) @Max(100) int limit
@@ -252,6 +291,13 @@ public class ReviewCalibrationController {
             throw new IllegalStateException("LLM model release center is not available");
         }
         return modelReleaseService;
+    }
+
+    private LlmEvaluationRunService requireEvaluationRunService() {
+        if (evaluationRunService == null) {
+            throw new IllegalStateException("LLM evaluation runner is not available");
+        }
+        return evaluationRunService;
     }
 
     private LlmModelReleaseMetricsService requireMetricsService() {

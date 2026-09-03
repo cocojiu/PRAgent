@@ -42,11 +42,13 @@ notificationIntegrationControllerRetryEvent(input: { path: { id: number } }): Pr
 notificationIntegrationControllerTestBinding(input: { path: { id: number } }): Promise<ConnectionTestResult>; // POST /api/v1/config/notification-bindings/{id}/test
 notificationIntegrationControllerUpdateBinding(input: { path: { id: number }; body: NotificationBindingRequest }): Promise<NotificationBinding>; // PUT /api/v1/config/notification-bindings/{id}
 notificationIntegrationControllerUpdateBindingStatus(input: { path: { id: number }; body: NotificationBindingStatusRequest }): Promise<NotificationBinding>; // PUT /api/v1/config/notification-bindings/{id}/status
+reviewCalibrationControllerCancelEvaluationRun(input: { path: { runId: string } }): Promise<LlmEvaluationRun>; // POST /api/v1/config/review-calibration/evaluation-runs/{runId}/cancel
 reviewCalibrationControllerCompareEvaluationReports(input: { path: { candidateReportId: number; reportId: number } }): Promise<LlmEvaluationReportComparison>; // GET /api/v1/config/review-calibration/evaluation-reports/{reportId}/compare/{candidateReportId}
 reviewCalibrationControllerCreateEvaluationReport(input: { body: LlmEvaluationRequest }): Promise<LlmEvaluationReport>; // POST /api/v1/config/review-calibration/evaluation-reports
 reviewCalibrationControllerExportEvaluationReport(input: { path: { reportId: number }; query?: { format?: string } }): Promise<LlmEvaluationExport>; // GET /api/v1/config/review-calibration/evaluation-reports/{reportId}/export
 reviewCalibrationControllerExportModelReleaseAudits(input?: { query?: { action?: string; format?: string; from?: string; operator?: string; releaseId?: number; releaseKey?: string; to?: string } }): Promise<LlmModelReleaseAuditExport>; // GET /api/v1/config/review-calibration/release-center/audits/export
 reviewCalibrationControllerGetEvaluationReport(input: { path: { reportId: number } }): Promise<LlmEvaluationReport>; // GET /api/v1/config/review-calibration/evaluation-reports/{reportId}
+reviewCalibrationControllerGetEvaluationRun(input: { path: { runId: string } }): Promise<LlmEvaluationRun>; // GET /api/v1/config/review-calibration/evaluation-runs/{runId}
 reviewCalibrationControllerGetModelReleaseCenter(input?: { query?: { trendDays?: number } }): Promise<LlmModelReleaseCenter>; // GET /api/v1/config/review-calibration/release-center
 reviewCalibrationControllerGetReviewCalibrationQueue(input?: { query?: { includeIgnored?: boolean; limit?: number; ruleId: string } }): Promise<ReviewCalibrationQueue>; // GET /api/v1/config/review-calibration/queue
 reviewCalibrationControllerInspectModelReleaseDrift(): Promise<LlmModelReleaseDrift>; // GET /api/v1/config/review-calibration/release-center/drift
@@ -57,6 +59,7 @@ reviewCalibrationControllerPromoteModelRelease(input: { body: LlmModelReleaseReq
 reviewCalibrationControllerRegisterShadowRelease(input: { body: LlmModelReleaseRequest }): Promise<LlmModelRelease>; // POST /api/v1/config/review-calibration/release-center/shadow
 reviewCalibrationControllerRepairModelReleaseDrift(input: { body: LlmModelReleaseDriftRepairRequest }): Promise<LlmModelReleaseDriftRepair>; // POST /api/v1/config/review-calibration/release-center/drift/repair
 reviewCalibrationControllerRollbackModelRelease(input: { path: { releaseId: number }; body: LlmModelRollbackRequest }): Promise<LlmModelRelease>; // POST /api/v1/config/review-calibration/release-center/{releaseId}/rollback
+reviewCalibrationControllerStartEvaluationRun(input: { body: LlmEvaluationRunRequest }): Promise<LlmEvaluationRun>; // POST /api/v1/config/review-calibration/evaluation-runs
 reviewCalibrationControllerTransitionEvaluationReportLifecycle(input: { path: { reportId: number }; body: LlmEvaluationReportLifecycleRequest }): Promise<LlmEvaluationReport>; // POST /api/v1/config/review-calibration/evaluation-reports/{reportId}/lifecycle
 reviewCalibrationControllerVerifyModelReleaseAudit(input: { path: { auditId: number } }): Promise<LlmModelReleaseAuditVerification>; // GET /api/v1/config/review-calibration/release-center/audits/{auditId}/verify
 reviewControllerGetGithubCommentPreview(input: { path: { id: number }; query?: { commentableOnly?: boolean; page?: number; pageSize?: number } }): Promise<GithubCommentPreview>; // GET /api/v1/reviews/{id}/github-comments/preview

@@ -7,7 +7,7 @@
     "externalDatabaseSupported": true,
     "publishedMigrationPolicy": "IMMUTABLE",
     "newInstallationStrategy": "VALIDATED_SCHEMA_SNAPSHOT_THEN_BASELINE",
-    "candidateVersion": 90,
+    "candidateVersion": 91,
     "requiredEvidence": [
       "empty database migration to the candidate version",
       "schema structure diff against the supported production shape",
@@ -16,9 +16,9 @@
     ],
     "decisionEvidence": [
       "application-prod.yml requires an externally supplied datasource",
-      "FlywayMigrationUpgradePathIntegrationTest verifies the V76 to V77, V77 to V78, V78 to V79, V79 to V80, V80 to V81, V81 to V82, V82 to V83, V83 to V84, V84 to V85, V85 to V86, V86 to V87, V87 to V88, V88 to V89 and V89 to V90 upgrade paths"
+      "FlywayMigrationUpgradePathIntegrationTest verifies the V76 to V77, V77 to V78, V78 to V79, V79 to V80, V80 to V81, V81 to V82, V82 to V83, V83 to V84, V84 to V85, V85 to V86, V86 to V87, V87 to V88, V88 to V89, V89 to V90 and V90 to V91 upgrade paths"
     ],
-    "reconsiderWhen": "A V90 schema snapshot and all required rehearsal evidence are versioned together.",
+    "reconsiderWhen": "A V91 schema snapshot and all required rehearsal evidence are versioned together.",
     "rollbackStrategy": "restore a validated backup and apply a forward fix; never rewrite or delete a published migration"
   },
   "defaults": {
@@ -243,6 +243,18 @@
       "nMinusOneCompatible": true,
       "interruptedRecovery": "rerun the additive drift-audit migration after checking Flyway state; a preview fingerprint and existing release/task rows remain durable",
       "rollbackStrategy": "forward fix or restore the validated V89 predecessor backup; do not delete published migration"
+    },
+    {
+      "version": 91,
+      "file": "V91__llm_evaluation_version_provenance.sql",
+      "phase": "EXPAND",
+      "estimatedRows": "one verifier and aggregation version pair per immutable evaluation report",
+      "lockType": "metadata-and-table",
+      "maxDurationSeconds": 300,
+      "maxDiskMegabytes": 256,
+      "nMinusOneCompatible": true,
+      "interruptedRecovery": "rerun the additive provenance migration after checking Flyway state; legacy rows remain explicitly marked unknown",
+      "rollbackStrategy": "forward fix or restore the validated V90 predecessor backup; do not delete published migration"
     }
   ]
 }

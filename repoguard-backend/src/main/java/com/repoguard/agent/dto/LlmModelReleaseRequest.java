@@ -11,6 +11,8 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.util.List;
+import com.repoguard.agent.review.LlmReviewVersions;
+import com.repoguard.agent.review.ServerRiskAggregator;
 
 /** Aggregate, privacy-safe release evidence; raw prompts and provider responses are never accepted. */
 public record LlmModelReleaseRequest(@NotBlank @Size(max = 128) String releaseKey,
@@ -51,8 +53,21 @@ public record LlmModelReleaseRequest(@NotBlank @Size(max = 128) String releaseKe
         @NotBlank @Size(max = 96) String schemaVersion, @NotBlank @Size(max = 128) String chunkPolicyVersion,
         @NotNull @DecimalMin("0.0") @DecimalMax("2.0") BigDecimal temperature,
         @NotBlank @Size(max = 96) String ruleVersion, @NotBlank @Size(max = 128) String codeRevision,
+        @NotBlank @Size(max = 96) String verifierVersion, @NotBlank @Size(max = 96) String aggregationVersion,
         @NotNull @Size(min = 1, max = 100) List<@Valid LlmEvaluationObservationRequest> observations,
         @Min(30) @Max(100) Integer minimumSamples) {
+
+        public LlmEvaluationRequest(String datasetId, String datasetVersion, String datasetKind,
+            Integer sourceRepositoryCount, Integer sampleCount, Integer fixedRegressionSamples,
+            Integer rollingObservationSamples, Boolean authorized, Boolean anonymized, Boolean humanReviewed,
+            String sampleFingerprint, String provider, String model, String promptVersion, String contextVersion,
+            String schemaVersion, String chunkPolicyVersion, BigDecimal temperature, String ruleVersion,
+            String codeRevision, List<LlmEvaluationObservationRequest> observations, Integer minimumSamples) {
+            this(datasetId, datasetVersion, datasetKind, sourceRepositoryCount, sampleCount, fixedRegressionSamples,
+                rollingObservationSamples, authorized, anonymized, humanReviewed, sampleFingerprint, provider, model,
+                promptVersion, contextVersion, schemaVersion, chunkPolicyVersion, temperature, ruleVersion,
+                codeRevision, LlmReviewVersions.VERIFIER, ServerRiskAggregator.VERSION, observations, minimumSamples);
+        }
     }
 
     /** One labelled sample represented only by anonymized ids, labels and aggregate counters. */

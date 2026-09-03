@@ -107,8 +107,34 @@ export interface LlmEvaluationRequest {
   temperature: number;
   ruleVersion: string;
   codeRevision: string;
+  verifierVersion: string;
+  aggregationVersion: string;
   observations: LlmEvaluationObservationRequest[];
   minimumSamples?: number;
+}
+
+export interface LlmEvaluationRunRequest {
+  runKey: string;
+  dataDirectory: string;
+  maxConcurrency: number;
+  maxTokens: number;
+  maxCost: number;
+  maxDurationSeconds: number;
+}
+
+export interface LlmEvaluationRun {
+  runId: string;
+  runKey: string;
+  status: "QUEUED" | "RUNNING" | "COMPLETE" | "FAILED" | "CANCELLED" | string;
+  totalSamples: number;
+  completedSamples: number;
+  totalTokens: number;
+  totalCost: number;
+  reportId?: number;
+  failureCode?: string;
+  submittedAt?: string;
+  startedAt?: string;
+  finishedAt?: string;
 }
 
 export interface LlmEvaluationReportLifecycleRequest {
@@ -168,6 +194,8 @@ export interface LlmEvaluationReport {
   temperature: number;
   ruleVersion: string;
   codeRevision: string;
+  verifierVersion: string;
+  aggregationVersion: string;
   expectedFindings: number;
   predictedFindings: number;
   truePositives: number;

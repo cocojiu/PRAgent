@@ -6,6 +6,7 @@ import type {
   GithubChecksPolicyRequest,
   GithubChecksPreviewRequest,
   LlmEvaluationRequest,
+  LlmEvaluationRunRequest,
   LlmEvaluationReportLifecycleRequest,
   LlmModelReleaseDriftRepairRequest,
   LlmModelReleaseRequest,
@@ -144,6 +145,15 @@ export const promoteLlmModelRelease = (payload: LlmModelReleaseRequest) =>
 
 export const createLlmEvaluationReport = (payload: LlmEvaluationRequest) =>
   apiRequest("createLlmEvaluationReport", payload);
+
+export const startLlmEvaluationRun = (payload: LlmEvaluationRunRequest) =>
+  apiRequest("startLlmEvaluationRun", payload);
+
+export const fetchLlmEvaluationRun = (runId: string) =>
+  apiRequest("fetchLlmEvaluationRun", { runId });
+
+export const cancelLlmEvaluationRun = (runId: string) =>
+  apiRequest("cancelLlmEvaluationRun", { runId });
 
 export const fetchLlmEvaluationReports = (limit = 30) =>
   apiRequest("fetchLlmEvaluationReports", { limit });

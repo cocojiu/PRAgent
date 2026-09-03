@@ -77,6 +77,14 @@ management:
           include: readinessState,db,rabbit
 
 repoguard:
+  evaluation:
+    # Must point to a provisioned directory outside the repository. Empty by default so an
+    # evaluation run cannot accidentally read workspace files.
+    data-root: ${REPOGUARD_EVALUATION_DATA_ROOT:}
+    executor-threads: ${REPOGUARD_EVALUATION_EXECUTOR_THREADS:1}
+    queue-capacity: ${REPOGUARD_EVALUATION_QUEUE_CAPACITY:2}
+    max-sample-bytes: ${REPOGUARD_EVALUATION_MAX_SAMPLE_BYTES:10485760}
+    max-dataset-bytes: ${REPOGUARD_EVALUATION_MAX_DATASET_BYTES:536870912}
   review:
     evaluation-report-retention-days: ${REPOGUARD_EVALUATION_REPORT_RETENTION_DAYS:180}
     execution:
@@ -129,7 +137,7 @@ repoguard:
     # Roles that do not own Flyway migrations refuse to start below this version.
     # Keep in sync with the highest version under db/migration; the production
     # readiness check enforces the match.
-    expected-version: ${REPOGUARD_SCHEMA_EXPECTED_VERSION:90}
+    expected-version: ${REPOGUARD_SCHEMA_EXPECTED_VERSION:91}
   tenancy:
     enabled: ${REPOGUARD_TENANCY_ENABLED:false}
     header-name: ${REPOGUARD_TENANCY_HEADER_NAME:X-RepoGuard-Tenant}

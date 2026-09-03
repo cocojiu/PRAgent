@@ -56,7 +56,7 @@ public class LlmModelReleaseRepository {
                     dataset_kind, source_repository_count, sample_count, fixed_regression_samples,
                     rolling_observation_samples, authorized, anonymized, human_reviewed, manifest_fingerprint,
                     observed_sample_fingerprint, provider, model, prompt_version, context_version, schema_version,
-                    chunk_policy_version, temperature, rule_version, code_revision, expected_findings,
+                    chunk_policy_version, temperature, rule_version, code_revision, verifier_version, aggregation_version, expected_findings,
                     predicted_findings, true_positives, false_positives, false_negatives, precision_rate, recall_rate,
                     precision_wilson_lower_bound, anchor_rate, duplicate_rate, parse_failure_rate, severity_confusion_json,
                     total_latency_ms, total_tokens, total_cost, blockers_json, eligible, metrics_json, created_by, created_at)
@@ -88,6 +88,7 @@ public class LlmModelReleaseRepository {
             d.sampleCount(), d.fixedRegressionSamples(), d.rollingObservationSamples(), d.authorized(), d.anonymized(),
             d.humanReviewed(), d.sampleFingerprint(), report.sampleFingerprint(), v.provider(), v.model(), v.promptVersion(),
             v.contextVersion(), v.schemaVersion(), v.chunkPolicyVersion(), v.temperature(), v.ruleVersion(), v.codeRevision(),
+            v.verifierVersion(), v.aggregationVersion(),
             report.expectedFindings(), report.predictedFindings(), report.truePositives(), report.falsePositives(),
             report.falseNegatives(), report.precision(), report.recall(), report.precisionWilsonLowerBound(), report.anchorRate(),
             report.duplicateRate(), report.parseFailureRate(), json(report.severityConfusion()), report.totalLatencyMs(),
@@ -286,7 +287,8 @@ public class LlmModelReleaseRepository {
     private StoredEvaluationReport mapEvaluationReport(java.sql.ResultSet rs, int rowNum) throws SQLException {
         LlmEvaluationVersion v = new LlmEvaluationVersion(rs.getString("provider"), rs.getString("model"), rs.getString("prompt_version"),
             rs.getString("context_version"), rs.getString("schema_version"), rs.getString("chunk_policy_version"), rs.getBigDecimal("temperature"),
-            rs.getString("rule_version"), rs.getString("code_revision"));
+            rs.getString("rule_version"), rs.getString("code_revision"), provenance(rs.getString("verifier_version")),
+            provenance(rs.getString("aggregation_version")));
         LlmEvaluationDatasetMetadata d = new LlmEvaluationDatasetMetadata(rs.getString("dataset_id"), rs.getString("dataset_version"),
             LlmEvaluationDatasetMetadata.DatasetKind.valueOf(rs.getString("dataset_kind")), rs.getInt("source_repository_count"),
             rs.getInt("sample_count"), rs.getInt("fixed_regression_samples"), rs.getInt("rolling_observation_samples"),
@@ -344,6 +346,10 @@ public class LlmModelReleaseRepository {
     private LocalDateTime time(java.sql.ResultSet rs, String column) throws SQLException {
         java.sql.Timestamp timestamp = rs.getTimestamp(column);
         return timestamp == null ? null : timestamp.toLocalDateTime();
+    }
+
+    private String provenance(String value) {
+        return value == null || value.isBlank() ? "legacy-unknown" : value;
     }
 
     private List<String> parseBlockers(String value) {
