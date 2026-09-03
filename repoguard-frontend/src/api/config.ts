@@ -17,6 +17,7 @@ import type {
   ReviewRuleStatusRequest,
   NotificationBindingRequest,
   NotificationBindingStatusRequest,
+  RepositorySuppressionRequest,
   SecretReEncryptionRequest,
   ServiceIntegrationConfigRequest,
   SystemSettingsRequest
@@ -61,6 +62,27 @@ export const fetchReviewPolicyConfig = () => apiRequest("fetchReviewPolicyConfig
 
 export const updateReviewPolicyConfig = (payload: ReviewPolicyConfigRequest) =>
   apiRequest("updateReviewPolicyConfig", payload);
+
+export const fetchRepositoryPolicyPreview = (
+  organization: string,
+  repository: string,
+  headSha?: string
+) => apiRequest("fetchRepositoryPolicyPreview", { organization, repository, headSha });
+
+export const fetchRepositorySuppressions = (
+  organization: string,
+  repository: string,
+  limit = 100
+) => apiRequest("fetchRepositorySuppressions", { organization, repository, limit });
+
+export const createRepositorySuppression = (payload: RepositorySuppressionRequest) =>
+  apiRequest("createRepositorySuppression", payload);
+
+export const activateRepositorySuppression = (id: number, reason?: string) =>
+  apiRequest("activateRepositorySuppression", { id, reason });
+
+export const revokeRepositorySuppression = (id: number, reason?: string) =>
+  apiRequest("revokeRepositorySuppression", { id, reason });
 
 export const fetchSystemSettings = () => apiRequest("fetchSystemSettings", undefined);
 

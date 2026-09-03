@@ -42,6 +42,11 @@ notificationIntegrationControllerRetryEvent(input: { path: { id: number } }): Pr
 notificationIntegrationControllerTestBinding(input: { path: { id: number } }): Promise<ConnectionTestResult>; // POST /api/v1/config/notification-bindings/{id}/test
 notificationIntegrationControllerUpdateBinding(input: { path: { id: number }; body: NotificationBindingRequest }): Promise<NotificationBinding>; // PUT /api/v1/config/notification-bindings/{id}
 notificationIntegrationControllerUpdateBindingStatus(input: { path: { id: number }; body: NotificationBindingStatusRequest }): Promise<NotificationBinding>; // PUT /api/v1/config/notification-bindings/{id}/status
+repositoryPolicyControllerActivate(input: { path: { id: number }; query?: { reason?: string } }): Promise<RepositorySuppressionResponse>; // POST /api/v1/config/repository-policy/suppressions/{id}/activate
+repositoryPolicyControllerCreateSuppression(input: { body: RepositorySuppressionRequest }): Promise<RepositorySuppressionResponse>; // POST /api/v1/config/repository-policy/suppressions
+repositoryPolicyControllerListSuppressions(input?: { query?: { limit?: number; organization: string; repository: string } }): Promise<RepositorySuppressionResponse[]>; // GET /api/v1/config/repository-policy/suppressions
+repositoryPolicyControllerPreview(input?: { query?: { headSha?: string; organization: string; repository: string } }): Promise<RepositoryPolicyPreviewResponse>; // GET /api/v1/config/repository-policy/preview
+repositoryPolicyControllerRevoke(input: { path: { id: number }; query?: { reason?: string } }): Promise<RepositorySuppressionResponse>; // POST /api/v1/config/repository-policy/suppressions/{id}/revoke
 reviewCalibrationControllerCancelEvaluationRun(input: { path: { runId: string } }): Promise<LlmEvaluationRun>; // POST /api/v1/config/review-calibration/evaluation-runs/{runId}/cancel
 reviewCalibrationControllerCompareEvaluationReports(input: { path: { candidateReportId: number; reportId: number } }): Promise<LlmEvaluationReportComparison>; // GET /api/v1/config/review-calibration/evaluation-reports/{reportId}/compare/{candidateReportId}
 reviewCalibrationControllerCreateEvaluationReport(input: { body: LlmEvaluationRequest }): Promise<LlmEvaluationReport>; // POST /api/v1/config/review-calibration/evaluation-reports

@@ -1,3 +1,4 @@
+activateRepositorySuppression -> repositoryPolicyControllerActivate // POST /api/v1/config/repository-policy/suppressions/{id}/activate
 bindEnterpriseTenantIdentity -> enterpriseTenantControllerPutIdentity // PUT /api/v1/enterprise/tenants/{tenantKey}/identities
 bindEnterpriseTenantMembership -> enterpriseTenantControllerPutMembership // PUT /api/v1/enterprise/tenants/{tenantKey}/memberships
 bindEnterpriseTenantRepository -> enterpriseTenantControllerPutRepository // PUT /api/v1/enterprise/tenants/{tenantKey}/repositories
@@ -8,6 +9,7 @@ compareLlmEvaluationReports -> reviewCalibrationControllerCompareEvaluationRepor
 createEnterpriseTenant -> enterpriseTenantControllerCreate // POST /api/v1/enterprise/tenants
 createLlmEvaluationReport -> reviewCalibrationControllerCreateEvaluationReport // POST /api/v1/config/review-calibration/evaluation-reports
 createNotificationBinding -> notificationIntegrationControllerCreateBinding // POST /api/v1/config/notification-bindings
+createRepositorySuppression -> repositoryPolicyControllerCreateSuppression // POST /api/v1/config/repository-policy/suppressions
 createReviewRule -> systemConfigControllerCreateReviewRule // POST /api/v1/config/review-rules
 createUser -> userManagementControllerCreateUser // POST /api/v1/users
 deleteNotificationBinding -> notificationIntegrationControllerDeleteBinding // DELETE /api/v1/config/notification-bindings/{id}
@@ -46,6 +48,8 @@ fetchNotificationReadKeys -> notificationControllerReadKeys // GET /api/v1/notif
 fetchNotificationReport -> notificationControllerReport // GET /api/v1/notifications/reports
 fetchNotifications -> notificationControllerGetNotifications // GET /api/v1/notifications
 fetchRabbitMqIntegrationConfig -> systemConfigControllerGetRabbitMqIntegration // GET /api/v1/config/integrations/rabbitmq
+fetchRepositoryPolicyPreview -> repositoryPolicyControllerPreview // GET /api/v1/config/repository-policy/preview
+fetchRepositorySuppressions -> repositoryPolicyControllerListSuppressions // GET /api/v1/config/repository-policy/suppressions
 fetchReviewAttemptComparison -> reviewExecutionAttemptComparisonControllerCompare // GET /api/v1/reviews/{taskId}/attempts/{candidateAttemptId}/comparison
 fetchReviewCalibrationQueue -> reviewCalibrationControllerGetReviewCalibrationQueue // GET /api/v1/config/review-calibration/queue
 fetchReviewChangedFiles -> reviewControllerListChangedFiles // GET /api/v1/reviews/{id}/changed-files
@@ -89,6 +93,7 @@ resetRefreshToken -> authControllerResetRefreshToken // POST /api/v1/auth/refres
 resumeSecretReEncryptionJob -> systemConfigControllerResumeSecretReEncryptionJob // POST /api/v1/config/secrets/re-encryption/jobs/{jobId}/resume
 retryNotificationEvent -> notificationIntegrationControllerRetryEvent // POST /api/v1/notification-events/{id}/retry
 retryReview -> reviewControllerRetryReview // POST /api/v1/reviews/{id}/retry
+revokeRepositorySuppression -> repositoryPolicyControllerRevoke // POST /api/v1/config/repository-policy/suppressions/{id}/revoke
 rollbackLlmModelRelease -> reviewCalibrationControllerRollbackModelRelease // POST /api/v1/config/review-calibration/release-center/{releaseId}/rollback
 rollbackReviewRule -> systemConfigControllerRollbackReviewRule // POST /api/v1/config/review-rules/{id}/versions/{policyVersion}/rollback
 rollbackReviewStrategy -> systemConfigControllerRollbackReviewStrategy // POST /api/v1/config/review-strategy/versions/{snapshotId}/rollback

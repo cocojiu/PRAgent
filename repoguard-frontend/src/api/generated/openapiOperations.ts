@@ -63,6 +63,9 @@ import type {
   NotificationReadRequest,
   NotificationReport,
   PageResponse,
+  RepositoryPolicyPreviewResponse,
+  RepositorySuppressionRequest,
+  RepositorySuppressionResponse,
   ReviewAttemptComparison,
   ReviewCalibrationQueue,
   ReviewEnforcementModeRequest,
@@ -354,6 +357,41 @@ export type GeneratedOpenApiOperationMap = {
     query: never;
     body: NotificationBindingStatusRequest;
     response: NotificationBinding;
+  };
+  "repositoryPolicyControllerActivate": {
+    method: "POST";
+    pathParams: { id: number };
+    query: { reason?: string };
+    body: never;
+    response: RepositorySuppressionResponse;
+  };
+  "repositoryPolicyControllerCreateSuppression": {
+    method: "POST";
+    pathParams: never;
+    query: never;
+    body: RepositorySuppressionRequest;
+    response: RepositorySuppressionResponse;
+  };
+  "repositoryPolicyControllerListSuppressions": {
+    method: "GET";
+    pathParams: never;
+    query: { limit?: number; organization: string; repository: string };
+    body: never;
+    response: RepositorySuppressionResponse[];
+  };
+  "repositoryPolicyControllerPreview": {
+    method: "GET";
+    pathParams: never;
+    query: { headSha?: string; organization: string; repository: string };
+    body: never;
+    response: RepositoryPolicyPreviewResponse;
+  };
+  "repositoryPolicyControllerRevoke": {
+    method: "POST";
+    pathParams: { id: number };
+    query: { reason?: string };
+    body: never;
+    response: RepositorySuppressionResponse;
   };
   "reviewCalibrationControllerCancelEvaluationRun": {
     method: "POST";
@@ -1209,6 +1247,46 @@ export const generatedOpenApiOperations = {
     queryParamNames: [],
     hasRequestBody: true,
     requestBodyRequired: true
+  },
+  "repositoryPolicyControllerActivate": {
+    method: "POST",
+    path: "/api/v1/config/repository-policy/suppressions/{id}/activate",
+    pathParamNames: ["id"],
+    queryParamNames: ["reason"],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "repositoryPolicyControllerCreateSuppression": {
+    method: "POST",
+    path: "/api/v1/config/repository-policy/suppressions",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "repositoryPolicyControllerListSuppressions": {
+    method: "GET",
+    path: "/api/v1/config/repository-policy/suppressions",
+    pathParamNames: [],
+    queryParamNames: ["limit", "organization", "repository"],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "repositoryPolicyControllerPreview": {
+    method: "GET",
+    path: "/api/v1/config/repository-policy/preview",
+    pathParamNames: [],
+    queryParamNames: ["headSha", "organization", "repository"],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "repositoryPolicyControllerRevoke": {
+    method: "POST",
+    path: "/api/v1/config/repository-policy/suppressions/{id}/revoke",
+    pathParamNames: ["id"],
+    queryParamNames: ["reason"],
+    hasRequestBody: false,
+    requestBodyRequired: false
   },
   "reviewCalibrationControllerCancelEvaluationRun": {
     method: "POST",

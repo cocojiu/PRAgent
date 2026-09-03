@@ -121,6 +121,9 @@ import type {
   SystemHealthItem,
   SystemSettings,
   SystemSettingsRequest,
+  RepositoryPolicyPreviewResponse,
+  RepositorySuppressionRequest,
+  RepositorySuppressionResponse,
 } from "@/types";
 import { RequestError } from "@/utils/errors";
 
@@ -280,6 +283,23 @@ export type ApiContract = {
   updateRabbitMqIntegrationConfig: ApiOperation<ServiceIntegrationConfigRequest, ServiceIntegrationConfig>;
   fetchReviewPolicyConfig: ApiOperation<undefined, ReviewPolicyConfig>;
   updateReviewPolicyConfig: ApiOperation<ReviewPolicyConfigRequest, ReviewPolicyConfig>;
+  fetchRepositoryPolicyPreview: ApiOperation<
+    { organization: string; repository: string; headSha?: string },
+    RepositoryPolicyPreviewResponse
+  >;
+  fetchRepositorySuppressions: ApiOperation<
+    { organization: string; repository: string; limit?: number },
+    RepositorySuppressionResponse[]
+  >;
+  createRepositorySuppression: ApiOperation<RepositorySuppressionRequest, RepositorySuppressionResponse>;
+  activateRepositorySuppression: ApiOperation<
+    { id: number; reason?: string },
+    RepositorySuppressionResponse
+  >;
+  revokeRepositorySuppression: ApiOperation<
+    { id: number; reason?: string },
+    RepositorySuppressionResponse
+  >;
   fetchSystemSettings: ApiOperation<undefined, SystemSettings>;
   updateSystemSettings: ApiOperation<SystemSettingsRequest, SystemSettings>;
   reEncryptSecrets: ApiOperation<SecretReEncryptionRequest, SecretReEncryptionJob>;
@@ -643,6 +663,31 @@ const apiEndpoints: ApiEndpointMap = {
     }),
     validateResponse: isReviewPolicyConfig
   },
+  fetchRepositoryPolicyPreview: generatedEndpoint("repositoryPolicyControllerPreview", {
+    query: input => ({
+      organization: input.organization,
+      repository: input.repository,
+      headSha: input.headSha
+    })
+  }),
+  fetchRepositorySuppressions: generatedEndpoint("repositoryPolicyControllerListSuppressions", {
+    query: input => ({
+      organization: input.organization,
+      repository: input.repository,
+      limit: input.limit
+    })
+  }),
+  createRepositorySuppression: generatedEndpoint("repositoryPolicyControllerCreateSuppression", {
+    body: input => input
+  }),
+  activateRepositorySuppression: generatedEndpoint("repositoryPolicyControllerActivate", {
+    path: input => ({ id: input.id }),
+    query: input => ({ reason: input.reason })
+  }),
+  revokeRepositorySuppression: generatedEndpoint("repositoryPolicyControllerRevoke", {
+    path: input => ({ id: input.id }),
+    query: input => ({ reason: input.reason })
+  }),
   fetchSystemSettings: generatedEndpoint("systemConfigControllerGetSystemSettings", {}),
   updateSystemSettings: generatedEndpoint("systemConfigControllerUpdateSystemSettings", {
     body: input => input

@@ -58,7 +58,9 @@ class ControllerAuthorizationContractTest {
         "ScmProviderController#head",
         "NotificationController#readKeys",
         "NotificationController#report",
-        "ReviewWorkflowController#queue"
+        "ReviewWorkflowController#queue",
+        "RepositoryPolicyController#preview",
+        "RepositoryPolicyController#listSuppressions"
     );
 
     @Test

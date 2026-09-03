@@ -7,6 +7,8 @@ GET /api/v1/config/integrations/github/checks query=[organization, repository] b
 GET /api/v1/config/integrations/mysql query=[] body=- bodyRequired=false
 GET /api/v1/config/integrations/rabbitmq query=[] body=- bodyRequired=false
 GET /api/v1/config/notification-bindings query=[page, pageSize, organization, repository, provider] body=- bodyRequired=false
+GET /api/v1/config/repository-policy/preview query=[organization, repository, headSha] body=- bodyRequired=false
+GET /api/v1/config/repository-policy/suppressions query=[organization, repository, limit] body=- bodyRequired=false
 GET /api/v1/config/review-calibration/evaluation-reports query=[limit] body=- bodyRequired=false
 GET /api/v1/config/review-calibration/evaluation-reports/{reportId} query=[] body=- bodyRequired=false
 GET /api/v1/config/review-calibration/evaluation-reports/{reportId}/compare/{candidateReportId} query=[] body=- bodyRequired=false
@@ -84,6 +86,9 @@ POST /api/v1/config/integrations/mysql/test query=[] body=ServiceIntegrationConf
 POST /api/v1/config/integrations/rabbitmq/test query=[] body=ServiceIntegrationConfigRequest bodyRequired=false
 POST /api/v1/config/notification-bindings query=[] body=NotificationBindingRequest bodyRequired=true
 POST /api/v1/config/notification-bindings/{id}/test query=[] body=- bodyRequired=false
+POST /api/v1/config/repository-policy/suppressions query=[] body=RepositorySuppressionRequest bodyRequired=true
+POST /api/v1/config/repository-policy/suppressions/{id}/activate query=[reason] body=- bodyRequired=false
+POST /api/v1/config/repository-policy/suppressions/{id}/revoke query=[reason] body=- bodyRequired=false
 POST /api/v1/config/review-calibration/evaluation-reports query=[] body=LlmEvaluationRequest bodyRequired=true
 POST /api/v1/config/review-calibration/evaluation-reports/{reportId}/lifecycle query=[] body=LlmEvaluationReportLifecycleRequest bodyRequired=true
 POST /api/v1/config/review-calibration/evaluation-runs query=[] body=LlmEvaluationRunRequest bodyRequired=true

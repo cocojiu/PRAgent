@@ -33,6 +33,7 @@ const migratedOperationPrefixes = [
   "reviewController",
   "reviewExecutionAttemptController",
   "reviewExecutionAttemptComparisonController",
+  "repositoryPolicyController",
   "notificationController",
   "notificationIntegrationController",
   "systemConfigController",

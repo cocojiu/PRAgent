@@ -62,6 +62,7 @@
       />
     </section>
 
+    <RepositoryPolicyPanel />
     <ReviewCalibrationQueueCard :rules="rules" />
     <LlmEvaluationWorkbench />
     <LlmModelReleaseCenter />
@@ -343,6 +344,7 @@ import { useMetricIcon } from "@/composables/useMetricIcon";
 import ReviewCalibrationQueueCard from "@/features/rule-config/components/ReviewCalibrationQueueCard.vue";
 import LlmEvaluationWorkbench from "@/features/rule-config/components/LlmEvaluationWorkbench.vue";
 import LlmModelReleaseCenter from "@/features/rule-config/components/LlmModelReleaseCenter.vue";
+import RepositoryPolicyPanel from "@/features/rule-config/components/RepositoryPolicyPanel.vue";
 import { useReviewPolicyHistory } from "@/features/rule-config/composables/useReviewPolicyHistory";
 import { useReviewRuleCatalog } from "@/features/rule-config/composables/useReviewRuleCatalog";
 import { useReviewRuleEditor } from "@/features/rule-config/composables/useReviewRuleEditor";

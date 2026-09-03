@@ -41,6 +41,8 @@ public class MybatisPlusConfig {
         "review_pull_request_head",
         "review_quality_baseline_snapshot",
         "review_repository_dimension",
+        "review_repository_suppression",
+        "review_repository_suppression_audit",
         "review_rule_config",
         "review_rule_policy_snapshot",
         "review_strategy_policy_snapshot",

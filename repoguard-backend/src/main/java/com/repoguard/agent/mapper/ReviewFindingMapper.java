@@ -25,6 +25,25 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
         """)
     List<ReviewFinding> selectByTaskIdForComparison(@Param("taskId") Long taskId);
 
+    @Select("""
+        select finding.*
+          from review_finding finding
+          join review_task task on task.id = finding.task_id
+         where lower(task.organization) = lower(#{organization})
+           and lower(task.repository) = lower(#{repository})
+           and finding.category = 'FINDING'
+           and upper(finding.rule_id) = upper(#{ruleId})
+           and finding.current_attempt = 1
+         order by finding.id desc
+         limit #{limit}
+        """)
+    List<ReviewFinding> selectRecentSuppressionHits(
+        @Param("organization") String organization,
+        @Param("repository") String repository,
+        @Param("ruleId") String ruleId,
+        @Param("limit") int limit
+    );
+
     @Update("""
         update review_finding
         set finding_fingerprint = #{findingFingerprint},

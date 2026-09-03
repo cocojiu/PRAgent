@@ -1,3 +1,4 @@
+activateRepositorySuppression -> repositoryPolicyControllerActivate(input: { path: { id: number }; query?: { reason?: string } }): Promise<RepositorySuppressionResponse>; // POST /api/v1/config/repository-policy/suppressions/{id}/activate
 bindEnterpriseTenantIdentity -> enterpriseTenantControllerPutIdentity(input: { path: { tenantKey: string }; body: EnterpriseIdentityBindingRequest }): Promise<void>; // PUT /api/v1/enterprise/tenants/{tenantKey}/identities
 bindEnterpriseTenantMembership -> enterpriseTenantControllerPutMembership(input: { path: { tenantKey: string }; body: EnterpriseTenantMembershipRequest }): Promise<void>; // PUT /api/v1/enterprise/tenants/{tenantKey}/memberships
 bindEnterpriseTenantRepository -> enterpriseTenantControllerPutRepository(input: { path: { tenantKey: string }; body: EnterpriseTenantRepositoryRequest }): Promise<void>; // PUT /api/v1/enterprise/tenants/{tenantKey}/repositories
@@ -8,6 +9,7 @@ compareLlmEvaluationReports -> reviewCalibrationControllerCompareEvaluationRepor
 createEnterpriseTenant -> enterpriseTenantControllerCreate(input: { body: EnterpriseTenantCreateRequest }): Promise<EnterpriseTenant>; // POST /api/v1/enterprise/tenants
 createLlmEvaluationReport -> reviewCalibrationControllerCreateEvaluationReport(input: { body: LlmEvaluationRequest }): Promise<LlmEvaluationReport>; // POST /api/v1/config/review-calibration/evaluation-reports
 createNotificationBinding -> notificationIntegrationControllerCreateBinding(input: { body: NotificationBindingRequest }): Promise<NotificationBinding>; // POST /api/v1/config/notification-bindings
+createRepositorySuppression -> repositoryPolicyControllerCreateSuppression(input: { body: RepositorySuppressionRequest }): Promise<RepositorySuppressionResponse>; // POST /api/v1/config/repository-policy/suppressions
 createReviewRule -> systemConfigControllerCreateReviewRule(input: { body: ReviewRuleConfigRequest }): Promise<ReviewRuleConfig>; // POST /api/v1/config/review-rules
 createUser -> userManagementControllerCreateUser(input: { body: UserCreateRequest }): Promise<ManagedUser>; // POST /api/v1/users
 deleteNotificationBinding -> notificationIntegrationControllerDeleteBinding(input: { path: { id: number } }): Promise<void>; // DELETE /api/v1/config/notification-bindings/{id}
@@ -46,6 +48,8 @@ fetchNotificationReadKeys -> notificationControllerReadKeys(): Promise<string[]>
 fetchNotificationReport -> notificationControllerReport(input?: { query?: { period?: string } }): Promise<NotificationReport>; // GET /api/v1/notifications/reports
 fetchNotifications -> notificationControllerGetNotifications(): Promise<NotificationCenter>; // GET /api/v1/notifications
 fetchRabbitMqIntegrationConfig -> systemConfigControllerGetRabbitMqIntegration(): Promise<ServiceIntegrationConfig>; // GET /api/v1/config/integrations/rabbitmq
+fetchRepositoryPolicyPreview -> repositoryPolicyControllerPreview(input?: { query?: { headSha?: string; organization: string; repository: string } }): Promise<RepositoryPolicyPreviewResponse>; // GET /api/v1/config/repository-policy/preview
+fetchRepositorySuppressions -> repositoryPolicyControllerListSuppressions(input?: { query?: { limit?: number; organization: string; repository: string } }): Promise<RepositorySuppressionResponse[]>; // GET /api/v1/config/repository-policy/suppressions
 fetchReviewAttemptComparison -> reviewExecutionAttemptComparisonControllerCompare(input: { path: { candidateAttemptId: number; taskId: number }; query?: { baselineAttemptId?: number; page?: number; pageSize?: number } }): Promise<ReviewAttemptComparison>; // GET /api/v1/reviews/{taskId}/attempts/{candidateAttemptId}/comparison
 fetchReviewCalibrationQueue -> reviewCalibrationControllerGetReviewCalibrationQueue(input?: { query?: { includeIgnored?: boolean; limit?: number; ruleId: string } }): Promise<ReviewCalibrationQueue>; // GET /api/v1/config/review-calibration/queue
 fetchReviewChangedFiles -> reviewControllerListChangedFiles(input: { path: { id: number }; query?: { hasFinding?: boolean; page?: number; pageSize?: number } }): Promise<PageResponse<ChangedFile>>; // GET /api/v1/reviews/{id}/changed-files
@@ -89,6 +93,7 @@ resetRefreshToken -> authControllerResetRefreshToken(input: { body: AuthRefreshT
 resumeSecretReEncryptionJob -> systemConfigControllerResumeSecretReEncryptionJob(input: { path: { jobId: number } }): Promise<SecretReEncryptionJob>; // POST /api/v1/config/secrets/re-encryption/jobs/{jobId}/resume
 retryNotificationEvent -> notificationIntegrationControllerRetryEvent(input: { path: { id: number } }): Promise<NotificationEvent>; // POST /api/v1/notification-events/{id}/retry
 retryReview -> reviewControllerRetryReview(input: { path: { id: number } }): Promise<ReviewRetryResponse>; // POST /api/v1/reviews/{id}/retry
+revokeRepositorySuppression -> repositoryPolicyControllerRevoke(input: { path: { id: number }; query?: { reason?: string } }): Promise<RepositorySuppressionResponse>; // POST /api/v1/config/repository-policy/suppressions/{id}/revoke
 rollbackLlmModelRelease -> reviewCalibrationControllerRollbackModelRelease(input: { path: { releaseId: number }; body: LlmModelRollbackRequest }): Promise<LlmModelRelease>; // POST /api/v1/config/review-calibration/release-center/{releaseId}/rollback
 rollbackReviewRule -> systemConfigControllerRollbackReviewRule(input: { path: { id: string; policyVersion: number }; body: ReviewRuleRollbackRequest }): Promise<ReviewRuleConfig>; // POST /api/v1/config/review-rules/{id}/versions/{policyVersion}/rollback
 rollbackReviewStrategy -> systemConfigControllerRollbackReviewStrategy(input: { path: { snapshotId: number }; body: ReviewStrategyRollbackRequest }): Promise<ReviewStrategyPolicy>; // POST /api/v1/config/review-strategy/versions/{snapshotId}/rollback

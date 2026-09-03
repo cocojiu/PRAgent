@@ -1,8 +1,6 @@
 package com.repoguard.agent.review;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.repoguard.agent.review.ReviewPolicyProvider;
-import com.repoguard.agent.review.ReviewPolicySettings;
 import com.repoguard.agent.review.quality.LlmModelReleaseService;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.external.ExternalCallErrorClassifier;
@@ -26,7 +24,6 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
-
 @Service
 public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCaller {
 
@@ -40,8 +37,8 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
     private final LlmChatCompletionResponseExtractor responseExtractor;
     private final OutboundEndpointPolicy endpointPolicy;
     private final LlmModelReleaseService modelReleaseService;
+    private final RepositoryPolicyRuntime repositoryPolicyRuntime;
     private final AtomicReference<CachedRestClient> cachedRestClient = new AtomicReference<>();
-
     @Autowired
     public LlmPullRequestReviewer(
         ReviewPolicyProvider reviewPolicyProvider,
@@ -53,7 +50,8 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         ExternalHttpJsonResponseReader responseReader,
         LlmChatCompletionResponseExtractor responseExtractor,
         OutboundEndpointPolicy endpointPolicy,
-        ObjectProvider<LlmModelReleaseService> modelReleaseServiceProvider
+        ObjectProvider<LlmModelReleaseService> modelReleaseServiceProvider,
+        ObjectProvider<RepositoryPolicyRuntime> repositoryPolicyRuntimeProvider
     ) {
         this(
             reviewPolicyProvider,
@@ -66,6 +64,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
             responseExtractor,
             endpointPolicy,
             modelReleaseServiceProvider.getIfAvailable(),
+            repositoryPolicyRuntimeProvider.getIfAvailable(),
             true
         );
     }
@@ -91,6 +90,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
             responseExtractor,
             null,
             null,
+            null,
             true
         );
     }
@@ -106,6 +106,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         LlmChatCompletionResponseExtractor responseExtractor,
         OutboundEndpointPolicy endpointPolicy,
         LlmModelReleaseService modelReleaseService,
+        RepositoryPolicyRuntime repositoryPolicyRuntime,
         boolean ignored
     ) {
         this.reviewPolicyProvider = Objects.requireNonNull(reviewPolicyProvider, "reviewPolicyProvider");
@@ -118,16 +119,18 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         this.responseExtractor = Objects.requireNonNull(responseExtractor, "responseExtractor");
         this.endpointPolicy = endpointPolicy;
         this.modelReleaseService = modelReleaseService;
+        this.repositoryPolicyRuntime = repositoryPolicyRuntime;
     }
-
     @Override
     public ReviewResult review(ReviewTask task, PullRequestDiff diff) {
         return review(task, diff, null);
     }
-
     @Override
     public ReviewResult review(ReviewTask task, PullRequestDiff diff, ReviewDeadline deadline) {
         ReviewPolicySettings settings = reviewPolicyProvider.getSettings();
+        if (repositoryPolicyRuntime != null) {
+            settings = repositoryPolicyRuntime.applyLlmSettings(task, settings);
+        }
         if (modelReleaseService != null) {
             settings = modelReleaseService.route(settings, task);
         }
@@ -147,6 +150,9 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         String model
     ) {
         ReviewPolicySettings configured = reviewPolicyProvider.getSettings();
+        if (repositoryPolicyRuntime != null) {
+            configured = repositoryPolicyRuntime.applyLlmSettings(task, configured);
+        }
         if (!configured.enabled() || !configured.readyForLlmReview()) {
             throw new IllegalStateException("LLM 评估运行需要已启用且配置完整的模型服务");
         }
@@ -196,7 +202,6 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
             new ReviewPipelineContext(task, diff, settings, promptSummary, startedAt, this, promptContext, deadline)
         );
     }
-
     @Override
     public LlmCallResult callLlm(ReviewPolicySettings settings, ReviewTask task, PullRequestDiff diff) {
         return callLlm(settings, task, diff, promptBuilder.buildContext(diff));
