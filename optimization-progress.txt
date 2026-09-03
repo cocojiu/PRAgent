@@ -550,3 +550,10 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 条件项：`FUNC-P2-001`/`FUNC-P2-002` 因无真实非 GitHub 使用方或固定回归集成本/P95 基线暂缓；`FUNC-P2-003`/`FUNC-P2-004` 因无真实多实验需求或供应商故障/合规事件证据暂缓。优化-01～优化-58 的仓库范围代码、测试和 CI 记录保持原结论，但优化-36 的个人项目范围决策明确排除生产环境准出。
 验证证据：当前分支 `PRAgent-test` 与 `origin/PRAgent-test` 一致；最新提交 `77244a88` 对应 Pull Request Quality `33727031114`、Repository Governance `33727026689`、Auto Create Pull Request `33727026787` 均成功；本地最近一次后端 `mvn verify` 通过 2848 项（12 项条件跳过），前端生成检查/类型检查/ESLint/Vitest/Vite 构建均通过，`git diff --check` 通过。
 回滚与边界：审计只更新本进度文本，不修改业务代码；保留用户既有 `ArchitectureRatchetTest.java`、两个前端 `.test.ts` 文件和 `.tmp/` 未提交；不提交非 README Markdown 或测试相关脚本。P0 真实数据到位后先生成可重复报告，再按 P1-001、P1-003、P1-004 顺序补齐缺口并逐项执行真实验收。
+
+2026-09-03 | 优化-72 | FUNC-P1-001 按跨次状态发布 GitHub 回写
+状态：代码链路、完整本地质量门禁、中文提交、test 分支推送和远程 Actions 验收通过；真实 GitHub PR 数据集与生产凭据验收仍待授权，按第 14.18 节保留外部验收边界。
+变更：发布前强制为当前 attempt 生成对比结果，候选 SQL 仅允许 `NEW/REGRESSED`；`PERSISTING` 发现合并进现有单条 PR 总评，缺少当前 attempt 时 fail-closed；新增对比门禁和候选/SQL 契约测试，避免重复回写与跨 attempt 误发。
+本地验证：后端定向测试 18 项通过；完整 `mvn verify -DskipTests=false` 共 2853 项测试通过、0 失败、12 项按环境条件跳过，JaCoCo、架构棘轮、迁移和 OpenAPI 契约门禁通过；`git diff --check` 通过。
+提交/远程验收：实现提交 `71bd9c74`（优化：按跨次状态控制 GitHub 回写）已推送 `origin/PRAgent-test`；Pull Request Quality `33729657979` 的 8 个作业全部成功，Repository Governance `33729652270`、Auto Create Pull Request `33729652348` 亦成功。
+边界与回滚：仍不自动修改已发布旧评论；真实 PR/人工复核与生产 GitHub 权限需另行授权。回滚可回退 `71bd9c74`；本记录未提交非 README Markdown、测试相关脚本或用户既有测试改动/`.tmp/`。
