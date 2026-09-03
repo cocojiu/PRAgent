@@ -612,3 +612,9 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 状态：完成只读的生产主机、容器入口和云防火墙复核；未修改探测规则、生产服务或网络策略，GitHub-hosted runner 的外部可用性仍未恢复。
 证据：允许分支 `main` 的只读生产观测 run `33767117081` 经 `production` Environment 审批后成功 SSH 到生产主机；服务器 `0.0.0.0:80`/`:443` 由 docker-proxy 监听，UFW 为 inactive，nftables 未发现入站默认拒绝；阿里云轻量应用服务器的 TCP 443 规则为 `0.0.0.0/0` 且已启用。远程 Compose、Caddy、MySQL、RabbitMQ、后端、前端、Docker Proxy、Loki、Alloy 和 Grafana 状态健康，仓库与生产 Compose SHA 一致。主分支生产可用性 run `33772197847` 在 Azure `eastus2` runner 仍对六个端点重复 `curl: (28)` 超时，`PRAgent-test` 的 `33761885768` 在 `westcentralus` 亦同样失败。
 结论与处理边界：阻塞已定位到 GitHub-hosted runner 到中国大陆源站 IPv4 的跨境路由/边缘接入差异，不是仓库代码、Caddy、Docker、生产主机或轻量服务器防火墙配置。正式闭环只能通过全球可达的 ESA/CDN/代理入口并更新 DNS，或注册受控的同网段 self-hosted runner；在获得明确基础设施授权前，不改生产网络、不把 origin-side SSH 探测当作外部验收，也不关闭 Issue #151。未提交非 README Markdown、测试相关脚本或用户既有改动。
+
+2026-09-04 | 优化-82 | 全球 ESA 入口与 DNS 冲突记录修复验收
+状态：完成生产入口可达性修复并通过 GitHub-hosted runner 正式验收；优化-80/81 的外部阻塞已闭环。
+变更：阿里云 ESA 站点 `pragent.top`（站点 ID `168509105807564`）由“中国内地”切换为“全球”；删除阿里云 DNS 中与 ESA CNAME 冲突的根 `@ A 47.111.168.74`，保留 `@ CNAME pragent.top.a1.initaq.com`。DNS 操作日志记录 2026-09-04 00:10:29 删除该 A 记录，控制台记录数由 5 条降为 4 条；独立公共 Cloudflare 解析视角已仅返回 ESA 地址 `163.181.214.1`，未再返回旧根 A。
+验收：Production Availability run `33778294979` 在 Azure `eastus2` GitHub-hosted runner、提交 `2d800f53` 上成功；既有六个生产端点检查通过，`PROBE_HEALTHY=true`，`Fail unhealthy observation` 跳过，告警 Issue #151 已按健康逻辑关闭。此次不改探测规则、不改应用代码、不新增 self-hosted runner。
+影响与边界：全球 ESA 可能存在数分钟节点/DNS 传播窗口；`www A 47.111.168.74` 保持原样，未扩大变更范围。后续需观察定时 Production Availability 连续成功后，再把生产可用性从恢复态提升为稳定态；50～100 个真实脱敏 PR、真实 GitHub App/OIDC/扫描器/LLM/Prometheus 等方案外部验收仍按第 14.18 节等待授权。未提交非 README Markdown、测试相关脚本或用户既有改动。
