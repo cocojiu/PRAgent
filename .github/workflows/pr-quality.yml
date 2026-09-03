@@ -253,10 +253,18 @@ jobs:
       - name: Generate ephemeral integration secrets
         shell: bash
         run: |
-          echo "REPOGUARD_SECURITY_ENCRYPTION_KEY=CI!1-$(openssl rand -hex 32)" >> "$GITHUB_ENV"
-          echo "REPOGUARD_SECURITY_ENCRYPTION_SALT=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
-          echo "REPOGUARD_AUTH_TOKEN_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
-          echo "REPOGUARD_ADMIN_API_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          set -euo pipefail
+          encryption_key="CI!1-$(openssl rand -hex 32)"
+          encryption_salt="$(openssl rand -hex 32)"
+          auth_token_secret="$(openssl rand -hex 32)"
+          admin_api_key="$(openssl rand -hex 32)"
+          for value in "${encryption_key}" "${encryption_salt}" "${auth_token_secret}" "${admin_api_key}"; do
+            echo "::add-mask::${value}"
+          done
+          echo "REPOGUARD_SECURITY_ENCRYPTION_KEY=${encryption_key}" >> "$GITHUB_ENV"
+          echo "REPOGUARD_SECURITY_ENCRYPTION_SALT=${encryption_salt}" >> "$GITHUB_ENV"
+          echo "REPOGUARD_AUTH_TOKEN_SECRET=${auth_token_secret}" >> "$GITHUB_ENV"
+          echo "REPOGUARD_ADMIN_API_KEY=${admin_api_key}" >> "$GITHUB_ENV"
       - name: Run production-like context tests
         working-directory: repoguard-backend
         run: ./mvnw -B -Dtest=ProductionRuntimeContextIntegrationTest test
