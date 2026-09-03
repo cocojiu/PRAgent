@@ -557,3 +557,10 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 本地验证：后端定向测试 18 项通过；完整 `mvn verify -DskipTests=false` 共 2853 项测试通过、0 失败、12 项按环境条件跳过，JaCoCo、架构棘轮、迁移和 OpenAPI 契约门禁通过；`git diff --check` 通过。
 提交/远程验收：实现提交 `71bd9c74`（优化：按跨次状态控制 GitHub 回写）已推送 `origin/PRAgent-test`；Pull Request Quality `33729657979` 的 8 个作业全部成功，Repository Governance `33729652270`、Auto Create Pull Request `33729652348` 亦成功。
 边界与回滚：仍不自动修改已发布旧评论；真实 PR/人工复核与生产 GitHub 权限需另行授权。回滚可回退 `71bd9c74`；本记录未提交非 README Markdown、测试相关脚本或用户既有测试改动/`.tmp/`。
+
+2026-09-03 | 优化-73 | FUNC-P1-003 仓库策略即代码与误报抑制
+状态：代码链路、完整本地质量门禁、中文提交、test 分支推送和远程 Actions 验收通过；真实 GitHub 仓库策略文件、人工 suppression 审批和生产租户审计证据仍待授权，按第 14.18 节不提前宣称外部业务验收完成。
+变更：新增有界且 fail-closed 的 `.repoguard.yml` YAML 解析器，拒绝未知字段/规则、供应商地址、密钥、命令、危险或过宽 glob、无期限 suppression；实现 platform/base/admin 优先级合并，保护高影响 BLOCK 规则、限制 LLM token/费用预算，并仅把 head 策略作为预览。新增 V92 租户隔离 suppression 与审计表，支持提案、近期开历史回放、激活/撤销/到期和命中统计；误报反馈可生成精确文件范围、90 天到期的提案。新增管理员预览与 suppression API、OpenAPI/前端客户端及规则配置面板。
+本地验证：后端 `mvn clean verify -DskipTests=false` 共 2877 项测试通过、0 失败、12 项按环境条件跳过；JaCoCo 指令 0.8932、分支 0.7004、行 0.8917，架构、迁移、租户、授权和 OpenAPI 契约门禁通过；前端 `npm run quality` 通过 43 个文件/173 项测试、类型检查、生成客户端检查、ESLint、覆盖率和构建；`git diff --check` 通过。
+提交/远程验收：实现提交 `8e136e20`（新增：建设仓库策略即代码与误报抑制）已推送 `origin/PRAgent-test`；Pull Request Quality `33739480092` 的 10 个作业全部成功（含 MySQL/RabbitMQ、后端覆盖率/CVE、前端浏览器质量、Flyway、生产边缘、密钥与依赖门禁），Repository Governance `33739475479`、Auto Create Pull Request `33739475524` 亦成功。
+边界与回滚：服务端不接受仓库文件中的 endpoint、token、webhook 或执行命令；head 只用于预览，平台安全底线不可被仓库策略降低；suppression 必须有理由、操作人和到期时间且可撤销。真实 GitHub App/PR 和人工审批仍需另行授权；可回退 `8e136e20` 与 V92 前的应用版本（不删除已发布迁移）。本记录未提交非 README Markdown、测试相关脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
