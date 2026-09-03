@@ -256,7 +256,8 @@ jobs:
           set -euo pipefail
           encryption_key="CI!1-$(openssl rand -hex 32)"
           encryption_salt="$(openssl rand -hex 32)"
-          auth_token_secret="$(openssl rand -hex 32)"
+          REPOGUARD_AUTH_TOKEN_SECRET=$(openssl rand -hex 32)
+          auth_token_secret="${REPOGUARD_AUTH_TOKEN_SECRET}"
           admin_api_key="$(openssl rand -hex 32)"
           for value in "${encryption_key}" "${encryption_salt}" "${auth_token_secret}" "${admin_api_key}"; do
             echo "::add-mask::${value}"
