@@ -7,12 +7,15 @@ spring:
     username: ${SPRING_DATASOURCE_USERNAME}
     password: ${SPRING_DATASOURCE_PASSWORD}
     hikari:
-      maximum-pool-size: ${SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE:8}
-      minimum-idle: ${SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE:1}
-      connection-timeout: ${SPRING_DATASOURCE_HIKARI_CONNECTION_TIMEOUT_MS:3000}
-      validation-timeout: ${SPRING_DATASOURCE_HIKARI_VALIDATION_TIMEOUT_MS:2500}
-      idle-timeout: ${SPRING_DATASOURCE_HIKARI_IDLE_TIMEOUT_MS:300000}
-      max-lifetime: ${SPRING_DATASOURCE_HIKARI_MAX_LIFETIME_MS:1500000}
+      # Spring's environment-variable form removes dashes rather than
+      # introducing extra nested segments.  Keeping these names canonical
+      # prevents `CONNECTION_TIMEOUT_MS` from binding as hikari.connection.*.
+      maximum-pool-size: ${SPRING_DATASOURCE_HIKARI_MAXIMUMPOOLSIZE:8}
+      minimum-idle: ${SPRING_DATASOURCE_HIKARI_MINIMUMIDLE:1}
+      connection-timeout: ${SPRING_DATASOURCE_HIKARI_CONNECTIONTIMEOUT:3000}
+      validation-timeout: ${SPRING_DATASOURCE_HIKARI_VALIDATIONTIMEOUT:2500}
+      idle-timeout: ${SPRING_DATASOURCE_HIKARI_IDLETIMEOUT:300000}
+      max-lifetime: ${SPRING_DATASOURCE_HIKARI_MAXLIFETIME:1500000}
   flyway:
     enabled: ${SPRING_FLYWAY_ENABLED:true}
     locations: classpath:db/migration
