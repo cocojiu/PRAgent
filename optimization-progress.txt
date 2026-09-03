@@ -602,3 +602,8 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 状态：本轮进度记录提交后的远程门禁全部成功；优化项整体仍不能标记为“全部最终完成”，因为第 14.18 节要求的真实数据、生产凭据、线上性能和可用性证据仍未具备。
 证据：提交 `d58d0513` 已推送且 `PRAgent-test` 与 `origin/PRAgent-test` 一致；Pull Request Quality `33756165743`、Repository Governance `33756160665`、Auto Create Pull Request `33756160670` 均为 success，包含后端单元/契约、Spring MySQL/RabbitMQ 集成、Flyway、前端质量与浏览器 E2E、生产边缘、密钥差异、依赖审查和跟踪文件治理。工作树只保留用户已有 `ArchitectureRatchetTest.java`、两个前端 fixture 测试文件和 `.tmp/`，暂存区为空。
 结论：仓库范围内未发现新的代码优化缺口；仍需用户/运维提供授权评测数据、真实 GitHub App/OIDC/扫描器/LLM/观测环境并恢复 `pragent.top` 生产可用性后，才能按条目补齐最终业务验收。未提交非 README Markdown、测试相关脚本或用户既有改动。
+
+2026-09-03 | 优化-80 | 生产可用性分环境复核
+状态：当前网络直接访问生产站点已恢复，但 GitHub-hosted runner 的正式探测仍失败；不能把本机可用性替代 Actions/目标出口验收，也不修改探测规则掩盖差异。
+证据：本机对 `https://pragent.top` 的 liveness、readiness、首页、登录页和 overview 均返回 HTTP 200，匿名 `/api/v1/auth/me` 返回 HTTP 401，响应耗时约 0.06～0.21 秒。手动生产工作流 `33761885768` 在 GitHub Actions `ubuntu-24.04`、Azure `westcentralus` runner 上对同一六个端点连续收到 `curl: (28) Failed to connect to pragent.top port 443 after 8002 ms`，随后按既有逻辑更新告警 Issue #151 并失败。
+结论与处理边界：应用从当前网络可用，剩余阻塞是 GitHub Actions 出口到生产入口的网络/防火墙/白名单或路由差异；需要运维允许 GitHub-hosted runner 出口或提供同网段 self-hosted runner 后才能获得正式恢复证据。未修改业务代码、未关闭告警、未提交非 README Markdown、测试相关脚本或用户既有改动。
