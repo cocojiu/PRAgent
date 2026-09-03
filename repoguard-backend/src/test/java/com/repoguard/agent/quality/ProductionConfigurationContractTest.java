@@ -161,8 +161,8 @@ class ProductionConfigurationContractTest {
             "REPOGUARD_RUNTIME_ROLE",
             "REPOGUARD_API_INSTANCE_COUNT",
             "REPOGUARD_AUTH_REGISTRATION_ENABLED",
-            "SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE",
-            "SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE"
+            "SPRING_DATASOURCE_HIKARI_MAXIMUMPOOLSIZE",
+            "SPRING_DATASOURCE_HIKARI_MINIMUMIDLE"
         );
 
         assertThat(backendEnvironment).containsKeys(SHARED_CAPACITY_AND_SECURITY_KEYS.toArray(String[]::new));
@@ -179,9 +179,9 @@ class ProductionConfigurationContractTest {
                     .isEqualTo(backendEnvironment.get(key));
             }
         }
-        assertThat(backendEnvironment.get("SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE"))
+        assertThat(backendEnvironment.get("SPRING_DATASOURCE_HIKARI_MAXIMUMPOOLSIZE"))
             .isEqualTo("${API_DB_MAX_POOL_SIZE:-8}");
-        assertThat(workerEnvironment.get("SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE"))
+        assertThat(workerEnvironment.get("SPRING_DATASOURCE_HIKARI_MAXIMUMPOOLSIZE"))
             .isEqualTo("${WORKER_DB_MAX_POOL_SIZE:-4}");
         assertThat(service(production, "backend").get("secrets"))
             .isEqualTo(service(production, "backend-worker").get("secrets"));
@@ -189,7 +189,13 @@ class ProductionConfigurationContractTest {
             .contains("x-backend-environment: &backend-environment")
             .contains("x-backend-secrets: &backend-secrets")
             .contains("<<: *backend-environment")
-            .contains("secrets: *backend-secrets");
+            .contains("secrets: *backend-secrets")
+            .doesNotContain("SPRING_DATASOURCE_HIKARI_CONNECTION_TIMEOUT_MS")
+            .doesNotContain("SPRING_DATASOURCE_HIKARI_VALIDATION_TIMEOUT_MS")
+            .doesNotContain("SPRING_DATASOURCE_HIKARI_IDLE_TIMEOUT_MS")
+            .doesNotContain("SPRING_DATASOURCE_HIKARI_MAX_LIFETIME_MS")
+            .doesNotContain("SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE")
+            .doesNotContain("SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE");
 
         String application = read(
             root.resolve("repoguard-backend/src/main/resources/application.yml")
