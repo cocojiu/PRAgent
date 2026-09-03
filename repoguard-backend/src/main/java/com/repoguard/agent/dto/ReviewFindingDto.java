@@ -31,7 +31,9 @@ public record ReviewFindingDto(
     List<String> relatedFiles,
     Boolean blockingCandidate,
     String verificationStatus,
-    ReviewFindingTraceDto trace
+    ReviewFindingTraceDto trace,
+    Long sourceBatchId,
+    String sourceBatchStatus
 ) {
     public ReviewFindingDto(
         Long id,
@@ -79,7 +81,9 @@ public record ReviewFindingDto(
             List.of(),
             false,
             "NOT_REQUIRED",
-            ReviewFindingTraceDto.legacy(severity, confidence, isBlocking)
+            ReviewFindingTraceDto.legacy(severity, confidence, isBlocking),
+            null,
+            null
         );
     }
 
@@ -127,7 +131,9 @@ public record ReviewFindingDto(
             List.of(),
             false,
             "NOT_REQUIRED",
-            ReviewFindingTraceDto.legacy(severity, confidence, isBlocking)
+            ReviewFindingTraceDto.legacy(severity, confidence, isBlocking),
+            null,
+            null
         );
     }
 

@@ -144,10 +144,12 @@
             :current-page="findingsPage"
             :page-size="DETAIL_SECTION_PAGE_SIZE"
             :total="findingTotal"
+            :source-filter="findingsSource"
             :risk-text="riskText"
             :finding-feedback-status-class="findingFeedbackStatusClass"
             :finding-feedback-status-text="findingFeedbackStatusText"
             @load="loadFindingsFirstPage"
+            @source-change="setFindingsSource"
             @feedback="submitFindingFeedback"
             @page-change="loadFindingsPage"
           />
@@ -413,10 +415,12 @@ const {
   findingsLoaded,
   findingsLoading,
   findingsPage,
+  findingsSource,
   loadChangedFilesFirstPage,
   loadChangedFilesPage,
   loadFindingsFirstPage,
   loadFindingsPage,
+  setFindingsSource,
   loadMissingTestsFirstPage,
   loadMissingTestsPage,
   loadTimelineItems,

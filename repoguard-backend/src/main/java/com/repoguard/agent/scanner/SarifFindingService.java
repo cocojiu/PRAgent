@@ -1,6 +1,7 @@
 package com.repoguard.agent.scanner;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
@@ -29,14 +30,12 @@ import java.util.TreeSet;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import org.springframework.dao.DuplicateKeyException;
 import com.repoguard.agent.mapper.ReviewFindingMapper.SarifImportBatchRow;
 import com.repoguard.agent.tenancy.TenantContext;
 @Service
 public class SarifFindingService {
     private static final String SARIF_VERSION = "2.1.0";
-    private static final String SARIF_SCHEMA = "https://json.schemastore.org/sarif-2.1.0.json";
     private static final int MAX_RUNS = 20;
     private static final int MAX_RESULTS = 5_000;
     private static final int MAX_RULE_ID_LENGTH = 64;
@@ -141,41 +140,14 @@ public class SarifFindingService {
     }
     public SarifExportDto exportFindings(Long taskId) {
         requireTask(taskId);
-        List<ReviewFinding> findings = reviewFindingMapper.selectList(
-            new LambdaQueryWrapper<ReviewFinding>()
-                .eq(ReviewFinding::getTaskId, taskId)
-                .eq(ReviewFinding::getCurrentAttempt, true)
-                .eq(ReviewFinding::getCategory, "FINDING")
-                .orderByAsc(ReviewFinding::getId)
-        );
-        Map<String, Map<String, Object>> rules = new LinkedHashMap<>();
-        List<Map<String, Object>> results = new ArrayList<>();
-        for (ReviewFinding finding : findings) {
-            String ruleId = text(finding.getRuleId(), "SARIF-" + finding.getId());
-            rules.putIfAbsent(ruleId, Map.of("id", ruleId, "name", ruleId));
-            Map<String, Object> region = new LinkedHashMap<>();
-            if (finding.getLineNumber() != null && finding.getLineNumber() > 0) {
-                region.put("startLine", finding.getLineNumber());
-            }
-            Map<String, Object> physical = new LinkedHashMap<>();
-            physical.put("artifactLocation", Map.of("uri", finding.getFilePath()));
-            physical.put("region", region);
-            results.add(Map.of(
-                "ruleId", ruleId,
-                "level", sarifLevel(finding.getSeverity()),
-                "message", Map.of("text", text(finding.getMessage(), "RepoGuard finding")),
-                "locations", List.of(Map.of("physicalLocation", physical))
-            ));
-        }
-        Map<String, Object> driver = new LinkedHashMap<>();
-        driver.put("name", "RepoGuard Agent");
-        driver.put("version", "1");
-        driver.put("rules", List.copyOf(rules.values()));
-        Map<String, Object> tool = Map.of("driver", driver);
-        return new SarifExportDto(SARIF_VERSION, SARIF_SCHEMA, List.of(
-            Map.of("tool", tool, "results", List.copyOf(results))
-        ));
+        return SarifExportBuilder.export(taskId, reviewFindingMapper);
     }
+
+    /** Returns the canonical fingerprint used by the durable SARIF batch identity. */
+    public String contentFingerprint(String content) {
+        return sha256(content == null ? "" : content);
+    }
+
     private JsonNode parse(String content) {
         try {
             return objectMapper.readTree(content);
@@ -296,16 +268,10 @@ public class SarifFindingService {
             default -> "INFO";
         };
     }
-    private String sarifLevel(String severity) {
-        return switch (severity == null ? "" : severity.toUpperCase()) {
-            case "CRITICAL", "HIGH" -> "error";
-            case "MEDIUM" -> "warning";
-            default -> "note";
-        };
-    }
     private String text(String value, String fallback) {
         return StringUtils.hasText(value) ? value.trim() : fallback;
     }
+
     private ReviewTask requireTask(Long taskId) {
         ReviewTask task = taskId == null || taskId < 1 ? null : reviewTaskMapper.selectById(taskId);
         if (task == null) {
@@ -417,9 +383,6 @@ public class SarifFindingService {
             finding.getSeverity(),
             finding.getMessage()
         );
-    }
-    private static <T> List<T> safeList(List<T> values) {
-        return values == null ? List.of() : values;
     }
     private record ToolMetadata(String name, String version) {
     }

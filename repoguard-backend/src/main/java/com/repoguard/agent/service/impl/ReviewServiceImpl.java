@@ -103,6 +103,27 @@ public class ReviewServiceImpl implements ReviewService {
     }
 
     @Override
+    public PageResponse<ReviewFindingDto> listReviewFindings(
+        Long id,
+        int page,
+        int pageSize,
+        String severity,
+        String category,
+        String feedbackStatus,
+        String source
+    ) {
+        return reviewTaskQueryService.listReviewFindings(
+            id,
+            page,
+            pageSize,
+            severity,
+            category,
+            feedbackStatus,
+            source
+        );
+    }
+
+    @Override
     public PageResponse<ChangedFileDto> listChangedFiles(Long id, int page, int pageSize, Boolean hasFinding) {
         return reviewTaskQueryService.listChangedFiles(id, page, pageSize, hasFinding);
     }

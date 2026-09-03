@@ -19,7 +19,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
  * Exercises the supported rolling-upgrade path against a real MySQL instance.
  *
  * <p>The test is opt-in because local unit-test runs do not provision a database. CI enables it
- * with an isolated database and verifies the V76 expand state through the V91 evaluation provenance state.
+ * with an isolated database and verifies the V76 expand state through the V93 CI SARIF upload state.
  */
 @EnabledIfEnvironmentVariable(named = "REPOGUARD_RUN_INTEGRATION_TESTS", matches = "true")
 class FlywayMigrationUpgradePathIntegrationTest {
@@ -124,9 +124,9 @@ class FlywayMigrationUpgradePathIntegrationTest {
                 }
             }
 
-            migrateTo(url, username, password, "91");
+            migrateTo(url, username, password, "93");
             try (Connection connection = open(url, username, password)) {
-                assertThat(latestSuccessfulMigration(connection)).isEqualTo("91");
+                assertThat(latestSuccessfulMigration(connection)).isEqualTo("93");
                 assertThat(columnExists(connection, "tenant_quota_config", "monthly_llm_token_budget"))
                     .isTrue();
                 assertThat(columnExists(connection, "tenant_quota_config", "monthly_llm_cost_budget"))
@@ -212,6 +212,19 @@ class FlywayMigrationUpgradePathIntegrationTest {
                     connection,
                     "llm_model_release_drift_audit",
                     "fk_llm_model_release_drift_audit_tenant"
+                )).isTrue();
+                assertThat(columnExists(connection, "sarif_ci_upload", "scan_run_id")).isTrue();
+                assertThat(columnExists(connection, "sarif_ci_upload", "completion_time")).isTrue();
+                assertThat(compositeUniqueIndexExists(
+                    connection,
+                    "sarif_ci_upload",
+                    "uk_sarif_ci_upload_identity",
+                    7
+                )).isTrue();
+                assertThat(constraintExists(
+                    connection,
+                    "sarif_ci_upload",
+                    "fk_sarif_ci_upload_batch"
                 )).isTrue();
             }
         } finally {

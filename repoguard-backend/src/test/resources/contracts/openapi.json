@@ -6744,6 +6744,14 @@
             "type" : "string",
             "maxLength" : 32
           }
+        }, {
+          "name" : "source",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 64
+          }
         } ],
         "responses" : {
           "200" : {
@@ -7813,6 +7821,129 @@
                     },
                     "data" : {
                       "$ref" : "#/components/schemas/ReviewAttemptComparisonDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/scanners/sarif/ci/tasks/{taskId}/credentials" : {
+      "post" : {
+        "tags" : [ "CiSarif" ],
+        "operationId" : "ciSarifControllerIssueCredential",
+        "x-controller-operation" : "CiSarifController#issueCredential",
+        "parameters" : [ {
+          "name" : "taskId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        }, {
+          "name" : "attemptId",
+          "in" : "query",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "CiSarifCredentialResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/CiSarifCredentialResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/scanners/sarif/ci/tasks/{taskId}/upload" : {
+      "post" : {
+        "tags" : [ "CiSarif" ],
+        "operationId" : "ciSarifControllerUpload",
+        "x-controller-operation" : "CiSarifController#upload",
+        "parameters" : [ {
+          "name" : "taskId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "byte[]",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "string",
+                "format" : "binary"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "CiSarifUploadResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/CiSarifUploadResponse"
                     },
                     "timestamp" : {
                       "type" : "string",
@@ -9183,6 +9314,86 @@
             }
           }
         }
+      },
+      "CiSarifCredentialResponse" : {
+        "type" : "object",
+        "x-java-type" : "CiSarifCredentialResponse",
+        "properties" : {
+          "credential" : {
+            "type" : "string"
+          },
+          "expiresAt" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "attemptId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "organization" : {
+            "type" : "string"
+          },
+          "repository" : {
+            "type" : "string"
+          },
+          "prNumber" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "commitSha" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "expiresAt" ]
+      },
+      "CiSarifUploadResponse" : {
+        "type" : "object",
+        "x-java-type" : "CiSarifUploadResponse",
+        "properties" : {
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "attemptId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "toolName" : {
+            "type" : "string"
+          },
+          "toolVersion" : {
+            "type" : "string"
+          },
+          "scanRunId" : {
+            "type" : "string"
+          },
+          "commitSha" : {
+            "type" : "string"
+          },
+          "sarifFingerprint" : {
+            "type" : "string"
+          },
+          "completedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "imported" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "skipped" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        },
+        "required" : [ "imported", "skipped" ]
       },
       "ConnectionTestResultDto" : {
         "type" : "object",
@@ -13921,6 +14132,13 @@
           },
           "trace" : {
             "$ref" : "#/components/schemas/ReviewFindingTraceDto"
+          },
+          "sourceBatchId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "sourceBatchStatus" : {
+            "type" : "string"
           }
         }
       },

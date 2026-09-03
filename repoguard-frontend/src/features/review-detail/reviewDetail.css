@@ -567,6 +567,16 @@
   gap: 12px;
 }
 
+.findings-card-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.finding-source-filter {
+  width: 132px;
+}
+
 .finding-item {
   display: flex;
   flex-direction: column;
@@ -602,6 +612,29 @@
   background: #eaf2ff;
   font-size: 13px;
   font-weight: 700;
+}
+
+.source-pill,
+.batch-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 8px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.source-pill {
+  color: #155e75;
+  background: #cffafe;
+}
+
+.batch-pill {
+  color: #6b21a8;
+  background: #f3e8ff;
 }
 
 .confidence-pill,

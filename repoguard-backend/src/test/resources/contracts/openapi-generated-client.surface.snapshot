@@ -6,6 +6,8 @@ authControllerRefresh(input?: { body?: AuthRefreshRequest }): Promise<AuthRespon
 authControllerRegister(input: { body: AuthRegisterRequest }): Promise<AuthResponse>; // POST /api/v1/auth/register
 authControllerResetRefreshToken(input: { body: AuthRefreshTokenResetRequest }): Promise<AuthResponse>; // POST /api/v1/auth/refresh-token/reset
 cacheStatsControllerGetStats(): Promise<CacheStats>; // GET /api/v1/cache/stats
+ciSarifControllerIssueCredential(input: { path: { taskId: number }; query?: { attemptId: number } }): Promise<CiSarifCredentialResponse>; // POST /api/v1/scanners/sarif/ci/tasks/{taskId}/credentials
+ciSarifControllerUpload(input: { path: { taskId: number }; body: Uint8Array }): Promise<CiSarifUploadResponse>; // POST /api/v1/scanners/sarif/ci/tasks/{taskId}/upload
 dashboardControllerGetHighRiskReviews(): Promise<HighRiskReview[]>; // GET /api/v1/dashboard/high-risk-reviews
 dashboardControllerGetLlmQuality(input?: { query?: { llmTrendDays?: number } }): Promise<DashboardLlmQuality>; // GET /api/v1/dashboard/llm-quality
 dashboardControllerGetOverview(input?: { query?: { llmTrendDays?: number } }): Promise<DashboardOverview>; // GET /api/v1/dashboard/overview
@@ -76,7 +78,7 @@ reviewControllerListChangedFiles(input: { path: { id: number }; query?: { hasFin
 reviewControllerListConfiguredGithubPullRequests(): Promise<GithubPullRequestOptions>; // GET /api/v1/reviews/github/pull-requests
 reviewControllerListMissingTests(input: { path: { id: number }; query?: { page?: number; pageSize?: number } }): Promise<PageResponse<MissingTest>>; // GET /api/v1/reviews/{id}/missing-tests
 reviewControllerListRepositories(): Promise<string[]>; // GET /api/v1/reviews/repositories
-reviewControllerListReviewFindings(input: { path: { id: number }; query?: { category?: string; feedbackStatus?: string; page?: number; pageSize?: number; severity?: string } }): Promise<PageResponse<ReviewFinding>>; // GET /api/v1/reviews/{id}/findings
+reviewControllerListReviewFindings(input: { path: { id: number }; query?: { category?: string; feedbackStatus?: string; page?: number; pageSize?: number; severity?: string; source?: string } }): Promise<PageResponse<ReviewFinding>>; // GET /api/v1/reviews/{id}/findings
 reviewControllerListReviewTimeline(input: { path: { id: number }; query?: { limit?: number } }): Promise<TimelineItem[]>; // GET /api/v1/reviews/{id}/timeline
 reviewControllerListReviews(input?: { query?: { cursor?: string; keyword?: string; page?: number; pageSize?: number; repository?: string; riskLevel?: string; source?: string; status?: string; triggerSource?: string } }): Promise<PageResponse<ReviewTask>>; // GET /api/v1/reviews
 reviewControllerPublishGithubComments(input: { path: { id: number } }): Promise<GithubCommentPublish>; // POST /api/v1/reviews/{id}/github-comments

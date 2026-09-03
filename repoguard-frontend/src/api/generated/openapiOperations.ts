@@ -599,7 +599,7 @@ export type GeneratedOpenApiOperationMap = {
   "reviewControllerListReviewFindings": {
     method: "GET";
     pathParams: { id: number };
-    query: { category?: string; feedbackStatus?: string; page?: number; pageSize?: number; severity?: string };
+    query: { category?: string; feedbackStatus?: string; page?: number; pageSize?: number; severity?: string; source?: string };
     body: never;
     response: PageResponse<ReviewFinding>;
   };
@@ -1524,7 +1524,7 @@ export const generatedOpenApiOperations = {
     method: "GET",
     path: "/api/v1/reviews/{id}/findings",
     pathParamNames: ["id"],
-    queryParamNames: ["category", "feedbackStatus", "page", "pageSize", "severity"],
+    queryParamNames: ["category", "feedbackStatus", "page", "pageSize", "severity", "source"],
     hasRequestBody: false,
     requestBodyRequired: false
   },

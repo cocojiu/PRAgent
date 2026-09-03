@@ -158,6 +158,7 @@ type ReviewFindingsPageInput = ReviewDetailPageInput & {
   severity?: string;
   category?: string;
   feedbackStatus?: string;
+  source?: string;
 };
 
 type ReviewChangedFilesPageInput = ReviewDetailPageInput & {
@@ -531,7 +532,8 @@ const apiEndpoints: ApiEndpointMap = {
       pageSize: input.pageSize,
       severity: input.severity,
       category: input.category,
-      feedbackStatus: input.feedbackStatus
+      feedbackStatus: input.feedbackStatus,
+      source: input.source
     })
   }),
   fetchReviewChangedFiles: generatedEndpoint("reviewControllerListChangedFiles", {

@@ -52,6 +52,7 @@ public class MybatisPlusConfig {
         "llm_model_release_drift_audit",
         "llm_model_release_metric_snapshot",
         "sarif_import_batch",
+        "sarif_ci_upload",
         "secret_re_encryption_job",
         "secret_re_encryption_job_item",
         "review_task",

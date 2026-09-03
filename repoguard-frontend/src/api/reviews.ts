@@ -29,7 +29,14 @@ export const fetchReviewDetail = (id: number, options?: ApiRequestOptions) =>
 
 export const fetchReviewFindings = (
   id: number,
-  params?: { page?: number; pageSize?: number; severity?: string; category?: string; feedbackStatus?: string }
+  params?: {
+    page?: number;
+    pageSize?: number;
+    severity?: string;
+    category?: string;
+    feedbackStatus?: string;
+    source?: string;
+  }
 ) => apiRequest("fetchReviewFindings", { id, ...params });
 
 export const fetchReviewChangedFiles = (

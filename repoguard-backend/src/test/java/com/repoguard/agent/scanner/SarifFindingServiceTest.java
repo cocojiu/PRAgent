@@ -296,6 +296,66 @@ class SarifFindingServiceTest {
         });
     }
 
+    @Test
+    void exportsImportedToolIdentityAndHandlesEmptyFindingPage() {
+        when(taskMapper.selectById(9L)).thenReturn(currentTask());
+        ReviewFinding imported = new ReviewFinding();
+        imported.setId(8L);
+        imported.setSource("SARIF");
+        imported.setSourceBatchId(101L);
+        imported.setRuleId("CODEQL-1");
+        imported.setFilePath("src/Imported.java");
+        imported.setLineNumber(12);
+        imported.setSeverity("HIGH");
+        imported.setMessage("External finding");
+        imported.setCurrentAttempt(true);
+        imported.setCategory("FINDING");
+        SarifImportBatchRow batch = new SarifImportBatchRow();
+        batch.setToolName("CodeQL");
+        batch.setToolVersion("2.15");
+        when(findingMapper.selectList(any())).thenReturn(List.of(imported));
+        when(findingMapper.selectSarifImportBatchById(101L)).thenReturn(batch);
+
+        var document = service.exportFindings(9L);
+
+        assertThat(document.runs()).singleElement().satisfies(run ->
+            assertThat(run.get("tool").toString()).contains("CodeQL", "2.15"));
+
+        when(findingMapper.selectList(any())).thenReturn(null);
+        assertThat(service.exportFindings(9L).runs()).isEmpty();
+    }
+
+    @Test
+    void exportsBlankImportedToolUsingSafeDefaults() {
+        when(taskMapper.selectById(9L)).thenReturn(currentTask());
+        ReviewFinding imported = new ReviewFinding();
+        imported.setId(9L);
+        imported.setSource("SARIF");
+        imported.setSourceBatchId(102L);
+        imported.setFilePath("src/Imported.java");
+        imported.setCurrentAttempt(true);
+        imported.setCategory("FINDING");
+        SarifImportBatchRow batch = new SarifImportBatchRow();
+        batch.setToolName(" ");
+        batch.setToolVersion(null);
+        when(findingMapper.selectList(any())).thenReturn(List.of(imported));
+        when(findingMapper.selectSarifImportBatchById(102L)).thenReturn(batch);
+
+        var document = service.exportFindings(9L);
+
+        assertThat(document.runs()).singleElement().satisfies(run ->
+            assertThat(run.get("tool").toString()).contains("unknown"));
+    }
+
+    @Test
+    void fingerprintsNullAndNonNullContentDeterministically() {
+        assertThat(service.contentFingerprint(null))
+            .isEqualTo(service.contentFingerprint(""))
+            .hasSize(64);
+        assertThat(service.contentFingerprint("sarif-content"))
+            .isNotEqualTo(service.contentFingerprint("other-content"));
+    }
+
     private ReviewTask currentTask() {
         ReviewTask task = new ReviewTask();
         task.setId(9L);

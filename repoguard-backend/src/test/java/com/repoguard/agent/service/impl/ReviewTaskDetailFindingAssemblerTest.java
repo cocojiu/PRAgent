@@ -4,9 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.ReviewFinding;
+import com.repoguard.agent.dto.ReviewFindingDto;
+import com.repoguard.agent.mapper.ReviewFindingMapper;
+import com.repoguard.agent.mapper.ReviewFindingMapper.SarifImportBatchRow;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 class ReviewTaskDetailFindingAssemblerTest {
 
@@ -69,6 +73,24 @@ class ReviewTaskDetailFindingAssemblerTest {
         assertThat(result.reviewDimension()).isEmpty();
         assertThat(result.isBlocking()).isFalse();
         assertThat(result.feedbackAt()).isNull();
+    }
+
+    @Test
+    void exposesSarifBatchIdentityAndCurrentStatus() {
+        ReviewFindingMapper mapper = Mockito.mock(ReviewFindingMapper.class);
+        SarifImportBatchRow batch = new SarifImportBatchRow();
+        batch.setStatus("ACTIVE");
+        Mockito.when(mapper.selectSarifImportBatchById(55L)).thenReturn(batch);
+        ReviewTaskDetailFindingAssembler sarifAssembler = new ReviewTaskDetailFindingAssembler(mapper);
+        ReviewFinding finding = finding();
+        finding.setSource("SARIF");
+        finding.setSourceBatchId(55L);
+
+        ReviewFindingDto result = sarifAssembler.toFindingDtos(List.of(finding)).getFirst();
+
+        assertThat(result.source()).isEqualTo("SARIF");
+        assertThat(result.sourceBatchId()).isEqualTo(55L);
+        assertThat(result.sourceBatchStatus()).isEqualTo("ACTIVE");
     }
 
     private ChangedFile changedFile() {

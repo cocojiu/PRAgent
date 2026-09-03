@@ -7,7 +7,7 @@
     "externalDatabaseSupported": true,
     "publishedMigrationPolicy": "IMMUTABLE",
     "newInstallationStrategy": "VALIDATED_SCHEMA_SNAPSHOT_THEN_BASELINE",
-    "candidateVersion": 92,
+  "candidateVersion": 93,
     "requiredEvidence": [
       "empty database migration to the candidate version",
       "schema structure diff against the supported production shape",
@@ -267,6 +267,18 @@
       "nMinusOneCompatible": true,
       "interruptedRecovery": "rerun the additive suppression migration after checking Flyway state; proposed suppressions remain inactive until approved",
       "rollbackStrategy": "forward fix or restore the validated V91 predecessor backup; do not delete published migration"
+    },
+    {
+      "version": 93,
+      "file": "V93__ci_sarif_upload_channel.sql",
+      "phase": "EXPAND",
+      "estimatedRows": "one bounded CI upload identity row per scanner run and attempt",
+      "lockType": "metadata-and-table",
+      "maxDurationSeconds": 300,
+      "maxDiskMegabytes": 256,
+      "nMinusOneCompatible": true,
+      "interruptedRecovery": "rerun the additive CI upload migration after checking Flyway state; SARIF batches remain independently replayable",
+      "rollbackStrategy": "forward fix or restore the validated V92 predecessor backup; do not delete published migration"
     }
   ]
 }

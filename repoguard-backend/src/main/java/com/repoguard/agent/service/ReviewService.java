@@ -52,6 +52,21 @@ public interface ReviewService {
         String feedbackStatus
     );
 
+    /**
+     * 按来源筛选当前 attempt 的 finding；旧调用方省略来源时保持原有行为。
+     */
+    default PageResponse<ReviewFindingDto> listReviewFindings(
+        Long id,
+        int page,
+        int pageSize,
+        String severity,
+        String category,
+        String feedbackStatus,
+        String source
+    ) {
+        return listReviewFindings(id, page, pageSize, severity, category, feedbackStatus);
+    }
+
     PageResponse<ChangedFileDto> listChangedFiles(Long id, int page, int pageSize, Boolean hasFinding);
 
     PageResponse<MissingTestDto> listMissingTests(Long id, int page, int pageSize);

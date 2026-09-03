@@ -130,7 +130,7 @@ class ApiContractTest {
             .contains(
                 "GET /api/v1/reviews query=[page, pageSize, repository, status, riskLevel, source, triggerSource, keyword, cursor] body=- bodyRequired=false",
                 "GET /api/v1/reviews/{id} query=[] body=- bodyRequired=false",
-                "GET /api/v1/reviews/{id}/findings query=[page, pageSize, severity, category, feedbackStatus] body=- bodyRequired=false",
+            "GET /api/v1/reviews/{id}/findings query=[page, pageSize, severity, category, feedbackStatus, source] body=- bodyRequired=false",
                 "GET /api/v1/reviews/{id}/changed-files query=[page, pageSize, hasFinding] body=- bodyRequired=false",
                 "GET /api/v1/reviews/{id}/missing-tests query=[page, pageSize] body=- bodyRequired=false",
                 "GET /api/v1/reviews/{id}/github-comments/preview query=[page, pageSize, commentableOnly] body=- bodyRequired=false",
@@ -344,6 +344,8 @@ class ApiContractTest {
             "POST /api/v1/config/declarative-rules/{id}/dry-run",
             "GET /api/v1/scanners/sarif/tasks/{taskId}/export",
             "POST /api/v1/scanners/sarif/tasks/{taskId}/import",
+            "POST /api/v1/scanners/sarif/ci/tasks/{taskId}/credentials",
+            "POST /api/v1/scanners/sarif/ci/tasks/{taskId}/upload",
             "GET /api/v1/scm/providers",
             "GET /api/v1/scm/providers/{provider}/change-requests",
             "GET /api/v1/scm/providers/{provider}/tasks/{taskId}/diff",

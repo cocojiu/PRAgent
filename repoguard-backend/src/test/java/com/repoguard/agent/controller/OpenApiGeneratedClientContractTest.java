@@ -43,6 +43,8 @@ class OpenApiGeneratedClientContractTest {
         "POST /api/v1/config/declarative-rules/{id}/dry-run",
         "GET /api/v1/scanners/sarif/tasks/{taskId}/export",
         "POST /api/v1/scanners/sarif/tasks/{taskId}/import",
+        "POST /api/v1/scanners/sarif/ci/tasks/{taskId}/credentials",
+        "POST /api/v1/scanners/sarif/ci/tasks/{taskId}/upload",
         "GET /api/v1/scm/providers",
         "GET /api/v1/scm/providers/{provider}/change-requests",
         "GET /api/v1/scm/providers/{provider}/tasks/{taskId}/diff",

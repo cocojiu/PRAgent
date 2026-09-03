@@ -323,6 +323,41 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
         @Param("fingerprint") String fingerprint
     );
 
+    @Select("""
+        select id, task_id as taskId, attempt_id as attemptId, tool_name as toolName,
+               tool_version as toolVersion, commit_sha as commitSha,
+               content_fingerprint as contentFingerprint, status,
+               imported_count as importedCount, skipped_count as skippedCount
+          from sarif_import_batch
+         where task_id = #{taskId}
+           and attempt_id = #{attemptId}
+           and tool_name = #{toolName}
+           and tool_version = #{toolVersion}
+           and commit_sha = #{commitSha}
+           and content_fingerprint = #{fingerprint}
+         order by id desc
+         limit 1
+        """)
+    SarifImportBatchRow selectSarifImportBatchByFingerprint(
+        @Param("taskId") Long taskId,
+        @Param("attemptId") Long attemptId,
+        @Param("toolName") String toolName,
+        @Param("toolVersion") String toolVersion,
+        @Param("commitSha") String commitSha,
+        @Param("fingerprint") String fingerprint
+    );
+
+    @Select("""
+        select id, task_id as taskId, attempt_id as attemptId, tool_name as toolName,
+               tool_version as toolVersion, commit_sha as commitSha,
+               content_fingerprint as contentFingerprint, status,
+               imported_count as importedCount, skipped_count as skippedCount
+          from sarif_import_batch
+         where id = #{batchId}
+         limit 1
+        """)
+    SarifImportBatchRow selectSarifImportBatchById(@Param("batchId") Long batchId);
+
     @Insert("""
         insert into sarif_import_batch (
             tenant_id, task_id, attempt_id, tool_name, tool_version, commit_sha,
@@ -369,7 +404,6 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
         @Param("batchId") Long batchId,
         @Param("updatedAt") java.time.LocalDateTime updatedAt
     );
-
     /** Minimal MyBatis row model kept beside the owning finding mapper. */
     class SarifImportBatchRow {
         private Long id;

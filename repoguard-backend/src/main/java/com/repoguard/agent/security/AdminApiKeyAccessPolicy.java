@@ -25,7 +25,12 @@ final class AdminApiKeyAccessPolicy {
         new ProtectedEndpoint("POST", "/api/v1/reviews/{id}/human-review", "Human review decision"),
         new ProtectedEndpoint("POST", "/api/v1/reviews/{id}/github-comments", "GitHub comment publish"),
         new ProtectedEndpoint("POST", "/api/v1/reviews/{id}/findings/{findingId}/feedback", "Finding feedback"),
-        new ProtectedEndpoint("POST", "/api/v1/review-workflow/escalations", "Human review SLA escalation")
+        new ProtectedEndpoint("POST", "/api/v1/review-workflow/escalations", "Human review SLA escalation"),
+        new ProtectedEndpoint(
+            "POST",
+            "/api/v1/scanners/sarif/ci/tasks/{taskId}/credentials",
+            "CI SARIF credential minting"
+        )
     );
 
     private AdminApiKeyAccessPolicy() {

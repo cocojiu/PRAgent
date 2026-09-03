@@ -53,7 +53,7 @@ GET /api/v1/reviews/repositories query=[] body=- bodyRequired=false
 GET /api/v1/reviews/summary query=[repository, status, riskLevel, source, triggerSource, keyword] body=- bodyRequired=false
 GET /api/v1/reviews/{id} query=[] body=- bodyRequired=false
 GET /api/v1/reviews/{id}/changed-files query=[page, pageSize, hasFinding] body=- bodyRequired=false
-GET /api/v1/reviews/{id}/findings query=[page, pageSize, severity, category, feedbackStatus] body=- bodyRequired=false
+GET /api/v1/reviews/{id}/findings query=[page, pageSize, severity, category, feedbackStatus, source] body=- bodyRequired=false
 GET /api/v1/reviews/{id}/github-comments/preview query=[page, pageSize, commentableOnly] body=- bodyRequired=false
 GET /api/v1/reviews/{id}/github-comments/publications query=[page, pageSize, status] body=- bodyRequired=false
 GET /api/v1/reviews/{id}/missing-tests query=[page, pageSize] body=- bodyRequired=false
@@ -117,6 +117,8 @@ POST /api/v1/reviews/{id}/findings/{findingId}/feedback query=[] body=FindingFee
 POST /api/v1/reviews/{id}/github-comments query=[] body=- bodyRequired=false
 POST /api/v1/reviews/{id}/human-review query=[] body=HumanReviewRequest bodyRequired=true
 POST /api/v1/reviews/{id}/retry query=[] body=- bodyRequired=false
+POST /api/v1/scanners/sarif/ci/tasks/{taskId}/credentials query=[attemptId] body=- bodyRequired=false
+POST /api/v1/scanners/sarif/ci/tasks/{taskId}/upload query=[] body=byte[] bodyRequired=true
 POST /api/v1/scanners/sarif/tasks/{taskId}/import query=[] body=SarifImportRequest bodyRequired=true
 POST /api/v1/scm/providers/{provider}/tasks/{taskId}/comments query=[] body=ScmCommentDraft bodyRequired=true
 POST /api/v1/scm/providers/{provider}/tasks/{taskId}/status query=[] body=ScmStatusRequest bodyRequired=true

@@ -1,8 +1,24 @@
 <template>
   <article v-loading="loading" class="dashboard-card findings-card">
     <div class="card-title-row">
-      <h2>LLM Findings</h2>
-      <span class="count-badge">{{ total }} 条</span>
+      <div class="findings-card-title">
+        <h2>审查发现</h2>
+        <span class="count-badge">{{ total }} 条</span>
+      </div>
+      <el-select
+        :model-value="sourceFilter ?? ''"
+        class="finding-source-filter"
+        size="small"
+        aria-label="筛选 finding 来源"
+        placeholder="全部来源"
+        clearable
+        @change="$emit('sourceChange', $event || undefined)"
+      >
+        <el-option label="全部来源" value="" />
+        <el-option label="规则" value="RULE" />
+        <el-option label="LLM" value="LLM" />
+        <el-option label="SARIF" value="SARIF" />
+      </el-select>
     </div>
     <div v-if="archived && total > 0" class="archive-section-note">
       历史明细已归档，当前保留 {{ total }} 条审查发现计数。
@@ -19,6 +35,10 @@
           <span :class="`risk-pill ${finding.severity}`">{{ riskText(finding.severity) }}</span>
           <code>{{ finding.file }}</code>
           <span class="line-badge">L{{ finding.line ?? "-" }}</span>
+          <span v-if="finding.source" class="source-pill">{{ findingSourceText(finding.source) }}</span>
+          <span v-if="finding.sourceBatchId" class="batch-pill">
+            SARIF 批次 #{{ finding.sourceBatchId }} · {{ sourceBatchStatusText(finding.sourceBatchStatus) }}
+          </span>
           <span :class="`status-pill ${findingFeedbackStatusClass(finding.feedbackStatus)}`">
             {{ findingFeedbackStatusText(finding.feedbackStatus) }}
           </span>
@@ -141,6 +161,7 @@ const props = defineProps<{
   currentPage: number;
   pageSize: number;
   total: number;
+  sourceFilter?: string;
   riskText: (risk: RiskLevel) => string;
   findingFeedbackStatusClass: (status?: FindingFeedbackStatus | string) => string;
   findingFeedbackStatusText: (status?: FindingFeedbackStatus | string) => string;
@@ -148,6 +169,7 @@ const props = defineProps<{
 
 defineEmits<{
   load: [];
+  sourceChange: [source?: string];
   feedback: [findingId: number, status: FindingFeedbackStatus];
   pageChange: [page: number];
 }>();
@@ -182,6 +204,20 @@ const reviewDimensionText = (dimension?: string) => {
     SECURITY_RULE: "安全规则"
   };
   return dimension ? labels[dimension] ?? dimension.replaceAll("_", " ") : "";
+};
+
+const findingSourceText = (source?: string) => {
+  const labels: Record<string, string> = { RULE: "规则", LLM: "LLM", SARIF: "SARIF" };
+  return source ? labels[source.toUpperCase()] ?? source : "未知来源";
+};
+
+const sourceBatchStatusText = (status?: string) => {
+  const labels: Record<string, string> = {
+    ACTIVE: "生效",
+    SUPERSEDED: "已替换",
+    REPLACED: "已替换"
+  };
+  return status ? labels[status.toUpperCase()] ?? status : "状态未知";
 };
 
 const hasExplainability = (finding: ReviewFindingViewModel) =>

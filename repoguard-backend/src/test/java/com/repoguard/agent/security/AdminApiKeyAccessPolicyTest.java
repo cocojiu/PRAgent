@@ -31,7 +31,8 @@ class AdminApiKeyAccessPolicyTest {
                 "POST /api/v1/reviews/{id}/human-review",
                 "POST /api/v1/reviews/{id}/github-comments",
                 "POST /api/v1/reviews/{id}/findings/{findingId}/feedback",
-                "POST /api/v1/review-workflow/escalations"
+                "POST /api/v1/review-workflow/escalations",
+                "POST /api/v1/scanners/sarif/ci/tasks/{taskId}/credentials"
             );
     }
 

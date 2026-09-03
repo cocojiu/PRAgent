@@ -104,6 +104,19 @@ describe("useReviewDetailSectionLoaders", () => {
     expect(selectedTask.value?.missingTests).toEqual([]);
     expect(sections.findingsLoaded.value).toBe(true);
   });
+
+  it("reloads the first findings page when the source filter changes", async () => {
+    fetchReviewFindings.mockResolvedValue({ items: [{ id: 31, source: "SARIF" }], total: 1 });
+    const selectedTask = ref<ReviewTaskDetail | null>(task(12));
+    const sections = createSections(selectedTask);
+
+    await sections.setFindingsSource("SARIF");
+
+    expect(fetchReviewFindings).toHaveBeenCalledWith(12, { page: 1, pageSize: 20, source: "SARIF" });
+    expect(sections.findingsSource.value).toBe("SARIF");
+    expect(sections.findingsPage.value).toBe(1);
+    expect(selectedTask.value?.findings[0]).toMatchObject({ id: 31, source: "SARIF" });
+  });
 });
 
 const createSections = (selectedTask: Ref<ReviewTaskDetail | null>) =>

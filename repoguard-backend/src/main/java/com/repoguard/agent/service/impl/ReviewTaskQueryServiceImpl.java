@@ -263,20 +263,30 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
         String category,
         String feedbackStatus
     ) {
-        PageResponse<ReviewFindingDto> result = detailDataLoader.loadFindingsPage(
-            id,
-            page,
-            pageSize,
-            severity,
-            category,
-            feedbackStatus
-        );
+        return listReviewFindings(id, page, pageSize, severity, category, feedbackStatus, null);
+    }
+
+    @Override
+    public PageResponse<ReviewFindingDto> listReviewFindings(
+        Long id,
+        int page,
+        int pageSize,
+        String severity,
+        String category,
+        String feedbackStatus,
+        String source
+    ) {
+        PageResponse<ReviewFindingDto> result = source == null
+            ? detailDataLoader.loadFindingsPage(id, page, pageSize, severity, category, feedbackStatus)
+            : detailDataLoader.loadFindingsPage(id, page, pageSize, severity, category, feedbackStatus, source);
         if (hasPageData(result)) {
             return result;
         }
         ReviewTaskArchiveSummary archive = archiveIfHotTaskMissing(id);
         if (archive != null) {
-            long total = hasAnyText(severity, category, feedbackStatus) ? 0L : longValue(archive.getFindingCount());
+            long total = hasAnyText(severity, category, feedbackStatus, source)
+                ? 0L
+                : longValue(archive.getFindingCount());
             return new PageResponse<>(List.of(), total);
         }
         return result;
