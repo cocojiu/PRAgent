@@ -7,6 +7,7 @@ import com.repoguard.agent.dto.HumanReviewRequest;
 import com.repoguard.agent.dto.HumanReviewResponse;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.review.HumanReviewStatus;
+import com.repoguard.agent.review.ReviewTaskCheckRunLifecycle;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import com.repoguard.agent.timeline.ReviewTimelineStatus;
@@ -15,6 +16,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -27,18 +29,47 @@ public class HumanReviewCommandService {
     private final ReviewTimelineAppender reviewTimelineAppender;
     private final ReviewTaskStateMachine reviewTaskStateMachine;
     private final CacheEvictionService cacheEvictionService;
+    private final ReviewTaskCheckRunLifecycle checkRunLifecycle;
 
     @Autowired
     public HumanReviewCommandService(
         ReviewTaskTransitionStore transitionStore,
         ReviewTimelineAppender reviewTimelineAppender,
         ReviewTaskStateMachine reviewTaskStateMachine,
+        CacheEvictionService cacheEvictionService,
+        ObjectProvider<ReviewTaskCheckRunLifecycle> checkRunLifecycleProvider
+    ) {
+        this(
+            transitionStore,
+            reviewTimelineAppender,
+            reviewTaskStateMachine,
+            cacheEvictionService,
+            checkRunLifecycleProvider.getIfAvailable()
+        );
+    }
+
+    public HumanReviewCommandService(
+        ReviewTaskTransitionStore transitionStore,
+        ReviewTimelineAppender reviewTimelineAppender,
+        ReviewTaskStateMachine reviewTaskStateMachine,
         CacheEvictionService cacheEvictionService
+    ) {
+        this(transitionStore, reviewTimelineAppender, reviewTaskStateMachine, cacheEvictionService,
+            (ReviewTaskCheckRunLifecycle) null);
+    }
+
+    private HumanReviewCommandService(
+        ReviewTaskTransitionStore transitionStore,
+        ReviewTimelineAppender reviewTimelineAppender,
+        ReviewTaskStateMachine reviewTaskStateMachine,
+        CacheEvictionService cacheEvictionService,
+        ReviewTaskCheckRunLifecycle checkRunLifecycle
     ) {
         this.transitionStore = Objects.requireNonNull(transitionStore, "transitionStore");
         this.reviewTimelineAppender = reviewTimelineAppender;
         this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
         this.cacheEvictionService = Objects.requireNonNull(cacheEvictionService, "cacheEvictionService");
+        this.checkRunLifecycle = checkRunLifecycle;
     }
 
     public HumanReviewResponse submit(Long id, HumanReviewRequest request, String operator) {
@@ -63,6 +94,9 @@ public class HumanReviewCommandService {
             cleanOperator(operator),
             reviewedAt
         );
+        if (checkRunLifecycle != null) {
+            checkRunLifecycle.completed(task);
+        }
         reviewTimelineAppender.completeCurrentAndAppend(
             task.getId(),
             humanReviewTimelineLabel(humanReviewStatus, note),

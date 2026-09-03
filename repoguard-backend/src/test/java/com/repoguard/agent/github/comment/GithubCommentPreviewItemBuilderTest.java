@@ -31,6 +31,39 @@ class GithubCommentPreviewItemBuilderTest {
     }
 
     @Test
+    void buildFindingItemIncludesSafeGithubSuggestionForExplicitReplacement() {
+        ReviewFinding finding = finding(
+            "HIGH", "src/App.java", 12, "Use structured logging", "Replace stdout", null
+        );
+        finding.setFixExample("```java\nlogger.info(\"value={}\", value);\n```");
+
+        var item = builder.buildFindingItem(finding, changedFile("src/App.java", "MODIFY"), null);
+
+        assertThat(item.commentBody())
+            .contains("**可应用修复（请先确认）**", "```suggestion", "logger.info(\"value={}\", value);")
+            .doesNotContain("```java");
+    }
+
+    @Test
+    void rejectsNaturalLanguageOrUnsafeSuggestionAndPrFallback() {
+        ReviewFinding finding = finding(
+            "HIGH", "src/App.java", 12, "Use structured logging", "Replace stdout", null
+        );
+        finding.setFixExample("Replace stdout with the project logger");
+        var naturalLanguage = builder.buildFindingItem(finding, changedFile("src/App.java", "MODIFY"), null);
+        assertThat(naturalLanguage.commentBody()).doesNotContain("```suggestion");
+
+        finding.setFixExample("suggestion:\nline one\nline two\nline three\nline four\nline five\nline six");
+        var tooManyLines = builder.buildFindingItem(finding, changedFile("src/App.java", "MODIFY"), null);
+        assertThat(tooManyLines.commentBody()).doesNotContain("```suggestion");
+
+        finding.setFixExample("suggestion:System.out.println(\"x\");");
+        var deleted = builder.buildFindingItem(finding, changedFile("src/App.java", "DELETED"), null);
+        assertThat(deleted.targetType()).isEqualTo("pull_request");
+        assertThat(deleted.commentBody()).doesNotContain("```suggestion");
+    }
+
+    @Test
     void buildFindingItemFallsBackToPullRequestCommentWhenLineIsMissing() {
         var item = builder.buildFindingItem(
             finding("LOW", "README.md", null, "Missing line", "Add line reference", null),

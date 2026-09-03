@@ -70,6 +70,23 @@ class WebhookNotificationContentBuilderTest {
         assertThat(content.markdown()).contains("### RepoGuard 通知测试", "这是一条连接测试消息。", "时间：");
     }
 
+    @Test
+    void buildsModelReleaseAlertWithAggregateSummary() {
+        WebhookNotificationContent content = builder.reviewContent(new NotificationMessage(
+            "MODEL_RELEASE_ALERT", null, null, "*", "*", null, "LLM 模型发布运行告警",
+            "AUTO_ROLLBACK", "HIGH", 12, 0, 0, 0,
+            "/repoguard/config/review-calibration/release-center",
+            "版本 release-next 触发 P95_LATENCY_ABOVE_RUNTIME_THRESHOLD"
+        ));
+
+        assertThat(content.title()).isEqualTo("RepoGuard LLM 模型发布告警");
+        assertThat(content.markdown()).contains(
+            "### RepoGuard LLM 模型发布告警",
+            "版本 release-next 触发 P95_LATENCY_ABOVE_RUNTIME_THRESHOLD",
+            "[查看发布中心](/repoguard/config/review-calibration/release-center)"
+        );
+    }
+
     private NotificationMessage message() {
         return new NotificationMessage(
             "HUMAN_REVIEW_REQUIRED",

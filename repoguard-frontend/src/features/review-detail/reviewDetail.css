@@ -4,6 +4,167 @@
   gap: 16px;
 }
 
+.attempt-comparison-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.attempt-comparison-head,
+.finding-diff-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.attempt-comparison-head h2 {
+  margin: 2px 0 0;
+}
+
+.card-eyebrow {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.attempt-timeline,
+.comparison-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.attempt-dot,
+.comparison-stat {
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 12px;
+}
+
+.attempt-dot.current {
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
+.attempt-dot.more {
+  background: #f8fafc;
+}
+
+.comparison-stat strong {
+  margin-left: 3px;
+}
+
+.comparison-stat.new {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.comparison-stat.regressed {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.comparison-stat.persisting {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.comparison-stat.unmatched {
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.attempt-comparison-meta,
+.attempt-comparison-empty {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.finding-diff-list,
+.resolved-findings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.finding-diff-item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.finding-diff-item.resolved {
+  opacity: 0.78;
+}
+
+.finding-diff-item code {
+  overflow: hidden;
+  color: #475569;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.finding-diff-item small {
+  color: #64748b;
+}
+
+.comparison-status {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  padding: 3px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.comparison-status.new {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.comparison-status.regressed {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.comparison-status.persisting {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.comparison-status.unmatched {
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.comparison-status.resolved {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.resolved-findings summary {
+  color: #475569;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.comparison-pagination {
+  align-self: flex-end;
+}
+
 .detail-header {
   display: flex;
   align-items: flex-start;
@@ -406,6 +567,16 @@
   gap: 12px;
 }
 
+.findings-card-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.finding-source-filter {
+  width: 132px;
+}
+
 .finding-item {
   display: flex;
   flex-direction: column;
@@ -441,6 +612,29 @@
   background: #eaf2ff;
   font-size: 13px;
   font-weight: 700;
+}
+
+.source-pill,
+.batch-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 8px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.source-pill {
+  color: #155e75;
+  background: #cffafe;
+}
+
+.batch-pill {
+  color: #6b21a8;
+  background: #f3e8ff;
 }
 
 .confidence-pill,

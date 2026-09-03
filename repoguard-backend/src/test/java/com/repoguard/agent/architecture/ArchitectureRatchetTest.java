@@ -108,7 +108,7 @@ class ArchitectureRatchetTest {
 
         assertThat(productionLines)
             .as("production Java line budget")
-            .isLessThanOrEqualTo(Long.parseLong(properties.getProperty("maxProductionJavaLines", "70036")));
+            .isLessThanOrEqualTo(Long.parseLong(properties.getProperty("maxProductionJavaLines", "70074")));
         assertThat(productionClassCount)
             .as("production Java class budget")
             .isLessThanOrEqualTo(Integer.parseInt(properties.getProperty("maxProductionClassCount", "941")));

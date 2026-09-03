@@ -34,6 +34,18 @@ public interface ReviewTaskQueryService {
         String feedbackStatus
     );
 
+    default PageResponse<ReviewFindingDto> listReviewFindings(
+        Long id,
+        int page,
+        int pageSize,
+        String severity,
+        String category,
+        String feedbackStatus,
+        String source
+    ) {
+        return listReviewFindings(id, page, pageSize, severity, category, feedbackStatus);
+    }
+
     PageResponse<ChangedFileDto> listChangedFiles(Long id, int page, int pageSize, Boolean hasFinding);
 
     PageResponse<MissingTestDto> listMissingTests(Long id, int page, int pageSize);

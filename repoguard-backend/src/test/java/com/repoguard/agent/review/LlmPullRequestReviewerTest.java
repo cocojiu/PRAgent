@@ -127,6 +127,46 @@ class LlmPullRequestReviewerTest {
     }
 
     @Test
+    void evaluationUsesCandidateModelOnlyWhenConfiguredProviderIsReady() {
+        ReviewPolicyProvider reviewPolicyProvider = org.mockito.Mockito.mock(ReviewPolicyProvider.class);
+        RuleBasedPullRequestReviewer ruleBasedReviewer = org.mockito.Mockito.mock(RuleBasedPullRequestReviewer.class);
+        when(reviewPolicyProvider.getSettings()).thenReturn(llmSettings());
+        when(ruleBasedReviewer.review(any(PullRequestDiff.class))).thenReturn(ReviewResult.completed("INFO", List.of()));
+        when(ruleBasedReviewer.review(any(PullRequestDiff.class), any(ReviewDeadline.class)))
+            .thenReturn(ReviewResult.completed("INFO", List.of()));
+        TestableLlmPullRequestReviewer reviewer = new TestableLlmPullRequestReviewer(
+            reviewPolicyProvider, ruleBasedReviewer, new ArrayList<>()
+        );
+
+        ReviewResult result = reviewer.reviewForEvaluation(
+            new ReviewTask(), new PullRequestDiff("org", "repo", 1, List.of()),
+            ReviewDeadline.unlimited(), " OPENAI ", "gpt-candidate"
+        );
+
+        assertThat(result.llmStatus()).isEqualTo("COMPLETED");
+        assertThat(result.llmParseStatus()).isEqualTo("parsed");
+        assertThatThrownBy(() -> reviewer.reviewForEvaluation(
+            new ReviewTask(), new PullRequestDiff("org", "repo", 1, List.of()),
+            ReviewDeadline.unlimited(), "azure", "gpt-candidate"
+        )).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void evaluationRejectsDisabledOrIncompleteLlmConfiguration() {
+        ReviewPolicyProvider reviewPolicyProvider = org.mockito.Mockito.mock(ReviewPolicyProvider.class);
+        RuleBasedPullRequestReviewer ruleBasedReviewer = org.mockito.Mockito.mock(RuleBasedPullRequestReviewer.class);
+        when(reviewPolicyProvider.getSettings()).thenReturn(ReviewPolicySettings.empty());
+        TestableLlmPullRequestReviewer reviewer = new TestableLlmPullRequestReviewer(
+            reviewPolicyProvider, ruleBasedReviewer, new ArrayList<>()
+        );
+
+        assertThatThrownBy(() -> reviewer.reviewForEvaluation(
+            new ReviewTask(), new PullRequestDiff("org", "repo", 1, List.of()),
+            ReviewDeadline.unlimited(), "openai", "gpt-candidate"
+        )).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
     void reviewFallsBackToRulesWhenLlmCircuitIsOpen() {
         ReviewPolicyProvider reviewPolicyProvider = org.mockito.Mockito.mock(ReviewPolicyProvider.class);
         RuleBasedPullRequestReviewer ruleBasedReviewer = org.mockito.Mockito.mock(RuleBasedPullRequestReviewer.class);

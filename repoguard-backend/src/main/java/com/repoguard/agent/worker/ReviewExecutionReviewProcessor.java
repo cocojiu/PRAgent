@@ -7,10 +7,12 @@ import com.repoguard.agent.review.PullRequestReviewer;
 import com.repoguard.agent.review.ReviewBudgetExceededException;
 import com.repoguard.agent.review.ReviewDeadline;
 import com.repoguard.agent.review.ReviewResult;
+import com.repoguard.agent.review.RepositoryPolicyRuntime;
 import com.repoguard.agent.review.RuleBasedPullRequestReviewer;
 import com.repoguard.agent.review.execution.LargePullRequestDegradationProperties;
 import java.util.List;
 import java.util.Objects;
+import org.springframework.beans.factory.ObjectProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,39 +27,53 @@ class ReviewExecutionReviewProcessor {
     private final PullRequestReviewer pullRequestReviewer;
     private final RuleBasedPullRequestReviewer ruleBasedReviewer;
     private final LargePullRequestDegradationProperties largePullRequestProperties;
+    private final RepositoryPolicyRuntime repositoryPolicyRuntime;
     private final boolean deadlineAware;
 
     @Autowired
     ReviewExecutionReviewProcessor(
         PullRequestReviewer pullRequestReviewer,
         RuleBasedPullRequestReviewer ruleBasedReviewer,
-        LargePullRequestDegradationProperties largePullRequestProperties
+        LargePullRequestDegradationProperties largePullRequestProperties,
+        ObjectProvider<RepositoryPolicyRuntime> repositoryPolicyRuntimeProvider
     ) {
         this(
             pullRequestReviewer,
             Objects.requireNonNull(ruleBasedReviewer, "ruleBasedReviewer"),
             Objects.requireNonNull(largePullRequestProperties, "largePullRequestProperties"),
+            repositoryPolicyRuntimeProvider == null ? null : repositoryPolicyRuntimeProvider.getIfAvailable(),
             true
         );
     }
 
+    ReviewExecutionReviewProcessor(
+        PullRequestReviewer pullRequestReviewer,
+        RuleBasedPullRequestReviewer ruleBasedReviewer,
+        LargePullRequestDegradationProperties largePullRequestProperties
+    ) {
+        this(pullRequestReviewer, ruleBasedReviewer, largePullRequestProperties, null, true);
+    }
+
     ReviewExecutionReviewProcessor(PullRequestReviewer pullRequestReviewer) {
-        this(pullRequestReviewer, null, null, false);
+        this(pullRequestReviewer, null, null, null, false);
     }
 
     private ReviewExecutionReviewProcessor(
         PullRequestReviewer pullRequestReviewer,
         RuleBasedPullRequestReviewer ruleBasedReviewer,
         LargePullRequestDegradationProperties largePullRequestProperties,
+        RepositoryPolicyRuntime repositoryPolicyRuntime,
         boolean deadlineAware
     ) {
         this.pullRequestReviewer = Objects.requireNonNull(pullRequestReviewer, "pullRequestReviewer");
         this.ruleBasedReviewer = ruleBasedReviewer;
         this.largePullRequestProperties = largePullRequestProperties;
+        this.repositoryPolicyRuntime = repositoryPolicyRuntime;
         this.deadlineAware = deadlineAware;
     }
 
     ReviewResult review(ReviewTask task, PullRequestDiff diff, ReviewDeadline deadline) {
+        ReviewResult result;
         if (shouldDegradeLargePullRequest(diff)) {
             int changes = totalChanges(diff);
             LOGGER.warn(
@@ -66,14 +82,16 @@ class ReviewExecutionReviewProcessor {
                 diff.files().size(),
                 changes
             );
-            return ruleBasedReviewer.review(diff, deadline).withIncompleteInput(
+            result = ruleBasedReviewer.review(diff, deadline).withIncompleteInput(
                 "Large pull request exceeded the single-server LLM capacity envelope",
                 "largePrDegraded=true; files=" + diff.files().size() + "; changes=" + changes
             );
+        } else {
+            result = deadlineAware
+                ? pullRequestReviewer.review(task, diff, deadline)
+                : pullRequestReviewer.review(task, diff);
         }
-        return deadlineAware
-            ? pullRequestReviewer.review(task, diff, deadline)
-            : pullRequestReviewer.review(task, diff);
+        return repositoryPolicyRuntime == null ? result : repositoryPolicyRuntime.applyFindings(task, result);
     }
 
     ReviewResult applyDiffBudgetOutcome(PullRequestDiff diff, ReviewResult reviewResult) {

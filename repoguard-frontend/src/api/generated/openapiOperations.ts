@@ -12,7 +12,18 @@ import type {
   DataRetentionCleanupAudit,
   DataRetentionCleanupRequest,
   DataRetentionCleanupResponse,
+  EnterpriseIdentityBindingRequest,
+  EnterpriseTenant,
+  EnterpriseTenantCreateRequest,
+  EnterpriseTenantMembershipRequest,
+  EnterpriseTenantQuota,
+  EnterpriseTenantQuotaRequest,
+  EnterpriseTenantRepositoryRequest,
+  EnterpriseTenantStatusRequest,
   FrontendPerformanceReport,
+  GithubChecksPolicyRequest,
+  GithubChecksPreviewRequest,
+  GithubChecksSetupStatus,
   GithubCommentPreview,
   GithubCommentPublicationHistory,
   GithubCommentPublish,
@@ -20,6 +31,24 @@ import type {
   GithubIntegrationConfigRequest,
   GithubPullRequestOptions,
   HighRiskReview,
+  LlmEvaluationExport,
+  LlmEvaluationReport,
+  LlmEvaluationReportComparison,
+  LlmEvaluationReportLifecycleRequest,
+  LlmEvaluationRequest,
+  LlmEvaluationRun,
+  LlmEvaluationRunRequest,
+  LlmModelRelease,
+  LlmModelReleaseAudit,
+  LlmModelReleaseAuditExport,
+  LlmModelReleaseAuditVerification,
+  LlmModelReleaseCenter,
+  LlmModelReleaseDrift,
+  LlmModelReleaseDriftRepair,
+  LlmModelReleaseDriftRepairRequest,
+  LlmModelReleaseMetric,
+  LlmModelReleaseRequest,
+  LlmModelRollbackRequest,
   ManagedUser,
   ManualReviewRequest,
   ManualReviewResponse,
@@ -31,7 +60,13 @@ import type {
   NotificationCenter,
   NotificationDelivery,
   NotificationEvent,
+  NotificationReadRequest,
+  NotificationReport,
   PageResponse,
+  RepositoryPolicyPreviewResponse,
+  RepositorySuppressionRequest,
+  RepositorySuppressionResponse,
+  ReviewAttemptComparison,
   ReviewCalibrationQueue,
   ReviewEnforcementModeRequest,
   ReviewExecutionAttempt,
@@ -148,6 +183,69 @@ export type GeneratedOpenApiOperationMap = {
     body: never;
     response: PageResponse<DataRetentionCleanupAudit>;
   };
+  "enterpriseTenantControllerCreate": {
+    method: "POST";
+    pathParams: never;
+    query: never;
+    body: EnterpriseTenantCreateRequest;
+    response: EnterpriseTenant;
+  };
+  "enterpriseTenantControllerGet": {
+    method: "GET";
+    pathParams: { tenantKey: string };
+    query: never;
+    body: never;
+    response: EnterpriseTenant;
+  };
+  "enterpriseTenantControllerList": {
+    method: "GET";
+    pathParams: never;
+    query: { page?: number; pageSize?: number; status?: string };
+    body: never;
+    response: PageResponse<EnterpriseTenant>;
+  };
+  "enterpriseTenantControllerPutIdentity": {
+    method: "PUT";
+    pathParams: { tenantKey: string };
+    query: never;
+    body: EnterpriseIdentityBindingRequest;
+    response: void;
+  };
+  "enterpriseTenantControllerPutMembership": {
+    method: "PUT";
+    pathParams: { tenantKey: string };
+    query: never;
+    body: EnterpriseTenantMembershipRequest;
+    response: void;
+  };
+  "enterpriseTenantControllerPutRepository": {
+    method: "PUT";
+    pathParams: { tenantKey: string };
+    query: never;
+    body: EnterpriseTenantRepositoryRequest;
+    response: void;
+  };
+  "enterpriseTenantControllerUpdateStatus": {
+    method: "PUT";
+    pathParams: { tenantKey: string };
+    query: never;
+    body: EnterpriseTenantStatusRequest;
+    response: EnterpriseTenant;
+  };
+  "enterpriseTenantQuotaControllerGet": {
+    method: "GET";
+    pathParams: { tenantKey: string };
+    query: never;
+    body: never;
+    response: EnterpriseTenantQuota;
+  };
+  "enterpriseTenantQuotaControllerUpdate": {
+    method: "PUT";
+    pathParams: { tenantKey: string };
+    query: never;
+    body: EnterpriseTenantQuotaRequest;
+    response: EnterpriseTenantQuota;
+  };
   "frontendPerformanceControllerRecordPerformance": {
     method: "POST";
     pathParams: never;
@@ -175,6 +273,27 @@ export type GeneratedOpenApiOperationMap = {
     query: never;
     body: never;
     response: NotificationCenter;
+  };
+  "notificationControllerMarkRead": {
+    method: "POST";
+    pathParams: never;
+    query: never;
+    body: NotificationReadRequest;
+    response: void;
+  };
+  "notificationControllerReadKeys": {
+    method: "GET";
+    pathParams: never;
+    query: never;
+    body: never;
+    response: string[];
+  };
+  "notificationControllerReport": {
+    method: "GET";
+    pathParams: never;
+    query: { period?: string };
+    body: never;
+    response: NotificationReport;
   };
   "notificationIntegrationControllerCreateBinding": {
     method: "POST";
@@ -239,12 +358,180 @@ export type GeneratedOpenApiOperationMap = {
     body: NotificationBindingStatusRequest;
     response: NotificationBinding;
   };
+  "repositoryPolicyControllerActivate": {
+    method: "POST";
+    pathParams: { id: number };
+    query: { reason?: string };
+    body: never;
+    response: RepositorySuppressionResponse;
+  };
+  "repositoryPolicyControllerCreateSuppression": {
+    method: "POST";
+    pathParams: never;
+    query: never;
+    body: RepositorySuppressionRequest;
+    response: RepositorySuppressionResponse;
+  };
+  "repositoryPolicyControllerListSuppressions": {
+    method: "GET";
+    pathParams: never;
+    query: { limit?: number; organization: string; repository: string };
+    body: never;
+    response: RepositorySuppressionResponse[];
+  };
+  "repositoryPolicyControllerPreview": {
+    method: "GET";
+    pathParams: never;
+    query: { headSha?: string; organization: string; repository: string };
+    body: never;
+    response: RepositoryPolicyPreviewResponse;
+  };
+  "repositoryPolicyControllerRevoke": {
+    method: "POST";
+    pathParams: { id: number };
+    query: { reason?: string };
+    body: never;
+    response: RepositorySuppressionResponse;
+  };
+  "reviewCalibrationControllerCancelEvaluationRun": {
+    method: "POST";
+    pathParams: { runId: string };
+    query: never;
+    body: never;
+    response: LlmEvaluationRun;
+  };
+  "reviewCalibrationControllerCompareEvaluationReports": {
+    method: "GET";
+    pathParams: { candidateReportId: number; reportId: number };
+    query: never;
+    body: never;
+    response: LlmEvaluationReportComparison;
+  };
+  "reviewCalibrationControllerCreateEvaluationReport": {
+    method: "POST";
+    pathParams: never;
+    query: never;
+    body: LlmEvaluationRequest;
+    response: LlmEvaluationReport;
+  };
+  "reviewCalibrationControllerExportEvaluationReport": {
+    method: "GET";
+    pathParams: { reportId: number };
+    query: { format?: string };
+    body: never;
+    response: LlmEvaluationExport;
+  };
+  "reviewCalibrationControllerExportModelReleaseAudits": {
+    method: "GET";
+    pathParams: never;
+    query: { action?: string; format?: string; from?: string; operator?: string; releaseId?: number; releaseKey?: string; to?: string };
+    body: never;
+    response: LlmModelReleaseAuditExport;
+  };
+  "reviewCalibrationControllerGetEvaluationReport": {
+    method: "GET";
+    pathParams: { reportId: number };
+    query: never;
+    body: never;
+    response: LlmEvaluationReport;
+  };
+  "reviewCalibrationControllerGetEvaluationRun": {
+    method: "GET";
+    pathParams: { runId: string };
+    query: never;
+    body: never;
+    response: LlmEvaluationRun;
+  };
+  "reviewCalibrationControllerGetModelReleaseCenter": {
+    method: "GET";
+    pathParams: never;
+    query: { trendDays?: number };
+    body: never;
+    response: LlmModelReleaseCenter;
+  };
   "reviewCalibrationControllerGetReviewCalibrationQueue": {
     method: "GET";
     pathParams: never;
     query: { includeIgnored?: boolean; limit?: number; ruleId: string };
     body: never;
     response: ReviewCalibrationQueue;
+  };
+  "reviewCalibrationControllerInspectModelReleaseDrift": {
+    method: "GET";
+    pathParams: never;
+    query: never;
+    body: never;
+    response: LlmModelReleaseDrift;
+  };
+  "reviewCalibrationControllerListEvaluationReports": {
+    method: "GET";
+    pathParams: never;
+    query: { limit?: number };
+    body: never;
+    response: LlmEvaluationReport[];
+  };
+  "reviewCalibrationControllerListModelReleaseAudits": {
+    method: "GET";
+    pathParams: never;
+    query: { action?: string; from?: string; operator?: string; page?: number; pageSize?: number; releaseId?: number; releaseKey?: string; to?: string };
+    body: never;
+    response: PageResponse<LlmModelReleaseAudit>;
+  };
+  "reviewCalibrationControllerListModelReleaseRuntimeMetrics": {
+    method: "GET";
+    pathParams: never;
+    query: { days?: number; limit?: number; releaseKey?: string };
+    body: never;
+    response: LlmModelReleaseMetric[];
+  };
+  "reviewCalibrationControllerPromoteModelRelease": {
+    method: "POST";
+    pathParams: never;
+    query: never;
+    body: LlmModelReleaseRequest;
+    response: LlmModelRelease;
+  };
+  "reviewCalibrationControllerRegisterShadowRelease": {
+    method: "POST";
+    pathParams: never;
+    query: never;
+    body: LlmModelReleaseRequest;
+    response: LlmModelRelease;
+  };
+  "reviewCalibrationControllerRepairModelReleaseDrift": {
+    method: "POST";
+    pathParams: never;
+    query: never;
+    body: LlmModelReleaseDriftRepairRequest;
+    response: LlmModelReleaseDriftRepair;
+  };
+  "reviewCalibrationControllerRollbackModelRelease": {
+    method: "POST";
+    pathParams: { releaseId: number };
+    query: never;
+    body: LlmModelRollbackRequest;
+    response: LlmModelRelease;
+  };
+  "reviewCalibrationControllerStartEvaluationRun": {
+    method: "POST";
+    pathParams: never;
+    query: never;
+    body: LlmEvaluationRunRequest;
+    response: LlmEvaluationRun;
+  };
+  "reviewCalibrationControllerTransitionEvaluationReportLifecycle": {
+    method: "POST";
+    pathParams: { reportId: number };
+    query: never;
+    body: LlmEvaluationReportLifecycleRequest;
+    response: LlmEvaluationReport;
+  };
+  "reviewCalibrationControllerVerifyModelReleaseAudit": {
+    method: "GET";
+    pathParams: { auditId: number };
+    query: never;
+    body: never;
+    response: LlmModelReleaseAuditVerification;
   };
   "reviewControllerGetGithubCommentPreview": {
     method: "GET";
@@ -312,7 +599,7 @@ export type GeneratedOpenApiOperationMap = {
   "reviewControllerListReviewFindings": {
     method: "GET";
     pathParams: { id: number };
-    query: { category?: string; feedbackStatus?: string; page?: number; pageSize?: number; severity?: string };
+    query: { category?: string; feedbackStatus?: string; page?: number; pageSize?: number; severity?: string; source?: string };
     body: never;
     response: PageResponse<ReviewFinding>;
   };
@@ -365,6 +652,13 @@ export type GeneratedOpenApiOperationMap = {
     body: FindingFeedbackRequest;
     response: FindingFeedbackResponse;
   };
+  "reviewExecutionAttemptComparisonControllerCompare": {
+    method: "GET";
+    pathParams: { candidateAttemptId: number; taskId: number };
+    query: { baselineAttemptId?: number; page?: number; pageSize?: number };
+    body: never;
+    response: ReviewAttemptComparison;
+  };
   "reviewExecutionAttemptControllerGetResult": {
     method: "GET";
     pathParams: { attemptId: number; taskId: number };
@@ -385,6 +679,13 @@ export type GeneratedOpenApiOperationMap = {
     query: never;
     body: ReviewRuleConfigRequest;
     response: ReviewRuleConfig;
+  };
+  "systemConfigControllerGetGithubChecksSetup": {
+    method: "GET";
+    pathParams: never;
+    query: { organization: string; repository: string };
+    body: never;
+    response: GithubChecksSetupStatus;
   };
   "systemConfigControllerGetGithubIntegration": {
     method: "GET";
@@ -477,6 +778,13 @@ export type GeneratedOpenApiOperationMap = {
     body: never;
     response: SecretReEncryptionJob;
   };
+  "systemConfigControllerPreviewGithubChecks": {
+    method: "POST";
+    pathParams: never;
+    query: never;
+    body: GithubChecksPreviewRequest;
+    response: GithubChecksSetupStatus;
+  };
   "systemConfigControllerPromoteReviewStrategy": {
     method: "PUT";
     pathParams: never;
@@ -539,6 +847,13 @@ export type GeneratedOpenApiOperationMap = {
     query: never;
     body: ReviewPolicyConfigRequest | undefined;
     response: ConnectionTestResult;
+  };
+  "systemConfigControllerUpdateGithubChecksPolicy": {
+    method: "PUT";
+    pathParams: never;
+    query: never;
+    body: GithubChecksPolicyRequest;
+    response: GithubChecksSetupStatus;
   };
   "systemConfigControllerUpdateGithubIntegration": {
     method: "PUT";
@@ -733,6 +1048,78 @@ export const generatedOpenApiOperations = {
     hasRequestBody: false,
     requestBodyRequired: false
   },
+  "enterpriseTenantControllerCreate": {
+    method: "POST",
+    path: "/api/v1/enterprise/tenants",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "enterpriseTenantControllerGet": {
+    method: "GET",
+    path: "/api/v1/enterprise/tenants/{tenantKey}",
+    pathParamNames: ["tenantKey"],
+    queryParamNames: [],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "enterpriseTenantControllerList": {
+    method: "GET",
+    path: "/api/v1/enterprise/tenants",
+    pathParamNames: [],
+    queryParamNames: ["page", "pageSize", "status"],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "enterpriseTenantControllerPutIdentity": {
+    method: "PUT",
+    path: "/api/v1/enterprise/tenants/{tenantKey}/identities",
+    pathParamNames: ["tenantKey"],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "enterpriseTenantControllerPutMembership": {
+    method: "PUT",
+    path: "/api/v1/enterprise/tenants/{tenantKey}/memberships",
+    pathParamNames: ["tenantKey"],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "enterpriseTenantControllerPutRepository": {
+    method: "PUT",
+    path: "/api/v1/enterprise/tenants/{tenantKey}/repositories",
+    pathParamNames: ["tenantKey"],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "enterpriseTenantControllerUpdateStatus": {
+    method: "PUT",
+    path: "/api/v1/enterprise/tenants/{tenantKey}/status",
+    pathParamNames: ["tenantKey"],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "enterpriseTenantQuotaControllerGet": {
+    method: "GET",
+    path: "/api/v1/enterprise/tenants/{tenantKey}/quota",
+    pathParamNames: ["tenantKey"],
+    queryParamNames: [],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "enterpriseTenantQuotaControllerUpdate": {
+    method: "PUT",
+    path: "/api/v1/enterprise/tenants/{tenantKey}/quota",
+    pathParamNames: ["tenantKey"],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
   "frontendPerformanceControllerRecordPerformance": {
     method: "POST",
     path: "/api/v1/observability/frontend/performance",
@@ -762,6 +1149,30 @@ export const generatedOpenApiOperations = {
     path: "/api/v1/notifications",
     pathParamNames: [],
     queryParamNames: [],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "notificationControllerMarkRead": {
+    method: "POST",
+    path: "/api/v1/notifications/read",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "notificationControllerReadKeys": {
+    method: "GET",
+    path: "/api/v1/notifications/read",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "notificationControllerReport": {
+    method: "GET",
+    path: "/api/v1/notifications/reports",
+    pathParamNames: [],
+    queryParamNames: ["period"],
     hasRequestBody: false,
     requestBodyRequired: false
   },
@@ -837,11 +1248,203 @@ export const generatedOpenApiOperations = {
     hasRequestBody: true,
     requestBodyRequired: true
   },
+  "repositoryPolicyControllerActivate": {
+    method: "POST",
+    path: "/api/v1/config/repository-policy/suppressions/{id}/activate",
+    pathParamNames: ["id"],
+    queryParamNames: ["reason"],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "repositoryPolicyControllerCreateSuppression": {
+    method: "POST",
+    path: "/api/v1/config/repository-policy/suppressions",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "repositoryPolicyControllerListSuppressions": {
+    method: "GET",
+    path: "/api/v1/config/repository-policy/suppressions",
+    pathParamNames: [],
+    queryParamNames: ["limit", "organization", "repository"],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "repositoryPolicyControllerPreview": {
+    method: "GET",
+    path: "/api/v1/config/repository-policy/preview",
+    pathParamNames: [],
+    queryParamNames: ["headSha", "organization", "repository"],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "repositoryPolicyControllerRevoke": {
+    method: "POST",
+    path: "/api/v1/config/repository-policy/suppressions/{id}/revoke",
+    pathParamNames: ["id"],
+    queryParamNames: ["reason"],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "reviewCalibrationControllerCancelEvaluationRun": {
+    method: "POST",
+    path: "/api/v1/config/review-calibration/evaluation-runs/{runId}/cancel",
+    pathParamNames: ["runId"],
+    queryParamNames: [],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "reviewCalibrationControllerCompareEvaluationReports": {
+    method: "GET",
+    path: "/api/v1/config/review-calibration/evaluation-reports/{reportId}/compare/{candidateReportId}",
+    pathParamNames: ["candidateReportId", "reportId"],
+    queryParamNames: [],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "reviewCalibrationControllerCreateEvaluationReport": {
+    method: "POST",
+    path: "/api/v1/config/review-calibration/evaluation-reports",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "reviewCalibrationControllerExportEvaluationReport": {
+    method: "GET",
+    path: "/api/v1/config/review-calibration/evaluation-reports/{reportId}/export",
+    pathParamNames: ["reportId"],
+    queryParamNames: ["format"],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "reviewCalibrationControllerExportModelReleaseAudits": {
+    method: "GET",
+    path: "/api/v1/config/review-calibration/release-center/audits/export",
+    pathParamNames: [],
+    queryParamNames: ["action", "format", "from", "operator", "releaseId", "releaseKey", "to"],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "reviewCalibrationControllerGetEvaluationReport": {
+    method: "GET",
+    path: "/api/v1/config/review-calibration/evaluation-reports/{reportId}",
+    pathParamNames: ["reportId"],
+    queryParamNames: [],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "reviewCalibrationControllerGetEvaluationRun": {
+    method: "GET",
+    path: "/api/v1/config/review-calibration/evaluation-runs/{runId}",
+    pathParamNames: ["runId"],
+    queryParamNames: [],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "reviewCalibrationControllerGetModelReleaseCenter": {
+    method: "GET",
+    path: "/api/v1/config/review-calibration/release-center",
+    pathParamNames: [],
+    queryParamNames: ["trendDays"],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
   "reviewCalibrationControllerGetReviewCalibrationQueue": {
     method: "GET",
     path: "/api/v1/config/review-calibration/queue",
     pathParamNames: [],
     queryParamNames: ["includeIgnored", "limit", "ruleId"],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "reviewCalibrationControllerInspectModelReleaseDrift": {
+    method: "GET",
+    path: "/api/v1/config/review-calibration/release-center/drift",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "reviewCalibrationControllerListEvaluationReports": {
+    method: "GET",
+    path: "/api/v1/config/review-calibration/evaluation-reports",
+    pathParamNames: [],
+    queryParamNames: ["limit"],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "reviewCalibrationControllerListModelReleaseAudits": {
+    method: "GET",
+    path: "/api/v1/config/review-calibration/release-center/audits",
+    pathParamNames: [],
+    queryParamNames: ["action", "from", "operator", "page", "pageSize", "releaseId", "releaseKey", "to"],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "reviewCalibrationControllerListModelReleaseRuntimeMetrics": {
+    method: "GET",
+    path: "/api/v1/config/review-calibration/release-center/runtime-metrics",
+    pathParamNames: [],
+    queryParamNames: ["days", "limit", "releaseKey"],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "reviewCalibrationControllerPromoteModelRelease": {
+    method: "POST",
+    path: "/api/v1/config/review-calibration/release-center/promote",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "reviewCalibrationControllerRegisterShadowRelease": {
+    method: "POST",
+    path: "/api/v1/config/review-calibration/release-center/shadow",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "reviewCalibrationControllerRepairModelReleaseDrift": {
+    method: "POST",
+    path: "/api/v1/config/review-calibration/release-center/drift/repair",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "reviewCalibrationControllerRollbackModelRelease": {
+    method: "POST",
+    path: "/api/v1/config/review-calibration/release-center/{releaseId}/rollback",
+    pathParamNames: ["releaseId"],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "reviewCalibrationControllerStartEvaluationRun": {
+    method: "POST",
+    path: "/api/v1/config/review-calibration/evaluation-runs",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "reviewCalibrationControllerTransitionEvaluationReportLifecycle": {
+    method: "POST",
+    path: "/api/v1/config/review-calibration/evaluation-reports/{reportId}/lifecycle",
+    pathParamNames: ["reportId"],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "reviewCalibrationControllerVerifyModelReleaseAudit": {
+    method: "GET",
+    path: "/api/v1/config/review-calibration/release-center/audits/{auditId}/verify",
+    pathParamNames: ["auditId"],
+    queryParamNames: [],
     hasRequestBody: false,
     requestBodyRequired: false
   },
@@ -921,7 +1524,7 @@ export const generatedOpenApiOperations = {
     method: "GET",
     path: "/api/v1/reviews/{id}/findings",
     pathParamNames: ["id"],
-    queryParamNames: ["category", "feedbackStatus", "page", "pageSize", "severity"],
+    queryParamNames: ["category", "feedbackStatus", "page", "pageSize", "severity", "source"],
     hasRequestBody: false,
     requestBodyRequired: false
   },
@@ -981,6 +1584,14 @@ export const generatedOpenApiOperations = {
     hasRequestBody: true,
     requestBodyRequired: true
   },
+  "reviewExecutionAttemptComparisonControllerCompare": {
+    method: "GET",
+    path: "/api/v1/reviews/{taskId}/attempts/{candidateAttemptId}/comparison",
+    pathParamNames: ["candidateAttemptId", "taskId"],
+    queryParamNames: ["baselineAttemptId", "page", "pageSize"],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
   "reviewExecutionAttemptControllerGetResult": {
     method: "GET",
     path: "/api/v1/reviews/{taskId}/attempts/{attemptId}",
@@ -1004,6 +1615,14 @@ export const generatedOpenApiOperations = {
     queryParamNames: [],
     hasRequestBody: true,
     requestBodyRequired: true
+  },
+  "systemConfigControllerGetGithubChecksSetup": {
+    method: "GET",
+    path: "/api/v1/config/integrations/github/checks",
+    pathParamNames: [],
+    queryParamNames: ["organization", "repository"],
+    hasRequestBody: false,
+    requestBodyRequired: false
   },
   "systemConfigControllerGetGithubIntegration": {
     method: "GET",
@@ -1109,6 +1728,14 @@ export const generatedOpenApiOperations = {
     hasRequestBody: false,
     requestBodyRequired: false
   },
+  "systemConfigControllerPreviewGithubChecks": {
+    method: "POST",
+    path: "/api/v1/config/integrations/github/checks/preview",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
   "systemConfigControllerPromoteReviewStrategy": {
     method: "PUT",
     path: "/api/v1/config/review-strategy/enforcement",
@@ -1180,6 +1807,14 @@ export const generatedOpenApiOperations = {
     queryParamNames: [],
     hasRequestBody: true,
     requestBodyRequired: false
+  },
+  "systemConfigControllerUpdateGithubChecksPolicy": {
+    method: "PUT",
+    path: "/api/v1/config/integrations/github/checks/policy",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
   },
   "systemConfigControllerUpdateGithubIntegration": {
     method: "PUT",

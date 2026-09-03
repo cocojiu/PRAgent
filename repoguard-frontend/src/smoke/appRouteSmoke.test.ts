@@ -80,12 +80,13 @@ describe("application route smoke", () => {
     expect((await navigate("/repoguard/message-queue")).name).toBe(routeNames.overview);
     expect((await navigate("/repoguard/notifications")).name).toBe(routeNames.overview);
     expect((await navigate("/repoguard/users")).name).toBe(routeNames.overview);
+    expect((await navigate("/repoguard/tenants")).name).toBe(routeNames.overview);
     await expectResolvedRoute("/repoguard/integrations", routeNames.integrations);
     await expectResolvedRoute("/repoguard/settings", routeNames.settings);
   });
 
   it("keeps advanced pages behind lazy route boundaries", async () => {
-    for (const routeName of [routeNames.messageQueue, routeNames.notificationOps, routeNames.users]) {
+    for (const routeName of [routeNames.messageQueue, routeNames.notificationOps, routeNames.users, routeNames.tenants]) {
       const route = router.getRoutes().find((candidate) => candidate.name === routeName);
       const loader = route?.components?.default as (() => Promise<unknown>) | undefined;
       expect(loader).toBeTypeOf("function");

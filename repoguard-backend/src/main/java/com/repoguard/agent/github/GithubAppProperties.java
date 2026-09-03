@@ -3,6 +3,7 @@ package com.repoguard.agent.github;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.util.StringUtils;
 
 @ConfigurationProperties(prefix = "repoguard.github-app")
 public class GithubAppProperties {
@@ -60,5 +61,16 @@ public class GithubAppProperties {
 
     public void setApiVersion(String apiVersion) {
         this.apiVersion = apiVersion;
+    }
+
+    /** Returns whether the App can mint an installation token without revealing its key. */
+    public boolean isConfigured() {
+        return enabled && appId != null && appId > 0 && StringUtils.hasText(privateKey);
+    }
+
+    public boolean isInstallationAllowlisted(Long installationId) {
+        return installationId != null
+            && installationId > 0
+            && (allowedInstallationIds.isEmpty() || allowedInstallationIds.contains(installationId));
     }
 }

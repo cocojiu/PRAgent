@@ -8,6 +8,7 @@ export const routeNames = {
   messageQueue: "message-queue",
   notificationOps: "notification-ops",
   users: "users",
+  tenants: "tenants",
   settings: "settings",
   notFound: "not-found"
 } as const;

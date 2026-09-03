@@ -23,6 +23,11 @@ class WebhookNotificationContentBuilder {
     }
 
     WebhookNotificationContent reviewContent(NotificationMessage message) {
+        if ("MODEL_RELEASE_ALERT".equalsIgnoreCase(message.eventType())) {
+            String summary = text(message.alertSummary());
+            return new WebhookNotificationContent("RepoGuard LLM 模型发布告警", "### RepoGuard LLM 模型发布告警\n\n" + summary
+                + "\n\n[查看发布中心](" + text(message.detailUrl()) + ")");
+        }
         return new WebhookNotificationContent(title(message), markdown(message));
     }
 

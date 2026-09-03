@@ -2,10 +2,12 @@ package com.repoguard.agent.review.task;
 
 import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.review.ReviewTaskCheckRunLifecycle;
 import java.time.LocalDateTime;
 import java.util.Objects;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -18,8 +20,25 @@ public class ReviewTaskAfterCommitPublisher {
     private final ReviewTaskPublishFailureStore publishFailureStore;
     private final Executor reviewPublishExecutor;
     private final RabbitReviewQueueProperties queueProperties;
+    private final ReviewTaskCheckRunLifecycle checkRunLifecycle;
 
     @Autowired
+    public ReviewTaskAfterCommitPublisher(
+        ReviewTaskPublisher reviewTaskPublisher,
+        ReviewTaskPublishFailureStore publishFailureStore,
+        ReviewTaskAfterCommitPublisherExecutor reviewPublishExecutor,
+        RabbitReviewQueueProperties queueProperties,
+        ObjectProvider<ReviewTaskCheckRunLifecycle> checkRunLifecycleProvider
+    ) {
+        this(
+            reviewTaskPublisher,
+            publishFailureStore,
+            (Executor) reviewPublishExecutor,
+            queueProperties,
+            checkRunLifecycleProvider.getIfAvailable()
+        );
+    }
+
     public ReviewTaskAfterCommitPublisher(
         ReviewTaskPublisher reviewTaskPublisher,
         ReviewTaskPublishFailureStore publishFailureStore,
@@ -30,7 +49,8 @@ public class ReviewTaskAfterCommitPublisher {
             reviewTaskPublisher,
             publishFailureStore,
             (Executor) reviewPublishExecutor,
-            queueProperties
+            queueProperties,
+            null
         );
     }
 
@@ -40,13 +60,27 @@ public class ReviewTaskAfterCommitPublisher {
         Executor reviewPublishExecutor,
         RabbitReviewQueueProperties queueProperties
     ) {
+        this(reviewTaskPublisher, publishFailureStore, reviewPublishExecutor, queueProperties, null);
+    }
+
+    private ReviewTaskAfterCommitPublisher(
+        ReviewTaskPublisher reviewTaskPublisher,
+        ReviewTaskPublishFailureStore publishFailureStore,
+        Executor reviewPublishExecutor,
+        RabbitReviewQueueProperties queueProperties,
+        ReviewTaskCheckRunLifecycle checkRunLifecycle
+    ) {
         this.reviewTaskPublisher = Objects.requireNonNull(reviewTaskPublisher, "reviewTaskPublisher");
         this.publishFailureStore = Objects.requireNonNull(publishFailureStore, "outboxStore");
         this.reviewPublishExecutor = Objects.requireNonNull(reviewPublishExecutor, "reviewPublishExecutor");
         this.queueProperties = Objects.requireNonNull(queueProperties, "queueProperties");
+        this.checkRunLifecycle = checkRunLifecycle;
     }
 
     public boolean publishAfterCommit(ReviewTask task, ReviewTaskMessage message, LocalDateTime queuedAt) {
+        if (checkRunLifecycle != null) {
+            checkRunLifecycle.queued(task);
+        }
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
             return publishAndMarkFailure(task, message, queuedAt);
         }

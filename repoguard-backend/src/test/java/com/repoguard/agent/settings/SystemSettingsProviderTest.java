@@ -5,6 +5,7 @@ import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.entity.SystemSettingsConfig;
 import com.repoguard.agent.mapper.SystemSettingsConfigMapper;
+import com.repoguard.agent.tenancy.TenantContext;
 import org.junit.jupiter.api.Test;
 
 class SystemSettingsProviderTest {
@@ -30,7 +31,7 @@ class SystemSettingsProviderTest {
         config.setSecretMasking(true);
         config.setPublicRepoAllowed(false);
         config.setTokenTtlDays(7);
-        when(systemSettingsConfigMapper.selectById(1L)).thenReturn(config);
+        when(systemSettingsConfigMapper.selectByTenantId(1L)).thenReturn(config);
 
         SystemSettings settings = provider.getSettings();
 
@@ -44,12 +45,27 @@ class SystemSettingsProviderTest {
 
     @Test
     void getSettingsReturnsEmptySettingsWhenConfigurationIsMissing() {
-        when(systemSettingsConfigMapper.selectById(1L)).thenReturn(null);
+        when(systemSettingsConfigMapper.selectByTenantId(1L)).thenReturn(null);
 
         SystemSettings settings = provider.getSettings();
 
         assertThat(settings.exists()).isFalse();
         assertThat(settings.retentionDays()).isNull();
         assertThat(settings.systemName()).isNull();
+    }
+
+    @Test
+    void getSettingsLoadsConfigurationForActiveTenant() {
+        SystemSettingsConfig config = new SystemSettingsConfig();
+        config.setSystemName("Tenant 23 Guard");
+        when(systemSettingsConfigMapper.selectByTenantId(23L)).thenReturn(config);
+
+        SystemSettings settings;
+        try (TenantContext.Scope _ = TenantContext.withTenant(23L)) {
+            settings = provider.getSettings();
+        }
+
+        assertThat(settings.exists()).isTrue();
+        assertThat(settings.systemName()).isEqualTo("Tenant 23 Guard");
     }
 }

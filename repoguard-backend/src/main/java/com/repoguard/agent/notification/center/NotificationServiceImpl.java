@@ -55,6 +55,7 @@ public class NotificationServiceImpl implements NotificationService {
         List<NotificationItemDto> items = new ArrayList<>();
         addFailedTaskNotifications(items, tasks);
         addHighRiskNotifications(items, tasks);
+        addOverdueHumanReviewNotifications(items, tasks);
         addFallbackNotifications(items, tasks);
         addIntegrationNotifications(items);
 
@@ -112,6 +113,22 @@ public class NotificationServiceImpl implements NotificationService {
                 "warning",
                 "LLM 审查已降级",
                 taskTitle(task) + " 已使用规则兜底结果。",
+                task
+            ))
+            .forEach(items::add);
+    }
+
+    private void addOverdueHumanReviewNotifications(List<NotificationItemDto> items, List<ReviewTask> tasks) {
+        LocalDateTime now = LocalDateTime.now();
+        tasks.stream()
+            .filter(task -> ReviewTaskStatus.PENDING_HUMAN_REVIEW == ReviewTaskStatus.from(task.getStatus()))
+            .filter(task -> task.getReviewSlaDeadline() != null && !task.getReviewSlaDeadline().isAfter(now))
+            .limit(4)
+            .map(task -> taskNotification(
+                "review-sla-overdue-" + task.getId(),
+                "warning",
+                "人工复核已超时",
+                taskTitle(task) + (StringUtils.hasText(task.getReviewAssignee()) ? "（负责人：" + task.getReviewAssignee() + "）" : "") + " 已超过 SLA，需要升级处理。",
                 task
             ))
             .forEach(items::add);

@@ -4,14 +4,13 @@ import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
 import com.repoguard.agent.security.SecretCryptoService;
+import com.repoguard.agent.tenancy.TenantContext;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
 public class ReviewPolicyProvider {
-
-    private static final long DEFAULT_POLICY_ID = 1L;
 
     private final ReviewPolicyConfigMapper reviewPolicyConfigMapper;
     private final SecretCryptoService secretCryptoService;
@@ -53,7 +52,9 @@ public class ReviewPolicyProvider {
     }
 
     public ReviewPolicySettings getSettings() {
-        ReviewPolicyConfig config = reviewPolicyConfigMapper.selectById(DEFAULT_POLICY_ID);
+        ReviewPolicyConfig config = reviewPolicyConfigMapper.selectByTenantId(
+            TenantContext.currentTenantIdOrDefault()
+        );
         if (config == null) {
             return ReviewPolicySettings.empty();
         }

@@ -2,6 +2,7 @@ import type { AuthResponse, AuthUser, CurrentUser } from "@/api/auth";
 import type { ReviewTaskSummary } from "@/api/generated/reviewDetailTypes";
 import type {
   GithubIntegrationConfig,
+  GithubChecksSetupStatus,
   PageResponse,
   ReviewPolicyConfig,
   SecretReEncryptionItem,
@@ -58,6 +59,50 @@ const hasIntegrationCore = (value: unknown): value is Record<string, unknown> =>
 
 export const isGithubIntegrationConfig: ApiResponseValidator<GithubIntegrationConfig> =
   (value): value is GithubIntegrationConfig => hasIntegrationCore(value);
+
+const isGithubChecksDiagnostic = (value: unknown): boolean =>
+  isRecord(value)
+  && hasString(value, "code")
+  && hasString(value, "label")
+  && hasString(value, "status")
+  && hasString(value, "message")
+  && hasBoolean(value, "blocking");
+
+const isGithubChecksPreview = (value: unknown): boolean =>
+  isRecord(value)
+  && hasBoolean(value, "attempted")
+  && hasBoolean(value, "created")
+  && hasString(value, "desiredStage")
+  && hasNumber(value, "desiredVersion")
+  && hasNumber(value, "appliedVersion")
+  && hasNumber(value, "retryAttempts")
+  && hasNumber(value, "annotationCount")
+  && hasBoolean(value, "annotationTruncated")
+  && hasString(value, "status")
+  && hasString(value, "message");
+
+export const isGithubChecksSetupStatus: ApiResponseValidator<GithubChecksSetupStatus> =
+  (value): value is GithubChecksSetupStatus =>
+    isRecord(value)
+    && hasString(value, "organization")
+    && hasString(value, "repository")
+    && hasBoolean(value, "appEnabled")
+    && hasBoolean(value, "appConfigured")
+    && hasBoolean(value, "installationAllowlisted")
+    && hasBoolean(value, "repositoryAuthorized")
+    && hasBoolean(value, "metadataPermission")
+    && hasBoolean(value, "contentsPermission")
+    && hasBoolean(value, "pullRequestsPermission")
+    && hasBoolean(value, "checksPermission")
+    && hasBoolean(value, "globalCheckRunEnabled")
+    && hasBoolean(value, "repositoryCheckRunEnabled")
+    && hasBoolean(value, "effectiveCheckRunEnabled")
+    && hasNumber(value, "policyVersion")
+    && hasBoolean(value, "ready")
+    && isRecord(value.webhook)
+    && Array.isArray(value.diagnostics)
+    && value.diagnostics.every(isGithubChecksDiagnostic)
+    && isGithubChecksPreview(value.preview);
 
 export const isServiceIntegrationConfig: ApiResponseValidator<ServiceIntegrationConfig> =
   (value): value is ServiceIntegrationConfig => hasIntegrationCore(value);

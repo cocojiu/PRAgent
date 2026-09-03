@@ -130,7 +130,7 @@ class ApiContractTest {
             .contains(
                 "GET /api/v1/reviews query=[page, pageSize, repository, status, riskLevel, source, triggerSource, keyword, cursor] body=- bodyRequired=false",
                 "GET /api/v1/reviews/{id} query=[] body=- bodyRequired=false",
-                "GET /api/v1/reviews/{id}/findings query=[page, pageSize, severity, category, feedbackStatus] body=- bodyRequired=false",
+            "GET /api/v1/reviews/{id}/findings query=[page, pageSize, severity, category, feedbackStatus, source] body=- bodyRequired=false",
                 "GET /api/v1/reviews/{id}/changed-files query=[page, pageSize, hasFinding] body=- bodyRequired=false",
                 "GET /api/v1/reviews/{id}/missing-tests query=[page, pageSize] body=- bodyRequired=false",
                 "GET /api/v1/reviews/{id}/github-comments/preview query=[page, pageSize, commentableOnly] body=- bodyRequired=false",
@@ -340,7 +340,22 @@ class ApiContractTest {
             "PUT /api/v1/enterprise/tenants/{tenantKey}/status",
             "PUT /api/v1/enterprise/tenants/{tenantKey}/quota",
             "GET /api/v1/reviews/{taskId}/attempts/{attemptId}/changed-files",
-            "GET /api/v1/reviews/{taskId}/attempts/{attemptId}/findings"
+            "GET /api/v1/reviews/{taskId}/attempts/{attemptId}/findings",
+            "POST /api/v1/config/declarative-rules/{id}/dry-run",
+            "GET /api/v1/scanners/sarif/tasks/{taskId}/export",
+            "POST /api/v1/scanners/sarif/tasks/{taskId}/import",
+            "POST /api/v1/scanners/sarif/ci/tasks/{taskId}/credentials",
+            "POST /api/v1/scanners/sarif/ci/tasks/{taskId}/upload",
+            "GET /api/v1/scm/providers",
+            "GET /api/v1/scm/providers/{provider}/change-requests",
+            "GET /api/v1/scm/providers/{provider}/tasks/{taskId}/diff",
+            "GET /api/v1/scm/providers/{provider}/tasks/{taskId}/head",
+            "POST /api/v1/scm/providers/{provider}/tasks/{taskId}/comments",
+            "POST /api/v1/scm/providers/{provider}/tasks/{taskId}/status",
+            "GET /api/v1/review-workflow/queue",
+            "POST /api/v1/review-workflow/escalations",
+            "POST /api/v1/review-workflow/bot/{provider}/commands",
+            "PUT /api/v1/review-workflow/tasks/{taskId}/assignment"
         );
     }
 

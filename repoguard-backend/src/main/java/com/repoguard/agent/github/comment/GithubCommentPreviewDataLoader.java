@@ -213,7 +213,9 @@ public class GithubCommentPreviewDataLoader {
             relatedFiles(finding.getRelatedFiles()),
             Boolean.TRUE.equals(finding.getBlockingCandidate()),
             defaultString(finding.getVerificationStatus()),
-            trace(finding)
+            trace(finding),
+            finding.getSourceBatchId(),
+            null
         );
     }
 

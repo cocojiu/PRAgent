@@ -25,7 +25,7 @@ class ReviewPolicyConnectionTestExecutorTest {
     @Test
     void savedConfigUsesDefaultReviewPolicyId() {
         ReviewPolicyConfig savedConfig = reviewPolicyConfig("sk_saved");
-        when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(savedConfig);
+        when(reviewPolicyConfigMapper.selectByTenantId(1L)).thenReturn(savedConfig);
         CapturingLlmRunner runner = new CapturingLlmRunner(
             new ConnectionProbeResult(true, "connected", "LLM connection test succeeded")
         );
@@ -39,7 +39,7 @@ class ReviewPolicyConnectionTestExecutorTest {
     @Test
     void submittedConfigUsesSavedApiKeyWhenMasked() {
         ReviewPolicyConfig savedConfig = reviewPolicyConfig("sk_saved");
-        when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(savedConfig);
+        when(reviewPolicyConfigMapper.selectByTenantId(1L)).thenReturn(savedConfig);
         CapturingLlmRunner runner = new CapturingLlmRunner(
             new ConnectionProbeResult(true, "connected", "LLM connection test succeeded")
         );

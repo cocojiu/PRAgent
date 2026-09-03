@@ -1,5 +1,6 @@
 package com.repoguard.agent.entity;
 
+import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import java.time.LocalDateTime;
@@ -7,8 +8,9 @@ import java.time.LocalDateTime;
 @TableName("system_settings_config")
 public class SystemSettingsConfig {
 
-    @TableId
+    @TableId(type = IdType.AUTO)
     private Long id;
+    private Long tenantId;
     private String systemName;
     private String language;
     private String timezone;
@@ -33,6 +35,14 @@ public class SystemSettingsConfig {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public Long getTenantId() {
+        return tenantId;
+    }
+
+    public void setTenantId(Long tenantId) {
+        this.tenantId = tenantId;
     }
 
     public String getSystemName() {

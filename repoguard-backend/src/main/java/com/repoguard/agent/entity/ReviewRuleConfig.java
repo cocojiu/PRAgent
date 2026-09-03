@@ -10,6 +10,9 @@ public class ReviewRuleConfig {
     @TableId
     private String id;
     private String detectorVersion;
+    private String detectorType;
+    private String matcherExpression;
+    private String exceptionPatterns;
     private Long configVersion;
     private Long policyVersion;
     private String ruleName;
@@ -41,6 +44,30 @@ public class ReviewRuleConfig {
 
     public void setDetectorVersion(String detectorVersion) {
         this.detectorVersion = detectorVersion;
+    }
+
+    public String getDetectorType() {
+        return detectorType;
+    }
+
+    public void setDetectorType(String detectorType) {
+        this.detectorType = detectorType;
+    }
+
+    public String getMatcherExpression() {
+        return matcherExpression;
+    }
+
+    public void setMatcherExpression(String matcherExpression) {
+        this.matcherExpression = matcherExpression;
+    }
+
+    public String getExceptionPatterns() {
+        return exceptionPatterns;
+    }
+
+    public void setExceptionPatterns(String exceptionPatterns) {
+        this.exceptionPatterns = exceptionPatterns;
     }
 
     public Long getConfigVersion() {

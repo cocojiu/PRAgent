@@ -19,4 +19,16 @@ class WebhookNotificationPayloadFactory {
             "markdown", Map.of("content", markdown)
         );
     }
+
+    Object feishuText(String markdown) {
+        return Map.of("msg_type", "text", "content", Map.of("text", markdown));
+    }
+
+    Object slackText(String title, String markdown) {
+        return Map.of("text", "*" + title + "*\n" + markdown);
+    }
+
+    Object emailMessage(String title, String markdown) {
+        return Map.of("subject", title, "text", markdown, "format", "markdown");
+    }
 }

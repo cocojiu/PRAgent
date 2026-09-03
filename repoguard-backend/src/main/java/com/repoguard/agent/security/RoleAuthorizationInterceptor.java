@@ -9,7 +9,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
-import java.util.Arrays;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -40,7 +39,8 @@ public class RoleAuthorizationInterceptor implements HandlerInterceptor {
             writeError(response, HttpStatus.UNAUTHORIZED, ErrorCode.UNAUTHORIZED, "Authentication token is required");
             return false;
         }
-        boolean allowed = Arrays.stream(requireRole.value()).anyMatch(role -> role.equalsIgnoreCase(user.role()));
+        boolean allowed = java.util.Arrays.stream(requireRole.value())
+            .anyMatch(role -> RolePermissionPolicy.allows(user.role(), role));
         if (!allowed) {
             writeError(response, HttpStatus.FORBIDDEN, ErrorCode.FORBIDDEN, "Permission denied");
             return false;

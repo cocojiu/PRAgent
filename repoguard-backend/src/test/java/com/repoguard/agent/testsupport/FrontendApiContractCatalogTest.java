@@ -15,7 +15,7 @@ class FrontendApiContractCatalogTest {
         FrontendApiContractCatalog.EndpointContract findings = contracts.get("fetchReviewFindings");
         assertThat(findings.endpointKey()).isEqualTo("GET /api/v1/reviews/{id}/findings");
         assertThat(findings.queryParamNames())
-            .containsExactly("page", "pageSize", "severity", "category", "feedbackStatus");
+            .containsExactly("page", "pageSize", "severity", "category", "feedbackStatus", "source");
         assertThat(findings.hasRequestBody()).isFalse();
         assertThat(findings.requestBodyRequired()).isFalse();
 

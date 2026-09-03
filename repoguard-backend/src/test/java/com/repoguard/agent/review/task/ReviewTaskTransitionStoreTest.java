@@ -188,6 +188,64 @@ class ReviewTaskTransitionStoreTest {
             .hasMessage("reviewTaskStateMachine");
     }
 
+    @Test
+    void assignmentUsesPendingFenceAndUpdatesSnapshot() {
+        ReviewTask task = new ReviewTask();
+        task.setId(73L);
+        task.setStatus("PENDING_HUMAN_REVIEW");
+        LocalDateTime assignedAt = LocalDateTime.parse("2026-08-01T10:00:00");
+        LocalDateTime deadline = assignedAt.plusHours(2);
+        when(reviewTaskMapper.update(any())).thenReturn(1);
+
+        assertThat(store.assignHumanReview(task, "reviewer", assignedAt, deadline)).isTrue();
+
+        ArgumentCaptor<UpdateWrapper<ReviewTask>> captor = ArgumentCaptor.captor();
+        verify(reviewTaskMapper).update(captor.capture());
+        assertThat(captor.getValue().getSqlSegment()).contains("id", "status");
+        assertThat(captor.getValue().getSqlSet())
+            .contains("review_assignee", "review_assigned_at", "review_sla_deadline", "review_escalation_level");
+        assertThat(captor.getValue().getParamNameValuePairs().values())
+            .contains("PENDING_HUMAN_REVIEW", "reviewer", assignedAt, deadline, 0);
+        assertThat(task.getReviewAssignee()).isEqualTo("reviewer");
+        assertThat(task.getReviewAssignedAt()).isEqualTo(assignedAt);
+        assertThat(task.getReviewSlaDeadline()).isEqualTo(deadline);
+        assertThat(task.getReviewEscalationLevel()).isZero();
+    }
+
+    @Test
+    void assignmentAndEscalationReturnFalseWhenSnapshotWasChanged() {
+        ReviewTask task = new ReviewTask();
+        task.setId(74L);
+        task.setStatus("PENDING_HUMAN_REVIEW");
+        task.setReviewAssignee("existing");
+        task.setReviewEscalationLevel(1);
+        when(reviewTaskMapper.update(any())).thenReturn(0);
+
+        assertThat(store.assignHumanReview(task, null, null, null)).isFalse();
+        assertThat(store.escalateHumanReview(task, 1, LocalDateTime.now())).isFalse();
+        assertThat(task.getReviewAssignee()).isEqualTo("existing");
+        assertThat(task.getReviewEscalationLevel()).isEqualTo(1);
+    }
+
+    @Test
+    void escalationAdvancesLevelWhenSnapshotIsStillPending() {
+        ReviewTask task = new ReviewTask();
+        task.setId(75L);
+        task.setStatus("PENDING_HUMAN_REVIEW");
+        task.setReviewEscalationLevel(2);
+        LocalDateTime escalatedAt = LocalDateTime.parse("2026-08-01T12:00:00");
+        when(reviewTaskMapper.update(any())).thenReturn(1);
+
+        assertThat(store.escalateHumanReview(task, 2, escalatedAt)).isTrue();
+
+        ArgumentCaptor<UpdateWrapper<ReviewTask>> captor = ArgumentCaptor.captor();
+        verify(reviewTaskMapper).update(captor.capture());
+        assertThat(captor.getValue().getSqlSegment()).contains("id", "status", "review_escalation_level");
+        assertThat(captor.getValue().getSqlSet()).contains("review_escalation_level", "review_last_escalated_at");
+        assertThat(captor.getValue().getParamNameValuePairs().values())
+            .contains("PENDING_HUMAN_REVIEW", 2, 3, escalatedAt);
+    }
+
     private ReviewTask staleFailedTask() {
         ReviewTask task = new ReviewTask();
         task.setId(42L);

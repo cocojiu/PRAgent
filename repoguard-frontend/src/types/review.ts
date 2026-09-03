@@ -373,12 +373,61 @@ export interface ReviewAttemptFinding {
   schemaVersion?: string;
   verifierVersion?: string;
   aggregationVersion?: string;
+  findingFingerprint?: string;
+  previousFindingId?: number;
+  comparisonStatus?: "NEW" | "PERSISTING" | "RESOLVED" | "REGRESSED" | "UNMATCHED" | string;
+  comparisonConfidence?: number;
+  comparisonReason?: string;
+  comparisonVersion?: string;
+  comparisonAttemptId?: number;
 }
 
 export interface ReviewExecutionAttemptResult {
   attempt: ReviewExecutionAttempt;
   changedFiles: PageResponse<ReviewAttemptChangedFile>;
   findings: PageResponse<ReviewAttemptFinding>;
+}
+
+export interface ReviewFindingComparison {
+  id: number;
+  attemptId: number;
+  baselineFindingId?: number;
+  status: "NEW" | "PERSISTING" | "RESOLVED" | "REGRESSED" | "UNMATCHED" | string;
+  findingFingerprint?: string;
+  confidence: number;
+  reason: string;
+  comparisonVersion: string;
+  category: string;
+  severity: string;
+  source?: string;
+  ruleId?: string;
+  file?: string;
+  line?: number;
+  message: string;
+  recommendation?: string;
+  blocking?: boolean;
+  feedbackStatus?: FindingFeedbackStatus | string;
+}
+
+export interface ReviewFindingComparisonSummary {
+  newCount: number;
+  persistingCount: number;
+  resolvedCount: number;
+  regressedCount: number;
+  unmatchedCount: number;
+  total: number;
+}
+
+export interface ReviewAttemptComparison {
+  taskId: number;
+  baselineAttemptId?: number;
+  candidateAttemptId: number;
+  baselineCommitSha?: string;
+  candidateCommitSha?: string;
+  comparable: boolean;
+  comparabilityReason: string;
+  summary: ReviewFindingComparisonSummary;
+  findings: PageResponse<ReviewFindingComparison>;
 }
 
 export type PrRiskProfileViewModel = Omit<

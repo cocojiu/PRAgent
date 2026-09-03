@@ -140,6 +140,8 @@ export type ReviewFinding = {
   ruleId?: string;
   severity?: string;
   source?: string;
+  sourceBatchId?: number;
+  sourceBatchStatus?: string;
   trace?: ReviewFindingTrace;
   verificationStatus?: string;
 };

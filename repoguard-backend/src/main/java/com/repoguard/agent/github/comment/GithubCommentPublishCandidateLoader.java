@@ -17,6 +17,7 @@ import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.review.PrReviewSummaryBuilder;
 import com.repoguard.agent.review.ReviewFindingProjectionAssembler;
 import com.repoguard.agent.review.ReviewRiskProfileBuilder;
+import com.repoguard.agent.review.FindingFeedbackStatus;
 import com.repoguard.agent.github.comment.GithubCommentPreviewPublicationLoader.GithubCommentPreviewPublicationData;
 import com.repoguard.agent.review.task.ReviewFailureSummaryResolver.ReviewFailureSummary;
 import com.repoguard.agent.review.task.ReviewTaskListItemAssembler;
@@ -68,9 +69,13 @@ public class GithubCommentPublishCandidateLoader {
         );
         long totalFindings = findingStat == null ? 0L : findingStat.totalFindingsOrZero();
         GithubCommentPublication prSummaryPublication = previewPublicationLoader.loadPrSummaryPublication(taskId);
+        List<ReviewFinding> persistingFindings = loadPersistingFindings(taskId);
         GithubCommentPreviewItem prSummaryCandidate = published(prSummaryPublication)
             ? null
-            : previewItemBuilder.buildPrSummaryItem(buildPrSummary(task, totalFindings), prSummaryPublication);
+            : previewItemBuilder.buildPrSummaryItem(
+                buildPrSummary(task, totalFindings, persistingFindings),
+                prSummaryPublication
+            );
         return new GithubCommentPublishCandidateOverview(safeInt(totalFindings), prSummaryCandidate);
     }
 
@@ -101,7 +106,11 @@ public class GithubCommentPublishCandidateLoader {
             .toList();
     }
 
-    private PrReviewSummaryDto buildPrSummary(ReviewTask task, long totalFindings) {
+    private PrReviewSummaryDto buildPrSummary(
+        ReviewTask task,
+        long totalFindings,
+        List<ReviewFinding> persistingFindings
+    ) {
         Long taskId = task.getId();
         ReviewTaskListItem taskItem = listItemAssembler.assemble(task, NO_FAILURE_SUMMARY);
         FindingSeverityCountsDto severityCounts = ReviewFindingProjectionAssembler.toDto(
@@ -116,7 +125,7 @@ public class GithubCommentPublishCandidateLoader {
             totalFindings,
             changedFileTotal
         );
-        return reviewSummaryBuilder.build(
+        PrReviewSummaryDto summary = reviewSummaryBuilder.build(
             taskItem,
             List.of(),
             List.of(),
@@ -127,6 +136,69 @@ public class GithubCommentPublishCandidateLoader {
             missingTestTotal,
             changedFileTotal
         );
+        return appendPersistingSummary(summary, persistingFindings);
+    }
+
+    private List<ReviewFinding> loadPersistingFindings(Long taskId) {
+        List<ReviewFinding> findings = reviewFindingMapper.selectList(
+            new LambdaQueryWrapper<ReviewFinding>()
+                .eq(ReviewFinding::getTaskId, taskId)
+                .eq(ReviewFinding::getCurrentAttempt, true)
+                .eq(ReviewFinding::getCategory, "FINDING")
+                .eq(ReviewFinding::getComparisonStatus, "PERSISTING")
+                .orderByAsc(ReviewFinding::getId)
+        );
+        if (findings == null || findings.isEmpty()) {
+            return List.of();
+        }
+        return findings.stream()
+            .filter(finding -> FindingFeedbackStatus.fromFinding(finding).commentable())
+            .filter(finding -> !"OBSERVE".equalsIgnoreCase(finding.getEnforcementMode()))
+            .toList();
+    }
+
+    private PrReviewSummaryDto appendPersistingSummary(
+        PrReviewSummaryDto summary,
+        List<ReviewFinding> persistingFindings
+    ) {
+        if (summary == null || persistingFindings == null || persistingFindings.isEmpty()) {
+            return summary;
+        }
+        StringBuilder body = new StringBuilder(summary.githubCommentBody());
+        body.append("\n\n**持续问题汇总**\n仍有 ")
+            .append(persistingFindings.size())
+            .append(" 条问题与上一轮相同，本次不逐条重复评论：");
+        persistingFindings.stream().limit(20).forEach(finding -> body
+            .append("\n- `")
+            .append(location(finding))
+            .append("` ")
+            .append(summaryText(finding.getMessage())));
+        if (persistingFindings.size() > 20) {
+            body.append("\n- 其余 ").append(persistingFindings.size() - 20).append(" 条持续问题已折叠");
+        }
+        return new PrReviewSummaryDto(
+            summary.overallRisk(),
+            summary.summary(),
+            summary.mergeRecommendation(),
+            summary.recommendMerge(),
+            summary.humanReviewRequired(),
+            summary.keyRisks(),
+            summary.focusFiles(),
+            body.toString()
+        );
+    }
+
+    private String location(ReviewFinding finding) {
+        String path = StringUtils.hasText(finding.getFilePath()) ? finding.getFilePath().trim() : "PR";
+        return finding.getLineNumber() == null ? path : path + ":" + finding.getLineNumber();
+    }
+
+    private String summaryText(String value) {
+        if (!StringUtils.hasText(value)) {
+            return "持续问题";
+        }
+        String normalized = value.replaceAll("\\s+", " ").trim();
+        return normalized.length() <= 240 ? normalized : normalized.substring(0, 240) + "…";
     }
 
     private Map<String, ChangedFile> loadChangedFilesForFindings(Long taskId, List<ReviewFinding> findings) {

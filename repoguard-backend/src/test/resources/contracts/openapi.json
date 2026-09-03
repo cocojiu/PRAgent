@@ -567,6 +567,67 @@
         }
       }
     },
+    "/api/v1/config/declarative-rules/{id}/dry-run" : {
+      "post" : {
+        "tags" : [ "DeclarativeRule" ],
+        "operationId" : "declarativeRuleControllerDryRun",
+        "x-controller-operation" : "DeclarativeRuleController#dryRun",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 64
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "DeclarativeRuleDryRunRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/DeclarativeRuleDryRunRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "DeclarativeRuleDryRunResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/DeclarativeRuleDryRunResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/config/integrations/github" : {
       "get" : {
         "tags" : [ "SystemConfig" ],
@@ -646,6 +707,172 @@
                     },
                     "data" : {
                       "$ref" : "#/components/schemas/GithubIntegrationConfigDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/integrations/github/checks" : {
+      "get" : {
+        "tags" : [ "SystemConfig" ],
+        "operationId" : "systemConfigControllerGetGithubChecksSetup",
+        "x-controller-operation" : "SystemConfigController#getGithubChecksSetup",
+        "parameters" : [ {
+          "name" : "organization",
+          "in" : "query",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 255
+          }
+        }, {
+          "name" : "repository",
+          "in" : "query",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 255
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "GithubChecksSetupStatusDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/GithubChecksSetupStatusDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/integrations/github/checks/policy" : {
+      "put" : {
+        "tags" : [ "SystemConfig" ],
+        "operationId" : "systemConfigControllerUpdateGithubChecksPolicy",
+        "x-controller-operation" : "SystemConfigController#updateGithubChecksPolicy",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "GithubChecksPolicyRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/GithubChecksPolicyRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "GithubChecksSetupStatusDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/GithubChecksSetupStatusDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/integrations/github/checks/preview" : {
+      "post" : {
+        "tags" : [ "SystemConfig" ],
+        "operationId" : "systemConfigControllerPreviewGithubChecks",
+        "x-controller-operation" : "SystemConfigController#previewGithubChecks",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "GithubChecksPreviewRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/GithubChecksPreviewRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "GithubChecksSetupStatusDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/GithubChecksSetupStatusDto"
                     },
                     "timestamp" : {
                       "type" : "string",
@@ -1387,6 +1614,810 @@
         }
       }
     },
+    "/api/v1/config/repository-policy/preview" : {
+      "get" : {
+        "tags" : [ "RepositoryPolicy" ],
+        "operationId" : "repositoryPolicyControllerPreview",
+        "x-controller-operation" : "RepositoryPolicyController#preview",
+        "parameters" : [ {
+          "name" : "organization",
+          "in" : "query",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          }
+        }, {
+          "name" : "repository",
+          "in" : "query",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 255
+          }
+        }, {
+          "name" : "headSha",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 128
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "RepositoryPolicyPreviewResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/RepositoryPolicyPreviewResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/repository-policy/suppressions" : {
+      "get" : {
+        "tags" : [ "RepositoryPolicy" ],
+        "operationId" : "repositoryPolicyControllerListSuppressions",
+        "x-controller-operation" : "RepositoryPolicyController#listSuppressions",
+        "parameters" : [ {
+          "name" : "organization",
+          "in" : "query",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          }
+        }, {
+          "name" : "repository",
+          "in" : "query",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 255
+          }
+        }, {
+          "name" : "limit",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 100,
+            "default" : 50
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "List<RepositorySuppressionResponse>",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "array",
+                      "items" : {
+                        "$ref" : "#/components/schemas/RepositorySuppressionResponse"
+                      }
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post" : {
+        "tags" : [ "RepositoryPolicy" ],
+        "operationId" : "repositoryPolicyControllerCreateSuppression",
+        "x-controller-operation" : "RepositoryPolicyController#createSuppression",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "RepositorySuppressionRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RepositorySuppressionRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "RepositorySuppressionResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/RepositorySuppressionResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/repository-policy/suppressions/{id}/activate" : {
+      "post" : {
+        "tags" : [ "RepositoryPolicy" ],
+        "operationId" : "repositoryPolicyControllerActivate",
+        "x-controller-operation" : "RepositoryPolicyController#activate",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        }, {
+          "name" : "reason",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 512
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "RepositorySuppressionResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/RepositorySuppressionResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/repository-policy/suppressions/{id}/revoke" : {
+      "post" : {
+        "tags" : [ "RepositoryPolicy" ],
+        "operationId" : "repositoryPolicyControllerRevoke",
+        "x-controller-operation" : "RepositoryPolicyController#revoke",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        }, {
+          "name" : "reason",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 512
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "RepositorySuppressionResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/RepositorySuppressionResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-calibration/evaluation-reports" : {
+      "get" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerListEvaluationReports",
+        "x-controller-operation" : "ReviewCalibrationController#listEvaluationReports",
+        "parameters" : [ {
+          "name" : "limit",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 100,
+            "default" : 30
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "List<EvaluationReportDto>",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "array",
+                      "items" : {
+                        "$ref" : "#/components/schemas/EvaluationReportDto"
+                      }
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerCreateEvaluationReport",
+        "x-controller-operation" : "ReviewCalibrationController#createEvaluationReport",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "LlmEvaluationRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/LlmEvaluationRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "EvaluationReportDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/EvaluationReportDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-calibration/evaluation-reports/{reportId}" : {
+      "get" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerGetEvaluationReport",
+        "x-controller-operation" : "ReviewCalibrationController#getEvaluationReport",
+        "parameters" : [ {
+          "name" : "reportId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "EvaluationReportDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/EvaluationReportDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-calibration/evaluation-reports/{reportId}/compare/{candidateReportId}" : {
+      "get" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerCompareEvaluationReports",
+        "x-controller-operation" : "ReviewCalibrationController#compareEvaluationReports",
+        "parameters" : [ {
+          "name" : "reportId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        }, {
+          "name" : "candidateReportId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "EvaluationReportComparisonDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/EvaluationReportComparisonDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-calibration/evaluation-reports/{reportId}/export" : {
+      "get" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerExportEvaluationReport",
+        "x-controller-operation" : "ReviewCalibrationController#exportEvaluationReport",
+        "parameters" : [ {
+          "name" : "reportId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        }, {
+          "name" : "format",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 8,
+            "default" : "json"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "EvaluationExportDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/EvaluationExportDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-calibration/evaluation-reports/{reportId}/lifecycle" : {
+      "post" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerTransitionEvaluationReportLifecycle",
+        "x-controller-operation" : "ReviewCalibrationController#transitionEvaluationReportLifecycle",
+        "parameters" : [ {
+          "name" : "reportId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "LlmEvaluationReportLifecycleRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/LlmEvaluationReportLifecycleRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "EvaluationReportDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/EvaluationReportDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-calibration/evaluation-runs" : {
+      "post" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerStartEvaluationRun",
+        "x-controller-operation" : "ReviewCalibrationController#startEvaluationRun",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "LlmEvaluationRunRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/LlmEvaluationRunRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "LlmEvaluationRunDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/LlmEvaluationRunDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-calibration/evaluation-runs/{runId}" : {
+      "get" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerGetEvaluationRun",
+        "x-controller-operation" : "ReviewCalibrationController#getEvaluationRun",
+        "parameters" : [ {
+          "name" : "runId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 64
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "LlmEvaluationRunDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/LlmEvaluationRunDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-calibration/evaluation-runs/{runId}/cancel" : {
+      "post" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerCancelEvaluationRun",
+        "x-controller-operation" : "ReviewCalibrationController#cancelEvaluationRun",
+        "parameters" : [ {
+          "name" : "runId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 64
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "LlmEvaluationRunDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/LlmEvaluationRunDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/config/review-calibration/queue" : {
       "get" : {
         "tags" : [ "ReviewCalibration" ],
@@ -1442,6 +2473,681 @@
                     },
                     "data" : {
                       "$ref" : "#/components/schemas/ReviewCalibrationQueueDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-calibration/release-center" : {
+      "get" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerGetModelReleaseCenter",
+        "x-controller-operation" : "ReviewCalibrationController#getModelReleaseCenter",
+        "parameters" : [ {
+          "name" : "trendDays",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 7,
+            "maximum" : 90,
+            "default" : 30
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "LlmModelReleaseCenterDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/LlmModelReleaseCenterDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-calibration/release-center/audits" : {
+      "get" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerListModelReleaseAudits",
+        "x-controller-operation" : "ReviewCalibrationController#listModelReleaseAudits",
+        "parameters" : [ {
+          "name" : "releaseId",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        }, {
+          "name" : "releaseKey",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 128
+          }
+        }, {
+          "name" : "operator",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 128
+          }
+        }, {
+          "name" : "action",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 32
+          }
+        }, {
+          "name" : "from",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 40
+          }
+        }, {
+          "name" : "to",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 40
+          }
+        }, {
+          "name" : "page",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 10000,
+            "default" : 1
+          }
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 100,
+            "default" : 20
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "PageResponse<LlmModelReleaseAuditDto>",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "object",
+                      "x-java-type" : "PageResponse<LlmModelReleaseAuditDto>",
+                      "properties" : {
+                        "items" : {
+                          "type" : "array",
+                          "items" : {
+                            "$ref" : "#/components/schemas/LlmModelReleaseAuditDto"
+                          }
+                        },
+                        "total" : {
+                          "type" : "integer",
+                          "format" : "int64"
+                        },
+                        "nextCursor" : {
+                          "type" : "string"
+                        },
+                        "hasMore" : {
+                          "type" : "boolean"
+                        }
+                      },
+                      "required" : [ "total", "hasMore" ]
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-calibration/release-center/audits/export" : {
+      "get" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerExportModelReleaseAudits",
+        "x-controller-operation" : "ReviewCalibrationController#exportModelReleaseAudits",
+        "parameters" : [ {
+          "name" : "releaseId",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        }, {
+          "name" : "releaseKey",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 128
+          }
+        }, {
+          "name" : "operator",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 128
+          }
+        }, {
+          "name" : "action",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 32
+          }
+        }, {
+          "name" : "from",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 40
+          }
+        }, {
+          "name" : "to",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 40
+          }
+        }, {
+          "name" : "format",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 8,
+            "default" : "json"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "LlmModelReleaseAuditExportDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/LlmModelReleaseAuditExportDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-calibration/release-center/audits/{auditId}/verify" : {
+      "get" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerVerifyModelReleaseAudit",
+        "x-controller-operation" : "ReviewCalibrationController#verifyModelReleaseAudit",
+        "parameters" : [ {
+          "name" : "auditId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "LlmModelReleaseAuditVerificationDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/LlmModelReleaseAuditVerificationDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-calibration/release-center/drift" : {
+      "get" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerInspectModelReleaseDrift",
+        "x-controller-operation" : "ReviewCalibrationController#inspectModelReleaseDrift",
+        "parameters" : [ ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "LlmModelReleaseDriftDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/LlmModelReleaseDriftDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-calibration/release-center/drift/repair" : {
+      "post" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerRepairModelReleaseDrift",
+        "x-controller-operation" : "ReviewCalibrationController#repairModelReleaseDrift",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "LlmModelReleaseDriftRepairRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/LlmModelReleaseDriftRepairRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "LlmModelReleaseDriftRepairDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/LlmModelReleaseDriftRepairDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-calibration/release-center/promote" : {
+      "post" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerPromoteModelRelease",
+        "x-controller-operation" : "ReviewCalibrationController#promoteModelRelease",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "LlmModelReleaseRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/LlmModelReleaseRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "LlmModelReleaseDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/LlmModelReleaseDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-calibration/release-center/runtime-metrics" : {
+      "get" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerListModelReleaseRuntimeMetrics",
+        "x-controller-operation" : "ReviewCalibrationController#listModelReleaseRuntimeMetrics",
+        "parameters" : [ {
+          "name" : "releaseKey",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 128
+          }
+        }, {
+          "name" : "days",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 90,
+            "default" : 7
+          }
+        }, {
+          "name" : "limit",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 500,
+            "default" : 168
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "List<LlmModelReleaseMetricDto>",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "array",
+                      "items" : {
+                        "$ref" : "#/components/schemas/LlmModelReleaseMetricDto"
+                      }
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-calibration/release-center/shadow" : {
+      "post" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerRegisterShadowRelease",
+        "x-controller-operation" : "ReviewCalibrationController#registerShadowRelease",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "LlmModelReleaseRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/LlmModelReleaseRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "LlmModelReleaseDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/LlmModelReleaseDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-calibration/release-center/{releaseId}/rollback" : {
+      "post" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerRollbackModelRelease",
+        "x-controller-operation" : "ReviewCalibrationController#rollbackModelRelease",
+        "parameters" : [ {
+          "name" : "releaseId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "LlmModelRollbackRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/LlmModelRollbackRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "LlmModelReleaseDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/LlmModelReleaseDto"
                     },
                     "timestamp" : {
                       "type" : "string",
@@ -3997,6 +5703,153 @@
         }
       }
     },
+    "/api/v1/notifications/read" : {
+      "get" : {
+        "tags" : [ "Notification" ],
+        "operationId" : "notificationControllerReadKeys",
+        "x-controller-operation" : "NotificationController#readKeys",
+        "parameters" : [ ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "List<String>",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "array",
+                      "items" : {
+                        "type" : "string"
+                      }
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post" : {
+        "tags" : [ "Notification" ],
+        "operationId" : "notificationControllerMarkRead",
+        "x-controller-operation" : "NotificationController#markRead",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "NotificationReadRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/NotificationReadRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "Void",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "null"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/reports" : {
+      "get" : {
+        "tags" : [ "Notification" ],
+        "operationId" : "notificationControllerReport",
+        "x-controller-operation" : "NotificationController#report",
+        "parameters" : [ {
+          "name" : "period",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 16,
+            "default" : "DAILY"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "NotificationReportDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/NotificationReportDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/observability/frontend/performance" : {
       "post" : {
         "tags" : [ "FrontendPerformance" ],
@@ -4036,6 +5889,269 @@
                     },
                     "data" : {
                       "type" : "null"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/review-workflow/bot/{provider}/commands" : {
+      "post" : {
+        "tags" : [ "ReviewWorkflow" ],
+        "operationId" : "reviewWorkflowControllerCommand",
+        "x-controller-operation" : "ReviewWorkflowController#command",
+        "parameters" : [ {
+          "name" : "provider",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 32
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "ReviewBotCommandRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ReviewBotCommandRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ReviewBotCommandResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ReviewBotCommandResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/review-workflow/escalations" : {
+      "post" : {
+        "tags" : [ "ReviewWorkflow" ],
+        "operationId" : "reviewWorkflowControllerEscalate",
+        "x-controller-operation" : "ReviewWorkflowController#escalate",
+        "parameters" : [ ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ReviewEscalationResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ReviewEscalationResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/review-workflow/queue" : {
+      "get" : {
+        "tags" : [ "ReviewWorkflow" ],
+        "operationId" : "reviewWorkflowControllerQueue",
+        "x-controller-operation" : "ReviewWorkflowController#queue",
+        "parameters" : [ {
+          "name" : "page",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "default" : 1
+          }
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 100,
+            "default" : 20
+          }
+        }, {
+          "name" : "assignee",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 128
+          }
+        }, {
+          "name" : "overdue",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "boolean"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "PageResponse<ReviewWorkflowItemDto>",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "object",
+                      "x-java-type" : "PageResponse<ReviewWorkflowItemDto>",
+                      "properties" : {
+                        "items" : {
+                          "type" : "array",
+                          "items" : {
+                            "$ref" : "#/components/schemas/ReviewWorkflowItemDto"
+                          }
+                        },
+                        "total" : {
+                          "type" : "integer",
+                          "format" : "int64"
+                        },
+                        "nextCursor" : {
+                          "type" : "string"
+                        },
+                        "hasMore" : {
+                          "type" : "boolean"
+                        }
+                      },
+                      "required" : [ "total", "hasMore" ]
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/review-workflow/tasks/{taskId}/assignment" : {
+      "put" : {
+        "tags" : [ "ReviewWorkflow" ],
+        "operationId" : "reviewWorkflowControllerAssign",
+        "x-controller-operation" : "ReviewWorkflowController#assign",
+        "parameters" : [ {
+          "name" : "taskId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "ReviewAssignmentRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ReviewAssignmentRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ReviewWorkflowItemDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ReviewWorkflowItemDto"
                     },
                     "timestamp" : {
                       "type" : "string",
@@ -4627,6 +6743,14 @@
           "schema" : {
             "type" : "string",
             "maxLength" : 32
+          }
+        }, {
+          "name" : "source",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 64
           }
         } ],
         "responses" : {
@@ -5621,6 +7745,689 @@
         }
       }
     },
+    "/api/v1/reviews/{taskId}/attempts/{candidateAttemptId}/comparison" : {
+      "get" : {
+        "tags" : [ "ReviewExecutionAttemptComparison" ],
+        "operationId" : "reviewExecutionAttemptComparisonControllerCompare",
+        "x-controller-operation" : "ReviewExecutionAttemptComparisonController#compare",
+        "parameters" : [ {
+          "name" : "taskId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        }, {
+          "name" : "candidateAttemptId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        }, {
+          "name" : "baselineAttemptId",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        }, {
+          "name" : "page",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "default" : 1
+          }
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 100,
+            "default" : 50
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ReviewAttemptComparisonDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ReviewAttemptComparisonDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/scanners/sarif/ci/tasks/{taskId}/credentials" : {
+      "post" : {
+        "tags" : [ "CiSarif" ],
+        "operationId" : "ciSarifControllerIssueCredential",
+        "x-controller-operation" : "CiSarifController#issueCredential",
+        "parameters" : [ {
+          "name" : "taskId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        }, {
+          "name" : "attemptId",
+          "in" : "query",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "CiSarifCredentialResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/CiSarifCredentialResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/scanners/sarif/ci/tasks/{taskId}/upload" : {
+      "post" : {
+        "tags" : [ "CiSarif" ],
+        "operationId" : "ciSarifControllerUpload",
+        "x-controller-operation" : "CiSarifController#upload",
+        "parameters" : [ {
+          "name" : "taskId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "byte[]",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "string",
+                "format" : "binary"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "CiSarifUploadResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/CiSarifUploadResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/scanners/sarif/tasks/{taskId}/export" : {
+      "get" : {
+        "tags" : [ "Sarif" ],
+        "operationId" : "sarifControllerExportFindings",
+        "x-controller-operation" : "SarifController#exportFindings",
+        "parameters" : [ {
+          "name" : "taskId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "SarifExportDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/SarifExportDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/scanners/sarif/tasks/{taskId}/import" : {
+      "post" : {
+        "tags" : [ "Sarif" ],
+        "operationId" : "sarifControllerImportFindings",
+        "x-controller-operation" : "SarifController#importFindings",
+        "parameters" : [ {
+          "name" : "taskId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "SarifImportRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SarifImportRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "SarifImportResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/SarifImportResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/scm/providers" : {
+      "get" : {
+        "tags" : [ "ScmProvider" ],
+        "operationId" : "scmProviderControllerProviders",
+        "x-controller-operation" : "ScmProviderController#providers",
+        "parameters" : [ ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "List<ScmProviderDescriptor>",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "array",
+                      "items" : {
+                        "type" : "object",
+                        "x-java-type" : "ScmProviderDescriptor"
+                      }
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/scm/providers/{provider}/change-requests" : {
+      "get" : {
+        "tags" : [ "ScmProvider" ],
+        "operationId" : "scmProviderControllerChangeRequests",
+        "x-controller-operation" : "ScmProviderController#changeRequests",
+        "parameters" : [ {
+          "name" : "provider",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "List<ScmChangeRequestSummary>",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "array",
+                      "items" : {
+                        "type" : "object",
+                        "x-java-type" : "ScmChangeRequestSummary"
+                      }
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/scm/providers/{provider}/tasks/{taskId}/comments" : {
+      "post" : {
+        "tags" : [ "ScmProvider" ],
+        "operationId" : "scmProviderControllerComment",
+        "x-controller-operation" : "ScmProviderController#comment",
+        "parameters" : [ {
+          "name" : "provider",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "taskId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "ScmCommentDraft",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ScmCommentDraft"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ScmCommentResult",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "object",
+                      "x-java-type" : "ScmCommentResult"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/scm/providers/{provider}/tasks/{taskId}/diff" : {
+      "get" : {
+        "tags" : [ "ScmProvider" ],
+        "operationId" : "scmProviderControllerDiff",
+        "x-controller-operation" : "ScmProviderController#diff",
+        "parameters" : [ {
+          "name" : "provider",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "taskId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "PullRequestDiff",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "object",
+                      "x-java-type" : "PullRequestDiff"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/scm/providers/{provider}/tasks/{taskId}/head" : {
+      "get" : {
+        "tags" : [ "ScmProvider" ],
+        "operationId" : "scmProviderControllerHead",
+        "x-controller-operation" : "ScmProviderController#head",
+        "parameters" : [ {
+          "name" : "provider",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "taskId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "Map<String,String>",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "object",
+                      "x-java-type" : "Map<String,String>"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/scm/providers/{provider}/tasks/{taskId}/status" : {
+      "post" : {
+        "tags" : [ "ScmProvider" ],
+        "operationId" : "scmProviderControllerStatus",
+        "x-controller-operation" : "ScmProviderController#status",
+        "parameters" : [ {
+          "name" : "provider",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "taskId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "ScmStatusRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ScmStatusRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ScmStatusResult",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "object",
+                      "x-java-type" : "ScmStatusResult"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/system/health/summary" : {
       "get" : {
         "tags" : [ "SystemHealth" ],
@@ -6092,6 +8899,65 @@
           }
         }
       },
+      "AssignmentDto" : {
+        "type" : "object",
+        "x-java-type" : "AssignmentDto",
+        "properties" : {
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "releaseKey" : {
+            "type" : "string"
+          },
+          "provider" : {
+            "type" : "string"
+          },
+          "model" : {
+            "type" : "string"
+          },
+          "taskStatus" : {
+            "type" : "string"
+          },
+          "started" : {
+            "type" : "boolean"
+          },
+          "issueCode" : {
+            "type" : "string"
+          },
+          "repairable" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "AssignmentSummary" : {
+        "type" : "object",
+        "x-java-type" : "AssignmentSummary",
+        "properties" : {
+          "assignedTaskCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "missingReleaseCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "metadataMismatchCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "runningTaskDriftCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "samples" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/AssignmentDto"
+            }
+          }
+        }
+      },
       "AuthCurrentUserDto" : {
         "type" : "object",
         "x-java-type" : "AuthCurrentUserDto",
@@ -6449,6 +9315,86 @@
           }
         }
       },
+      "CiSarifCredentialResponse" : {
+        "type" : "object",
+        "x-java-type" : "CiSarifCredentialResponse",
+        "properties" : {
+          "credential" : {
+            "type" : "string"
+          },
+          "expiresAt" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "attemptId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "organization" : {
+            "type" : "string"
+          },
+          "repository" : {
+            "type" : "string"
+          },
+          "prNumber" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "commitSha" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "expiresAt" ]
+      },
+      "CiSarifUploadResponse" : {
+        "type" : "object",
+        "x-java-type" : "CiSarifUploadResponse",
+        "properties" : {
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "attemptId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "toolName" : {
+            "type" : "string"
+          },
+          "toolVersion" : {
+            "type" : "string"
+          },
+          "scanRunId" : {
+            "type" : "string"
+          },
+          "commitSha" : {
+            "type" : "string"
+          },
+          "sarifFingerprint" : {
+            "type" : "string"
+          },
+          "completedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "imported" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "skipped" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        },
+        "required" : [ "imported", "skipped" ]
+      },
       "ConnectionTestResultDto" : {
         "type" : "object",
         "x-java-type" : "ConnectionTestResultDto",
@@ -6788,6 +9734,88 @@
         },
         "required" : [ "executed", "cleanupBatchId", "retentionDays", "maxTasks", "candidateTasks", "selectedTasks", "deletedBatchItems", "deletedPublications", "deletedBatches", "deletedChangedFiles", "deletedTimelines", "deletedFindings", "deletedTasks" ]
       },
+      "DeclarativeRuleDryRunFile" : {
+        "type" : "object",
+        "x-java-type" : "DeclarativeRuleDryRunFile",
+        "properties" : {
+          "filePath" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 1024
+          },
+          "patch" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 512000
+          }
+        },
+        "required" : [ "filePath", "patch" ]
+      },
+      "DeclarativeRuleDryRunRequest" : {
+        "type" : "object",
+        "x-java-type" : "DeclarativeRuleDryRunRequest",
+        "properties" : {
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          },
+          "files" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/DeclarativeRuleDryRunFile"
+            },
+            "maxItems" : 100
+          }
+        }
+      },
+      "DeclarativeRuleDryRunResponse" : {
+        "type" : "object",
+        "x-java-type" : "DeclarativeRuleDryRunResponse",
+        "properties" : {
+          "ruleId" : {
+            "type" : "string"
+          },
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "matchedFiles" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "matchedLines" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "matches" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/DeclarativeRuleMatchDto"
+            }
+          }
+        },
+        "required" : [ "matchedFiles", "matchedLines" ]
+      },
+      "DeclarativeRuleMatchDto" : {
+        "type" : "object",
+        "x-java-type" : "DeclarativeRuleMatchDto",
+        "properties" : {
+          "filePath" : {
+            "type" : "string"
+          },
+          "lineNumber" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "evidence" : {
+            "type" : "string"
+          }
+        }
+      },
       "EnterpriseIdentityBindingRequest" : {
         "type" : "object",
         "x-java-type" : "EnterpriseIdentityBindingRequest",
@@ -6882,7 +9910,7 @@
           "role" : {
             "type" : "string",
             "minLength" : 1,
-            "pattern" : "^(ADMIN|VIEWER)$"
+            "pattern" : "^(ADMIN|VIEWER|TENANT_ADMIN|RULE_ADMIN|REVIEWER|READ_ONLY)$"
           },
           "defaultTenant" : {
             "type" : "boolean"
@@ -6908,6 +9936,13 @@
           "maxDailyReviews" : {
             "type" : "integer",
             "format" : "int32"
+          },
+          "monthlyLlmTokenBudget" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "monthlyLlmCostBudget" : {
+            "type" : "number"
           },
           "usedReviews" : {
             "type" : "integer",
@@ -6937,9 +9972,20 @@
             "format" : "int32",
             "minimum" : 1,
             "maximum" : 1000000
+          },
+          "monthlyLlmTokenBudget" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 0,
+            "maximum" : 100000000000
+          },
+          "monthlyLlmCostBudget" : {
+            "type" : "number",
+            "minimum" : 0.0,
+            "maximum" : 1000000000.0
           }
         },
-        "required" : [ "expectedVersion", "maxDailyReviews" ]
+        "required" : [ "expectedVersion", "maxDailyReviews", "monthlyLlmTokenBudget", "monthlyLlmCostBudget" ]
       },
       "EnterpriseTenantRepositoryRequest" : {
         "type" : "object",
@@ -6990,6 +10036,342 @@
         },
         "required" : [ "expectedStatus", "targetStatus", "expectedVersion", "reason" ]
       },
+      "EvaluationExportDto" : {
+        "type" : "object",
+        "x-java-type" : "EvaluationExportDto",
+        "properties" : {
+          "reportId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "format" : {
+            "type" : "string"
+          },
+          "contentSha256" : {
+            "type" : "string"
+          },
+          "content" : {
+            "type" : "string"
+          }
+        }
+      },
+      "EvaluationMetricsDto" : {
+        "type" : "object",
+        "x-java-type" : "EvaluationMetricsDto",
+        "properties" : {
+          "labeledComments" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "usefulComments" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "falsePositiveComments" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "publishAttempts" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "publishedComments" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "fixedComments" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "ignoredComments" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "usefulCommentRate" : {
+            "type" : "number"
+          },
+          "falsePositiveCommentRate" : {
+            "type" : "number"
+          },
+          "publishSuccessRate" : {
+            "type" : "number"
+          },
+          "fixRate" : {
+            "type" : "number"
+          },
+          "ignoredRate" : {
+            "type" : "number"
+          },
+          "p50LatencyMs" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "p95LatencyMs" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "averageLatencyMs" : {
+            "type" : "number"
+          },
+          "averageTokensPerSample" : {
+            "type" : "number"
+          },
+          "averageCostPerSample" : {
+            "type" : "number"
+          },
+          "ruleFindings" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "llmFindings" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "verifiedFindings" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "ruleContributionRate" : {
+            "type" : "number"
+          },
+          "llmContributionRate" : {
+            "type" : "number"
+          },
+          "verifiedContributionRate" : {
+            "type" : "number"
+          }
+        }
+      },
+      "EvaluationReportComparisonDto" : {
+        "type" : "object",
+        "x-java-type" : "EvaluationReportComparisonDto",
+        "properties" : {
+          "baselineReportId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "candidateReportId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "precisionDelta" : {
+            "type" : "number"
+          },
+          "recallDelta" : {
+            "type" : "number"
+          },
+          "anchorRateDelta" : {
+            "type" : "number"
+          },
+          "duplicateRateDelta" : {
+            "type" : "number"
+          },
+          "parseFailureRateDelta" : {
+            "type" : "number"
+          },
+          "p95LatencyDeltaMs" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "costDelta" : {
+            "type" : "number"
+          },
+          "candidateImproved" : {
+            "type" : "boolean"
+          },
+          "blockers" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          }
+        }
+      },
+      "EvaluationReportDto" : {
+        "type" : "object",
+        "x-java-type" : "EvaluationReportDto",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "reportKey" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "datasetId" : {
+            "type" : "string"
+          },
+          "datasetVersion" : {
+            "type" : "string"
+          },
+          "datasetKind" : {
+            "type" : "string"
+          },
+          "sourceRepositoryCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "sampleCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "fixedRegressionSamples" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "rollingObservationSamples" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "authorized" : {
+            "type" : "boolean"
+          },
+          "anonymized" : {
+            "type" : "boolean"
+          },
+          "humanReviewed" : {
+            "type" : "boolean"
+          },
+          "sampleFingerprint" : {
+            "type" : "string"
+          },
+          "provider" : {
+            "type" : "string"
+          },
+          "model" : {
+            "type" : "string"
+          },
+          "promptVersion" : {
+            "type" : "string"
+          },
+          "contextVersion" : {
+            "type" : "string"
+          },
+          "schemaVersion" : {
+            "type" : "string"
+          },
+          "chunkPolicyVersion" : {
+            "type" : "string"
+          },
+          "temperature" : {
+            "type" : "number"
+          },
+          "ruleVersion" : {
+            "type" : "string"
+          },
+          "codeRevision" : {
+            "type" : "string"
+          },
+          "verifierVersion" : {
+            "type" : "string"
+          },
+          "aggregationVersion" : {
+            "type" : "string"
+          },
+          "expectedFindings" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "predictedFindings" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "truePositives" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "falsePositives" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "falseNegatives" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "precision" : {
+            "type" : "number"
+          },
+          "recall" : {
+            "type" : "number"
+          },
+          "precisionWilsonLowerBound" : {
+            "type" : "number"
+          },
+          "anchorRate" : {
+            "type" : "number"
+          },
+          "duplicateRate" : {
+            "type" : "number"
+          },
+          "parseFailureRate" : {
+            "type" : "number"
+          },
+          "severityConfusion" : {
+            "type" : "object",
+            "x-java-type" : "Map<String,Map<String,Long>>"
+          },
+          "totalLatencyMs" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "totalTokens" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "totalCost" : {
+            "type" : "number"
+          },
+          "blockers" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "eligible" : {
+            "type" : "boolean"
+          },
+          "metrics" : {
+            "$ref" : "#/components/schemas/EvaluationMetricsDto"
+          },
+          "createdBy" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "lifecycleStatus" : {
+            "type" : "string"
+          },
+          "retentionDays" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "expiresAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "authorizationRevokedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "frozenAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "deletedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "lifecycleVersion" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
       "FailedRuleStatDto" : {
         "type" : "object",
         "x-java-type" : "FailedRuleStatDto",
@@ -7012,6 +10394,37 @@
           }
         },
         "required" : [ "count" ]
+      },
+      "FindingDto" : {
+        "type" : "object",
+        "x-java-type" : "FindingDto",
+        "properties" : {
+          "code" : {
+            "type" : "string"
+          },
+          "severity" : {
+            "type" : "string"
+          },
+          "resourceType" : {
+            "type" : "string"
+          },
+          "resourceId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "resourceKey" : {
+            "type" : "string"
+          },
+          "observedValue" : {
+            "type" : "string"
+          },
+          "desiredValue" : {
+            "type" : "string"
+          },
+          "repairable" : {
+            "type" : "boolean"
+          }
+        }
       },
       "FindingFeedbackRequest" : {
         "type" : "object",
@@ -7188,6 +10601,241 @@
             "x-valid" : true
           }
         }
+      },
+      "GithubChecksDiagnosticDto" : {
+        "type" : "object",
+        "x-java-type" : "GithubChecksDiagnosticDto",
+        "properties" : {
+          "code" : {
+            "type" : "string"
+          },
+          "label" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "blocking" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "blocking" ]
+      },
+      "GithubChecksPolicyRequest" : {
+        "type" : "object",
+        "x-java-type" : "GithubChecksPolicyRequest",
+        "properties" : {
+          "organization" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 255
+          },
+          "repository" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 255
+          },
+          "enabled" : {
+            "type" : "boolean"
+          },
+          "expectedVersion" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 0
+          },
+          "confirmed" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "organization", "repository", "enabled", "expectedVersion", "confirmed" ]
+      },
+      "GithubChecksPreviewDto" : {
+        "type" : "object",
+        "x-java-type" : "GithubChecksPreviewDto",
+        "properties" : {
+          "attempted" : {
+            "type" : "boolean"
+          },
+          "created" : {
+            "type" : "boolean"
+          },
+          "headSha" : {
+            "type" : "string"
+          },
+          "externalId" : {
+            "type" : "string"
+          },
+          "remoteCheckRunId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "desiredStage" : {
+            "type" : "string"
+          },
+          "desiredVersion" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "appliedStage" : {
+            "type" : "string"
+          },
+          "appliedVersion" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "retryAttempts" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "annotationCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "annotationTruncated" : {
+            "type" : "boolean"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "conclusion" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "attempted", "created", "desiredVersion", "appliedVersion", "retryAttempts", "annotationCount", "annotationTruncated" ]
+      },
+      "GithubChecksPreviewRequest" : {
+        "type" : "object",
+        "x-java-type" : "GithubChecksPreviewRequest",
+        "properties" : {
+          "organization" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 255
+          },
+          "repository" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 255
+          },
+          "pullRequestNumber" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1
+          }
+        },
+        "required" : [ "organization", "repository", "pullRequestNumber" ]
+      },
+      "GithubChecksSetupStatusDto" : {
+        "type" : "object",
+        "x-java-type" : "GithubChecksSetupStatusDto",
+        "properties" : {
+          "organization" : {
+            "type" : "string"
+          },
+          "repository" : {
+            "type" : "string"
+          },
+          "appEnabled" : {
+            "type" : "boolean"
+          },
+          "appConfigured" : {
+            "type" : "boolean"
+          },
+          "installationId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "installationAllowlisted" : {
+            "type" : "boolean"
+          },
+          "repositoryAuthorized" : {
+            "type" : "boolean"
+          },
+          "metadataPermission" : {
+            "type" : "boolean"
+          },
+          "contentsPermission" : {
+            "type" : "boolean"
+          },
+          "pullRequestsPermission" : {
+            "type" : "boolean"
+          },
+          "checksPermission" : {
+            "type" : "boolean"
+          },
+          "globalCheckRunEnabled" : {
+            "type" : "boolean"
+          },
+          "repositoryCheckRunEnabled" : {
+            "type" : "boolean"
+          },
+          "effectiveCheckRunEnabled" : {
+            "type" : "boolean"
+          },
+          "policyVersion" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "webhook" : {
+            "$ref" : "#/components/schemas/GithubChecksWebhookStatusDto"
+          },
+          "diagnostics" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/GithubChecksDiagnosticDto"
+            }
+          },
+          "preview" : {
+            "$ref" : "#/components/schemas/GithubChecksPreviewDto"
+          },
+          "ready" : {
+            "type" : "boolean"
+          },
+          "mergeGateGuidance" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "appEnabled", "appConfigured", "installationAllowlisted", "repositoryAuthorized", "metadataPermission", "contentsPermission", "pullRequestsPermission", "checksPermission", "globalCheckRunEnabled", "repositoryCheckRunEnabled", "effectiveCheckRunEnabled", "policyVersion", "ready" ]
+      },
+      "GithubChecksWebhookStatusDto" : {
+        "type" : "object",
+        "x-java-type" : "GithubChecksWebhookStatusDto",
+        "properties" : {
+          "endpointUrl" : {
+            "type" : "string"
+          },
+          "enabled" : {
+            "type" : "boolean"
+          },
+          "signatureRequired" : {
+            "type" : "boolean"
+          },
+          "secretConfigured" : {
+            "type" : "boolean"
+          },
+          "repositoriesRestricted" : {
+            "type" : "boolean"
+          },
+          "branchesRestricted" : {
+            "type" : "boolean"
+          },
+          "lastDeliveryId" : {
+            "type" : "string"
+          },
+          "lastDeliveryStatus" : {
+            "type" : "string"
+          },
+          "lastDeliveryAt" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "enabled", "signatureRequired", "secretConfigured", "repositoriesRestricted", "branchesRestricted" ]
       },
       "GithubCommentPreviewItem" : {
         "type" : "object",
@@ -7747,6 +11395,934 @@
             "type" : "string"
           }
         }
+      },
+      "LlmEvaluationObservationRequest" : {
+        "type" : "object",
+        "x-java-type" : "LlmEvaluationObservationRequest",
+        "properties" : {
+          "caseId" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "category" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 64
+          },
+          "expectedFinding" : {
+            "type" : "boolean"
+          },
+          "expectedSeverity" : {
+            "type" : "string",
+            "maxLength" : 32
+          },
+          "predictedFinding" : {
+            "type" : "boolean"
+          },
+          "predictedSeverity" : {
+            "type" : "string",
+            "maxLength" : 32
+          },
+          "anchorValid" : {
+            "type" : "boolean"
+          },
+          "predictionKey" : {
+            "type" : "string",
+            "maxLength" : 256
+          },
+          "parseSucceeded" : {
+            "type" : "boolean"
+          },
+          "latencyMs" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 0
+          },
+          "totalTokens" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 0
+          },
+          "estimatedCost" : {
+            "type" : "number",
+            "minimum" : 0.0
+          },
+          "usefulComment" : {
+            "type" : "boolean"
+          },
+          "commentPublishAttempted" : {
+            "type" : "boolean"
+          },
+          "commentPublished" : {
+            "type" : "boolean"
+          },
+          "commentFixed" : {
+            "type" : "boolean"
+          },
+          "commentIgnored" : {
+            "type" : "boolean"
+          },
+          "ruleFindingCount" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 0
+          },
+          "llmFindingCount" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 0
+          },
+          "verifiedFindingCount" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 0
+          },
+          "split" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "(?i)FIXED_REGRESSION|ROLLING_OBSERVATION|UNSPECIFIED"
+          },
+          "sourceRepositoryKey" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "[a-z0-9][a-z0-9._-]{0,63}"
+          },
+          "language" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "[a-z0-9][a-z0-9._-]{0,63}"
+          },
+          "changedFileCount" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 0
+          },
+          "changedLineCount" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 0
+          },
+          "fileTypeGroup" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "[a-z0-9][a-z0-9._-]{0,63}"
+          },
+          "expectedLocationKey" : {
+            "type" : "string",
+            "pattern" : "[a-z0-9][a-z0-9._-]{0,127}"
+          }
+        },
+        "required" : [ "caseId", "category", "expectedFinding", "predictedFinding", "anchorValid", "parseSucceeded", "latencyMs", "totalTokens", "estimatedCost", "commentPublishAttempted", "ruleFindingCount", "llmFindingCount", "verifiedFindingCount", "split", "sourceRepositoryKey", "language", "changedFileCount", "changedLineCount", "fileTypeGroup" ]
+      },
+      "LlmEvaluationReportLifecycleRequest" : {
+        "type" : "object",
+        "x-java-type" : "LlmEvaluationReportLifecycleRequest",
+        "properties" : {
+          "action" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "(?i)FREEZE|REVOKE_AUTHORIZATION|DELETE"
+          },
+          "reason" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 512
+          },
+          "secondApprover" : {
+            "type" : "string",
+            "maxLength" : 128
+          },
+          "idempotencyKey" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          }
+        },
+        "required" : [ "action", "reason", "idempotencyKey" ]
+      },
+      "LlmEvaluationRequest" : {
+        "type" : "object",
+        "x-java-type" : "LlmEvaluationRequest",
+        "properties" : {
+          "datasetId" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "datasetVersion" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 64
+          },
+          "datasetKind" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "(?i)REAL_PR|OFFLINE_SYNTHETIC"
+          },
+          "sourceRepositoryCount" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 0,
+            "maximum" : 3
+          },
+          "sampleCount" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 0,
+            "maximum" : 100
+          },
+          "fixedRegressionSamples" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 0,
+            "maximum" : 100
+          },
+          "rollingObservationSamples" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 0,
+            "maximum" : 100
+          },
+          "authorized" : {
+            "type" : "boolean"
+          },
+          "anonymized" : {
+            "type" : "boolean"
+          },
+          "humanReviewed" : {
+            "type" : "boolean"
+          },
+          "sampleFingerprint" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "(?i)[0-9a-f]{64}"
+          },
+          "provider" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 64
+          },
+          "model" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "promptVersion" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 96
+          },
+          "contextVersion" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 96
+          },
+          "schemaVersion" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 96
+          },
+          "chunkPolicyVersion" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "temperature" : {
+            "type" : "number",
+            "minimum" : 0.0,
+            "maximum" : 2.0
+          },
+          "ruleVersion" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 96
+          },
+          "codeRevision" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "verifierVersion" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 96
+          },
+          "aggregationVersion" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 96
+          },
+          "observations" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/LlmEvaluationObservationRequest"
+            },
+            "minItems" : 1,
+            "maxItems" : 100
+          },
+          "minimumSamples" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 30,
+            "maximum" : 100
+          }
+        },
+        "required" : [ "datasetId", "datasetVersion", "datasetKind", "sourceRepositoryCount", "sampleCount", "fixedRegressionSamples", "rollingObservationSamples", "authorized", "anonymized", "humanReviewed", "sampleFingerprint", "provider", "model", "promptVersion", "contextVersion", "schemaVersion", "chunkPolicyVersion", "temperature", "ruleVersion", "codeRevision", "verifierVersion", "aggregationVersion", "observations" ]
+      },
+      "LlmEvaluationRunDto" : {
+        "type" : "object",
+        "x-java-type" : "LlmEvaluationRunDto",
+        "properties" : {
+          "runId" : {
+            "type" : "string"
+          },
+          "runKey" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "totalSamples" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "completedSamples" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "totalTokens" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "totalCost" : {
+            "type" : "number"
+          },
+          "reportId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "failureCode" : {
+            "type" : "string"
+          },
+          "submittedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "startedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "finishedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        },
+        "required" : [ "totalSamples", "completedSamples", "totalTokens" ]
+      },
+      "LlmEvaluationRunRequest" : {
+        "type" : "object",
+        "x-java-type" : "LlmEvaluationRunRequest",
+        "properties" : {
+          "runKey" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "dataDirectory" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 512
+          },
+          "maxConcurrency" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 8
+          },
+          "maxTokens" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1,
+            "maximum" : 1000000
+          },
+          "maxCost" : {
+            "type" : "number",
+            "minimum" : 0.0
+          },
+          "maxDurationSeconds" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 3600
+          }
+        },
+        "required" : [ "runKey", "dataDirectory", "maxConcurrency", "maxTokens", "maxCost", "maxDurationSeconds" ]
+      },
+      "LlmModelBudgetDto" : {
+        "type" : "object",
+        "x-java-type" : "LlmModelBudgetDto",
+        "properties" : {
+          "month" : {
+            "type" : "object",
+            "x-java-type" : "YearMonth"
+          },
+          "tokenBudget" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "tokenUsed" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "tokenRemaining" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "costBudget" : {
+            "type" : "number"
+          },
+          "costUsed" : {
+            "type" : "number"
+          },
+          "costRemaining" : {
+            "type" : "number"
+          },
+          "exhausted" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "tokenBudget", "tokenUsed", "tokenRemaining", "exhausted" ]
+      },
+      "LlmModelReleaseAuditDto" : {
+        "type" : "object",
+        "x-java-type" : "LlmModelReleaseAuditDto",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "releaseId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "releaseKey" : {
+            "type" : "string"
+          },
+          "action" : {
+            "type" : "string"
+          },
+          "fromState" : {
+            "type" : "string"
+          },
+          "toState" : {
+            "type" : "string"
+          },
+          "trafficPercent" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "operator" : {
+            "type" : "string"
+          },
+          "reason" : {
+            "type" : "string"
+          },
+          "detailsJson" : {
+            "type" : "string"
+          },
+          "eventHash" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "hashValid" : {
+            "type" : "boolean"
+          },
+          "hashStatus" : {
+            "type" : "string"
+          }
+        }
+      },
+      "LlmModelReleaseAuditExportDto" : {
+        "type" : "object",
+        "x-java-type" : "LlmModelReleaseAuditExportDto",
+        "properties" : {
+          "format" : {
+            "type" : "string"
+          },
+          "recordCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "contentSha256" : {
+            "type" : "string"
+          },
+          "content" : {
+            "type" : "string"
+          }
+        }
+      },
+      "LlmModelReleaseAuditVerificationDto" : {
+        "type" : "object",
+        "x-java-type" : "LlmModelReleaseAuditVerificationDto",
+        "properties" : {
+          "auditId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "releaseId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "releaseKey" : {
+            "type" : "string"
+          },
+          "storedHash" : {
+            "type" : "string"
+          },
+          "calculatedHash" : {
+            "type" : "string"
+          },
+          "valid" : {
+            "type" : "boolean"
+          },
+          "status" : {
+            "type" : "string"
+          }
+        }
+      },
+      "LlmModelReleaseCenterDto" : {
+        "type" : "object",
+        "x-java-type" : "LlmModelReleaseCenterDto",
+        "properties" : {
+          "configuredProvider" : {
+            "type" : "string"
+          },
+          "configuredModel" : {
+            "type" : "string"
+          },
+          "activeRelease" : {
+            "$ref" : "#/components/schemas/LlmModelReleaseDto"
+          },
+          "canaryRelease" : {
+            "$ref" : "#/components/schemas/LlmModelReleaseDto"
+          },
+          "releases" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/LlmModelReleaseDto"
+            }
+          },
+          "modelComparison" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/LlmQualityByModelDto"
+            }
+          },
+          "monthlyBudget" : {
+            "$ref" : "#/components/schemas/LlmModelBudgetDto"
+          },
+          "recommendedAction" : {
+            "type" : "string"
+          }
+        }
+      },
+      "LlmModelReleaseDriftDto" : {
+        "type" : "object",
+        "x-java-type" : "LlmModelReleaseDriftDto",
+        "properties" : {
+          "checkedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "healthy" : {
+            "type" : "boolean"
+          },
+          "fingerprint" : {
+            "type" : "string"
+          },
+          "findings" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/FindingDto"
+            }
+          },
+          "releaseSummary" : {
+            "$ref" : "#/components/schemas/ReleaseSummary"
+          },
+          "assignmentSummary" : {
+            "$ref" : "#/components/schemas/AssignmentSummary"
+          }
+        }
+      },
+      "LlmModelReleaseDriftRepairDto" : {
+        "type" : "object",
+        "x-java-type" : "LlmModelReleaseDriftRepairDto",
+        "properties" : {
+          "operationKey" : {
+            "type" : "string"
+          },
+          "previewFingerprint" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "changedReleaseCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "changedTaskCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "skippedRunningTaskCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "failureCode" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "updatedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "preview" : {
+            "$ref" : "#/components/schemas/LlmModelReleaseDriftDto"
+          },
+          "after" : {
+            "$ref" : "#/components/schemas/LlmModelReleaseDriftDto"
+          }
+        }
+      },
+      "LlmModelReleaseDriftRepairRequest" : {
+        "type" : "object",
+        "x-java-type" : "LlmModelReleaseDriftRepairRequest",
+        "properties" : {
+          "idempotencyKey" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "previewFingerprint" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "(?i)[0-9a-f]{64}"
+          },
+          "confirm" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "idempotencyKey", "previewFingerprint", "confirm" ]
+      },
+      "LlmModelReleaseDto" : {
+        "type" : "object",
+        "x-java-type" : "LlmModelReleaseDto",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "releaseKey" : {
+            "type" : "string"
+          },
+          "provider" : {
+            "type" : "string"
+          },
+          "modelName" : {
+            "type" : "string"
+          },
+          "promptVersion" : {
+            "type" : "string"
+          },
+          "contextVersion" : {
+            "type" : "string"
+          },
+          "schemaVersion" : {
+            "type" : "string"
+          },
+          "datasetId" : {
+            "type" : "string"
+          },
+          "datasetVersion" : {
+            "type" : "string"
+          },
+          "datasetFingerprint" : {
+            "type" : "string"
+          },
+          "state" : {
+            "type" : "string"
+          },
+          "trafficPercent" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "qualityGatePassed" : {
+            "type" : "boolean"
+          },
+          "precisionRate" : {
+            "type" : "number"
+          },
+          "recallRate" : {
+            "type" : "number"
+          },
+          "anchorRate" : {
+            "type" : "number"
+          },
+          "duplicateRate" : {
+            "type" : "number"
+          },
+          "parseFailureRate" : {
+            "type" : "number"
+          },
+          "p95LatencyMs" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "averageCost" : {
+            "type" : "number"
+          },
+          "totalTokens" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "blockers" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "rollbackReason" : {
+            "type" : "string"
+          },
+          "createdBy" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "updatedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "evaluationReportId" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
+      "LlmModelReleaseMetricDto" : {
+        "type" : "object",
+        "x-java-type" : "LlmModelReleaseMetricDto",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "releaseId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "releaseKey" : {
+            "type" : "string"
+          },
+          "provider" : {
+            "type" : "string"
+          },
+          "modelName" : {
+            "type" : "string"
+          },
+          "windowStart" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "windowEnd" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "sampleCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "totalTokens" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "totalCost" : {
+            "type" : "number"
+          },
+          "p95LatencyMs" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "parseFailureCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "fallbackCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "rollbackCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "alertState" : {
+            "type" : "string"
+          },
+          "alertCodes" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "action" : {
+            "type" : "string"
+          },
+          "alertFingerprint" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "updatedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "LlmModelReleaseRequest" : {
+        "type" : "object",
+        "x-java-type" : "LlmModelReleaseRequest",
+        "properties" : {
+          "releaseKey" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "provider" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 64
+          },
+          "modelName" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "promptVersion" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 96
+          },
+          "contextVersion" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 96
+          },
+          "schemaVersion" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 96
+          },
+          "datasetId" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "datasetVersion" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 64
+          },
+          "datasetFingerprint" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "(?i)[0-9a-f]{64}"
+          },
+          "trafficPercent" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 0,
+            "maximum" : 100
+          },
+          "qualityGatePassed" : {
+            "type" : "boolean"
+          },
+          "precisionRate" : {
+            "type" : "number",
+            "minimum" : 0.0,
+            "maximum" : 1.0
+          },
+          "recallRate" : {
+            "type" : "number",
+            "minimum" : 0.0,
+            "maximum" : 1.0
+          },
+          "anchorRate" : {
+            "type" : "number",
+            "minimum" : 0.0,
+            "maximum" : 1.0
+          },
+          "duplicateRate" : {
+            "type" : "number",
+            "minimum" : 0.0,
+            "maximum" : 1.0
+          },
+          "parseFailureRate" : {
+            "type" : "number",
+            "minimum" : 0.0,
+            "maximum" : 1.0
+          },
+          "p95LatencyMs" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 0
+          },
+          "averageCost" : {
+            "type" : "number",
+            "minimum" : 0.0
+          },
+          "totalTokens" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 0
+          },
+          "blockers" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            },
+            "maxItems" : 10
+          },
+          "evaluationReportId" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        },
+        "required" : [ "releaseKey", "provider", "modelName", "promptVersion", "contextVersion", "schemaVersion", "datasetId", "datasetVersion", "datasetFingerprint", "trafficPercent", "qualityGatePassed", "precisionRate", "recallRate", "anchorRate", "duplicateRate", "parseFailureRate", "p95LatencyMs", "averageCost", "totalTokens" ]
+      },
+      "LlmModelRollbackRequest" : {
+        "type" : "object",
+        "x-java-type" : "LlmModelRollbackRequest",
+        "properties" : {
+          "reason" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 512
+          }
+        },
+        "required" : [ "reason" ]
       },
       "LlmQualityByModelDto" : {
         "type" : "object",
@@ -8363,6 +12939,58 @@
           }
         }
       },
+      "NotificationReadRequest" : {
+        "type" : "object",
+        "x-java-type" : "NotificationReadRequest",
+        "properties" : {
+          "notificationKey" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 191
+          }
+        },
+        "required" : [ "notificationKey" ]
+      },
+      "NotificationReportDto" : {
+        "type" : "object",
+        "x-java-type" : "NotificationReportDto",
+        "properties" : {
+          "period" : {
+            "type" : "string"
+          },
+          "from" : {
+            "type" : "string"
+          },
+          "to" : {
+            "type" : "string"
+          },
+          "totalReviews" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "completedReviews" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "failedReviews" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "pendingHumanReviews" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "highRiskReviews" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "overdueHumanReviews" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        },
+        "required" : [ "totalReviews", "completedReviews", "failedReviews", "pendingHumanReviews", "highRiskReviews", "overdueHumanReviews" ]
+      },
       "NotificationSettingsDto" : {
         "type" : "object",
         "x-java-type" : "NotificationSettingsDto",
@@ -8570,6 +13198,174 @@
           }
         }
       },
+      "ReleaseSummary" : {
+        "type" : "object",
+        "x-java-type" : "ReleaseSummary",
+        "properties" : {
+          "activeCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "canaryCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "activeReleaseIds" : {
+            "type" : "array",
+            "items" : {
+              "type" : "integer",
+              "format" : "int64"
+            }
+          },
+          "canaryReleaseIds" : {
+            "type" : "array",
+            "items" : {
+              "type" : "integer",
+              "format" : "int64"
+            }
+          },
+          "desiredActiveReleaseId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "desiredCanaryReleaseId" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
+      "RepositoryPolicyPreviewResponse" : {
+        "type" : "object",
+        "x-java-type" : "RepositoryPolicyPreviewResponse",
+        "properties" : {
+          "basePolicy" : {
+            "type" : "object",
+            "x-java-type" : "RepositoryPolicyDocument"
+          },
+          "headPolicy" : {
+            "type" : "object",
+            "x-java-type" : "RepositoryPolicyDocument"
+          },
+          "rules" : {
+            "type" : "object",
+            "x-java-type" : "Map<String,RuleDecision>"
+          },
+          "effectiveLlmEnabled" : {
+            "type" : "boolean"
+          },
+          "effectiveTokenBudget" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "effectiveCostBudget" : {
+            "type" : "number"
+          },
+          "commentMode" : {
+            "type" : "string"
+          },
+          "checkMode" : {
+            "type" : "string"
+          },
+          "warnings" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          }
+        }
+      },
+      "RepositorySuppressionRequest" : {
+        "type" : "object",
+        "x-java-type" : "RepositorySuppressionRequest",
+        "properties" : {
+          "organization" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "repository" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 255
+          },
+          "ruleId" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 96
+          },
+          "fileGlob" : {
+            "type" : "string",
+            "maxLength" : 256
+          },
+          "symbol" : {
+            "type" : "string",
+            "maxLength" : 256
+          },
+          "reason" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 512
+          },
+          "expiresAt" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 64
+          }
+        },
+        "required" : [ "organization", "repository", "ruleId", "reason", "expiresAt" ]
+      },
+      "RepositorySuppressionResponse" : {
+        "type" : "object",
+        "x-java-type" : "RepositorySuppressionResponse",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "organization" : {
+            "type" : "string"
+          },
+          "repository" : {
+            "type" : "string"
+          },
+          "ruleId" : {
+            "type" : "string"
+          },
+          "fileGlob" : {
+            "type" : "string"
+          },
+          "symbol" : {
+            "type" : "string"
+          },
+          "reason" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "operator" : {
+            "type" : "string"
+          },
+          "expiresAt" : {
+            "type" : "string"
+          },
+          "previewHitCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "hitCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "createdAt" : {
+            "type" : "string"
+          },
+          "updatedAt" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "previewHitCount", "hitCount" ]
+      },
       "RetryCompensationStatusDto" : {
         "type" : "object",
         "x-java-type" : "RetryCompensationStatusDto",
@@ -8602,6 +13398,22 @@
           }
         }
       },
+      "ReviewAssignmentRequest" : {
+        "type" : "object",
+        "x-java-type" : "ReviewAssignmentRequest",
+        "properties" : {
+          "assignee" : {
+            "type" : "string",
+            "maxLength" : 128
+          },
+          "slaMinutes" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 5,
+            "maximum" : 10080
+          }
+        }
+      },
       "ReviewAttemptChangedFileDto" : {
         "type" : "object",
         "x-java-type" : "ReviewAttemptChangedFileDto",
@@ -8625,6 +13437,63 @@
             "format" : "int32"
           }
         }
+      },
+      "ReviewAttemptComparisonDto" : {
+        "type" : "object",
+        "x-java-type" : "ReviewAttemptComparisonDto",
+        "properties" : {
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "baselineAttemptId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "candidateAttemptId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "baselineCommitSha" : {
+            "type" : "string"
+          },
+          "candidateCommitSha" : {
+            "type" : "string"
+          },
+          "comparable" : {
+            "type" : "boolean"
+          },
+          "comparabilityReason" : {
+            "type" : "string"
+          },
+          "summary" : {
+            "$ref" : "#/components/schemas/ReviewFindingComparisonSummaryDto"
+          },
+          "findings" : {
+            "type" : "object",
+            "x-java-type" : "PageResponse<ReviewFindingComparisonDto>",
+            "properties" : {
+              "items" : {
+                "type" : "array",
+                "items" : {
+                  "$ref" : "#/components/schemas/ReviewFindingComparisonDto"
+                }
+              },
+              "total" : {
+                "type" : "integer",
+                "format" : "int64"
+              },
+              "nextCursor" : {
+                "type" : "string"
+              },
+              "hasMore" : {
+                "type" : "boolean"
+              }
+            },
+            "required" : [ "total", "hasMore" ]
+          }
+        },
+        "required" : [ "comparable" ]
       },
       "ReviewAttemptFindingDto" : {
         "type" : "object",
@@ -8681,6 +13550,72 @@
             "type" : "string"
           },
           "aggregationVersion" : {
+            "type" : "string"
+          },
+          "findingFingerprint" : {
+            "type" : "string"
+          },
+          "previousFindingId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "comparisonStatus" : {
+            "type" : "string"
+          },
+          "comparisonConfidence" : {
+            "type" : "number"
+          },
+          "comparisonReason" : {
+            "type" : "string"
+          },
+          "comparisonVersion" : {
+            "type" : "string"
+          },
+          "comparisonAttemptId" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
+      "ReviewBotCommandRequest" : {
+        "type" : "object",
+        "x-java-type" : "ReviewBotCommandRequest",
+        "properties" : {
+          "externalCommandId" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "text" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 512
+          },
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        },
+        "required" : [ "externalCommandId", "text" ]
+      },
+      "ReviewBotCommandResponse" : {
+        "type" : "object",
+        "x-java-type" : "ReviewBotCommandResponse",
+        "properties" : {
+          "provider" : {
+            "type" : "string"
+          },
+          "command" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "message" : {
             "type" : "string"
           }
         }
@@ -8897,6 +13832,24 @@
         },
         "required" : [ "enforcementMode", "expectedSnapshotId" ]
       },
+      "ReviewEscalationResponse" : {
+        "type" : "object",
+        "x-java-type" : "ReviewEscalationResponse",
+        "properties" : {
+          "escalated" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "skipped" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "executedAt" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "escalated", "skipped" ]
+      },
       "ReviewExecutionAttemptDto" : {
         "type" : "object",
         "x-java-type" : "ReviewExecutionAttemptDto",
@@ -9062,6 +14015,37 @@
           }
         }
       },
+      "ReviewFindingComparisonSummaryDto" : {
+        "type" : "object",
+        "x-java-type" : "ReviewFindingComparisonSummaryDto",
+        "properties" : {
+          "newCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "persistingCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "resolvedCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "regressedCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "unmatchedCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "total" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        },
+        "required" : [ "newCount", "persistingCount", "resolvedCount", "regressedCount", "unmatchedCount", "total" ]
+      },
       "ReviewFindingDto" : {
         "type" : "object",
         "x-java-type" : "ReviewFindingDto",
@@ -9148,6 +14132,13 @@
           },
           "trace" : {
             "$ref" : "#/components/schemas/ReviewFindingTraceDto"
+          },
+          "sourceBatchId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "sourceBatchStatus" : {
+            "type" : "string"
           }
         }
       },
@@ -9621,6 +14612,15 @@
           },
           "qualityGate" : {
             "$ref" : "#/components/schemas/ReviewRuleQualityGateDto"
+          },
+          "detectorType" : {
+            "type" : "string"
+          },
+          "matcherExpression" : {
+            "type" : "string"
+          },
+          "exceptionPatterns" : {
+            "type" : "string"
           }
         },
         "required" : [ "hitCount", "configVersion", "policyVersion" ]
@@ -9686,6 +14686,19 @@
             "type" : "string",
             "minLength" : 1,
             "pattern" : "(?i)observe|comment|block"
+          },
+          "detectorType" : {
+            "type" : "string",
+            "maxLength" : 16,
+            "pattern" : "(?i)builtin|regex|ast"
+          },
+          "matcherExpression" : {
+            "type" : "string",
+            "maxLength" : 1024
+          },
+          "exceptionPatterns" : {
+            "type" : "string",
+            "maxLength" : 1024
           }
         },
         "required" : [ "id", "name", "scope", "severity", "status", "description", "enforcementMode" ]
@@ -10250,6 +15263,127 @@
         },
         "required" : [ "value" ]
       },
+      "ReviewWorkflowItemDto" : {
+        "type" : "object",
+        "x-java-type" : "ReviewWorkflowItemDto",
+        "properties" : {
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "repository" : {
+            "type" : "string"
+          },
+          "prNumber" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "humanReviewStatus" : {
+            "type" : "string"
+          },
+          "assignee" : {
+            "type" : "string"
+          },
+          "assignedAt" : {
+            "type" : "string"
+          },
+          "slaDeadline" : {
+            "type" : "string"
+          },
+          "escalationLevel" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "overdue" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "overdue" ]
+      },
+      "SarifExportDto" : {
+        "type" : "object",
+        "x-java-type" : "SarifExportDto",
+        "properties" : {
+          "version" : {
+            "type" : "string"
+          },
+          "schema" : {
+            "type" : "string"
+          },
+          "runs" : {
+            "type" : "array",
+            "items" : {
+              "type" : "object",
+              "x-java-type" : "Map<String,Object>"
+            }
+          }
+        }
+      },
+      "SarifImportRequest" : {
+        "type" : "object",
+        "x-java-type" : "SarifImportRequest",
+        "properties" : {
+          "content" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 2000000
+          }
+        },
+        "required" : [ "content" ]
+      },
+      "SarifImportResponse" : {
+        "type" : "object",
+        "x-java-type" : "SarifImportResponse",
+        "properties" : {
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "imported" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "skipped" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "findings" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/SarifImportedFindingDto"
+            }
+          }
+        },
+        "required" : [ "imported", "skipped" ]
+      },
+      "SarifImportedFindingDto" : {
+        "type" : "object",
+        "x-java-type" : "SarifImportedFindingDto",
+        "properties" : {
+          "ruleId" : {
+            "type" : "string"
+          },
+          "filePath" : {
+            "type" : "string"
+          },
+          "lineNumber" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "severity" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          }
+        }
+      },
       "SecretReEncryptionItemDto" : {
         "type" : "object",
         "x-java-type" : "SecretReEncryptionItemDto",
@@ -10697,7 +15831,7 @@
           "role" : {
             "type" : "string",
             "minLength" : 1,
-            "pattern" : "ADMIN|VIEWER"
+            "pattern" : "ADMIN|VIEWER|PLATFORM_ADMIN|TENANT_ADMIN|RULE_ADMIN|REVIEWER|READ_ONLY"
           }
         },
         "required" : [ "role" ]

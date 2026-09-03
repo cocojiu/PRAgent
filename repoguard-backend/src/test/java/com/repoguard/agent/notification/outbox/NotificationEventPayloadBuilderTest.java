@@ -5,6 +5,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.notification.NotificationEventType;
 import com.repoguard.agent.notification.NotificationMessage;
+import com.repoguard.agent.review.quality.LlmModelReleaseMetricSnapshot;
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class NotificationEventPayloadBuilderTest {
@@ -72,6 +76,29 @@ class NotificationEventPayloadBuilderTest {
             "\"commentFailedCount\":1",
             "\"commentSkippedCount\":2"
         );
+    }
+
+    @Test
+    void buildsReleaseAlertPayloadWithoutTaskIdentity() {
+        LlmModelReleaseMetricSnapshot snapshot = new LlmModelReleaseMetricSnapshot(
+            8L, 7L, "release-next", "openai", "gpt-next",
+            LocalDateTime.of(2026, 9, 3, 1, 0), LocalDateTime.of(2026, 9, 3, 2, 0),
+            12L, 1200L, new BigDecimal("0.1200"), 20_000L, 1L, 3L, 0L,
+            "ALERT", List.of("P95_LATENCY_ABOVE_RUNTIME_THRESHOLD"), "NOTIFY",
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            LocalDateTime.of(2026, 9, 3, 2, 0), LocalDateTime.of(2026, 9, 3, 2, 0)
+        );
+
+        NotificationEventPayload payload = builder.buildReleaseAlert(snapshot);
+
+        assertThat(payload.eventKey()).startsWith("MODEL_RELEASE_ALERT:release-next:2026-09-03T01:00:");
+        assertThat(payload.message()).isEqualTo(new NotificationMessage(
+            "MODEL_RELEASE_ALERT", null, null, "*", "*", null, "LLM 模型发布运行告警",
+            "ALERT", "HIGH", 12, 0, 0, 0,
+            "/repoguard/config/review-calibration/release-center",
+            "版本 release-next（openai/gpt-next）触发 P95_LATENCY_ABOVE_RUNTIME_THRESHOLD；阈值动作：NOTIFY；样本 12；窗口 2026-09-03T01:00 ~ 2026-09-03T02:00"
+        ));
+        assertThat(payload.json()).contains("MODEL_RELEASE_ALERT", "alertSummary");
     }
 
     private ReviewTask task() {

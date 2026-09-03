@@ -1,8 +1,7 @@
 package com.repoguard.agent.review;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.repoguard.agent.review.ReviewPolicyProvider;
-import com.repoguard.agent.review.ReviewPolicySettings;
+import com.repoguard.agent.review.quality.LlmModelReleaseService;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.external.ExternalCallErrorClassifier;
 import com.repoguard.agent.external.ExternalCallException;
@@ -21,10 +20,10 @@ import java.util.Objects;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
-
 @Service
 public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCaller {
 
@@ -37,8 +36,9 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
     private final ExternalHttpJsonResponseReader responseReader;
     private final LlmChatCompletionResponseExtractor responseExtractor;
     private final OutboundEndpointPolicy endpointPolicy;
+    private final LlmModelReleaseService modelReleaseService;
+    private final RepositoryPolicyRuntime repositoryPolicyRuntime;
     private final AtomicReference<CachedRestClient> cachedRestClient = new AtomicReference<>();
-
     @Autowired
     public LlmPullRequestReviewer(
         ReviewPolicyProvider reviewPolicyProvider,
@@ -49,9 +49,24 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         LlmReviewPipeline reviewPipeline,
         ExternalHttpJsonResponseReader responseReader,
         LlmChatCompletionResponseExtractor responseExtractor,
-        OutboundEndpointPolicy endpointPolicy
+        OutboundEndpointPolicy endpointPolicy,
+        ObjectProvider<LlmModelReleaseService> modelReleaseServiceProvider,
+        ObjectProvider<RepositoryPolicyRuntime> repositoryPolicyRuntimeProvider
     ) {
-        this(reviewPolicyProvider, restClientBuilder, metrics, resilience, promptBuilder, reviewPipeline, responseReader, responseExtractor, endpointPolicy, true);
+        this(
+            reviewPolicyProvider,
+            restClientBuilder,
+            metrics,
+            resilience,
+            promptBuilder,
+            reviewPipeline,
+            responseReader,
+            responseExtractor,
+            endpointPolicy,
+            modelReleaseServiceProvider.getIfAvailable(),
+            repositoryPolicyRuntimeProvider.getIfAvailable(),
+            true
+        );
     }
 
     public LlmPullRequestReviewer(
@@ -64,7 +79,20 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         ExternalHttpJsonResponseReader responseReader,
         LlmChatCompletionResponseExtractor responseExtractor
     ) {
-        this(reviewPolicyProvider, restClientBuilder, metrics, resilience, promptBuilder, reviewPipeline, responseReader, responseExtractor, null, true);
+        this(
+            reviewPolicyProvider,
+            restClientBuilder,
+            metrics,
+            resilience,
+            promptBuilder,
+            reviewPipeline,
+            responseReader,
+            responseExtractor,
+            null,
+            null,
+            null,
+            true
+        );
     }
 
     private LlmPullRequestReviewer(
@@ -77,6 +105,8 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         ExternalHttpJsonResponseReader responseReader,
         LlmChatCompletionResponseExtractor responseExtractor,
         OutboundEndpointPolicy endpointPolicy,
+        LlmModelReleaseService modelReleaseService,
+        RepositoryPolicyRuntime repositoryPolicyRuntime,
         boolean ignored
     ) {
         this.reviewPolicyProvider = Objects.requireNonNull(reviewPolicyProvider, "reviewPolicyProvider");
@@ -88,20 +118,81 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         this.responseReader = Objects.requireNonNull(responseReader, "responseReader");
         this.responseExtractor = Objects.requireNonNull(responseExtractor, "responseExtractor");
         this.endpointPolicy = endpointPolicy;
+        this.modelReleaseService = modelReleaseService;
+        this.repositoryPolicyRuntime = repositoryPolicyRuntime;
     }
-
     @Override
     public ReviewResult review(ReviewTask task, PullRequestDiff diff) {
         return review(task, diff, null);
     }
-
     @Override
     public ReviewResult review(ReviewTask task, PullRequestDiff diff, ReviewDeadline deadline) {
+        ReviewPolicySettings settings = reviewPolicyProvider.getSettings();
+        if (repositoryPolicyRuntime != null) {
+            settings = repositoryPolicyRuntime.applyLlmSettings(task, settings);
+        }
+        if (modelReleaseService != null) {
+            settings = modelReleaseService.route(settings, task);
+        }
+        return reviewWithSettings(task, diff, deadline, settings);
+    }
+
+    /**
+     * Executes one evaluation case against the configured provider using the candidate model.
+     * Evaluation deliberately bypasses canary routing: a dataset run must compare exactly one
+     * immutable model version and must never persist a release assignment or publish side effects.
+     */
+    public ReviewResult reviewForEvaluation(
+        ReviewTask task,
+        PullRequestDiff diff,
+        ReviewDeadline deadline,
+        String provider,
+        String model
+    ) {
+        ReviewPolicySettings configured = reviewPolicyProvider.getSettings();
+        if (repositoryPolicyRuntime != null) {
+            configured = repositoryPolicyRuntime.applyLlmSettings(task, configured);
+        }
+        if (!configured.enabled() || !configured.readyForLlmReview()) {
+            throw new IllegalStateException("LLM 评估运行需要已启用且配置完整的模型服务");
+        }
+        if (provider == null || provider.isBlank() || model == null || model.isBlank()
+            || !provider.trim().equalsIgnoreCase(configured.llmProvider())) {
+            throw new IllegalArgumentException("评估版本与当前 LLM 配置不一致");
+        }
+        ReviewPolicySettings evaluationSettings = new ReviewPolicySettings(
+            configured.exists(),
+            configured.llmEnabled(),
+            configured.llmProvider(),
+            model.trim(),
+            configured.baseUrl(),
+            configured.apiKey(),
+            configured.timeoutSeconds(),
+            configured.temperature(),
+            configured.maxTokens(),
+            configured.fallbackToRules(),
+            configured.workerConcurrency(),
+            configured.chunkFileThreshold(),
+            configured.chunkLineThreshold(),
+            configured.chunkMaxFiles(),
+            configured.chunkMaxLines(),
+            configured.inputTokenPricePerMillion(),
+            configured.outputTokenPricePerMillion(),
+            configured.strategyRelease()
+        );
+        return reviewWithSettings(task, diff, deadline, evaluationSettings);
+    }
+
+    private ReviewResult reviewWithSettings(
+        ReviewTask task,
+        PullRequestDiff diff,
+        ReviewDeadline deadline,
+        ReviewPolicySettings settings
+    ) {
         long startedAt = System.nanoTime();
         if (deadline != null) {
             deadline.requireRemaining("review_context");
         }
-        ReviewPolicySettings settings = reviewPolicyProvider.getSettings();
         LlmReviewContext promptContext = promptBuilder.buildContext(diff);
         String promptSummary = promptBuilder.promptSummary(diff, promptContext);
         if (deadline != null) {
@@ -111,7 +202,6 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
             new ReviewPipelineContext(task, diff, settings, promptSummary, startedAt, this, promptContext, deadline)
         );
     }
-
     @Override
     public LlmCallResult callLlm(ReviewPolicySettings settings, ReviewTask task, PullRequestDiff diff) {
         return callLlm(settings, task, diff, promptBuilder.buildContext(diff));

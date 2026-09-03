@@ -19,6 +19,7 @@ import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
 import com.repoguard.agent.mapper.SystemSettingLogMapper;
 import com.repoguard.agent.mapper.SystemSettingsConfigMapper;
 import com.repoguard.agent.service.SystemSettingsApplicationService;
+import com.repoguard.agent.tenancy.TenantContext;
 import java.math.BigDecimal;
 import java.time.DateTimeException;
 import java.time.LocalDateTime;
@@ -110,14 +111,15 @@ public class SystemSettingsApplicationServiceImpl implements SystemSettingsAppli
     }
 
     private ReviewPolicyConfig loadReviewPolicy() {
-        ReviewPolicyConfig config = reviewPolicyConfigMapper.selectById(1L);
+        long tenantId = TenantContext.currentTenantIdOrDefault();
+        ReviewPolicyConfig config = reviewPolicyConfigMapper.selectByTenantId(tenantId);
         if (config != null) {
             return config;
         }
 
         LocalDateTime now = LocalDateTime.now();
         ReviewPolicyConfig defaultConfig = new ReviewPolicyConfig();
-        defaultConfig.setId(1L);
+        defaultConfig.setTenantId(tenantId);
         defaultConfig.setLlmEnabled(true);
         defaultConfig.setLlmProvider("dashscope");
         defaultConfig.setModelName("qwen-plus");
@@ -140,14 +142,15 @@ public class SystemSettingsApplicationServiceImpl implements SystemSettingsAppli
     }
 
     private SystemSettingsConfig loadSystemSettings() {
-        SystemSettingsConfig config = systemSettingsConfigMapper.selectById(1L);
+        long tenantId = TenantContext.currentTenantIdOrDefault();
+        SystemSettingsConfig config = systemSettingsConfigMapper.selectByTenantId(tenantId);
         if (config != null) {
             return config;
         }
 
         LocalDateTime now = LocalDateTime.now();
         SystemSettingsConfig defaultConfig = new SystemSettingsConfig();
-        defaultConfig.setId(1L);
+        defaultConfig.setTenantId(tenantId);
         defaultConfig.setSystemName("RepoGuard Agent");
         defaultConfig.setLanguage(SUPPORTED_LANGUAGE);
         defaultConfig.setTimezone("Asia/Shanghai");

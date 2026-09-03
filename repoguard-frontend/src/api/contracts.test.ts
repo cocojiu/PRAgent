@@ -7,6 +7,21 @@ const frontendPerformance = vi.hoisted(() => ({
 vi.mock("@/observability/frontendPerformanceBuffer", () => frontendPerformance);
 
 import { apiRequest } from "./contracts";
+import {
+  compareLlmEvaluationReports,
+  createLlmEvaluationReport,
+  exportLlmEvaluationReport,
+  fetchLlmEvaluationReport,
+  fetchLlmEvaluationReports,
+  transitionLlmEvaluationReportLifecycle
+} from "./config";
+import {
+  fetchNotificationReadKeys,
+  fetchNotificationReport,
+  fetchNotifications,
+  markNotificationRead
+} from "./notifications";
+import { clearActiveTenant, setActiveTenant } from "@/stores/tenantContext";
 
 const okResponse = (data: unknown) =>
   new Response(JSON.stringify({
@@ -27,6 +42,7 @@ describe("apiRequest", () => {
     clearCsrfCookie();
     window.sessionStorage.clear();
     window.localStorage.clear();
+    clearActiveTenant();
   });
 
   it("builds query parameters from the typed operation contract", async () => {
@@ -107,6 +123,56 @@ describe("apiRequest", () => {
     expect(url).toContain("limit=30");
     expect(url).toContain("includeIgnored=false");
     expect(init.method).toBeUndefined();
+  });
+
+  it("exposes aggregate evaluation report endpoints through typed config wrappers", async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(okResponse({})));
+    vi.stubGlobal("fetch", fetchMock);
+    const request = {
+      datasetId: "real-pr",
+      datasetVersion: "2026-09-02",
+      datasetKind: "REAL_PR" as const,
+      sourceRepositoryCount: 2,
+      sampleCount: 1,
+      fixedRegressionSamples: 1,
+      rollingObservationSamples: 0,
+      authorized: true,
+      anonymized: true,
+      humanReviewed: true,
+      sampleFingerprint: "a".repeat(64),
+      provider: "openai",
+      model: "gpt-5",
+      promptVersion: "prompt-1",
+      contextVersion: "context-1",
+      schemaVersion: "schema-1",
+      chunkPolicyVersion: "chunk-1",
+      temperature: 0.2,
+      ruleVersion: "rules-1",
+      codeRevision: "0123456789abcdef0123456789abcdef01234567",
+      observations: [],
+      minimumSamples: 1
+    };
+    await createLlmEvaluationReport(request);
+    await fetchLlmEvaluationReports(10);
+    await fetchLlmEvaluationReport(7);
+    await compareLlmEvaluationReports(7, 8);
+    await exportLlmEvaluationReport(7, "html");
+    await transitionLlmEvaluationReportLifecycle(7, {
+      action: "FREEZE",
+      reason: "retention review",
+      idempotencyKey: "freeze-7-1"
+    });
+
+    const calls = fetchMock.mock.calls as [string, RequestInit][];
+    expect(calls[0][0]).toContain("/api/v1/config/review-calibration/evaluation-reports");
+    expect(calls[0][1].method).toBe("POST");
+    expect(calls[1][0]).toContain("limit=10");
+    expect(calls[2][0]).toContain("/evaluation-reports/7");
+    expect(calls[3][0]).toContain("/evaluation-reports/7/compare/8");
+    expect(calls[4][0]).toContain("/evaluation-reports/7/export");
+    expect(calls[4][0]).toContain("format=html");
+    expect(calls[5][0]).toContain("/evaluation-reports/7/lifecycle");
+    expect(calls[5][1].method).toBe("POST");
   });
 
   it("forwards cancellation signals through the typed API contract", async () => {
@@ -390,7 +456,10 @@ describe("apiRequest", () => {
     });
     await apiRequest("fetchMessageQueueHealth", undefined);
     await apiRequest("requeueMessageQueueTask", { taskId: 42 });
-    await apiRequest("fetchNotifications", undefined);
+    await fetchNotifications();
+    await markNotificationRead({ notificationKey: "review-sla-overdue-42" });
+    await fetchNotificationReadKeys();
+    await fetchNotificationReport("WEEKLY");
 
     const calls = fetchMock.mock.calls as [string, RequestInit][];
     expect(calls[0][0]).toContain("/api/v1/config/notification-bindings");
@@ -416,6 +485,14 @@ describe("apiRequest", () => {
     expect(calls[5][1].method).toBe("POST");
     expect(calls[6][0]).toContain("/api/v1/notifications");
     expect(calls[6][1].method).toBeUndefined();
+    expect(calls[7][0]).toContain("/api/v1/notifications/read");
+    expect(calls[7][1].method).toBe("POST");
+    expect(calls[7][1].body).toContain("review-sla-overdue-42");
+    expect(calls[8][0]).toContain("/api/v1/notifications/read");
+    expect(calls[8][1].method).toBeUndefined();
+    expect(calls[9][0]).toContain("/api/v1/notifications/reports");
+    expect(calls[9][0]).toContain("period=WEEKLY");
+    expect(calls[9][1].method).toBeUndefined();
   });
 
   it("keeps dashboard overview and split module endpoint contracts", async () => {
@@ -769,6 +846,86 @@ describe("apiRequest", () => {
     expect(calls[4][0]).toContain("/api/v1/users/42/status");
     expect(calls[4][1].method).toBe("PUT");
     expect(calls[4][1].body).toBe(JSON.stringify({ status: "DISABLED" }));
+  });
+
+  it("uses generated metadata for enterprise tenant control-plane paths", async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(okResponse({})));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await apiRequest("fetchEnterpriseTenants", { page: 2, pageSize: 10, status: "ACTIVE" });
+    await apiRequest("fetchEnterpriseTenant", { tenantKey: "acme-prod" });
+    await apiRequest("createEnterpriseTenant", {
+      tenantKey: "acme-prod",
+      displayName: "Acme Production",
+      initialAdminUserId: 7
+    });
+    await apiRequest("updateEnterpriseTenantStatus", {
+      tenantKey: "acme-prod",
+      payload: { expectedStatus: "ACTIVE", targetStatus: "SUSPENDED", expectedVersion: 1, reason: "maintenance" }
+    });
+    await apiRequest("bindEnterpriseTenantMembership", {
+      tenantKey: "acme-prod",
+      payload: { userId: 7, role: "TENANT_ADMIN", defaultTenant: true }
+    });
+    await apiRequest("bindEnterpriseTenantRepository", {
+      tenantKey: "acme-prod",
+      payload: { organization: "openai", repository: "repoguard", githubInstallationId: 77 }
+    });
+    await apiRequest("bindEnterpriseTenantIdentity", {
+      tenantKey: "acme-prod",
+      payload: { userId: 7, issuer: "https://idp.example.com", subject: "subject" }
+    });
+    await apiRequest("fetchEnterpriseTenantQuota", { tenantKey: "acme-prod" });
+    await apiRequest("updateEnterpriseTenantQuota", {
+      tenantKey: "acme-prod",
+      payload: {
+        expectedVersion: 1,
+        maxDailyReviews: 2000,
+        monthlyLlmTokenBudget: 0,
+        monthlyLlmCostBudget: 0
+      }
+    });
+
+    const calls = fetchMock.mock.calls as [string, RequestInit][];
+    expect(calls[0][0]).toContain("/api/v1/enterprise/tenants");
+    expect(calls[0][0]).toContain("page=2");
+    expect(calls[0][0]).toContain("pageSize=10");
+    expect(calls[0][0]).toContain("status=ACTIVE");
+    expect(calls[1][0]).toContain("/api/v1/enterprise/tenants/acme-prod");
+    expect(calls[2][1].method).toBe("POST");
+    expect(calls[2][1].body).toBe(JSON.stringify({
+      tenantKey: "acme-prod",
+      displayName: "Acme Production",
+      initialAdminUserId: 7
+    }));
+    expect(calls[3][0]).toContain("/acme-prod/status");
+    expect(calls[4][0]).toContain("/acme-prod/memberships");
+    expect(calls[5][0]).toContain("/acme-prod/repositories");
+    expect(calls[6][0]).toContain("/acme-prod/identities");
+    expect(calls[7][0]).toContain("/acme-prod/quota");
+    expect(calls[8][1].method).toBe("PUT");
+  });
+
+  it("propagates the selected tenant context without exposing it in the URL", async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(okResponse({ items: [], total: 0 })));
+    vi.stubGlobal("fetch", fetchMock);
+    setActiveTenant("Acme-Prod");
+
+    await apiRequest("fetchReviews", {
+      page: 1,
+      pageSize: 20,
+      repository: undefined,
+      status: undefined,
+      riskLevel: undefined,
+      source: undefined,
+      triggerSource: undefined,
+      keyword: undefined,
+      cursor: undefined
+    });
+
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(new Headers(init.headers).get("X-RepoGuard-Tenant")).toBe("acme-prod");
+    expect(String(fetchMock.mock.calls[0][0])).not.toContain("acme-prod");
   });
 });
 

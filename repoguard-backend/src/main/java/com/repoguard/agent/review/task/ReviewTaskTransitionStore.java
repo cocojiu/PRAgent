@@ -96,6 +96,40 @@ public class ReviewTaskTransitionStore {
         task.setHumanReviewedAt(reviewedAt);
     }
 
+    public boolean assignHumanReview(
+        ReviewTask task,
+        String assignee,
+        LocalDateTime assignedAt,
+        LocalDateTime slaDeadline
+    ) {
+        int updated = reviewTaskMapper.update(new UpdateWrapper<ReviewTask>()
+            .eq("id", task.getId())
+            .eq("status", ReviewTaskStatus.PENDING_HUMAN_REVIEW.code())
+            .set("review_assignee", assignee)
+            .set("review_assigned_at", assignedAt)
+            .set("review_sla_deadline", slaDeadline)
+            .set("review_escalation_level", 0)
+            .set("review_last_escalated_at", null));
+        if (updated == 0) {
+            return false;
+        }
+        task.setReviewAssignee(assignee);
+        task.setReviewAssignedAt(assignedAt);
+        task.setReviewSlaDeadline(slaDeadline);
+        task.setReviewEscalationLevel(0);
+        task.setReviewLastEscalatedAt(null);
+        return true;
+    }
+
+    public boolean escalateHumanReview(ReviewTask task, int observedLevel, LocalDateTime escalatedAt) {
+        return reviewTaskMapper.update(new UpdateWrapper<ReviewTask>()
+            .eq("id", task.getId())
+            .eq("status", ReviewTaskStatus.PENDING_HUMAN_REVIEW.code())
+            .eq("review_escalation_level", observedLevel)
+            .set("review_escalation_level", observedLevel + 1)
+            .set("review_last_escalated_at", escalatedAt)) > 0;
+    }
+
     public void requeueForPublish(ReviewTask task) {
         Objects.requireNonNull(task, "task");
         UpdateWrapper<ReviewTask> update = resetForQueuedExecution(
@@ -181,6 +215,11 @@ public class ReviewTaskTransitionStore {
             .set("human_review_note", null)
             .set("human_review_by", null)
             .set("human_reviewed_at", null)
+            .set("review_assignee", null)
+            .set("review_assigned_at", null)
+            .set("review_sla_deadline", null)
+            .set("review_escalation_level", 0)
+            .set("review_last_escalated_at", null)
             .set("started_at", null)
             .set("finished_at", null)
             .set("duration_seconds", 0);
@@ -213,6 +252,11 @@ public class ReviewTaskTransitionStore {
         task.setHumanReviewNote(null);
         task.setHumanReviewBy(null);
         task.setHumanReviewedAt(null);
+        task.setReviewAssignee(null);
+        task.setReviewAssignedAt(null);
+        task.setReviewSlaDeadline(null);
+        task.setReviewEscalationLevel(0);
+        task.setReviewLastEscalatedAt(null);
         task.setStartedAt(null);
         task.setFinishedAt(null);
         task.setDurationSeconds(0);

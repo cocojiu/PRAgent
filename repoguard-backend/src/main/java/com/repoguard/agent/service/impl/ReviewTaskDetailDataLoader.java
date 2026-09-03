@@ -106,9 +106,21 @@ public class ReviewTaskDetailDataLoader {
         String category,
         String feedbackStatus
     ) {
+        return loadFindingsPage(taskId, page, pageSize, severity, category, feedbackStatus, null);
+    }
+
+    public PageResponse<ReviewFindingDto> loadFindingsPage(
+        Long taskId,
+        int page,
+        int pageSize,
+        String severity,
+        String category,
+        String feedbackStatus,
+        String source
+    ) {
         Page<ReviewFinding> result = reviewFindingMapper.selectPage(
             Page.of(page, pageSize),
-            findingPageQuery(taskId, severity, category, feedbackStatus)
+            findingPageQuery(taskId, severity, category, feedbackStatus, source)
         );
         return new PageResponse<>(findingAssembler.toFindingDtos(pageRecords(result)), pageTotal(result));
     }
@@ -153,7 +165,8 @@ public class ReviewTaskDetailDataLoader {
         Long taskId,
         String severity,
         String category,
-        String feedbackStatus
+        String feedbackStatus,
+        String source
     ) {
         LambdaQueryWrapper<ReviewFinding> wrapper = new LambdaQueryWrapper<ReviewFinding>()
             .eq(ReviewFinding::getTaskId, taskId)
@@ -166,6 +179,9 @@ public class ReviewTaskDetailDataLoader {
         }
         if (StringUtils.hasText(category)) {
             wrapper.eq(ReviewFinding::getReviewDimension, normalizeUpper(category));
+        }
+        if (StringUtils.hasText(source)) {
+            wrapper.eq(ReviewFinding::getSource, normalizeUpper(source));
         }
         if (StringUtils.hasText(feedbackStatus)) {
             String normalizedStatus = FindingFeedbackStatus.queryCode(feedbackStatus);

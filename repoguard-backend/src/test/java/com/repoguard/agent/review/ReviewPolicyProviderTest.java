@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
 import com.repoguard.agent.security.SecretCryptoService;
+import com.repoguard.agent.tenancy.TenantContext;
 import java.math.BigDecimal;
 import org.junit.jupiter.api.Test;
 
@@ -35,7 +36,7 @@ class ReviewPolicyProviderTest {
         config.setChunkMaxLines(450);
         config.setInputTokenPricePerMillion(BigDecimal.valueOf(0.5));
         config.setOutputTokenPricePerMillion(BigDecimal.valueOf(1.5));
-        when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);
+        when(reviewPolicyConfigMapper.selectByTenantId(1L)).thenReturn(config);
 
         ReviewPolicySettings settings = provider.getSettings();
 
@@ -52,7 +53,7 @@ class ReviewPolicyProviderTest {
 
     @Test
     void getSettingsReturnsEmptySettingsWhenPolicyIsMissing() {
-        when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(null);
+        when(reviewPolicyConfigMapper.selectByTenantId(1L)).thenReturn(null);
 
         ReviewPolicySettings settings = provider.getSettings();
 
@@ -62,11 +63,26 @@ class ReviewPolicyProviderTest {
     }
 
     @Test
+    void getSettingsLoadsPolicyForActiveTenant() {
+        ReviewPolicyConfig config = new ReviewPolicyConfig();
+        config.setModelName("tenant-23-model");
+        when(reviewPolicyConfigMapper.selectByTenantId(23L)).thenReturn(config);
+
+        ReviewPolicySettings settings;
+        try (TenantContext.Scope _ = TenantContext.withTenant(23L)) {
+            settings = provider.getSettings();
+        }
+
+        assertThat(settings.exists()).isTrue();
+        assertThat(settings.modelName()).isEqualTo("tenant-23-model");
+    }
+
+    @Test
     void getSettingsCarriesTheActiveVersionedStrategyRelease() {
         ReviewPolicyConfig config = new ReviewPolicyConfig();
         config.setLlmEnabled(true);
         config.setApiKeyValue(secretCryptoService.encrypt("sk-test"));
-        when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);
+        when(reviewPolicyConfigMapper.selectByTenantId(1L)).thenReturn(config);
         ReviewStrategyReleaseProvider releaseProvider =
             org.mockito.Mockito.mock(ReviewStrategyReleaseProvider.class);
         ReviewStrategyRelease release = new ReviewStrategyRelease(

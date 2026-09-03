@@ -6,11 +6,17 @@ import com.repoguard.agent.dto.ReviewFindingDto;
 import com.repoguard.agent.dto.ReviewFindingTraceDto;
 import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.ReviewFinding;
+import com.repoguard.agent.mapper.ReviewFindingMapper;
+import com.repoguard.agent.mapper.ReviewFindingMapper.SarifImportBatchRow;
 import com.repoguard.agent.review.FindingFeedbackStatus;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
+import java.util.Objects;
+import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -21,14 +27,29 @@ public class ReviewTaskDetailFindingAssembler {
     private static final String CATEGORY_FINDING = "FINDING";
     private static final String CATEGORY_MISSING_TEST = "MISSING_TEST";
 
+    private final ReviewFindingMapper reviewFindingMapper;
+
+    public ReviewTaskDetailFindingAssembler() {
+        this.reviewFindingMapper = null;
+    }
+
+    @Autowired
+    public ReviewTaskDetailFindingAssembler(ReviewFindingMapper reviewFindingMapper) {
+        this.reviewFindingMapper = Objects.requireNonNull(reviewFindingMapper, "reviewFindingMapper must not be null");
+    }
+
     public List<ChangedFileDto> toChangedFileDtos(List<ChangedFile> changedFiles) {
         return changedFiles.stream().map(this::toChangedFileDto).toList();
     }
 
     public List<ReviewFindingDto> toFindingDtos(List<ReviewFinding> findings) {
+        Map<Long, String> sarifBatchStatuses = sarifBatchStatuses(findings);
         return findings.stream()
             .filter(finding -> CATEGORY_FINDING.equals(finding.getCategory()))
-            .map(this::toFindingDto)
+            .map(finding -> toFindingDto(
+                finding,
+                finding.getSourceBatchId() == null ? null : sarifBatchStatuses.get(finding.getSourceBatchId())
+            ))
             .toList();
     }
 
@@ -43,7 +64,7 @@ public class ReviewTaskDetailFindingAssembler {
         return new ChangedFileDto(file.getFilePath(), file.getChangeType(), file.getAdditions(), file.getDeletions());
     }
 
-    private ReviewFindingDto toFindingDto(ReviewFinding finding) {
+    private ReviewFindingDto toFindingDto(ReviewFinding finding, String sourceBatchStatus) {
         boolean falsePositive = FindingFeedbackStatus.fromFinding(finding)
             == FindingFeedbackStatus.FALSE_POSITIVE;
         return new ReviewFindingDto(
@@ -72,8 +93,29 @@ public class ReviewTaskDetailFindingAssembler {
             relatedFiles(finding.getRelatedFiles()),
             Boolean.TRUE.equals(finding.getBlockingCandidate()),
             defaultString(finding.getVerificationStatus()),
-            trace(finding)
+            trace(finding),
+            finding.getSourceBatchId(),
+            sourceBatchStatus
         );
+    }
+
+    private Map<Long, String> sarifBatchStatuses(List<ReviewFinding> findings) {
+        if (reviewFindingMapper == null || findings == null) {
+            return Map.of();
+        }
+        return findings.stream()
+            .map(ReviewFinding::getSourceBatchId)
+            .filter(Objects::nonNull)
+            .distinct()
+            .map(id -> new BatchStatus(id, reviewFindingMapper.selectSarifImportBatchById(id)))
+            .filter(entry -> entry.batch() != null)
+            .collect(Collectors.toUnmodifiableMap(
+                BatchStatus::id,
+                entry -> defaultString(entry.batch().getStatus())
+            ));
+    }
+
+    private record BatchStatus(Long id, SarifImportBatchRow batch) {
     }
 
     private ReviewFindingTraceDto trace(ReviewFinding finding) {

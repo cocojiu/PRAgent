@@ -164,7 +164,7 @@ public class OutboundEndpointPolicy {
 
     private List<String> allowedSchemes(OutboundEndpointType type) {
         return switch (type) {
-            case GITHUB, LLM, NOTIFICATION -> List.of("https");
+            case GITHUB, GITLAB, GITEE, BITBUCKET, LLM, NOTIFICATION -> List.of("https");
             case MYSQL -> List.of("mysql");
             case RABBITMQ -> List.of("amqp", "amqps");
         };

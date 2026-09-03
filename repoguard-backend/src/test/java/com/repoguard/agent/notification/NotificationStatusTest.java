@@ -40,6 +40,7 @@ class NotificationStatusTest {
         assertThat(NotificationEventType.from("review_completed")).isEqualTo(NotificationEventType.REVIEW_COMPLETED);
         assertThat(NotificationEventType.from(" human_review_required ")).isEqualTo(NotificationEventType.HUMAN_REVIEW_REQUIRED);
         assertThat(NotificationEventType.from("github_comment_published")).isEqualTo(NotificationEventType.GITHUB_COMMENT_PUBLISHED);
+        assertThat(NotificationEventType.from("model_release_alert")).isEqualTo(NotificationEventType.MODEL_RELEASE_ALERT);
         assertThat(NotificationEventType.from(null)).isEqualTo(NotificationEventType.UNKNOWN);
         assertThat(NotificationEventType.from("custom_event")).isEqualTo(NotificationEventType.UNKNOWN);
     }

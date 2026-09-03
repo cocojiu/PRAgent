@@ -134,7 +134,8 @@ public class ReviewController {
         @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize,
         @RequestParam(required = false) @Size(max = 32) String severity,
         @RequestParam(required = false) @Size(max = 64) String category,
-        @RequestParam(required = false) @Size(max = 32) String feedbackStatus
+        @RequestParam(required = false) @Size(max = 32) String feedbackStatus,
+        @RequestParam(required = false) @Size(max = 64) String source
     ) {
         return ApiResponse.ok(reviewService.listReviewFindings(
             id,
@@ -142,7 +143,8 @@ public class ReviewController {
             pageSize,
             severity,
             category,
-            feedbackStatus
+            feedbackStatus,
+            source
         ));
     }
 

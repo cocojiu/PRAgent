@@ -367,3 +367,272 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 提交/远程验收：修复提交 `29345dd5`（补齐 Bean 与配置审计）已推送 `origin/PRAgent-test`；Pull Request Quality #33473466454、push Repository Governance #33473463434、Auto Create Pull Request #33473463482 均成功，PRAgent-test 未触发生产镜像发布。
 边界：本批仅补齐个人项目复杂度与配置生命周期证据，不改变运行时业务行为；未修改既有 `openapi-generated-client.frontend-signature.snapshot` 工作区改动和 `.tmp/`。
 下一步：继续按顺序处理后续工程优化项；若预算再次接近上限，必须优先删除、合并或完成退役证据后再扩展。
+
+2026-09-01 | 最终验收-优化序列收口
+状态：已完成仓库范围内优化序列的最终审计；优化方案中已定义的 S0–S2 顺序项、后续 P0/P1/P2 批次和个人项目范围决策均已形成代码、契约/测试、中文提交、test 分支推送及 Actions 证据。当前没有未定义而可继续执行的优化项，不凭空扩展方案。
+审计结果：`optimization-progress.txt` 的优化-01 至优化-49 均已记录完成或按项目范围/外部前置条件明确收口；P0/P1 的真实授权数据、生产 Kubernetes/网络/备份与 OTel 观测仍按优化-36 的个人项目范围保留为外部延期项，不伪造目标环境证据。优化-24 至优化-30 的早期“待提交推送”文字已由优化-31 的提交映射和后续远程验收闭环覆盖。
+本地验证：在当前工作区执行 `mvn -Dtest=ArchitectureRatchetTest,ApplicationArchitectureTest,MigrationContractManifestTest,SchemaVersionExpectationContractTest,WorkflowCatalogContractTest test`，61 项通过；`git diff --check` 通过。该回归包含工作区既有 `ArchitectureRatchetTest.java` 差异，但该差异、既有 OpenAPI snapshot 状态和 `.tmp/` 均未纳入本次记录提交。
+分支与远程：收口记录提交后推送 `origin/PRAgent-test`，再核对该提交对应的 Pull Request Quality、Repository Governance、Auto Create Pull Request；任一失败只修复对应问题并补记结果。
+边界：本条仅记录完成度审计和准出边界，不改变运行时业务，不提交非 README Markdown 或测试脚本；后续若新增功能或优化，先更新优化方案再按单项提交、推送和 Actions 验收。
+
+2026-09-01 | 优化-50 | P0 前置：租户单例配置按 tenant 寻址
+状态：已完成代码、迁移、本地门禁、中文实现提交、test 分支推送和远程 Actions 验收。
+变更：`review_policy_config` 与 `system_settings_config` 的运行时读取统一改为当前 `TenantContext` 的 tenantId，不再依赖全局主键 1；默认配置插入使用数据库自增主键并显式绑定当前租户。新增 V78 contract migration，在加 tenant 唯一键前阻断缺失或重复配置，避免静默选择任意记录；Schema 期望版本、迁移清单、Kubernetes 配置和升级工作流同步至 V78。
+本地验证：定向配置/迁移/连接测试 67 项通过；新增非默认 tenant 23 的查询与初始化断言 23 项通过；完整后端 `mvn verify` 2600 项测试通过、0 失败、12 项按环境条件跳过，JaCoCo 覆盖率门禁通过；readiness quick（治理模式）与 `git diff --check` 通过。
+集成证据：真实 MySQL 升级测试覆盖 V76→V77→V78、唯一索引和重复插入拒绝；生产运行时集成测试覆盖非 1 自增主键下的跨租户配置读取。这两组测试由 Pull Request Quality 的独立 MySQL/RabbitMQ 作业实跑。
+提交/远程验收：实现提交 `e6b7ce39`（修复：按租户寻址单例配置）已推送 `origin/PRAgent-test`，自动 PR #160；Pull Request Quality #33508881510 的 8 个作业全部成功，其中 Flyway supported upgrade path 与 Spring MySQL RabbitMQ integration 均在真实服务环境通过；push Repository Governance #33508878357 和 Auto Create Pull Request #33508878343 成功。
+边界：仅提升复杂度预算 38 行至本项实际生产净增量；`ArchitectureRatchetTest.java` 中用户原有其他未提交改动、OpenAPI frontend-signature snapshot 和 `.tmp/` 不纳入提交。不提交非 README Markdown 或测试脚本。
+下一步：远程 Actions 全部成功并补齐证据后，进入优化-51 GitHub Checks 合并门禁。
+
+2026-09-01 | 优化-51 | P0 GitHub Checks 合并门禁
+状态：已完成 Checks 生命周期、阻断结论、人工复核动作、重新运行入口、租户隔离、恢复调度、本地门禁、中文提交、test 分支推送和远程 Actions 验收。
+变更：新增 V79 `github_check_run` 租户安全表和复合唯一约束；审查任务排队、执行中、完成/失败/人工复核状态在同事务中写入期望 Check Run 状态；新增 GitHub Checks REST 客户端、幂等 external_id、失败重试与租约恢复、阻断 Finding failure annotation、无定位问题摘要、`action_required`/`cancelled`/`failure`/`success` 结论；`check_run.rerequested` webhook 可安全触发已结束任务重跑，并校验仓库、租户、Check 名称、head SHA 和活动任务；数据保留先删除 Check Run 记录再删除任务，避免外键悬挂。README 补充 GitHub App Checks 权限、事件订阅、分支保护 required status 和内置 Re-run 配置。
+本地验证：新增 GitHub Checks 客户端、网关、生命周期、结论、Webhook、恢复和配置测试；完整后端 `mvn verify` 共 2642 项测试通过、0 失败、12 项按环境条件跳过，JaCoCo 覆盖率门禁通过；生产就绪 quick 检查、架构/迁移/Schema/调度契约和 `git diff --check` 通过。
+提交/远程验收：实现提交 `15080abe`（新增：实现 GitHub Checks 合并门禁）已推送 `origin/PRAgent-test`；首次 Pull Request Quality `33515872257` 发现升级测试把三列复合索引按单列断言，已由修复提交 `ff3134b8`（修复：校正 GitHub Checks 复合索引升级断言）修复并重新推送。修复后的 Pull Request Quality `33516343298`（8 个作业全部成功，含真实 MySQL/RabbitMQ 与 V76→V79 Flyway 升级）、push Repository Governance `33516337598` 和 Auto Create Pull Request `33516337638` 全部成功。
+边界：GitHub App 仍需维护者在目标组织授予 Checks write、Pull requests write 等权限，并在分支保护中将 `RepoGuard PR Review` 设为 required status；未写入真实 token、源码或 PR 数据，不提交非 README Markdown 或测试脚本；工作区既有 `ArchitectureRatchetTest.java`、OpenAPI frontend-signature snapshot 和 `.tmp/` 保持未提交。
+下一步：进入优化-52 企业租户与仓库管理台，先复用现有租户/成员/仓库/OIDC/配额接口补齐前端路由，再扩展细粒度 RBAC，并保持单项提交、推送、Actions 验收。
+
+2026-09-01 | 优化-52 | P0 企业租户与仓库管理台、细粒度 RBAC
+状态：已完成企业控制台、租户上下文、细粒度角色、本地门禁、中文提交、test 分支推送和远程 Actions 验收。
+变更：补齐企业租户列表/详情、创建、状态切换、成员角色绑定、GitHub App 仓库绑定、OIDC 身份绑定和配额维护页面；新增顶部租户切换器，将当前租户以 `X-RepoGuard-Tenant` 请求头传递且不暴露到 URL；企业控制面路径绕过业务租户解析并保留平台管理员校验。后端新增 `PLATFORM_ADMIN`、`TENANT_ADMIN`、`RULE_ADMIN`、`REVIEWER`、`READ_ONLY` 角色及权限蕴含策略，保留 `ADMIN`/`VIEWER` 兼容；用户管理、规则治理、校准和企业接口分别收敛到对应角色，活动平台管理员数量约束同步扩展。OpenAPI、生成客户端、前端 API contracts、路由和个人版访问边界同步更新。
+本地验证：后端定向安全/租户/控制器/OpenAPI 测试 42 项通过；完整后端 `mvn verify` 共 2647 项测试通过、0 失败、12 项按环境条件跳过，JaCoCo 覆盖率门禁通过；前端 `npm run quality` 通过（40 个测试文件、162 项测试，语句 65.25%、分支 53.40%、函数 56.18%、行 65.60%），生产 `npm run build` 通过 bundle budget（首屏请求 10/16，概览增量请求 16/16）；readiness quick 与 `git diff --check` 通过。首次远程质量运行因租户切换器同步引入 Element Plus 依赖导致 bundle budget 超限（#33520788074），已通过异步加载和原生 select 控件修复，未放宽预算。
+提交/远程验收：实现提交 `d4287762`（优化：建设企业租户管理台与细粒度 RBAC）和修复提交 `7e4d4b81`（修复：降低租户切换控件的首屏构建开销）已推送 `origin/PRAgent-test`；最终 Pull Request Quality #33521775825 的 8 个作业全部成功，含后端单测/契约、真实 MySQL/RabbitMQ、Flyway 升级、前端类型/lint/测试/构建、密钥差异、依赖和生产边缘配置；push Repository Governance #33521555128、Auto Create Pull Request #33521555110 均成功。
+边界：架构复杂度预算按新增生产类实际值更新为 71,821 行/955 类；GitHub App、真实 OIDC、组织安装和生产配额仍需部署环境凭据与分支保护配置，不在仓库伪造。保留用户既有 `ArchitectureRatchetTest.java` 未提交改动和 `.tmp/`，未提交非 README Markdown 或测试脚本。
+下一步：进入优化-53 仓库级语义上下文，先建立默认分支符号索引和确定性调用方/测试/配置检索，再接入审查上下文并保持单项验收。
+
+2026-09-01 | 优化-53 | P1 仓库级语义上下文索引与检索
+状态：已完成默认分支语义索引、确定性关联检索、上下文接入、失败降级、预算/缓存保护、本地门禁、中文提交、test 分支推送和远程 Actions 验收。
+变更：新增源代码管理无关的 `RepositorySemanticRepository` 端口及 GitHub 默认分支适配器；按变更文件符号、目录、扩展名和配置路径对默认分支 Git tree 做确定性评分，检索调用方、实现类、关联测试、配置和迁移文件，并通过现有精确 head 内容读取器取得内容；新增 Caffeine 有界缓存、文件数/单文件/总字节/超时预算和树截断标记，任何凭据缺失、接口失败、内容过大或读取异常均降级为上下文限制，不阻断主审查；语义切片、摘要和 `[REPOSITORY_SEMANTIC_CONTEXT]` 已接入 LLM prompt，输出继续经过统一脱敏；README 与环境变量契约同步补充，明确当前不启用向量检索。
+本地验证：语义索引定向测试 19 项通过；完整后端 `mvn verify` 共 2662 项测试通过、0 失败、12 项按环境条件跳过，JaCoCo 覆盖率门禁通过，`ApplicationArchitectureTest` 44 项和 `ArchitectureRatchetTest` 9 项通过；`git diff --check` 通过。首次远程质量运行因新增分支覆盖率不足失败（#33525786854），补齐异常、预算、树过滤和规则上下文测试后复验通过。
+提交/远程验收：实现提交 `c8c9941f`（新增：建设仓库级语义上下文索引）已推送，push Repository Governance #33525560125、Auto Create Pull Request #33525560081 成功；修复提交 `de666efc`（修复：补齐语义上下文覆盖率测试）已推送，push Repository Governance #33527235941、Auto Create Pull Request #33527235974 成功；最终 Pull Request Quality #33527240746 的 8 个作业全部成功，含真实 MySQL/RabbitMQ、Flyway 升级、前端构建、边缘配置、跟踪文件治理、密钥差异和依赖审查。
+边界：索引只读取默认分支且以确定性规则检索，不伪造未取得的调用关系；GitLab/Gitee/Bitbucket 适配、向量检索和增量符号索引留待后续 SCM/模型批次；未新增数据库迁移，不提交非 README Markdown 或测试脚本；用户既有 `ArchitectureRatchetTest.java`、OpenAPI frontend-signature snapshot 和 `.tmp/` 保持未提交。
+下一步：进入优化-54 一键修复建议，先约束为可精确定位的单行/小范围 GitHub suggestion，并保留人工确认边界。
+
+2026-09-02 | 优化-54 | P1 GitHub suggestion 一键修复建议
+状态：已完成精确替换建议生成、评论发布链路接入、安全边界、本地门禁、中文提交、test 分支推送和远程 Actions 验收。
+变更：GitHub 评论预览现在仅对定位到变更行的 finding 生成原生 `suggestion` 代码块；`fixExample` 必须是完整代码块或 `suggestion:` 前缀，限制为最多 5 行、4,000 字符且拒绝嵌套围栏和控制字符，普通自然语言、删除文件、PR 总评、已发布和非 actionable finding 均不生成可应用补丁。作者在 GitHub 页面确认后可直接应用建议，系统不自动提交作者分支或创建修复 PR。LLM prompt 与结构化输出契约增加精确替换字段及空字符串约束，README 补充使用边界。
+本地验证：GitHub 评论、LLM prompt/schema 相关定向测试 20 项通过；完整后端 `mvn verify` 共 2664 项测试通过、0 失败、12 项按环境条件跳过，JaCoCo 覆盖率、`ApplicationArchitectureTest` 44 项和 `ArchitectureRatchetTest` 9 项均通过；复杂度预算按实际生产净增量更新至 72,604 行；`git diff --check` 通过。
+提交/远程验收：实现提交 `01a5dfb7`（新增：实现 GitHub suggestion 一键修复建议）已推送，push Repository Governance #33528912035、Auto Create Pull Request #33528912064 成功；Pull Request Quality #33528918715 的 8 个作业全部成功，含前后端质量、真实 MySQL/RabbitMQ、Flyway 升级、边缘配置、跟踪文件治理、密钥差异和依赖审查。
+边界：当前只支持作者在 GitHub 原生评论中人工确认后应用单行/小范围替换；创建修复分支/PR、跨文件补丁、自动验证和批量应用留待后续模型评测与协作批次；未提交非 README Markdown 或测试脚本，用户既有 `ArchitectureRatchetTest.java`、OpenAPI frontend-signature snapshot 和 `.tmp/` 保持未提交。
+下一步：进入优化-55 LLM 评测与模型发布中心，先复用已有质量指标和校准队列建设版本化数据集、影子运行与发布门禁。
+
+2026-09-02 | 优化-55 | P1 LLM 评测与模型发布中心
+状态：已完成版本化评测证据、模型影子/灰度/正式发布与回滚、质量门禁、租户预算、本地门禁、中文提交、test 分支推送和远程 Actions 验收。
+变更：新增 V80 `llm_model_release` 租户隔离表与月度 token/费用预算；复用已有质量指标建立仅保存聚合指标的数据集证据（dataset id/version/fingerprint），发布前校验 precision、recall、锚定率、重复率、解析失败率和 P95 延迟阈值；支持 SHADOW、CANARY、ACTIVE、ROLLED_BACK 生命周期、确定性任务哈希路由、灰度超阈值自动回滚和预算耗尽时规则兜底。新增评测发布中心后端 API、专用仓储/质量比较端口、前端类型/API/OpenAPI 契约和租户配额界面；拆分质量比较端口以保持架构依赖单向。
+本地验证：完整后端 `mvn verify -DskipTests=false` 共 2680 项测试通过、0 失败、12 项按环境条件跳过，JaCoCo 覆盖率门禁通过；前端生成检查、`vue-tsc -b`、ESLint、Vitest 全量（40 个测试文件、162 项测试）和 Vite 构建通过；`SpringBeanConstructorSelectionTest` 1 项、`ArchitectureRatchetTest` 9 项通过；`git diff --check` 通过。Flyway/生产上下文集成测试在本地无服务变量时按条件跳过，远程真实 MySQL/RabbitMQ 已实跑。
+提交/远程验收：实现提交 `3196ab64`（新增：建设 LLM 评测与模型发布中心）及修复提交 `315fc553`（修复：校验模型发布复合唯一索引）、`4145f5ed`（修复：声明评测中心控制器注入构造器）、`726dd918`（修复：登记模型发布租户表契约）、`a72b326a`（修复：同步生产代码架构预算基线）均已推送 `origin/PRAgent-test`；最终 Pull Request Quality `33540576409` 的 8 个作业全部成功，含真实 MySQL/RabbitMQ 与 V76→V80 Flyway 升级；对应 push Repository Governance、Auto Create Pull Request 亦成功，PRAgent-test 未触发生产镜像发布。
+边界：数据库只保存可复现所需的聚合评测证据，不保存原始 prompt、源码、供应商响应或凭据；0 预算表示不限制但不绕过租户隔离；不自动改写供应商凭据、不自动提交作者分支或创建修复 PR。修复过程中未提交非 README Markdown、测试脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
+下一步：进入优化-56 动态声明式规则与 SARIF 扫描器接入，先保持规则沙箱、dry-run 和 Finding 统一模型。
+
+2026-09-02 | 优化-56 | P1 动态声明式规则与 SARIF 扫描器接入
+状态：已完成安全声明式规则、历史 PR dry-run、SARIF 2.1.0 导入/导出、规则审查链路接入、前后端门禁、中文提交、test 分支推送和远程 Actions 验收。
+变更：规则配置新增 BUILTIN/REGEX/AST 类型、受限表达式和例外模式；新增正则/文件 glob/受限 AST token-call 匹配器与策略校验，拒绝控制字符、回溯引用、嵌套量词、lookaround 和超长表达式，动态规则只能走沙箱匹配器。新增历史补丁 dry-run API，按文件/新增行返回可审计匹配结果；新增 SARIF 导入/导出 API，校验版本、结果规模、路径和定位，将第三方扫描结果统一写入租户 Finding，并保留规则帮助、严重级别和审查元数据。数据库 V81、OpenAPI/生成客户端快照、前端规则编辑器和回归契约同步更新。
+本地验证：后端 `mvn verify -DskipTests=false` 共 2699 项测试通过、0 失败、12 项按环境条件跳过，JaCoCo 行覆盖率约 0.8905；前端 API 生成检查、`vue-tsc -b`、ESLint、Vitest 全量（40 个测试文件、162 项测试）和 Vite 生产构建通过；新增声明式规则、dry-run、SARIF、OpenAPI、迁移和架构契约测试；`git diff --check` 通过。
+提交/远程验收：实现提交 `c32da764`（新增：支持动态声明式规则与SARIF扫描器接入），修复提交 `a313b628`（修复：消除声明式规则测试的密钥扫描误报）、`6b4fec40`（修复：处理声明式规则测试的历史扫描指纹）、`01a592dd`（修复：同步声明式规则扫描指纹契约）、`2be6d66f`（修复：补齐 SARIF 异常路径覆盖率）和 `24ec5474`（修复：扩大 SARIF 兼容路径测试覆盖）均已推送 `origin/PRAgent-test`；最终 Pull Request Quality `33549768772` 的 8 个作业全部成功，包含后端/前端、真实 MySQL/RabbitMQ、V80→V81 Flyway、生产边缘、跟踪文件、密钥差异和依赖门禁；push Repository Governance `33549763487`、Auto Create Pull Request `33549763658` 亦成功。
+边界：声明式表达式不执行任意代码、不生成 SQL 或脚本；SARIF 只导入安全相对路径和有效新增 Finding，不保存原始扫描器凭据；dry-run 只返回匹配预览，不自动启用规则、提交作者分支或创建修复 PR。Gitleaks 历史测试夹具仅使用精确指纹豁免，当前源码保持可扫描；未提交非 README Markdown、测试脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
+下一步：进入优化-57 GitLab/Gitee/Bitbucket 支持，先抽象 `ScmProvider` 读取、差异、评论和状态检查契约，再优先落地 GitLab。
+
+2026-09-02 | 优化-57 | P2 GitLab/Gitee/Bitbucket 多代码托管平台支持
+状态：已完成统一 SCM 端口、三种代码托管平台适配器、受控出站访问、SCM API 契约、本地门禁、中文提交、test 分支推送和远程 Actions 验收。
+变更：新增 `ScmProvider` 统一读取开放变更请求、获取差异/HEAD、发布评论和状态检查；既有 GitHub 客户端通过适配器接入，新增 GitLab Merge Requests/Notes/Commit Status、Gitee OpenAPI v5 Pull Requests/Comments/Statuses、Bitbucket Cloud v2 Pull Requests/Diffstat/Comments/Build Status 适配。新增租户隔离的 SCM 集成配置读取与 token 解密、provider 注册表、通用应用服务和受角色保护的六个 server-only API；GitLab 项目路径编码、差异文件/补丁预算、状态归一化和外部 URL/响应大小策略均纳入契约测试与 OpenAPI 快照。
+本地验证：干净 `mvn clean verify -DskipTests=false` 共 2719 项测试通过、0 失败、12 项按环境条件跳过；JaCoCo 根计数行覆盖率 24314/27313（达到 0.89）、分支覆盖率 7935/11301（达到 0.70）；架构、授权、迁移、OpenAPI 和出站访问契约均通过，`git diff --check` 通过。
+提交/远程验收：实现提交 `ef9ee36b`（新增：接入多代码托管平台统一适配）已推送；其 Pull Request Quality `33589654012` 首次只因干净 CI 覆盖率差一行失败，push Repository Governance `33589650746` 与 Auto Create Pull Request `33589650737` 成功。修复提交 `9f236739`（修复：补足多平台适配覆盖率门禁）已推送；最终 Pull Request Quality `33590409274` 的 8 个作业全部成功，含后端/前端、真实 MySQL/RabbitMQ、Flyway、边缘配置、跟踪文件、密钥差异和依赖门禁；push Repository Governance `33590406747`、Auto Create Pull Request `33590406722` 亦成功。
+边界：SCM 适配器提供统一读取/写回 API，现有审查 worker 的默认执行路径仍保持 GitHub 兼容；GitLab/Gitee/Bitbucket 的生产凭据、Webhook 注册、仓库绑定和分支保护需在部署环境配置，不在仓库写入 token 或伪造外部数据。不提交非 README Markdown、测试脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
+下一步：进入优化-58 协作与通知工作流，补齐复核任务分派、SLA/升级、机器人命令、多渠道通知、日报周报和服务端已读状态，并继续按单项提交、推送和 Actions 验收。
+
+2026-09-02 | 优化-58 | P2 协作与通知工作流
+状态：已完成复核任务分派、SLA/升级、机器人命令、多渠道通知、日报周报、服务端已读状态、本地门禁、中文提交、test 分支推送和远程 Actions 验收。
+变更：新增 V82 协作工作流迁移，支持审查任务负责人、SLA 截止时间、升级级别和超时扫描；新增复核队列、分派、升级、机器人命令审计 API，覆盖 GitHub/GitLab/Gitee/Bitbucket；新增通知已读状态持久化、日报/周报查询和 Feishu、Slack、邮件适配器，保留出站域名白名单、租户隔离和审计记录；前端通知 API、生成客户端、OpenAPI 契约和通知渠道配置同步更新。
+本地验证：完整后端 `mvn clean verify -DskipTests=false` 共 2737 项测试通过、0 失败、12 项按环境条件跳过，JaCoCo 覆盖率门禁通过；前端 40 个测试文件、162 项测试通过，函数覆盖率 55.79%，类型检查、ESLint、生成客户端检查和 Vite 构建通过；架构、迁移、OpenAPI、调度和 `git diff --check` 通过。
+提交/远程验收：实现提交 `373a85d0`（新增：完善协作与通知工作流）已推送；修复提交 `f29fb51e`（修复：通过协作通知工作流质量门禁）解决 Java 25 弃用警告和前端覆盖率门禁，修复提交 `5e1103e8`（修复：登记协作工作流租户表）补齐 V82 租户表注册。最终 Pull Request Quality `33596281203` 的 8 个作业全部成功，push Repository Governance `33596277981`、Auto Create Pull Request `33596277997` 亦成功；前序失败运行 `33594843740`、`33595852857` 均已按日志修复并重新验收。
+边界：机器人命令、通知渠道和升级收件人仍需部署环境配置真实 webhook、token、SMTP/Slack/Feishu 凭据；服务端已读状态只保存租户/读者/通知键，不保存敏感消息；不提交非 README Markdown、测试脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
+下一步：优化方案定义的 P0/P1/P2 优先项已全部完成并进入维护；后续新增需求须先更新优化方案，再按单项提交、推送和 Actions 验收。
+
+2026-09-02 | 优化-59 | FIX-P0-001 SARIF 导入尝试绑定与批次幂等合并
+状态：已完成代码、本地质量门禁、中文提交、test 分支推送和远程 Actions 验收。
+变更：SARIF 导入现在必须绑定审查任务的 current execution attempt，并从尝试记录解析 commit SHA；新增租户隔离的 SARIF 导入批次身份、工具/版本、提交 SHA、内容指纹和导入统计，使用唯一约束实现同一 payload 重试幂等；同一任务/尝试/工具/提交的新指纹导入会替换旧 SARIF 批次的当前 Finding，但不会错误地把规则或 LLM Finding 标为历史；保留 SARIF 导出及规则帮助、路径、定位和严重级别兼容行为。新增 V83 扩展迁移、MyBatis 租户表登记和重复键竞态处理。
+本地验证：SARIF 定向测试 13 项通过；后端完整 `mvn clean verify -DskipTests=false` 共 2744 项测试通过、0 失败、12 项按环境条件跳过，架构测试 44 项、架构预算 9 项和 JaCoCo 0.89 线/0.70 分支门禁均通过；迁移契约、OpenAPI 相关检查和 `git diff --check` 通过。此前一次全量构建因覆盖率 0.8894 失败，补齐批次替换、唯一键竞态、缺少任务/尝试/提交和空内容路径测试后修复。
+提交/远程验收：实现提交 `f911d0fe`（修复：绑定 SARIF 导入审查尝试并实现批次幂等合并）已推送 `origin/PRAgent-test`；Pull Request Quality `33620586551` 的 8 个作业全部成功，含真实 MySQL/RabbitMQ、V82→V83 Flyway、前后端质量、覆盖率、迁移契约和安全门禁；Repository Governance `33620582428`、Auto Create Pull Request `33620582491` 亦成功。覆盖率修复后的最终远程验收通过。
+边界：数据库不保存原始 SARIF 凭据；同一指纹重试返回已落库批次；新指纹替换仅作用于同一任务、尝试、工具、版本和提交的 SARIF 来源；未提交非 README Markdown、测试脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
+下一步：远程 Actions 通过后进入 `FUNC-P0-001`，建设真实 PR 质量评估工作台与可信报告，并继续按单项提交、推送和验收。
+
+2026-09-02 | 优化-60 | FUNC-P0-001 真实 PR 质量评估工作台与可信报告
+状态：已完成代码、完整本地门禁、中文提交、test 分支推送和远程 Actions 验收。
+变更：新增 V84 `llm_evaluation_report` 租户隔离不可变聚合表及 `llm_model_release.evaluation_report_id` 绑定；评估请求只接收数据集清单、匿名样本标签、版本元数据和聚合计数，不落库原始源码、补丁、prompt、供应商响应或凭据。服务端按固定/滚动切分、仓库匿名键、样本指纹、授权/匿名化/人工复核、版本可复现性执行阻断校验，并生成 precision/recall/Wilson 下界、定位锚定、重复、解析失败、P50/P95、token/费用、评论有用性/修复率和规则/LLM/verified 贡献指标。新增评估报告查询、两报告差异、JSON/HTML 导出和规则配置工作台；模型发布必须引用服务端 `evaluationReportId`，服务端重新读取报告指标和门禁，客户端伪造质量字段不能绕过发布校验；同一确定性报告键重试返回原记录，已发布聚合报告不支持覆盖。
+本地验证：后端完整 `mvn verify -DskipTests=false` 共 2752 项测试通过、0 失败、12 项按环境条件跳过，JaCoCo 行/分支覆盖率门禁通过，架构测试 44 项、架构预算 9 项、Jackson 配置、授权、迁移、OpenAPI、Kubernetes 契约均通过；前端 `vue-tsc -b`、ESLint、Vitest 全量 40 个测试文件/163 项测试（函数覆盖率 56.57%）和 Vite 构建 bundle budget 通过；`git diff --check` 通过。
+提交/远程验收：实现提交 `465814ef`（新增：建设真实 PR 质量评估工作台与可信报告）及覆盖率补测修复提交 `c9f818e7` 已推送 `origin/PRAgent-test`；进度记录提交首次触发的 Pull Request Quality `33630422749` 因 Java 25 覆盖率边界失败，补充缺失指纹、空观察集/默认样本数和未知格式负例后本地完整验证通过；最终 Pull Request Quality `33631917263` 的 8 个作业全部成功，Repository Governance `33631913086`、Auto Create Pull Request `33631913112` 亦成功。
+边界：当前评估入口以受控管理员 API 接收已脱敏的聚合标签，原始真实 PR 数据仍需在授权评测进程中准备并按数据集指纹提交；未自动发表评论、Checks、通知、修复分支或 PR。未提交非 README Markdown、测试脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
+下一步：进入 `FUNC-P1-001` 跨次审查差异与修复追踪。
+
+2026-09-02 | 优化-61 | FUNC-P1-001 跨次审查差异与修复追踪
+状态：已完成代码、完整本地质量门禁、中文提交、test 分支推送和远程 Actions 验收。
+变更：新增版本化 finding 指纹，按供应商、仓库、规则/问题类型、归一化路径、符号/代码锚点和语义摘要生成稳定身份，刻意忽略行号漂移；新增相邻成功 attempt 对比服务与分页 API，输出 NEW、PERSISTING、RESOLVED、REGRESSED、UNMATCHED 五类状态、匹配置信度、原因、版本和前序 Finding 关系。策略/提示词/模型/检测器元数据变化时明确标记不可直接比较；跨文件语义误匹配、重复指纹、历史数据无指纹和低置信度均保持 UNMATCHED，不自动继承 FALSE_POSITIVE 或修复反馈。规则、LLM、SARIF Finding 写入时自动初始化指纹与待比对状态；新增 V85 增量迁移、复合租户外键和索引。审查详情页增加 attempt 时间线、可比较性提示、状态统计、默认展示 NEW/REGRESSED/PERSISTING、RESOLVED 折叠和分页。
+本地验证：后端完整 `mvn clean verify -DskipTests=false` 共 2762 项测试通过、0 失败、12 项按环境条件跳过，JaCoCo 覆盖率门禁通过；后端 API/OpenAPI/生成客户端契约 25 项、指纹/对比定向测试通过；前端 `npm run quality` 通过（41 个测试文件、166 项测试，语句 65.87%、分支 53.97%、函数 56.71%、行 66.15%），`npm run build` 通过 bundle budget；架构预算、迁移、授权、`git diff --check` 均通过。
+提交/远程验收：实现提交 `8f832a5e`（新增：建设跨次审查差异与修复追踪）和修复提交 `90ed42bc`（修复：校正跨次审查迁移外键删除语义）均已推送 `origin/PRAgent-test`；首次 Pull Request Quality `33638864823` 因 V85 使用 `ON DELETE SET NULL` 作用于非空 `tenant_id` 而失败（MySQL 1830），修复为 `ON DELETE RESTRICT` 后，Pull Request Quality `33639544935` 的 8 个作业全部成功，含真实 MySQL/RabbitMQ、Flyway V76→V85、前后端质量、迁移契约和安全门禁；Repository Governance `33639539918`、Auto Create Pull Request `33639539904` 亦成功。架构复杂度评审预算更新为 77,850 行/1,030 类，单类上限仍为 450 行。
+边界：只比较有成功基线且候选为 COMPLETED/PARTIAL 的 attempt；历史 Finding 采用惰性指纹补齐，未改变旧反馈；暂未把对比结果自动写回 GitHub 评论/Checks，保留到后续闭环项；未提交非 README Markdown、测试脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
+下一步：进入 `FUNC-P1-002` GitHub 修复验证与发布闭环，继续按单项提交、推送和 Actions 验收。
+
+2026-09-02 | 优化-62 | FUNC-P1-002 最小模型发布中心
+状态：已完成代码、完整本地质量门禁、中文提交、test 分支推送和远程 Actions 验收。
+变更：模型发布必须绑定租户内服务端已完成且不可变的评估报告，客户端传入的质量/版本字段只作请求形状校验，最终发布事实以报告为准；新增 V86 `llm_model_release_audit` 追加式审计表，使用租户行锁串行化 Shadow/Canary/Active/Rollback 状态转换并保存前后快照、操作者、原因和事件哈希；`review_task.llm_release_key` 在首次路由时持久化，重试继续使用原 provider/model，回滚只影响新任务；新增运行时预算保护、Canary 质量/预算自动回滚和按 taskId 稳定分桶；规则配置页接入默认折叠的模型发布中心，展示当前 Active/Canary、7/30/90 日质量趋势、预算与服务端报告证据。
+本地验证：后端 `mvn verify -DskipTests=false` 共 2767 项测试通过、0 失败、12 项按环境条件跳过，Maven Enforcer、架构棘轮与 JaCoCo 门禁通过；模型发布服务/仓储、迁移和架构定向测试均通过；前端 OpenAPI 生成物一致性、`vue-tsc -b`、ESLint、Vitest 全量（42 个文件、169 项测试）和 Vite 生产构建通过，E2E 未在本地运行；`git diff --check` 通过。
+提交/远程验收：实现提交 `af63ed54`（feat(review): 建设最小模型发布中心闭环）已推送 `origin/PRAgent-test`；Pull Request Quality `33651302822` 的 8 个作业全部成功，含后端单测/契约、真实 MySQL/RabbitMQ、V76→V86 Flyway、前端质量与浏览器 E2E、生产边缘、跟踪文件治理、密钥差异和依赖审查；Repository Governance `33651298172`、Auto Create Pull Request `33651298170` 亦成功。
+边界：发布中心和 V86 迁移已有代码、契约与自动化证据，但没有真实 PR 数据集达标报告或新能力正式生产部署记录；发布审计查询/导出、按 release_key 的运行指标告警、评估报告生命周期、状态漂移修复、Canary cohort 和租户级 provider kill switch 已根据本轮代码审查补入优化方案第 14.19 节，尚未实现；本轮未提交非 README Markdown、测试相关脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
+下一步：进入 `FUNC-P1-005` GitHub App/Checks 设置向导，先补齐安装/权限/Webhook/desired-applied 诊断和安全启停，再继续按单项提交、推送和 Actions 验收。
+
+2026-09-03 | 优化-63 | FUNC-P1-005 GitHub App/Checks 设置向导
+状态：已完成设置诊断、权限与 Webhook 安全校验、稳定预览、按仓库启停策略、本地质量门禁、中文提交、test 分支推送和远程 Actions 验收。
+变更：新增 V87 `github_check_run_policy` 租户隔离配置表和 Checks 设置 API/前端向导；设置页只读展示 App 配置、安装仓库、PR head、权限、全局开关、Webhook 安全与最近投递摘要，启用前执行 fail-closed 前置检查并要求显式确认。预览会二次读取 PR head SHA，发生变化时拒绝创建 Check Run；通过后只创建 neutral 预览 Check Run，并返回 desired/applied 版本、外部 ID 和审计元数据。生命周期执行按仓库策略 fail-closed，策略写入使用租户范围 CAS；Webhook 投递只保留脱敏摘要，不保存 payload、secret 或凭据；不自动修改分支保护规则。
+本地验证：完整后端 `mvn verify -DskipTests=false` 共 2784 项测试通过、0 失败、12 项按环境条件跳过，JaCoCo、架构、迁移、授权和 OpenAPI 契约门禁通过；前端生成客户端检查、`vue-tsc -b`、ESLint、Vitest 全量（43 个测试文件、171 项测试）和 Vite 生产构建通过；`git diff --check` 通过。首次远程质量运行因干净 CI 分支覆盖率约 0.69 失败，补齐 Checks 策略服务分支测试后复验通过。
+提交/远程验收：实现提交 `b693e4e0`（新增：建设 GitHub App Checks 设置向导）及修复提交 `95a78f97`（修复：补齐 Checks 策略分支覆盖率）均已推送 `origin/PRAgent-test`；首次 Pull Request Quality `33663397008` 因覆盖率门禁失败，最终 Pull Request Quality `33664061408` 的 8 个作业全部成功；修复提交对应 Repository Governance `33664057745`、Auto Create Pull Request `33664057738` 成功，包含 V86→V87 Flyway、真实 MySQL/RabbitMQ、前后端质量、生产边缘、跟踪文件、密钥差异和依赖审查。
+边界：未使用真实生产 GitHub App 凭据或真实 PR 做外部创建验证，分支保护仍需人工配置；最近投递摘要为进程内有界状态，重启后不追溯历史；PAT 兼容路径保持不变；未提交非 README Markdown、测试相关脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
+下一步：进入 `FUNC-P1-006` 运行时发布指标、告警与可观测性，继续按单项提交、推送和 Actions 验收。
+
+2026-09-03 | 优化-64 | FUNC-P1-006 运行时发布指标、告警与可观测性
+状态：已完成代码、本地质量门禁、中文提交、test 分支推送和远程 Actions 验收。
+变更：新增租户隔离的发布运行快照表与聚合查询，按 releaseKey、时间窗口返回样本数、token、费用、P95 延迟、解析失败、fallback、回滚次数和 Canary 样本充分性；新增 Micrometer 指标、每小时幂等采集调度、运行指标查询接口和发布中心运行指标表。告警使用有界阈值、稳定指纹和通知 outbox 去重，区分样本不足、P95/费用异常与解析失败，Canary 异常可解释地触发服务端回滚；重复采集不重复发送，所有查询和写入均强制租户边界。
+本地验证：完整后端 `mvn verify -DskipTests=false` 共 2804 项测试通过、0 失败、12 项按环境条件跳过，JaCoCo 行/分支覆盖率、架构棘轮、架构预算、迁移、授权和 OpenAPI 契约门禁通过；前端 OpenAPI 生成物检查、`vue-tsc -b`、ESLint、Vitest 全量和 Vite 构建通过；`git diff --check` 通过。
+提交/远程验收：实现提交 `b5e6af9e`（新增：建设发布运行指标与告警可观测性）及覆盖率修复提交 `05d127b0`（修复：补足运行指标服务覆盖率分支）均已推送 `origin/PRAgent-test`；首次 Pull Request Quality `33670567455` 因干净 CI 分支覆盖率边界失败，补充运行指标服务分支测试后，最终 Pull Request Quality `33671350354` 的 8 个作业全部成功；Repository Governance `33671342964`、Auto Create Pull Request `33671342950` 亦成功。
+边界：当前采集为服务端聚合快照，尚未接入真实生产 Prometheus/Alertmanager 或真实租户流量；通知继续复用现有安全出站配置，样本不足不会误报；未提交非 README Markdown、测试相关脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
+下一步：进入 `FUNC-P1-007` 发布审计查询、完整性验证与受控导出，继续按单项提交、推送和 Actions 验收。
+
+2026-09-03 | 优化-65 | FUNC-P1-007 发布审计查询、完整性验证与受控导出
+状态：已完成代码、完整本地质量门禁、中文提交、test 分支推送和远程 Actions 验收。
+变更：新增租户隔离的发布审计分页查询与筛选（releaseId、releaseKey、operator、action、时间范围），提供发布状态时间线和规范化事件哈希校验；校验结果区分 VALID、HASH_MISMATCH、MALFORMED_HASH，查询与导出均拒绝跨租户访问。新增有界 JSON/CSV 导出（单次最多 1000 条），仅输出审计元数据、状态快照、操作者、事件哈希和校验状态，不输出 provider、模型响应、prompt、源码、reason 或 details；聚合导出仅返回计数，前端发布中心接入时间线、完整性状态和下载入口。
+本地验证：完整后端 `mvn verify -DskipTests=false` 共 2810 项测试通过、0 失败、12 项按环境条件跳过，JaCoCo、架构棘轮、架构预算、迁移、授权和 OpenAPI 契约门禁通过；前端 OpenAPI 生成物检查、`vue-tsc -b`、ESLint、Vitest 全量（43 个测试文件、172 项测试）和 Vite 生产构建通过；`git diff --check` 通过。
+提交/远程验收：实现提交 `0074a91a`（新增：建设发布审计查询校验与受控导出）已推送 `origin/PRAgent-test`；Pull Request Quality `33676634928` 的 8 个作业全部成功；Repository Governance `33676630401`、Auto Create Pull Request `33676630525` 亦成功。
+架构与边界：复用 V86 审计表，通过嵌套 DTO 和独立校验服务控制类数量，架构预算保持 80,500 行/1,050 个生产类（实际 80,314 行/1,049 类），无需新增迁移；原始内部审计细节仍仅服务端保存用于校验，未使用真实生产租户审计数据或真实导出链路验证；未提交非 README Markdown、测试相关脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
+下一步：进入 `FUNC-P1-008` 评估报告生命周期、隐私与留存治理，继续按单项提交、推送和 Actions 验收。
+
+2026-09-03 | 优化-66 | FUNC-P1-008 评估报告生命周期与隐私治理
+状态：已完成评估报告保留期限、到期扫描、授权撤销阻断、冻结/软删除、受控导出、双人/管理员授权、幂等审计、本地质量门禁、中文提交、test 分支推送和远程 Actions 验收。
+变更：新增 V89 评估报告生命周期元数据和租户隔离生命周期审计表；报告默认保留 180 天（可配置且限制在 30～3650 天），后台按租户有界扫描到期报告，未被发布引用的报告转为 EXPIRED，被引用的报告转为 FROZEN。FREEZE、REVOKE_AUTHORIZATION、DELETE 均采用租户行锁与 CAS 版本更新，删除引用中的报告只记录 DELETE_BLOCKED_FREEZE，历史发布仍可追溯；撤销授权、冻结、过期或软删除报告不能作为新发布证据。导出仅允许 ADMIN/PLATFORM_ADMIN，生命周期写操作要求管理员或不同操作者二次审批，统一使用操作幂等键、失败审计重试和跨租户隔离；报告仍只保存数据集、版本、样本指纹和质量/成本等必要聚合字段，不保存原始 PR、源码、prompt、provider 响应或凭据。前端评测工作台接入状态、到期时间、冻结/撤销授权/软删除和受控导出操作，OpenAPI 与生成客户端契约同步更新。
+本地验证：后端完整 `mvn verify -DskipTests=false` 共 2824 项测试通过、0 失败、12 项按环境条件跳过，JaCoCo、架构棘轮、架构预算、迁移、授权和 OpenAPI 契约门禁通过；生命周期定向测试 13 项通过；前端 `npm run quality` 的 API 生成检查、类型检查、ESLint、43 个测试文件共 173 项测试全部通过；`git diff --check` 通过。首次远程 Pull Request Quality `33682309114` 因新增生命周期审计表未登记到 MyBatis 租户表清单而失败，已补齐登记后复验通过。
+提交/远程验收：实现提交 `e6c1b466`（新增：建设评估报告生命周期与隐私治理）及修复提交 `87b12a08`（修复：登记评估报告生命周期审计租户表）均已推送 `origin/PRAgent-test`；最终 Pull Request Quality `33682952540` 的全部作业成功，含真实 MySQL/RabbitMQ、V76→V89 Flyway、后端/前端质量、浏览器 E2E、生产边缘、跟踪文件治理、密钥差异和依赖审查；Repository Governance `33682949198`、Auto Create Pull Request `33682949206` 亦成功。
+边界：报告治理只处理服务端已脱敏的聚合证据，未使用真实生产评测数据执行删除或导出；已发布引用通过外键和租户引用计数保护，幂等键跨报告重放会拒绝；保留期限扫描为每租户每次最多 100 条并可重试；未提交非 README Markdown、测试相关脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
+下一步：进入 `FUNC-P1-009` 发布状态漂移检测与人工确认修复，继续按单项提交、推送和 Actions 验收。
+
+2026-09-03 | 优化-67 | FUNC-P1-009 发布状态漂移检测与人工确认修复
+状态：已完成代码、完整本地质量门禁、中文提交、test 分支推送和远程 Actions 验收。
+变更：新增 V90 租户级发布漂移审计表和只读检测器，核对 Active/Canary 数量、流量、任务 release 引用以及 provider/model 元数据；扫描上限为 500 条并生成确定性 SHA-256 预览指纹。修复必须携带幂等键、预览指纹、显式确认和管理员角色，在租户锁与指纹 CAS 下执行；只修复未开始的 QUEUED 任务和发布状态/流量漂移，运行中任务只记录 skipped，不静默改派。失败事务回滚后通过 REQUIRES_NEW 写入 FAILED 审计，重复操作返回既有结果，避免无限重试。新增漂移检测/修复 API、定时检测、OpenAPI/前端契约和 V76→V90 升级路径。
+本地验证：后端 `mvn clean verify -DskipTests=false` 共 2834 项测试通过、0 失败、12 项按环境条件跳过，JaCoCo 行覆盖率约 0.891，架构、迁移、授权、OpenAPI 和契约门禁均通过；漂移相关定向测试通过；前端 `npm run quality`、生成客户端检查、类型检查、ESLint、Vitest 和 Vite 构建通过；`git diff --check` 通过。
+提交/远程验收：实现提交 `02bf550c`（新增：建设发布状态漂移检测与人工修复）已推送；首次 Pull Request Quality `33687978771` 暴露 Spring CGLIB 代理可见性与干净 CI 覆盖率问题；修复提交 `8ae24c8c`（修复：放开漂移审计组件的 Spring 代理可见性）和 `2270fa4f`（修复：补足发布漂移修复覆盖率门禁）均已推送。最终 Pull Request Quality `33689787892`、Repository Governance `33689783955`、Auto Create Pull Request `33689783933` 全部成功，包含真实 MySQL/RabbitMQ、前后端质量、Flyway、生产边缘、跟踪文件、密钥差异和依赖门禁。
+边界：检测/修复未连接真实生产租户或真实故障数据；扫描上限 500，操作人需按部署流程确认，运行中任务不自动修复；未提交非 README Markdown、测试相关脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
+下一步：按优化方案规则审计 P2-003/P2-004 条件项；如无真实多实验数据或生产 provider 事故证据则记录延后，不伪造完成。
+
+2026-09-03 | 优化-68 | P2-003/P2-004 条件项审计
+状态：按优化方案规则审计后暂缓，不宣称完成。
+证据：方案明确要求真实多实验需求或供应商故障/合规事件证据后才启动；当前仓库仅有 taskId 稳定分桶、预算保护和规则降级实现及模拟/契约测试，没有真实多实验数据集达标记录、生产 provider 故障报告、指标基线或恢复演练记录。因此未引入多实验 cohort 隔离、实验互斥组或租户级 provider/model kill switch，避免伪造验收。
+提交/远程验收：审计记录提交 `b26b63f6`（记录：审计条件优化项并暂缓）已推送；Pull Request Quality `33690700247`、Repository Governance `33690702076`、Auto Create Pull Request `33690701905` 全部成功。
+后续触发：取得脱敏真实实验数据或生产事故报告、指标基线和回滚/恢复演练记录后，先更新优化方案与验收口径，再拆分实现并按单项提交、推送和 Actions 验收。
+边界：本次只记录条件项审计，不修改代码；不提交非 README Markdown、测试相关脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
+
+2026-09-03 | 优化-69 | P2-001/P2-002 条件项审计
+状态：按优化方案规则审计后暂缓，不宣称完成。
+证据：`ScmProvider` 适配器已具备 GitLab/Gitee/Bitbucket 的协议边界，但核心任务编排仍保持 GitHub-first，尚无一个真实非 GitHub 使用方完成凭证、Webhook、乱序/重放、diff、评论和状态回写 Smoke；跨次 finding 对比与任务幂等也不等于增量审查复用，当前没有按完整复用键记录 chunk shadow 命中/失效、真实回归集召回对比或成本/P95 成对基线。因此未开放 Provider-neutral 主链，也未启用跨 commit 结果复用。
+提交/远程验收：审计记录提交 `c984ad85`（记录：审计平台与增量复用条件项）已推送；Pull Request Quality `33691358234`、Repository Governance `33691354972`、Auto Create Pull Request `33691354924` 全部成功。
+后续触发：取得明确的非 GitHub 使用方或真实成本瓶颈，并提供脱敏平台 Smoke、固定真实回归集、召回/严重级别差异、成本与 P95 基线后，先更新优化方案与退出条件，再拆分实现；任一复用键变化、上下文不完整或高风险类别仍必须走完整审查。
+边界：本次只记录条件项审计，不修改代码；不提交非 README Markdown、测试相关脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
+
+2026-09-03 | 优化-70 | FUNC-P0-001 真实 PR 评估运行闭环与评测版本溯源
+状态：代码链路已落地，按方案完成定义仍待真实授权数据集验收，不宣称该 P0 条目最终完成。
+变更：新增受控数据根目录与路径/符号链接防护、REAL_PR manifest 校验、50～100 样本及 2～3 个匿名仓库约束、固定/滚动切分、授权/脱敏/人工复核和 SHA-256 指纹校验；评估运行复用生产 LLM pipeline 的 preview 路径，禁止 GitHub 评论、Checks、通知或修复分支副作用，并提供有界并发、token/费用/总时长预算、幂等 runKey、取消、失败分类和仅聚合报告持久化。新增管理员评估运行启动/查询/取消 API 与工作台；评估版本与报告补齐 verifier/aggregation 版本，V91 增量迁移显式标注历史数据 `legacy-unknown`，迁移契约和前后端 OpenAPI 同步。
+本地验证：后端 `mvn verify -DskipTests=false` 共 2848 项测试通过、12 项条件跳过，JaCoCo、架构、授权、OpenAPI、迁移契约门禁通过；评估相关定向测试 51 项通过；前端 OpenAPI 生成检查、`vue-tsc -b`、ESLint、Vitest 43 个文件/173 项通过，Vite 生产构建通过，`git diff --check` 通过。
+提交/远程验收：实现提交 `c047a603`（新增：建设真实PR评估运行闭环）已推送；首轮 Pull Request Quality `33725974464` 因旧前端 fixture 缺失新版本字段失败，修复提交 `013bf531`（修复：兼容旧评估报告版本字段）后 Pull Request Quality `33726308656`、Repository Governance `33726303148`、Auto Create Pull Request `33726303239` 成功；随后修复迁移门禁名称提交 `c0fef33f`（修复：纳入V91迁移升级门禁）已推送，Pull Request Quality `33726660630`、Repository Governance `33726655773`、Auto Create Pull Request `33726655752` 成功，升级作业实际显示 V76→V91。
+边界：本地运行状态为进程内有界状态，重启会丢失排队进度但已完成报告可查；当前没有导入 50+ 个真实脱敏 PR、生产 LLM/权限/外部平台回写证据，报告失败/取消/预算耗尽不入库；V91 历史行的 verifier/aggregation 明确为 `legacy-unknown`。回滚：停止配置 `REPOGUARD_EVALUATION_DATA_ROOT` 以禁止新运行，并回退实现提交；V91 采用增量迁移，不回滚已发布迁移文件。
+下一步：取得真实授权数据集和生产验收证据后，才能把 FUNC-P0-001 标为完成；继续审计/实现 P1-001 未回写部分、P1-003 策略即代码和 P1-004 CI SARIF 通道，P2 条件项维持暂缓。
+
+2026-09-03 | 优化-71 | 全量优化项完成度审计
+状态：未全部完成；按第 14.18 节将“已完成”“代码已落地待外部验收”“部分实现”“条件暂缓”分开记录，不以接口、mock 或 Actions 绿灯替代真实业务验收。
+审计结论：`FIX-P0-001` 已完成（SARIF attempt 绑定、批次幂等/替换、真实 MySQL 升级路径和负例门禁均有证据）。`FUNC-P0-001` 已具备受控数据集加载、真实 pipeline preview、预算/取消/失败分类和聚合报告，但尚无 50～100 个真实脱敏 PR、2～3 个授权仓库、人工标签和可重复报告的真实运行证据，仍为代码已落地。`FUNC-P1-001` 已具备指纹和五类跨次比较及页面，但发布候选加载/计划仍未按 NEW/REGRESSED 回写且未将 PERSISTING 汇总为单条评论，属于部分实现；同样缺少人工复核真实样本证据。`FUNC-P1-002` 已具备服务端报告驱动的发布、灰度、预算和回滚，但没有真实 PR 数据集达标报告或生产发布/回滚记录，仍为代码已落地待验收。
+未完成项：`FUNC-P1-003` 尚未发现 `.repoguard.yml` 解析、平台/base/admin 优先级合并、head 变更预览或显式 suppression 提案/回放/审计实现；`FUNC-P1-004` 尚未发现短期 CI 凭证/OIDC、绑定 task/attempt/commit 的上传通道、压缩包防护、scan-run 幂等和 finding 来源筛选/批次状态 UI。两项均未进入可验收状态。
+已开发但外部验收未闭环：`FUNC-P1-005`～`FUNC-P1-009` 均有代码、前后端契约、本地门禁和远程 Actions 记录，但仍缺真实 GitHub App/PR、Prometheus/Alertmanager/租户流量、生产审计导出、真实授权报告生命周期操作或真实状态漂移故障演练，按规则不能标记为最终完成。
+条件项：`FUNC-P2-001`/`FUNC-P2-002` 因无真实非 GitHub 使用方或固定回归集成本/P95 基线暂缓；`FUNC-P2-003`/`FUNC-P2-004` 因无真实多实验需求或供应商故障/合规事件证据暂缓。优化-01～优化-58 的仓库范围代码、测试和 CI 记录保持原结论，但优化-36 的个人项目范围决策明确排除生产环境准出。
+验证证据：当前分支 `PRAgent-test` 与 `origin/PRAgent-test` 一致；最新提交 `77244a88` 对应 Pull Request Quality `33727031114`、Repository Governance `33727026689`、Auto Create Pull Request `33727026787` 均成功；本地最近一次后端 `mvn verify` 通过 2848 项（12 项条件跳过），前端生成检查/类型检查/ESLint/Vitest/Vite 构建均通过，`git diff --check` 通过。
+回滚与边界：审计只更新本进度文本，不修改业务代码；保留用户既有 `ArchitectureRatchetTest.java`、两个前端 `.test.ts` 文件和 `.tmp/` 未提交；不提交非 README Markdown 或测试相关脚本。P0 真实数据到位后先生成可重复报告，再按 P1-001、P1-003、P1-004 顺序补齐缺口并逐项执行真实验收。
+
+2026-09-03 | 优化-72 | FUNC-P1-001 按跨次状态发布 GitHub 回写
+状态：代码链路、完整本地质量门禁、中文提交、test 分支推送和远程 Actions 验收通过；真实 GitHub PR 数据集与生产凭据验收仍待授权，按第 14.18 节保留外部验收边界。
+变更：发布前强制为当前 attempt 生成对比结果，候选 SQL 仅允许 `NEW/REGRESSED`；`PERSISTING` 发现合并进现有单条 PR 总评，缺少当前 attempt 时 fail-closed；新增对比门禁和候选/SQL 契约测试，避免重复回写与跨 attempt 误发。
+本地验证：后端定向测试 18 项通过；完整 `mvn verify -DskipTests=false` 共 2853 项测试通过、0 失败、12 项按环境条件跳过，JaCoCo、架构棘轮、迁移和 OpenAPI 契约门禁通过；`git diff --check` 通过。
+提交/远程验收：实现提交 `71bd9c74`（优化：按跨次状态控制 GitHub 回写）已推送 `origin/PRAgent-test`；Pull Request Quality `33729657979` 的 8 个作业全部成功，Repository Governance `33729652270`、Auto Create Pull Request `33729652348` 亦成功。
+边界与回滚：仍不自动修改已发布旧评论；真实 PR/人工复核与生产 GitHub 权限需另行授权。回滚可回退 `71bd9c74`；本记录未提交非 README Markdown、测试相关脚本或用户既有测试改动/`.tmp/`。
+
+2026-09-03 | 优化-73 | FUNC-P1-003 仓库策略即代码与误报抑制
+状态：代码链路、完整本地质量门禁、中文提交、test 分支推送和远程 Actions 验收通过；真实 GitHub 仓库策略文件、人工 suppression 审批和生产租户审计证据仍待授权，按第 14.18 节不提前宣称外部业务验收完成。
+变更：新增有界且 fail-closed 的 `.repoguard.yml` YAML 解析器，拒绝未知字段/规则、供应商地址、密钥、命令、危险或过宽 glob、无期限 suppression；实现 platform/base/admin 优先级合并，保护高影响 BLOCK 规则、限制 LLM token/费用预算，并仅把 head 策略作为预览。新增 V92 租户隔离 suppression 与审计表，支持提案、近期开历史回放、激活/撤销/到期和命中统计；误报反馈可生成精确文件范围、90 天到期的提案。新增管理员预览与 suppression API、OpenAPI/前端客户端及规则配置面板。
+本地验证：后端 `mvn clean verify -DskipTests=false` 共 2877 项测试通过、0 失败、12 项按环境条件跳过；JaCoCo 指令 0.8932、分支 0.7004、行 0.8917，架构、迁移、租户、授权和 OpenAPI 契约门禁通过；前端 `npm run quality` 通过 43 个文件/173 项测试、类型检查、生成客户端检查、ESLint、覆盖率和构建；`git diff --check` 通过。
+提交/远程验收：实现提交 `8e136e20`（新增：建设仓库策略即代码与误报抑制）已推送 `origin/PRAgent-test`；Pull Request Quality `33739480092` 的 10 个作业全部成功（含 MySQL/RabbitMQ、后端覆盖率/CVE、前端浏览器质量、Flyway、生产边缘、密钥与依赖门禁），Repository Governance `33739475479`、Auto Create Pull Request `33739475524` 亦成功。
+边界与回滚：服务端不接受仓库文件中的 endpoint、token、webhook 或执行命令；head 只用于预览，平台安全底线不可被仓库策略降低；suppression 必须有理由、操作人和到期时间且可撤销。真实 GitHub App/PR 和人工审批仍需另行授权；可回退 `8e136e20` 与 V92 前的应用版本（不删除已发布迁移）。本记录未提交非 README Markdown、测试相关脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
+
+2026-09-03 | 优化-74 | FUNC-P1-004 CI 原生 SARIF 上传通道与来源/批次可见性
+状态：代码链路、完整本地质量门禁、中文提交、test 分支推送和远程 Actions 验收通过；真实 CodeQL/Semgrep 标准样例、生产 GitHub App/OIDC 凭据和人工业务验收仍待授权，按第 14.18 节保留外部验收边界。
+变更：新增短期、任务与 attempt/commit/repository 绑定的 CI 凭据及匿名上传接口；上传元数据包含工具、版本、scan run、SARIF 指纹和完成时间，拒绝过期、旧 attempt、错 commit、跨仓库和未来时间。新增有界 SARIF 2.1.0 raw/zip 解码，限制 20 个文档、总解压 8 MiB、单文档 2 MiB、压缩比 10 倍和路径穿越/多文档/格式错误；同一 scan run 幂等，内容变化按同工具/版本/commit 替换，跨来源不互相覆盖。审查发现导出保留 tool/rule，详情接口支持 source 筛选并返回 SARIF 批次状态与批次号；新增 V93 元数据表、租户隔离、迁移/授权/OpenAPI/前后端契约和回归测试。
+本地验证：后端完整 `mvn clean verify -DskipTests=false` 共 2902 项测试通过、0 失败、12 项按环境条件跳过，JaCoCo 分支覆盖率 70.31%，架构棘轮、架构预算、迁移、授权和 OpenAPI 契约门禁通过；前端 `npm run quality` 通过 43 个测试文件/174 项测试、生成客户端检查、类型检查、ESLint、覆盖率和 Vite 构建；`git diff --check` 通过。
+提交/远程验收：实现提交 `a65307e9`（优化：建设 CI 原生 SARIF 上传通道）、构造器修复提交 `5aa0c186`（修复：声明 CI 凭据服务的注入构造器）和契约修复提交 `633a3cf3`（修复：同步审查发现来源筛选契约）均已推送 `origin/PRAgent-test`；最终 Pull Request Quality `33749602745` 的 8 个作业全部成功，Repository Governance `33749596968`、Auto Create Pull Request `33749596962` 亦成功。
+边界与回滚：上传端点仍需生产网关/部署层限制请求体并配置真实 OIDC 或短期密钥，当前代码测试使用受控字节数组和模拟凭据；尚未在真实 CodeQL/Semgrep、真实 GitHub PR 或生产租户执行导入/替换/中断恢复及人工来源验收。可回退实现提交并保留 V93 增量迁移，不删除已发布迁移；本记录未提交非 README Markdown、测试相关脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
+
+2026-09-03 | 优化-75 | 全量优化项完成度审计（P1-004 后）
+状态：严格按方案第 14.18 节复核后，整体优化项仍不能标记为“全部最终完成”；所有已排期的代码项均已有实现、权限/契约/失败路径、中文提交、test 分支推送和远程 Actions 证据，剩余差异是“真实业务/生产验收待授权”或“条件项暂缓”，不是遗漏的代码待办。
+覆盖范围：第 4 章主优化池 `OPT-API-001`～`OPT-API-005`、`OPT-SQL-001`～`OPT-SQL-006`、`OPT-LINK-001`～`OPT-LINK-005` 的代码落地保持完成，但 2C4G 真实 `EXPLAIN`、P95、响应体、缓存命中率、浏览器 long task 和外部发布恢复数据仍按方案作为线上准出证据；优化-01～优化-58 的历史条目均已有各自代码/测试/Actions 记录，个人项目范围按优化-36 不把企业生产环境验收伪造为已完成。
+第 14 章条目结论：`FIX-P0-001` 已完成（V82/V93 迁移、真实 MySQL 升级路径、SARIF/attempt 绑定与幂等/替换负例）；`FUNC-P0-001`、`FUNC-P1-001`～`FUNC-P1-009` 均为代码已落地待真实数据或生产凭据/业务验收，其中 P1-001 的跨次状态回写已在优化-72 补齐，P1-003 的策略与抑制链路已在优化-73 补齐，P1-004 的 CI SARIF 通道已在优化-74 补齐；`FUNC-P2-001`～`FUNC-P2-004` 均按方案条件暂缓，不在缺少真实非 GitHub 使用方、固定回归集收益基线、多实验需求或供应商事故证据时扩展范围。
+数量汇总：第 14 章当前共 15 个条目，1 个严格代码/集成验收完成、10 个代码完成待外部验收、4 个条件暂缓；未发现尚未实现但应继续排期的条目。候选项的真实外部证据缺口包括 50～100 个授权脱敏 PR 与人工标签、真实 GitHub App/OIDC/PR、Prometheus/Alertmanager/租户流量、生产审计导出/报告生命周期/漂移演练以及 CodeQL/Semgrep 标准 SARIF。
+验证与远程状态：当前 `PRAgent-test` 与 `origin/PRAgent-test` 均为 `2a190a53`；最近 P1-004 实现/修复提交为 `a65307e9`、`5aa0c186`、`633a3cf3`，进度提交为 `2a190a53`；最终 Pull Request Quality `33750258399`、Repository Governance `33750254796`、Auto Create Pull Request `33750254778` 全部成功。完整后端 `mvn clean verify -DskipTests=false` 为 2902 项通过、0 失败、12 项条件跳过，JaCoCo 分支 70.31%；前端 `npm run quality` 为 43 个测试文件/174 项通过；`git diff --check` 通过。
+边界：本次只更新审计记录，不修改方案 Markdown；不把 mock、合成样例或 Actions 绿灯当作真实业务验收，不新增未定义需求。未提交非 README Markdown、测试相关脚本或用户既有 `ArchitectureRatchetTest.java`、两个前端 fixture 测试文件和 `.tmp/`。后续如获得外部数据/凭据，必须先补真实验收证据，再单独更新对应条目的状态。
+
+2026-09-03 | 优化-76 | FUNC-P1-004 补强 CI SARIF 受限流式读取
+状态：在既有 CI SARIF 通道基础上完成“先流式/限量解析”代码缺口，定向与完整本地门禁、中文提交、test 分支推送和远程 Actions 验收通过；真实 CodeQL/Semgrep 标准样例、生产网关请求体限制、OIDC/短期凭据和上传中断恢复仍待授权验收，按第 14.18 节不提前宣称最终业务完成。
+变更：CI 上传控制器改为直接读取 `HttpServletRequest` 输入流并传递 Content-Length，服务层新增流式入口，保留字节数组兼容调用；SARIF 解码器只读取 4 字节探测前缀和配置上限，raw JSON 最多读取 2,000,001 字节，ZIP 以计数流校验 10 MiB 压缩输入、20 个条目、单条目/总解压预算、压缩倍率、路径穿越和多文档约束，非 SARIF 条目不再缓冲。新增流式 raw/zip、未知长度超限、HTTP 请求直通测试，并扩展 API/OpenAPI 测试目录识别流式请求体而保持既有 `byte[]` 外部契约。
+本地验证：后端定向测试 17 项通过；API/OpenAPI 契约定向测试 33 项通过；完整 `mvn clean verify -DskipTests=false` 共 2904 项通过、0 失败、12 项按环境条件跳过，JaCoCo、架构、迁移、授权、OpenAPI 和覆盖率门禁通过；前端 `npm run quality` 通过 43 个测试文件/174 项测试、生成客户端检查、类型检查和 ESLint；`git diff --check` 通过。
+提交/远程验收：实现提交 `e05686c6`（优化：将 CI SARIF 上传改为受限流式读取）已推送 `origin/PRAgent-test`；Pull Request Quality `33753675168` 的 8 个作业全部成功（含真实 MySQL/RabbitMQ、V76→V93 Flyway、后端/前端质量、浏览器 E2E、生产边缘、跟踪文件治理、密钥差异和依赖审查）；Repository Governance `33753670218`、Auto Create Pull Request `33753670524` 亦成功。
+边界与回滚：服务端仍须由生产网关/部署层限制请求体并配置真实 OIDC 或短期密钥；本次只验证受控输入流和模拟服务，不使用真实生产租户或外部扫描器凭据。可回退 `e05686c6` 并保留 V93 增量迁移，不删除已发布迁移；本记录未提交非 README Markdown、测试相关脚本或用户既有 `ArchitectureRatchetTest.java`、两个前端 fixture 测试文件和 `.tmp/`。
+
+2026-09-03 | 优化-77 | 全量优化项完成度复核（P1-004 流式补强后）
+状态：按方案第 14.18 节复核，整体仍不能标记为“全部最终完成”；未发现应继续排期而尚未实现的代码项。第 14 章 15 个条目中，`FIX-P0-001` 为代码/集成验收完成，`FUNC-P0-001`、`FUNC-P1-001`～`FUNC-P1-009` 为代码、权限、契约、失败路径和自动门禁已落地但等待真实数据/生产凭据/业务验收，`FUNC-P2-001`～`FUNC-P2-004` 按方案条件暂缓。第 4 章 `OPT-API-*`、`OPT-SQL-*`、`OPT-LINK-*` 以及优化-01～优化-58 的仓库范围实现保持已完成；2C4G 线上 EXPLAIN/P95、响应体与缓存、浏览器 long task、发布恢复等仍是线上准出证据。
+证据：`e05686c6` 已将 CI SARIF 上传改为受限流式读取，兼容既有 byte[] 契约，并通过后端定向 17 项、API/OpenAPI 定向 33 项、完整 `mvn clean verify -DskipTests=false`（2904 通过、0 失败、12 项环境跳过）和前端 `npm run quality`（43 个测试文件/174 项测试）；其 Pull Request Quality `33753675168`、Repository Governance `33753670218`、Auto Create Pull Request `33753670524` 全部成功。进度提交 `60f3364e` 的 Pull Request Quality `33754109737`、Repository Governance `33754106301`、Auto Create Pull Request `33754106348` 亦全部成功；`PRAgent-test` 与 `origin/PRAgent-test` 指向同一提交。
+外部验收缺口：尚无 50～100 个跨 2～3 个授权仓库的真实脱敏 PR、人工标签和可重复报告；尚无真实 GitHub App/Checks、OIDC/短期凭据、CodeQL/Semgrep 标准样例导入及中断恢复；尚无 Prometheus/Alertmanager 与租户流量、审计导出、报告生命周期和发布漂移故障演练证据；P2 条件项仍分别缺真实非 GitHub 使用方/成本瓶颈、固定回归集、多实验需求或供应商事故/合规事件。不能用 mock、合成数据或 Actions 绿灯替代这些证据。
+工作区与边界：仅保留用户已有 `ArchitectureRatchetTest.java`、两个前端 fixture 测试文件和 `.tmp/` 未提交；未提交非 README Markdown 或测试相关脚本。获得相应授权数据/凭据后，应先补真实验收证据，再逐条更新状态；在此之前不新增 P2 功能、不宣称企业生产准出。
+
+2026-09-03 | 优化-78 | 外部验收与生产可用性复核
+状态：外部验收仍未闭环，且发现真实生产探测阻塞；不修改探测规则掩盖故障，也不把该故障误判为代码门禁失败。
+证据：只读核查 GitHub 授权账号可访问的仓库仅有 `PRAgent`、`gpt-auto-register` 和无 PR 的公开 fork；没有满足 2～3 个授权仓库、50～100 个人工标注样本的评测数据集。当前环境没有 `semgrep`、`codeql`、`docker`、`kubectl` 或 `promtool` 可执行文件，也没有可用于真实评测的 LLM/OIDC/Prometheus 环境变量。`Production Availability` 最新定时运行 `33741385450`（以及此前连续运行）对 `https://pragent.top` 的 liveness、readiness、页面和匿名 API 均以 curl 28 连接超时失败，告警 Issue #151 仍为 open；`real-chain-smoke.yml` 没有成功运行记录。
+处理边界：PR 质量、仓库治理和自动建 PR 仍保持全绿；生产主机恢复、GitHub App/OIDC 配置、真实 scanner/LLM 凭据、评测数据授权及生产观测需要用户/运维明确授权后才能执行，不能通过改为跳过探测、使用 bot PR、合成样例或伪造指标关闭。未提交非 README Markdown、测试相关脚本或用户既有测试改动和 `.tmp/`。
+
+2026-09-03 | 优化-79 | 最终提交门禁与工作树边界复核
+状态：本轮进度记录提交后的远程门禁全部成功；优化项整体仍不能标记为“全部最终完成”，因为第 14.18 节要求的真实数据、生产凭据、线上性能和可用性证据仍未具备。
+证据：提交 `d58d0513` 已推送且 `PRAgent-test` 与 `origin/PRAgent-test` 一致；Pull Request Quality `33756165743`、Repository Governance `33756160665`、Auto Create Pull Request `33756160670` 均为 success，包含后端单元/契约、Spring MySQL/RabbitMQ 集成、Flyway、前端质量与浏览器 E2E、生产边缘、密钥差异、依赖审查和跟踪文件治理。工作树只保留用户已有 `ArchitectureRatchetTest.java`、两个前端 fixture 测试文件和 `.tmp/`，暂存区为空。
+结论：仓库范围内未发现新的代码优化缺口；仍需用户/运维提供授权评测数据、真实 GitHub App/OIDC/扫描器/LLM/观测环境并恢复 `pragent.top` 生产可用性后，才能按条目补齐最终业务验收。未提交非 README Markdown、测试相关脚本或用户既有改动。
+
+2026-09-03 | 优化-80 | 生产可用性分环境复核
+状态：当前网络直接访问生产站点已恢复，但 GitHub-hosted runner 的正式探测仍失败；不能把本机可用性替代 Actions/目标出口验收，也不修改探测规则掩盖差异。
+证据：本机对 `https://pragent.top` 的 liveness、readiness、首页、登录页和 overview 均返回 HTTP 200，匿名 `/api/v1/auth/me` 返回 HTTP 401，响应耗时约 0.06～0.21 秒。手动生产工作流 `33761885768` 在 GitHub Actions `ubuntu-24.04`、Azure `westcentralus` runner 上对同一六个端点连续收到 `curl: (28) Failed to connect to pragent.top port 443 after 8002 ms`，随后按既有逻辑更新告警 Issue #151 并失败。
+结论与处理边界：应用从当前网络可用，剩余阻塞是 GitHub Actions 出口到生产入口的网络/防火墙/白名单或路由差异；需要运维允许 GitHub-hosted runner 出口或提供同网段 self-hosted runner 后才能获得正式恢复证据。未修改业务代码、未关闭告警、未提交非 README Markdown、测试相关脚本或用户既有改动。
+
+2026-09-03 | 优化-81 | 生产入口与主机防火墙诊断
+状态：完成只读的生产主机、容器入口和云防火墙复核；未修改探测规则、生产服务或网络策略，GitHub-hosted runner 的外部可用性仍未恢复。
+证据：允许分支 `main` 的只读生产观测 run `33767117081` 经 `production` Environment 审批后成功 SSH 到生产主机；服务器 `0.0.0.0:80`/`:443` 由 docker-proxy 监听，UFW 为 inactive，nftables 未发现入站默认拒绝；阿里云轻量应用服务器的 TCP 443 规则为 `0.0.0.0/0` 且已启用。远程 Compose、Caddy、MySQL、RabbitMQ、后端、前端、Docker Proxy、Loki、Alloy 和 Grafana 状态健康，仓库与生产 Compose SHA 一致。主分支生产可用性 run `33772197847` 在 Azure `eastus2` runner 仍对六个端点重复 `curl: (28)` 超时，`PRAgent-test` 的 `33761885768` 在 `westcentralus` 亦同样失败。
+结论与处理边界：阻塞已定位到 GitHub-hosted runner 到中国大陆源站 IPv4 的跨境路由/边缘接入差异，不是仓库代码、Caddy、Docker、生产主机或轻量服务器防火墙配置。正式闭环只能通过全球可达的 ESA/CDN/代理入口并更新 DNS，或注册受控的同网段 self-hosted runner；在获得明确基础设施授权前，不改生产网络、不把 origin-side SSH 探测当作外部验收，也不关闭 Issue #151。未提交非 README Markdown、测试相关脚本或用户既有改动。
+
+2026-09-04 | 优化-82 | 全球 ESA 入口与 DNS 冲突记录修复验收
+状态：完成生产入口可达性修复并通过 GitHub-hosted runner 正式验收；优化-80/81 的外部阻塞已闭环。
+变更：阿里云 ESA 站点 `pragent.top`（站点 ID `168509105807564`）由“中国内地”切换为“全球”；删除阿里云 DNS 中与 ESA CNAME 冲突的根 `@ A 47.111.168.74`，保留 `@ CNAME pragent.top.a1.initaq.com`。DNS 操作日志记录 2026-09-04 00:10:29 删除该 A 记录，控制台记录数由 5 条降为 4 条；独立公共 Cloudflare 解析视角已仅返回 ESA 地址 `163.181.214.1`，未再返回旧根 A。
+验收：Production Availability run `33778294979` 在 Azure `eastus2` GitHub-hosted runner、提交 `2d800f53` 上成功；既有六个生产端点检查通过，`PROBE_HEALTHY=true`，`Fail unhealthy observation` 跳过，告警 Issue #151 已按健康逻辑关闭。此次不改探测规则、不改应用代码、不新增 self-hosted runner。
+影响与边界：全球 ESA 可能存在数分钟节点/DNS 传播窗口；`www A 47.111.168.74` 保持原样，未扩大变更范围。后续需观察定时 Production Availability 连续成功后，再把生产可用性从恢复态提升为稳定态；50～100 个真实脱敏 PR、真实 GitHub App/OIDC/扫描器/LLM/Prometheus 等方案外部验收仍按第 14.18 节等待授权。未提交非 README Markdown、测试相关脚本或用户既有改动。
+
+2026-09-04 | 优化-83 | 真实 Smoke 健康入口修复与生产保护复核
+状态：发现并修复真实链路 Smoke 在 ESA 切换后的健康入口错误；工作流修复通过 test 分支完整 PR 门禁，公开生产可用性已连续跨区域复验；隔离三任务本身仍未因生产分支保护而执行，不提前宣称真实 LLM/GitHub 链路完成。
+根因与处理：原 `.github/workflows/real-chain-smoke.yml` 在前后健康检查中使用 `http://${DEPLOY_HOST}`。该变量是 SSH/源站地址，切换 ESA 后直接用源站 Host 请求返回 HTTP 421。将工作流改为固定的公开生产入口 `https://pragent.top/actuator/health/readiness`，保留 `DEPLOY_HOST` 仅用于 SSH 和远端资产访问；不放宽 production Environment 分支白名单。
+证据：test 分支旧工作流 run `33780561283` 在执行前被 production 分支保护拒绝；允许的 `main` Smoke run `33781014428` 经审批后复现原始 421，确认失败不是 LLM 或远端脚本。修复后提交 `58973f83` 的 Pull Request Quality `33781435257`、Repository Governance `33781429881`、Auto Create Pull Request `33781429876` 全部成功；Production Availability run `33781804046` 在 Azure `westcentralus` runner 上六个端点通过，`PROBE_HEALTHY=true`，Issue #151 保持 CLOSED。
+后续前置：真实隔离 Smoke 仍需将修复工作流合入 production 允许的 `main` 或由用户/运维明确批准受控分支策略，并确认远端隔离资产、生产 LLM/GitHub 权限和可接受的资源消耗；不通过临时关闭保护来制造绿灯。未提交非 README Markdown、测试相关脚本或用户既有改动。
+
+2026-09-04 | 优化-84 | CI 集成测试临时凭据脱敏
+状态：完成 CI 临时凭据日志脱敏并通过 test 分支完整远程门禁；不提交测试文件、不改变 production Environment 保护规则。
+变更：`.github/workflows/pr-quality.yml` 的集成测试改为先在 shell 变量中生成临时加密密钥、认证密钥和管理 API key，逐项调用 GitHub Actions `add-mask` 后再写入 `$GITHUB_ENV`，避免环境回显或失败日志暴露凭据；保留契约测试要求的变量赋值兼容形式，旧的可复用固定凭据仍未引入。
+处理与证据：首次脱敏实现提交 `e1f8bb91` 触发 Pull Request Quality `33782771829`，后端配置契约仍断言旧文本而失败；未提交测试文件，改以工作流兼容赋值修复提交 `445d69f8`。重新运行的 Pull Request Quality `33783414909`、Repository Governance `33783410552`、Auto Create Pull Request `33783410537` 全部成功，后端 2903 项测试、MySQL/RabbitMQ 集成、Flyway、前端浏览器 E2E、生产边缘、密钥差异和依赖门禁均通过。
+边界与回滚：本项只改 CI 工作流，回退 `e1f8bb91`/`445d69f8` 可恢复旧实现；保留用户已有 `ArchitectureRatchetTest.java`、两个前端 fixture 测试文件和 `.tmp/` 未提交，未提交非 README Markdown 或测试相关脚本。真实隔离 Smoke 及其他方案外部验收缺口仍按优化-83和第 14.18 节等待授权，不以本次 Actions 绿灯替代。
+
+2026-09-04 | 优化-85 | 集成负例 stderr 注释误报收敛
+状态：完成预期 RabbitMQ 负例日志的 GitHub Actions 注释收敛，并通过 test 分支完整远程门禁；真实失败仍保留非零退出码，不屏蔽质量门禁。
+变更：`.github/workflows/pr-quality.yml` 将 `ProductionRuntimeContextIntegrationTest` 的 stderr 合并到 stdout，使故意删除 exchange 触发的 `PublisherCallbackChannel is closed` 线程栈不再被 Actions 解析成失败注释；Maven 的实际退出码保持不变，测试失败仍会使 job 失败。
+验收证据：修复提交 `03ed702e` 的 Pull Request Quality `33784509234`、Repository Governance `33784504070`、Auto Create Pull Request `33784504098` 全部成功；集成测试 job 成功，复核其日志 `##[error]` 命令注释计数为 0，后端单元/契约、MySQL/RabbitMQ、Flyway、前端 E2E、生产边缘、密钥和依赖门禁均通过。
+边界与回滚：本项只调整 CI 输出流，不修改业务代码、测试文件或生产保护；回退 `03ed702e` 可恢复原输出行为。保留用户已有测试改动和 `.tmp/` 未提交，未提交非 README Markdown 或测试相关脚本；真实 Smoke 和其余外部验收缺口仍按第 14.18 节等待授权。

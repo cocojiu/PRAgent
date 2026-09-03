@@ -3,6 +3,7 @@ package com.repoguard.agent.scheduling;
 import com.repoguard.agent.config.SchedulerRuntimeEnabled;
 import com.repoguard.agent.dashboard.DashboardDailySnapshotRecoveryWorker;
 import com.repoguard.agent.github.comment.GithubCommentPublicationBatchRecoveryWorker;
+import com.repoguard.agent.github.checks.GithubCheckRunRecoveryWorker;
 import com.repoguard.agent.messaging.ReviewTaskPublishCompensator;
 import com.repoguard.agent.notification.delivery.NotificationDeliveryRecoveryCompensator;
 import com.repoguard.agent.notification.publish.NotificationEventPublishCompensator;
@@ -12,8 +13,11 @@ import com.repoguard.agent.review.quality.ReviewQualityBaselineRecoveryWorker;
 import com.repoguard.agent.security.SecretReEncryptionJobWorker;
 import com.repoguard.agent.tenancy.TenantScheduledTaskRunner;
 import com.repoguard.agent.worker.ReviewTaskRecoveryCompensator;
+import com.repoguard.agent.service.ReviewWorkflowService;
+import java.util.Optional;
 import java.util.Objects;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -31,6 +35,61 @@ public class TenantBackgroundJobScheduler {
     private final ReviewTaskPublishCompensator reviewPublish;
     private final SecretReEncryptionJobWorker secretReEncryption;
     private final ReviewQualityBaselineRecoveryWorker qualityBaseline;
+    private final GithubCheckRunRecoveryWorker githubCheckRunRecovery;
+    private final ReviewWorkflowService reviewWorkflow;
+
+    @Autowired
+    public TenantBackgroundJobScheduler(
+        TenantScheduledTaskRunner tenantRunner,
+        DashboardDailySnapshotRecoveryWorker dashboardSnapshots,
+        ReviewTaskRecoveryCompensator reviewRecovery,
+        ReviewAttemptRetentionWorker reviewAttemptRetention,
+        OperationalDataRetentionWorker operationalRetention,
+        GithubCommentPublicationBatchRecoveryWorker githubCommentRecovery,
+        NotificationEventPublishCompensator notificationPublish,
+        NotificationDeliveryRecoveryCompensator notificationDelivery,
+        ReviewTaskPublishCompensator reviewPublish,
+        SecretReEncryptionJobWorker secretReEncryption,
+        ReviewQualityBaselineRecoveryWorker qualityBaseline,
+        GithubCheckRunRecoveryWorker githubCheckRunRecovery,
+        Optional<ReviewWorkflowService> reviewWorkflow
+    ) {
+        this.tenantRunner = Objects.requireNonNull(tenantRunner, "tenantRunner");
+        this.dashboardSnapshots = Objects.requireNonNull(dashboardSnapshots, "dashboardSnapshots");
+        this.reviewRecovery = Objects.requireNonNull(reviewRecovery, "reviewRecovery");
+        this.reviewAttemptRetention = Objects.requireNonNull(reviewAttemptRetention, "reviewAttemptRetention");
+        this.operationalRetention = Objects.requireNonNull(operationalRetention, "operationalRetention");
+        this.githubCommentRecovery = Objects.requireNonNull(githubCommentRecovery, "githubCommentRecovery");
+        this.notificationPublish = Objects.requireNonNull(notificationPublish, "notificationPublish");
+        this.notificationDelivery = Objects.requireNonNull(notificationDelivery, "notificationDelivery");
+        this.reviewPublish = Objects.requireNonNull(reviewPublish, "reviewPublish");
+        this.secretReEncryption = Objects.requireNonNull(secretReEncryption, "secretReEncryption");
+        this.qualityBaseline = Objects.requireNonNull(qualityBaseline, "qualityBaseline");
+        this.githubCheckRunRecovery = githubCheckRunRecovery;
+        this.reviewWorkflow = reviewWorkflow.orElse(null);
+    }
+
+    public TenantBackgroundJobScheduler(
+        TenantScheduledTaskRunner tenantRunner,
+        DashboardDailySnapshotRecoveryWorker dashboardSnapshots,
+        ReviewTaskRecoveryCompensator reviewRecovery,
+        ReviewAttemptRetentionWorker reviewAttemptRetention,
+        OperationalDataRetentionWorker operationalRetention,
+        GithubCommentPublicationBatchRecoveryWorker githubCommentRecovery,
+        NotificationEventPublishCompensator notificationPublish,
+        NotificationDeliveryRecoveryCompensator notificationDelivery,
+        ReviewTaskPublishCompensator reviewPublish,
+        SecretReEncryptionJobWorker secretReEncryption,
+        ReviewQualityBaselineRecoveryWorker qualityBaseline,
+        GithubCheckRunRecoveryWorker githubCheckRunRecovery,
+        ReviewWorkflowService reviewWorkflow
+    ) {
+        this(
+            tenantRunner, dashboardSnapshots, reviewRecovery, reviewAttemptRetention, operationalRetention,
+            githubCommentRecovery, notificationPublish, notificationDelivery, reviewPublish,
+            secretReEncryption, qualityBaseline, githubCheckRunRecovery, Optional.ofNullable(reviewWorkflow)
+        );
+    }
 
     public TenantBackgroundJobScheduler(
         TenantScheduledTaskRunner tenantRunner,
@@ -45,18 +104,34 @@ public class TenantBackgroundJobScheduler {
         SecretReEncryptionJobWorker secretReEncryption,
         ReviewQualityBaselineRecoveryWorker qualityBaseline
     ) {
-        this.tenantRunner = Objects.requireNonNull(tenantRunner, "tenantRunner");
-        this.dashboardSnapshots = Objects.requireNonNull(dashboardSnapshots, "dashboardSnapshots");
-        this.reviewRecovery = Objects.requireNonNull(reviewRecovery, "reviewRecovery");
-        this.reviewAttemptRetention = Objects.requireNonNull(reviewAttemptRetention, "reviewAttemptRetention");
-        this.operationalRetention = Objects.requireNonNull(operationalRetention, "operationalRetention");
-        this.githubCommentRecovery = Objects.requireNonNull(githubCommentRecovery, "githubCommentRecovery");
-        this.notificationPublish = Objects.requireNonNull(notificationPublish, "notificationPublish");
-        this.notificationDelivery = Objects.requireNonNull(notificationDelivery, "notificationDelivery");
-        this.reviewPublish = Objects.requireNonNull(reviewPublish, "reviewPublish");
-        this.secretReEncryption = Objects.requireNonNull(secretReEncryption, "secretReEncryption");
-        this.qualityBaseline = Objects.requireNonNull(qualityBaseline, "qualityBaseline");
+        this(
+            tenantRunner, dashboardSnapshots, reviewRecovery, reviewAttemptRetention, operationalRetention,
+            githubCommentRecovery, notificationPublish, notificationDelivery, reviewPublish,
+            secretReEncryption, qualityBaseline, null, Optional.empty()
+        );
     }
+
+    public TenantBackgroundJobScheduler(
+        TenantScheduledTaskRunner tenantRunner,
+        DashboardDailySnapshotRecoveryWorker dashboardSnapshots,
+        ReviewTaskRecoveryCompensator reviewRecovery,
+        ReviewAttemptRetentionWorker reviewAttemptRetention,
+        OperationalDataRetentionWorker operationalRetention,
+        GithubCommentPublicationBatchRecoveryWorker githubCommentRecovery,
+        NotificationEventPublishCompensator notificationPublish,
+        NotificationDeliveryRecoveryCompensator notificationDelivery,
+        ReviewTaskPublishCompensator reviewPublish,
+        SecretReEncryptionJobWorker secretReEncryption,
+        ReviewQualityBaselineRecoveryWorker qualityBaseline,
+        GithubCheckRunRecoveryWorker githubCheckRunRecovery
+    ) {
+        this(
+            tenantRunner, dashboardSnapshots, reviewRecovery, reviewAttemptRetention, operationalRetention,
+            githubCommentRecovery, notificationPublish, notificationDelivery, reviewPublish,
+            secretReEncryption, qualityBaseline, githubCheckRunRecovery, Optional.empty()
+        );
+    }
+
 
     @Scheduled(fixedDelayString = "${repoguard.dashboard.snapshot-recovery-interval-ms:60000}")
     public void recoverDashboardSnapshots() {
@@ -70,7 +145,12 @@ public class TenantBackgroundJobScheduler {
 
     @Scheduled(fixedDelayString = "${app.rabbit.review.review-recovery-interval-ms:60000}")
     public void recoverReviewTasks() {
-        run("review_execution_recovery", reviewRecovery::recoverStuckTasks);
+        run("review_execution_recovery", () -> {
+            reviewRecovery.recoverStuckTasks();
+            if (reviewWorkflow != null) {
+                reviewWorkflow.escalateOverdue();
+            }
+        });
     }
 
     @Scheduled(cron = "${repoguard.operational-data-retention.review-attempt-cron:0 45 3 * * *}")
@@ -115,6 +195,13 @@ public class TenantBackgroundJobScheduler {
     @Scheduled(fixedDelayString = "${repoguard.review.quality-baseline-recovery-interval-ms:60000}")
     public void recoverQualityBaseline() {
         run("review_quality_baseline_recovery", qualityBaseline::recoverDirtySnapshot);
+    }
+
+    @Scheduled(fixedDelayString = "${app.github.check-run.recovery-interval-ms:5000}")
+    public void recoverGithubCheckRuns() {
+        if (githubCheckRunRecovery != null) {
+            run("github_check_run_recovery", githubCheckRunRecovery::recover);
+        }
     }
 
     @Scheduled(cron = "${repoguard.review.quality-baseline-reconciliation-cron:0 20 3 * * *}")

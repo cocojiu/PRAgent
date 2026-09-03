@@ -11,6 +11,8 @@ import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.review.FindingFeedbackStatus;
 import com.repoguard.agent.review.ReviewFindingRiskRecalibrator;
+import com.repoguard.agent.review.ReviewTaskCheckRunLifecycle;
+import com.repoguard.agent.review.RepositorySuppressionService;
 import com.repoguard.agent.review.task.ReviewTaskTransitionStore;
 import com.repoguard.agent.service.FindingFeedbackService;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
@@ -19,6 +21,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -34,6 +37,8 @@ public class FindingFeedbackServiceImpl implements FindingFeedbackService {
     private final CacheEvictionService cacheEvictionService;
     private final ReviewFindingRiskRecalibrator riskRecalibrator;
     private final ReviewTaskTransitionStore transitionStore;
+    private final ReviewTaskCheckRunLifecycle checkRunLifecycle;
+    private final RepositorySuppressionService suppressionService;
 
     @Autowired
     public FindingFeedbackServiceImpl(
@@ -42,7 +47,51 @@ public class FindingFeedbackServiceImpl implements FindingFeedbackService {
         ReviewTimelineAppender reviewTimelineAppender,
         CacheEvictionService cacheEvictionService,
         ReviewFindingRiskRecalibrator riskRecalibrator,
+        ReviewTaskTransitionStore transitionStore,
+        ObjectProvider<ReviewTaskCheckRunLifecycle> checkRunLifecycleProvider,
+        ObjectProvider<RepositorySuppressionService> suppressionServiceProvider
+    ) {
+        this(
+            reviewTaskMapper,
+            reviewFindingMapper,
+            reviewTimelineAppender,
+            cacheEvictionService,
+            riskRecalibrator,
+            transitionStore,
+            checkRunLifecycleProvider.getIfAvailable(),
+            suppressionServiceProvider == null ? null : suppressionServiceProvider.getIfAvailable()
+        );
+    }
+
+    public FindingFeedbackServiceImpl(
+        ReviewTaskMapper reviewTaskMapper,
+        ReviewFindingMapper reviewFindingMapper,
+        ReviewTimelineAppender reviewTimelineAppender,
+        CacheEvictionService cacheEvictionService,
+        ReviewFindingRiskRecalibrator riskRecalibrator,
         ReviewTaskTransitionStore transitionStore
+    ) {
+        this(
+            reviewTaskMapper,
+            reviewFindingMapper,
+            reviewTimelineAppender,
+            cacheEvictionService,
+            riskRecalibrator,
+            transitionStore,
+            (ReviewTaskCheckRunLifecycle) null,
+            null
+        );
+    }
+
+    private FindingFeedbackServiceImpl(
+        ReviewTaskMapper reviewTaskMapper,
+        ReviewFindingMapper reviewFindingMapper,
+        ReviewTimelineAppender reviewTimelineAppender,
+        CacheEvictionService cacheEvictionService,
+        ReviewFindingRiskRecalibrator riskRecalibrator,
+        ReviewTaskTransitionStore transitionStore,
+        ReviewTaskCheckRunLifecycle checkRunLifecycle,
+        RepositorySuppressionService suppressionService
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.reviewFindingMapper = reviewFindingMapper;
@@ -50,6 +99,8 @@ public class FindingFeedbackServiceImpl implements FindingFeedbackService {
         this.cacheEvictionService = Objects.requireNonNull(cacheEvictionService, "cacheEvictionService");
         this.riskRecalibrator = Objects.requireNonNull(riskRecalibrator, "riskRecalibrator");
         this.transitionStore = Objects.requireNonNull(transitionStore, "transitionStore");
+        this.checkRunLifecycle = checkRunLifecycle;
+        this.suppressionService = suppressionService;
     }
 
     @Override
@@ -79,12 +130,18 @@ public class FindingFeedbackServiceImpl implements FindingFeedbackService {
         finding.setFeedbackBy(cleanOperator(operator));
         finding.setFeedbackAt(feedbackAt);
         reviewFindingMapper.updateById(finding);
+        if (status == FindingFeedbackStatus.FALSE_POSITIVE && suppressionService != null) {
+            suppressionService.createFromFinding(task, finding, operator, finding.getFeedbackNote());
+        }
         ReviewFindingRiskRecalibrator.Outcome recalibrated = riskRecalibrator.recalculate(taskId);
         transitionStore.recalibrateAfterFindingFeedback(
             task,
             recalibrated.riskLevel(),
             recalibrated.humanReviewRequired()
         );
+        if (checkRunLifecycle != null) {
+            checkRunLifecycle.completed(task);
+        }
         reviewTimelineAppender.completeCurrentAndAppend(
             task.getId(),
             findingFeedbackTimelineLabel(finding, status),

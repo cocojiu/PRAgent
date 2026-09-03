@@ -181,6 +181,121 @@
   font-weight: 500;
 }
 
+.github-checks-wizard {
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.github-checks-wizard__header,
+.github-checks-wizard__target,
+.github-checks-wizard__preview-actions,
+.github-checks-wizard__actions,
+.github-checks-wizard__webhook,
+.github-checks-wizard__summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.github-checks-wizard__header {
+  justify-content: space-between;
+}
+
+.github-checks-wizard__header h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+}
+
+.github-checks-wizard__header p,
+.github-checks-wizard__guidance {
+  margin: 0;
+  color: #64748b;
+  line-height: 1.6;
+}
+
+.github-checks-wizard__target > .el-input {
+  max-width: 260px;
+}
+
+.github-checks-wizard__body {
+  display: grid;
+  gap: 14px;
+}
+
+.github-checks-wizard__summary,
+.github-checks-wizard__webhook {
+  flex-wrap: wrap;
+  color: #475569;
+  font-size: 13px;
+}
+
+.github-checks-wizard__diagnostics {
+  display: grid;
+  gap: 7px;
+}
+
+.github-checks-diagnostic {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.github-checks-diagnostic > div {
+  display: grid;
+  gap: 3px;
+}
+
+.github-checks-diagnostic span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.github-checks-diagnostic.success { border-color: #bbf7d0; background: #f0fdf4; }
+.github-checks-diagnostic.warning { border-color: #fde68a; background: #fffbeb; }
+.github-checks-diagnostic.danger { border-color: #fecaca; background: #fef2f2; }
+
+.github-checks-wizard__preview {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px dashed #93c5fd;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.github-checks-wizard__preview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px 14px;
+  color: #475569;
+  font-size: 13px;
+}
+
+@media (max-width: 800px) {
+  .github-checks-wizard__target,
+  .github-checks-wizard__preview-actions,
+  .github-checks-wizard__actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .github-checks-wizard__target > .el-input,
+  .github-checks-wizard__preview-actions > * {
+    max-width: none;
+    width: 100%;
+  }
+
+  .github-checks-wizard__preview-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .integration-actions {
   display: flex;
   flex-direction: column;

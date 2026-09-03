@@ -5,13 +5,14 @@ import com.repoguard.agent.dto.DashboardLlmQualityModelStat;
 import com.repoguard.agent.dto.DashboardLlmQualityRepositoryStat;
 import com.repoguard.agent.dto.DashboardLlmQualityResponse;
 import com.repoguard.agent.dto.DashboardLlmQualityTrendCount;
+import com.repoguard.agent.review.quality.LlmQualityComparisonProvider;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
 
 @Component
-public class DashboardQualityFacade {
+public class DashboardQualityFacade implements LlmQualityComparisonProvider {
 
     private final DashboardLlmQualityStatsAssembler llmQualityStatsAssembler;
     private final DashboardLlmQualityTrendBuilder llmQualityTrendBuilder;

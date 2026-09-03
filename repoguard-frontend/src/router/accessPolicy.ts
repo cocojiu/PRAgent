@@ -4,11 +4,12 @@ export type RouteAccessContext = {
   authenticated: boolean;
   managementAllowed: boolean;
   enterpriseEnabled: boolean;
+  role?: string;
 };
 
 export const canAccessRouteMeta = (
   meta: RouteMeta,
-  { authenticated, managementAllowed, enterpriseEnabled }: RouteAccessContext
+  { authenticated, managementAllowed, enterpriseEnabled, role }: RouteAccessContext
 ) => {
   if (meta.requiresAuth && !authenticated) {
     return false;
@@ -16,5 +17,16 @@ export const canAccessRouteMeta = (
   if (meta.requiresEnterprise && !enterpriseEnabled) {
     return false;
   }
-  return !meta.requiresManage || authenticated && managementAllowed;
+  if (meta.requiresManage && (!authenticated || !managementAllowed)) {
+    return false;
+  }
+  const requiredRoles = Array.isArray(meta.requiresRole)
+    ? meta.requiresRole.filter((requiredRole): requiredRole is string => typeof requiredRole === "string")
+    : undefined;
+  if (requiredRoles && !requiredRoles.some(requiredRole =>
+    requiredRole.toUpperCase() === (role || "").toUpperCase()
+  )) {
+    return false;
+  }
+  return true;
 };

@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.dashboard.DashboardDailySnapshotRecoveryWorker;
 import com.repoguard.agent.github.comment.GithubCommentPublicationBatchRecoveryWorker;
+import com.repoguard.agent.github.checks.GithubCheckRunRecoveryWorker;
 import com.repoguard.agent.messaging.ReviewTaskPublishCompensator;
 import com.repoguard.agent.notification.delivery.NotificationDeliveryRecoveryCompensator;
 import com.repoguard.agent.notification.publish.NotificationEventPublishCompensator;
@@ -19,6 +20,7 @@ import com.repoguard.agent.review.quality.ReviewQualityBaselineRecoveryWorker;
 import com.repoguard.agent.security.SecretReEncryptionJobWorker;
 import com.repoguard.agent.tenancy.TenantScheduledTaskRunner;
 import com.repoguard.agent.worker.ReviewTaskRecoveryCompensator;
+import com.repoguard.agent.service.ReviewWorkflowService;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -45,6 +47,8 @@ class TenantBackgroundJobSchedulerTest {
     private final SecretReEncryptionJobWorker secretReEncryption = mock(SecretReEncryptionJobWorker.class);
     private final ReviewQualityBaselineRecoveryWorker qualityBaseline =
         mock(ReviewQualityBaselineRecoveryWorker.class);
+    private final GithubCheckRunRecoveryWorker githubCheckRuns = mock(GithubCheckRunRecoveryWorker.class);
+    private final ReviewWorkflowService reviewWorkflow = mock(ReviewWorkflowService.class);
     private final TenantBackgroundJobScheduler scheduler = new TenantBackgroundJobScheduler(
         tenantRunner,
         dashboard,
@@ -56,11 +60,13 @@ class TenantBackgroundJobSchedulerTest {
         notificationDelivery,
         reviewPublish,
         secretReEncryption,
-        qualityBaseline
+        qualityBaseline,
+        githubCheckRuns,
+        reviewWorkflow
     );
 
     @Test
-    void delegatesAllTwelveEntrypointsThroughTenantRunner() {
+    void delegatesAllThirteenEntrypointsThroughTenantRunner() {
         when(tenantRunner.runForEachActiveTenant(anyString(), any(Runnable.class))).thenAnswer(invocation -> {
             invocation.getArgument(1, Runnable.class).run();
             return new TenantScheduledTaskRunner.TenantRunSummary(1, 1, 0, 0);
@@ -82,8 +88,9 @@ class TenantBackgroundJobSchedulerTest {
         scheduler.processSecretReEncryption();
         scheduler.recoverQualityBaseline();
         scheduler.reconcileQualityBaseline();
+        scheduler.recoverGithubCheckRuns();
 
-        verify(tenantRunner, times(12)).runForEachActiveTenant(anyString(), any(Runnable.class));
+        verify(tenantRunner, times(13)).runForEachActiveTenant(anyString(), any(Runnable.class));
         verify(tenantRunner).runGlobal(
             org.mockito.ArgumentMatchers.eq("global_operational_data_retention"),
             any(Runnable.class)
@@ -91,6 +98,7 @@ class TenantBackgroundJobSchedulerTest {
         verify(dashboard).recoverDirtySnapshots();
         verify(dashboard).reconcileCurrentWindows();
         verify(reviewRecovery).recoverStuckTasks();
+        verify(reviewWorkflow).escalateOverdue();
         verify(reviewAttemptRetention).cleanup();
         verify(operationalRetention).cleanupGlobalData();
         verify(operationalRetention).cleanupTenantData();
@@ -101,15 +109,50 @@ class TenantBackgroundJobSchedulerTest {
         verify(secretReEncryption).processDueJob();
         verify(qualityBaseline).recoverDirtySnapshot();
         verify(qualityBaseline).reconcileSnapshot();
+        verify(githubCheckRuns).recover();
     }
 
     @Test
-    void ownsExactlyTwelveScheduledMethods() {
+    void compatibilityConstructorsLeaveOptionalWorkflowDisabled() {
+        TenantBackgroundJobScheduler withoutCheckRun = new TenantBackgroundJobScheduler(
+            tenantRunner,
+            dashboard,
+            reviewRecovery,
+            reviewAttemptRetention,
+            operationalRetention,
+            githubComments,
+            notificationPublish,
+            notificationDelivery,
+            reviewPublish,
+            secretReEncryption,
+            qualityBaseline
+        );
+        TenantBackgroundJobScheduler withoutWorkflow = new TenantBackgroundJobScheduler(
+            tenantRunner,
+            dashboard,
+            reviewRecovery,
+            reviewAttemptRetention,
+            operationalRetention,
+            githubComments,
+            notificationPublish,
+            notificationDelivery,
+            reviewPublish,
+            secretReEncryption,
+            qualityBaseline,
+            githubCheckRuns
+        );
+
+        assertThat(withoutCheckRun).isNotNull();
+        assertThat(withoutWorkflow).isNotNull();
+    }
+
+    @Test
+    void ownsExactlyThirteenScheduledMethods() {
         long scheduledMethods = Stream.of(TenantBackgroundJobScheduler.class.getDeclaredMethods())
             .filter(method -> method.isAnnotationPresent(Scheduled.class))
             .count();
 
-        assertThat(scheduledMethods).isEqualTo(12L);
+        assertThat(scheduledMethods).isEqualTo(13L);
     }
 
     @Test
@@ -129,9 +172,10 @@ class TenantBackgroundJobSchedulerTest {
             .extracting(path -> path.getFileName().toString())
             .containsExactlyInAnyOrder(
                 "ClusterCacheInvalidationPoller.java",
+                "LlmModelReleaseMetricsScheduler.java",
                 "TenantBackgroundJobScheduler.java"
             );
-        assertThat(annotationCount).isEqualTo(13L);
+        assertThat(annotationCount).isEqualTo(15L);
     }
 
     private boolean containsScheduledAnnotation(Path path) {

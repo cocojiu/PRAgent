@@ -77,7 +77,16 @@ management:
           include: readinessState,db,rabbit
 
 repoguard:
+  evaluation:
+    # Must point to a provisioned directory outside the repository. Empty by default so an
+    # evaluation run cannot accidentally read workspace files.
+    data-root: ${REPOGUARD_EVALUATION_DATA_ROOT:}
+    executor-threads: ${REPOGUARD_EVALUATION_EXECUTOR_THREADS:1}
+    queue-capacity: ${REPOGUARD_EVALUATION_QUEUE_CAPACITY:2}
+    max-sample-bytes: ${REPOGUARD_EVALUATION_MAX_SAMPLE_BYTES:10485760}
+    max-dataset-bytes: ${REPOGUARD_EVALUATION_MAX_DATASET_BYTES:536870912}
   review:
+    evaluation-report-retention-days: ${REPOGUARD_EVALUATION_REPORT_RETENTION_DAYS:180}
     execution:
       # End-to-end budget starts before GitHub diff retrieval and covers rule,
       # LLM and result persistence stages. Terminal persistence may use a short
@@ -103,6 +112,13 @@ repoguard:
       max-related-files: ${REPOGUARD_LLM_CONTEXT_MAX_RELATED_FILES:8}
       max-rule-policies: ${REPOGUARD_LLM_CONTEXT_MAX_RULE_POLICIES:20}
       max-rule-text-chars: ${REPOGUARD_LLM_CONTEXT_MAX_RULE_TEXT_CHARS:360}
+      semantic-index-enabled: ${REPOGUARD_LLM_SEMANTIC_INDEX_ENABLED:true}
+      semantic-index-max-files: ${REPOGUARD_LLM_SEMANTIC_INDEX_MAX_FILES:24}
+      semantic-index-max-file-bytes: ${REPOGUARD_LLM_SEMANTIC_INDEX_MAX_FILE_BYTES:65536}
+      semantic-index-max-total-bytes: ${REPOGUARD_LLM_SEMANTIC_INDEX_MAX_TOTAL_BYTES:1048576}
+      semantic-index-timeout-ms: ${REPOGUARD_LLM_SEMANTIC_INDEX_TIMEOUT_MS:3000}
+      semantic-index-cache-maximum-size: ${REPOGUARD_LLM_SEMANTIC_INDEX_CACHE_MAXIMUM_SIZE:128}
+      semantic-index-cache-ttl-seconds: ${REPOGUARD_LLM_SEMANTIC_INDEX_CACHE_TTL_SECONDS:900}
     llm-verification:
       enabled: ${REPOGUARD_LLM_VERIFICATION_ENABLED:true}
       max-candidates: ${REPOGUARD_LLM_VERIFICATION_MAX_CANDIDATES:4}
@@ -121,7 +137,7 @@ repoguard:
     # Roles that do not own Flyway migrations refuse to start below this version.
     # Keep in sync with the highest version under db/migration; the production
     # readiness check enforces the match.
-    expected-version: ${REPOGUARD_SCHEMA_EXPECTED_VERSION:77}
+    expected-version: ${REPOGUARD_SCHEMA_EXPECTED_VERSION:93}
   tenancy:
     enabled: ${REPOGUARD_TENANCY_ENABLED:false}
     header-name: ${REPOGUARD_TENANCY_HEADER_NAME:X-RepoGuard-Tenant}
@@ -283,6 +299,9 @@ repoguard:
     secure-cookies: ${REPOGUARD_AUTH_SECURE_COOKIES:true}
     public-auth-requests-per-minute-per-ip: ${REPOGUARD_AUTH_REQUESTS_PER_MINUTE_PER_IP:30}
     public-auth-requests-per-minute-per-account-ip: ${REPOGUARD_AUTH_REQUESTS_PER_MINUTE_PER_ACCOUNT_IP:10}
+  workflow:
+    human-review-sla-minutes: ${REPOGUARD_HUMAN_REVIEW_SLA_MINUTES:120}
+    escalation-limit: ${REPOGUARD_HUMAN_REVIEW_ESCALATION_LIMIT:3}
 
 app:
   edition: ${REPOGUARD_EDITION:personal}
@@ -304,16 +323,31 @@ app:
       networks: ${REPOGUARD_TRUSTED_PROXY_NETWORKS:127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
     outbound:
       github-allowed-hosts: ${REPOGUARD_OUTBOUND_GITHUB_ALLOWED_HOSTS:api.github.com}
+      gitlab-allowed-hosts: ${REPOGUARD_OUTBOUND_GITLAB_ALLOWED_HOSTS:gitlab.com}
+      gitee-allowed-hosts: ${REPOGUARD_OUTBOUND_GITEE_ALLOWED_HOSTS:gitee.com}
+      bitbucket-allowed-hosts: ${REPOGUARD_OUTBOUND_BITBUCKET_ALLOWED_HOSTS:api.bitbucket.org}
       llm-allowed-hosts: ${REPOGUARD_OUTBOUND_LLM_ALLOWED_HOSTS:dashscope.aliyuncs.com,api.openai.com}
-      notification-allowed-hosts: ${REPOGUARD_OUTBOUND_NOTIFICATION_ALLOWED_HOSTS:qyapi.weixin.qq.com,oapi.dingtalk.com}
+      notification-allowed-hosts: "${REPOGUARD_OUTBOUND_NOTIFICATION_ALLOWED_HOSTS:qyapi.weixin.qq.com,oapi.dingtalk.com,open.feishu.cn,*.slack.com}"
       infrastructure-allowed-hosts: ${REPOGUARD_OUTBOUND_INFRASTRUCTURE_ALLOWED_HOSTS:localhost,127.0.0.1,::1,mysql,rabbitmq}
       private-network-allowed-hosts: ${REPOGUARD_OUTBOUND_PRIVATE_NETWORK_ALLOWED_HOSTS:localhost,127.0.0.1,::1,mysql,rabbitmq}
       github-allowed-ports: ${REPOGUARD_OUTBOUND_GITHUB_ALLOWED_PORTS:443}
+      gitlab-allowed-ports: ${REPOGUARD_OUTBOUND_GITLAB_ALLOWED_PORTS:443}
+      gitee-allowed-ports: ${REPOGUARD_OUTBOUND_GITEE_ALLOWED_PORTS:443}
+      bitbucket-allowed-ports: ${REPOGUARD_OUTBOUND_BITBUCKET_ALLOWED_PORTS:443}
       llm-allowed-ports: ${REPOGUARD_OUTBOUND_LLM_ALLOWED_PORTS:443}
       notification-allowed-ports: ${REPOGUARD_OUTBOUND_NOTIFICATION_ALLOWED_PORTS:443}
       mysql-allowed-ports: ${REPOGUARD_OUTBOUND_MYSQL_ALLOWED_PORTS:3306}
       rabbit-mq-allowed-ports: ${REPOGUARD_OUTBOUND_RABBITMQ_ALLOWED_PORTS:5671,5672}
   github:
+    check-run:
+      enabled: ${REPOGUARD_GITHUB_CHECK_RUN_ENABLED:${REPOGUARD_GITHUB_APP_ENABLED:false}}
+      name: ${REPOGUARD_GITHUB_CHECK_RUN_NAME:RepoGuard PR Review}
+      recovery-interval-ms: ${REPOGUARD_GITHUB_CHECK_RUN_RECOVERY_INTERVAL_MS:5000}
+      recovery-batch-size: ${REPOGUARD_GITHUB_CHECK_RUN_RECOVERY_BATCH_SIZE:20}
+      claim-lease-seconds: ${REPOGUARD_GITHUB_CHECK_RUN_CLAIM_LEASE_SECONDS:120}
+      retry-base-seconds: ${REPOGUARD_GITHUB_CHECK_RUN_RETRY_BASE_SECONDS:10}
+      retry-max-seconds: ${REPOGUARD_GITHUB_CHECK_RUN_RETRY_MAX_SECONDS:900}
+      annotation-limit: ${REPOGUARD_GITHUB_CHECK_RUN_ANNOTATION_LIMIT:50}
     diff-budget:
       max-pages: ${REPOGUARD_GITHUB_DIFF_MAX_PAGES:10}
       max-files: ${REPOGUARD_GITHUB_DIFF_MAX_FILES:1000}
@@ -325,6 +359,7 @@ app:
       recovery-batch-size: ${REPOGUARD_GITHUB_COMMENT_PUBLISH_RECOVERY_BATCH_SIZE:20}
     webhook:
       enabled: ${REPOGUARD_GITHUB_WEBHOOK_ENABLED:true}
+      endpoint-url: ${REPOGUARD_GITHUB_WEBHOOK_ENDPOINT_URL:/api/v1/github/webhooks}
       secret: ${REPOGUARD_GITHUB_WEBHOOK_SECRET:}
       require-signature: ${REPOGUARD_GITHUB_WEBHOOK_REQUIRE_SIGNATURE:true}
       ignore-draft: ${REPOGUARD_GITHUB_WEBHOOK_IGNORE_DRAFT:true}

@@ -24,6 +24,9 @@ public class ReviewRulePolicySnapshotStore {
         snapshot.setPolicyVersion(rule.getPolicyVersion());
         snapshot.setConfigVersion(rule.getConfigVersion());
         snapshot.setDetectorVersion(rule.getDetectorVersion());
+        snapshot.setDetectorType(defaultString(rule.getDetectorType(), "BUILTIN"));
+        snapshot.setMatcherExpression(defaultString(rule.getMatcherExpression()));
+        snapshot.setExceptionPatterns(defaultString(rule.getExceptionPatterns()));
         snapshot.setRuleName(rule.getRuleName());
         snapshot.setScope(rule.getScope());
         snapshot.setApplicableLanguages(defaultString(rule.getApplicableLanguages()));
@@ -70,6 +73,9 @@ public class ReviewRulePolicySnapshotStore {
 
     public void restore(ReviewRuleConfig rule, ReviewRulePolicySnapshot snapshot, long newPolicyVersion) {
         rule.setDetectorVersion(snapshot.getDetectorVersion());
+        rule.setDetectorType(defaultString(snapshot.getDetectorType(), "BUILTIN"));
+        rule.setMatcherExpression(defaultString(snapshot.getMatcherExpression()));
+        rule.setExceptionPatterns(defaultString(snapshot.getExceptionPatterns()));
         rule.setConfigVersion(snapshot.getConfigVersion());
         rule.setPolicyVersion(newPolicyVersion);
         rule.setRuleName(snapshot.getRuleName());
@@ -88,5 +94,9 @@ public class ReviewRulePolicySnapshotStore {
 
     private String defaultString(String value) {
         return value == null ? "" : value;
+    }
+
+    private String defaultString(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
     }
 }

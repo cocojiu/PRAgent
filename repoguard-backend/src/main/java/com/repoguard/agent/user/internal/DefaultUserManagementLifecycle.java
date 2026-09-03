@@ -206,7 +206,7 @@ public class DefaultUserManagementLifecycle implements UserManagementLifecycle {
 
     private void ensureAnotherActiveAdmin(Long userId) {
         Long count = userAccountMapper.selectCount(new LambdaQueryWrapper<UserAccount>()
-            .eq(UserAccount::getRole, roleStatusPolicy.adminRole())
+            .in(UserAccount::getRole, roleStatusPolicy.adminRoles())
             .eq(UserAccount::getStatus, roleStatusPolicy.activeStatus())
             .ne(UserAccount::getId, userId));
         if (count == null || count == 0) {

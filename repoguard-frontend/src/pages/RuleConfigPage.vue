@@ -5,7 +5,10 @@
         <h1>规则配置</h1>
         <p>管理代码审查规则、严重级别和启用状态</p>
       </div>
-      <el-tag type="info" size="large">仅支持已注册内置规则</el-tag>
+      <div class="page-heading-actions">
+        <el-tag type="info" size="large">内置规则 + 安全声明式规则</el-tag>
+        <el-button type="primary" :disabled="!canManage" @click="openCreateDialog">新增声明式规则</el-button>
+      </div>
     </div>
 
     <el-alert v-if="errorMessage" class="page-alert" type="error" :title="errorMessage" show-icon :closable="false" />
@@ -59,7 +62,10 @@
       />
     </section>
 
+    <RepositoryPolicyPanel />
     <ReviewCalibrationQueueCard :rules="rules" />
+    <LlmEvaluationWorkbench />
+    <LlmModelReleaseCenter />
 
     <section class="rule-layout">
       <article class="rule-panel">
@@ -183,7 +189,7 @@
       </el-table>
     </section>
 
-    <el-dialog v-model="dialogVisible" title="编辑内置规则" width="560px">
+    <el-dialog v-model="dialogVisible" :title="editingRuleId ? '编辑规则' : '新增声明式规则'" width="560px">
       <el-form label-position="top" class="rule-form">
         <el-form-item label="规则 ID">
           <el-input v-model="ruleForm.id" :disabled="Boolean(editingRuleId)" placeholder="例如 RG-JAVA-004" />
@@ -199,6 +205,19 @@
         </el-form-item>
         <el-form-item label="文件匹配">
           <el-input v-model="ruleForm.filePatterns" placeholder="例如 *.java,application*.yml" />
+        </el-form-item>
+        <el-form-item label="检测器类型">
+          <el-select v-model="ruleForm.detectorType" :disabled="Boolean(editingRuleId && ruleForm.detectorType === 'BUILTIN')">
+            <el-option label="内置检测器" value="BUILTIN" />
+            <el-option label="正则表达式" value="REGEX" />
+            <el-option label="受限 AST 查询" value="AST" />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="ruleForm.detectorType !== 'BUILTIN'" label="匹配表达式">
+          <el-input v-model="ruleForm.matcherExpression" placeholder="正则，或 token:execute / call:save" />
+        </el-form-item>
+        <el-form-item v-if="ruleForm.detectorType !== 'BUILTIN'" label="例外文件匹配">
+          <el-input v-model="ruleForm.exceptionPatterns" placeholder="例如 **/generated/**,**/*.snap" />
         </el-form-item>
         <div class="rule-form-grid">
           <el-form-item label="严重级别">
@@ -323,6 +342,9 @@ import { canManage } from "@/stores/authState";
 import MetricGrid, { type MetricGridItem } from "@/components/MetricGrid.vue";
 import { useMetricIcon } from "@/composables/useMetricIcon";
 import ReviewCalibrationQueueCard from "@/features/rule-config/components/ReviewCalibrationQueueCard.vue";
+import LlmEvaluationWorkbench from "@/features/rule-config/components/LlmEvaluationWorkbench.vue";
+import LlmModelReleaseCenter from "@/features/rule-config/components/LlmModelReleaseCenter.vue";
+import RepositoryPolicyPanel from "@/features/rule-config/components/RepositoryPolicyPanel.vue";
 import { useReviewPolicyHistory } from "@/features/rule-config/composables/useReviewPolicyHistory";
 import { useReviewRuleCatalog } from "@/features/rule-config/composables/useReviewRuleCatalog";
 import { useReviewRuleEditor } from "@/features/rule-config/composables/useReviewRuleEditor";
@@ -352,6 +374,7 @@ const {
   ruleForm,
   saving,
   statusSavingId,
+  openCreateDialog,
   openEditDialog,
   saveRule,
   toggleRule

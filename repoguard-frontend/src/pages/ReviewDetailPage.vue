@@ -114,6 +114,16 @@
             :change-type-text="changeTypeText"
           />
 
+          <ReviewDetailAttemptComparisonCard
+            :attempts="attemptComparisonAttempts"
+            :comparison="attemptComparisonResult"
+            :error="attemptComparisonError"
+            :loading="attemptComparisonLoading"
+            :page="attemptComparisonPage"
+            :page-size="attemptComparisonPageSize"
+            @page-change="loadAttemptComparison"
+          />
+
           <ReviewDetailHumanReviewCard
             :can-manage="canManageHotTask"
             :can-submit-human-review="canSubmitHumanReview && !isArchivedTask"
@@ -134,10 +144,12 @@
             :current-page="findingsPage"
             :page-size="DETAIL_SECTION_PAGE_SIZE"
             :total="findingTotal"
+            :source-filter="findingsSource"
             :risk-text="riskText"
             :finding-feedback-status-class="findingFeedbackStatusClass"
             :finding-feedback-status-text="findingFeedbackStatusText"
             @load="loadFindingsFirstPage"
+            @source-change="setFindingsSource"
             @feedback="submitFindingFeedback"
             @page-change="loadFindingsPage"
           />
@@ -250,6 +262,7 @@ import {
   ReviewDetailKpiGrid,
   ReviewDetailSidePanel,
   ReviewDetailSummaryCard,
+  ReviewDetailAttemptComparisonCard,
   changeTypeText,
   chunkAggregateRiskText,
   chunkReasonText,
@@ -270,6 +283,7 @@ import {
   repositoryText,
   sourceText,
   useReviewDetailDerivedCollections,
+  useReviewDetailAttemptComparison,
   useReviewDetailFindingFeedback,
   useReviewDetailGithubCommentPublishConfirm,
   useReviewDetailGithubComments,
@@ -334,9 +348,11 @@ const {
 let stopPolling = () => {};
 let syncPolling = () => {};
 let resetDetailSections = () => {};
+let loadAttemptComparison: (page?: number) => Promise<void> = async () => {};
 
 function afterDetailSummaryLoaded() {
   resetDetailSections();
+  void loadAttemptComparison();
 }
 
 const {
@@ -381,6 +397,16 @@ const isSupersededTask = computed(() => selectedTask.value?.status === "supersed
 const canLoadGithubComments = computed(() =>
   isTerminalTask.value && !isSupersededTask.value && !isArchivedTask.value
 );
+const attemptComparison = useReviewDetailAttemptComparison({ selectedTask, isArchivedTask });
+const {
+  attempts: attemptComparisonAttempts,
+  comparison: attemptComparisonResult,
+  error: attemptComparisonError,
+  loading: attemptComparisonLoading,
+  page: attemptComparisonPage,
+  pageSize: attemptComparisonPageSize
+} = attemptComparison;
+loadAttemptComparison = attemptComparison.load;
 const sectionLoaders = useReviewDetailSectionLoaders({ isArchivedTask, selectedTask });
 const {
   changedFilesLoaded,
@@ -389,10 +415,12 @@ const {
   findingsLoaded,
   findingsLoading,
   findingsPage,
+  findingsSource,
   loadChangedFilesFirstPage,
   loadChangedFilesPage,
   loadFindingsFirstPage,
   loadFindingsPage,
+  setFindingsSource,
   loadMissingTestsFirstPage,
   loadMissingTestsPage,
   loadTimelineItems,

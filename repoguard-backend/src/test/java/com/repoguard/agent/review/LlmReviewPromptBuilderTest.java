@@ -94,8 +94,10 @@ class LlmReviewPromptBuilderTest {
             "issueType",
             "preconditions",
             "relatedFiles",
+            "fixExample",
             "blockingCandidate",
-            "lineNumber 必须是当前 diff 中变更后的新增行"
+            "lineNumber 必须是当前 diff 中变更后的新增行",
+            "无法精确替换时返回空字符串"
         );
         assertThat(prompt).doesNotContain("\"isBlocking\":");
     }

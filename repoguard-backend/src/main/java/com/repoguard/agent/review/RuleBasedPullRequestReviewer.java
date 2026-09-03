@@ -20,6 +20,7 @@ public class RuleBasedPullRequestReviewer {
     private final ReviewFindingFactory reviewFindingFactory;
     private final ReviewFindingSemanticDeduplicator findingDeduplicator;
     private final ServerRiskAggregator riskAggregator;
+    private final DeclarativeRuleMatcher declarativeRuleMatcher;
 
     @Autowired
     public RuleBasedPullRequestReviewer(
@@ -30,6 +31,26 @@ public class RuleBasedPullRequestReviewer {
         ReviewFindingSemanticDeduplicator findingDeduplicator,
         ServerRiskAggregator riskAggregator
     ) {
+        this(
+            reviewRuleProvider,
+            reviewRuleRegistry,
+            findingPolicyResolver,
+            reviewFindingFactory,
+            findingDeduplicator,
+            riskAggregator,
+            new DeclarativeRuleMatcher(new DeclarativeRulePolicy())
+        );
+    }
+
+    public RuleBasedPullRequestReviewer(
+        ReviewRuleProvider reviewRuleProvider,
+        ReviewRuleRegistry reviewRuleRegistry,
+        FindingPolicyResolver findingPolicyResolver,
+        ReviewFindingFactory reviewFindingFactory,
+        ReviewFindingSemanticDeduplicator findingDeduplicator,
+        ServerRiskAggregator riskAggregator,
+        DeclarativeRuleMatcher declarativeRuleMatcher
+    ) {
         this.reviewRuleProvider = Objects.requireNonNull(reviewRuleProvider, "reviewRuleProvider");
         ReviewRuleRegistry registry = Objects.requireNonNull(reviewRuleRegistry, "reviewRuleRegistry");
         this.lineRules = registry.lineRules();
@@ -38,6 +59,7 @@ public class RuleBasedPullRequestReviewer {
         this.reviewFindingFactory = Objects.requireNonNull(reviewFindingFactory, "reviewFindingFactory");
         this.findingDeduplicator = Objects.requireNonNull(findingDeduplicator, "findingDeduplicator");
         this.riskAggregator = Objects.requireNonNull(riskAggregator, "riskAggregator");
+        this.declarativeRuleMatcher = Objects.requireNonNull(declarativeRuleMatcher, "declarativeRuleMatcher");
     }
 
     RuleBasedPullRequestReviewer(
@@ -51,7 +73,8 @@ public class RuleBasedPullRequestReviewer {
             new FindingPolicyResolver(),
             new ReviewFindingFactory(),
             new ReviewFindingSemanticDeduplicator(),
-            new ServerRiskAggregator()
+            new ServerRiskAggregator(),
+            new DeclarativeRuleMatcher(new DeclarativeRulePolicy())
         );
     }
 
@@ -122,7 +145,12 @@ public class RuleBasedPullRequestReviewer {
         List<ReviewRule> applicableRules = lineRules.stream()
             .filter(rule -> applicableRuleIds.contains(rule.id()))
             .toList();
-        if (applicableRules.isEmpty()) {
+        List<ReviewRuleSettings> declarativeRules = applicableRuleIds.stream()
+            .map(configuredRules::get)
+            .filter(Objects::nonNull)
+            .filter(ReviewRuleSettings::isDeclarative)
+            .toList();
+        if (applicableRules.isEmpty() && declarativeRules.isEmpty()) {
             return true;
         }
         String patch = file.patch();
@@ -149,7 +177,8 @@ public class RuleBasedPullRequestReviewer {
                     file.context(),
                     patch,
                     applicableRuleIds,
-                    applicableRules
+                    applicableRules,
+                    declarativeRules
                 );
                 currentLine++;
             } else if (!line.startsWith("-")) {
@@ -169,7 +198,8 @@ public class RuleBasedPullRequestReviewer {
         ChangedFileContext changedFileContext,
         String patch,
         Set<String> applicableRuleIds,
-        List<ReviewRule> applicableRules
+        List<ReviewRule> applicableRules,
+        List<ReviewRuleSettings> declarativeRules
     ) {
         ReviewRuleLineContext context = new ReviewRuleLineContext(
             filePath,
@@ -184,6 +214,9 @@ public class RuleBasedPullRequestReviewer {
         );
         for (ReviewRule rule : applicableRules) {
             rule.evaluate(context).ifPresent(matches::add);
+        }
+        for (ReviewRuleSettings rule : declarativeRules) {
+            matches.addAll(declarativeRuleMatcher.matches(rule, filePath, lineNumber, line));
         }
     }
 

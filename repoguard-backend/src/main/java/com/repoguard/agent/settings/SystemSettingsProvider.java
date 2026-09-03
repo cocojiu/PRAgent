@@ -2,12 +2,11 @@ package com.repoguard.agent.settings;
 
 import com.repoguard.agent.entity.SystemSettingsConfig;
 import com.repoguard.agent.mapper.SystemSettingsConfigMapper;
+import com.repoguard.agent.tenancy.TenantContext;
 import org.springframework.stereotype.Service;
 
 @Service
 public class SystemSettingsProvider {
-
-    private static final long DEFAULT_SETTINGS_ID = 1L;
 
     private final SystemSettingsConfigMapper systemSettingsConfigMapper;
 
@@ -16,7 +15,9 @@ public class SystemSettingsProvider {
     }
 
     public SystemSettings getSettings() {
-        SystemSettingsConfig config = systemSettingsConfigMapper.selectById(DEFAULT_SETTINGS_ID);
+        SystemSettingsConfig config = systemSettingsConfigMapper.selectByTenantId(
+            TenantContext.currentTenantIdOrDefault()
+        );
         if (config == null) {
             return SystemSettings.empty();
         }

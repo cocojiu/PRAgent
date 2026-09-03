@@ -5,6 +5,7 @@ import com.repoguard.agent.dto.ReviewRulePolicyVersionDto;
 import com.repoguard.agent.entity.ReviewRuleConfig;
 import com.repoguard.agent.entity.ReviewRulePolicySnapshot;
 import com.repoguard.agent.review.ReviewRuleRegistry;
+import com.repoguard.agent.review.DeclarativeRulePolicy;
 import com.repoguard.agent.review.quality.ReviewQualityBaseline;
 import com.repoguard.agent.review.quality.ReviewQualityGroupBaseline;
 import java.time.LocalDateTime;
@@ -12,7 +13,9 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 @Component
 public class ReviewRuleResponseAssembler {
@@ -21,13 +24,24 @@ public class ReviewRuleResponseAssembler {
 
     private final ReviewRuleRegistry reviewRuleRegistry;
     private final ReviewRuleLifecycleGate lifecycleGate;
+    private final DeclarativeRulePolicy declarativeRulePolicy;
+
+    @Autowired
+    public ReviewRuleResponseAssembler(
+        ReviewRuleRegistry reviewRuleRegistry,
+        ReviewRuleLifecycleGate lifecycleGate,
+        DeclarativeRulePolicy declarativeRulePolicy
+    ) {
+        this.reviewRuleRegistry = Objects.requireNonNull(reviewRuleRegistry, "reviewRuleRegistry");
+        this.lifecycleGate = Objects.requireNonNull(lifecycleGate, "lifecycleGate");
+        this.declarativeRulePolicy = Objects.requireNonNull(declarativeRulePolicy, "declarativeRulePolicy");
+    }
 
     public ReviewRuleResponseAssembler(
         ReviewRuleRegistry reviewRuleRegistry,
         ReviewRuleLifecycleGate lifecycleGate
     ) {
-        this.reviewRuleRegistry = Objects.requireNonNull(reviewRuleRegistry, "reviewRuleRegistry");
-        this.lifecycleGate = Objects.requireNonNull(lifecycleGate, "lifecycleGate");
+        this(reviewRuleRegistry, lifecycleGate, new DeclarativeRulePolicy());
     }
 
     ReviewRuleConfigDto toRuleDto(
@@ -37,7 +51,14 @@ public class ReviewRuleResponseAssembler {
     ) {
         long configVersion = positiveVersion(rule.getConfigVersion());
         List<ReviewQualityGroupBaseline> qualityGroups = baseline == null ? List.of() : baseline.groups();
-        String detectorVersion = reviewRuleRegistry.detectorVersion(rule.getId());
+        String detectorType = declarativeRulePolicy.normalizeType(rule.getDetectorType());
+        boolean registered = reviewRuleRegistry.contains(rule.getId());
+        String detectorVersion = registered
+            ? reviewRuleRegistry.detectorVersion(rule.getId())
+            : defaultString(rule.getDetectorVersion());
+        if (!registered && !StringUtils.hasText(detectorVersion)) {
+            detectorVersion = declarativeRulePolicy.detectorVersion(detectorType);
+        }
         return new ReviewRuleConfigDto(
             rule.getId(),
             rule.getRuleName(),
@@ -56,7 +77,10 @@ public class ReviewRuleResponseAssembler {
             detectorVersion,
             configVersion,
             positiveVersion(rule.getPolicyVersion()),
-            lifecycleGate.evaluate(rule.getId(), detectorVersion, configVersion, qualityGroups)
+            lifecycleGate.evaluate(rule.getId(), detectorVersion, configVersion, qualityGroups),
+            detectorType,
+            defaultString(rule.getMatcherExpression()),
+            defaultString(rule.getExceptionPatterns())
         );
     }
 

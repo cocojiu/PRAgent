@@ -23,7 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/enterprise/tenants")
 @ApiRuntimeEnabled
 @EnterpriseEditionEnabled
-@RequireRole({"ADMIN"})
+@RequireRole({"ADMIN", "PLATFORM_ADMIN"})
 public class EnterpriseTenantQuotaController {
 
     private final TenantQuotaService quotaService;
@@ -53,7 +53,10 @@ public class EnterpriseTenantQuotaController {
 
     private void requirePlatformAdmin(HttpServletRequest request) {
         var principal = RequestAuthentication.require(request);
-        if (!Long.valueOf(0L).equals(principal.id()) || !"admin-api-key".equals(principal.username())) {
+        boolean apiKey = Long.valueOf(0L).equals(principal.id()) && "admin-api-key".equals(principal.username());
+        boolean platformRole = principal.tenantId() == null
+            && ("ADMIN".equalsIgnoreCase(principal.role()) || "PLATFORM_ADMIN".equalsIgnoreCase(principal.role()));
+        if (!apiKey && !platformRole) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "Platform administrator API key is required");
         }
     }

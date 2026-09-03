@@ -3,7 +3,9 @@ package com.repoguard.agent.worker;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.review.ReviewFindingResult;
 import com.repoguard.agent.review.ReviewExecutionProvenance;
+import com.repoguard.agent.review.ReviewFindingIdentity;
 import com.repoguard.agent.review.ReviewResult;
+import java.math.BigDecimal;
 import java.util.Locale;
 import org.springframework.util.StringUtils;
 import org.springframework.stereotype.Component;
@@ -70,6 +72,11 @@ class ReviewFindingEntityMapper {
         finding.setBlockReason(findingResult.isBlocking() ? safeReason(findingResult.policyReason()) : "");
         finding.setAnchorType(anchorType(findingResult));
         finding.setReviewDimension(findingResult.reviewDimension());
+        finding.setFindingFingerprint(ReviewFindingIdentity.fingerprint(taskId, finding));
+        finding.setComparisonStatus("UNMATCHED");
+        finding.setComparisonConfidence(BigDecimal.ZERO);
+        finding.setComparisonReason("PENDING_COMPARISON");
+        finding.setComparisonVersion(ReviewFindingIdentity.VERSION);
         return finding;
     }
 

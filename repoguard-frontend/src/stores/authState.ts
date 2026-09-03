@@ -5,7 +5,12 @@ import { applyUiPreferences } from "@/stores/uiPreferences";
 import { DEFAULT_TIMEZONE } from "@/utils/dateTime";
 
 export const currentUser = ref<CurrentUser>();
-export const canManage = computed(() => currentUser.value?.role === "ADMIN");
+const MANAGEMENT_ROLES = new Set(["ADMIN", "PLATFORM_ADMIN", "TENANT_ADMIN", "RULE_ADMIN"]);
+export const canManage = computed(() => MANAGEMENT_ROLES.has(currentUser.value?.role?.toUpperCase() || ""));
+export const canManageTenants = computed(() => {
+  const role = currentUser.value?.role?.toUpperCase();
+  return role === "ADMIN" || role === "PLATFORM_ADMIN";
+});
 
 type PendingCurrentUserLoad = {
   controller: AbortController;

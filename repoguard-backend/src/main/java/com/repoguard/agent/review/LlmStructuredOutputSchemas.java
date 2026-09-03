@@ -29,13 +29,14 @@ public final class LlmStructuredOutputSchemas {
                 "preconditions", map("type", "string"),
                 "impact", map("type", "string"),
                 "recommendation", map("type", "string"),
+                "fixExample", map("type", "string"),
                 "reviewDimension", map("type", "string"),
                 "blockingCandidate", map("type", "boolean")
             ),
             "required", List.of(
                 "issueType", "severity", "confidence", "filePath", "lineNumber", "relatedFiles",
                 "message", "evidence", "preconditions", "impact", "recommendation", "reviewDimension",
-                "blockingCandidate"
+                "blockingCandidate", "fixExample"
             )
         );
         return map(

@@ -210,7 +210,7 @@ class SystemConfigServiceImplTest {
     @Test
     void updateReviewPolicyKeepsExistingApiKeyWhenMaskedValueIsSubmitted() {
         ReviewPolicyConfig config = reviewPolicyConfig("sk-existing-5678");
-        when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);
+        when(reviewPolicyConfigMapper.selectByTenantId(1L)).thenReturn(config);
 
         var result = service.updateReviewPolicy(new ReviewPolicyConfigRequest(
             true,
@@ -265,7 +265,7 @@ class SystemConfigServiceImplTest {
     @Test
     void updateReviewPolicyClearsApiKeyWhenBlankValueIsSubmitted() {
         ReviewPolicyConfig config = reviewPolicyConfig("sk-existing-5678");
-        when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);
+        when(reviewPolicyConfigMapper.selectByTenantId(1L)).thenReturn(config);
 
         var result = service.updateReviewPolicy(new ReviewPolicyConfigRequest(
             true,
@@ -329,8 +329,8 @@ class SystemConfigServiceImplTest {
     void updateSystemSettingsPersistsConfigAndRecordsLog() {
         SystemSettingsConfig settingsConfig = systemSettingsConfig();
         ReviewPolicyConfig reviewPolicyConfig = reviewPolicyConfig("sk-existing-5678");
-        when(systemSettingsConfigMapper.selectById(1L)).thenReturn(settingsConfig);
-        when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(reviewPolicyConfig);
+        when(systemSettingsConfigMapper.selectByTenantId(1L)).thenReturn(settingsConfig);
+        when(reviewPolicyConfigMapper.selectByTenantId(1L)).thenReturn(reviewPolicyConfig);
         when(systemSettingLogMapper.selectList(any())).thenReturn(List.of(settingLog()));
 
         var result = service.updateSystemSettings(new SystemSettingsRequest(
@@ -430,7 +430,7 @@ class SystemConfigServiceImplTest {
             ReviewPolicyConfig config = reviewPolicyConfig("sk-test-1234");
             config.setBaseUrl(server.baseUrl());
             config.setMaxTokens(64);
-            when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);
+            when(reviewPolicyConfigMapper.selectByTenantId(1L)).thenReturn(config);
 
             var result = service.testReviewPolicy(null);
 
@@ -452,7 +452,7 @@ class SystemConfigServiceImplTest {
         try (ProbeServer server = startLlmProbeServer(llmResponse)) {
             ReviewPolicyConfig config = reviewPolicyConfig("sk-test-1234");
             config.setBaseUrl(server.baseUrl());
-            when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);
+            when(reviewPolicyConfigMapper.selectByTenantId(1L)).thenReturn(config);
 
             var result = service.testReviewPolicy(null);
 
@@ -469,7 +469,7 @@ class SystemConfigServiceImplTest {
         try (ProbeServer server = startLlmProbeServer(llmResponse)) {
             ReviewPolicyConfig config = reviewPolicyConfig("sk-test-1234");
             config.setBaseUrl(server.baseUrl());
-            when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);
+            when(reviewPolicyConfigMapper.selectByTenantId(1L)).thenReturn(config);
 
             var result = service.testReviewPolicy(null);
 

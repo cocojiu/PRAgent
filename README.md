@@ -10,6 +10,7 @@ RepoGuard Agent 是面向 GitHub Pull Request 的代码审查辅助系统，包�
 - RabbitMQ 异步执行、发布确认、失败补偿和异常任务运维。
 - 用户认证、管理员 API Key、RBAC、审计日志和敏感配置加密。
 - Dashboard 指标、质量趋势、通知运维、消息队列健康和日志观测。
+- 企业版租户与仓库管理台：租户切换、GitHub App installation 绑定、成员/OIDC 绑定和配额管理。
 
 ## 界面预览
 
@@ -164,6 +165,8 @@ powershell -ExecutionPolicy Bypass -File scripts/production-readiness-check.ps1 
 - `WORKER_CPU_LIMIT`、`BACKEND_MEM_LIMIT`、`WORKER_MEM_LIMIT`
 - `REPOGUARD_GITHUB_WEBHOOK_ALLOWED_REPOSITORIES`
 - `REPOGUARD_GITHUB_WEBHOOK_ALLOWED_HEAD_BRANCHES`
+- `REPOGUARD_GITHUB_CHECK_RUN_ENABLED`：启用 GitHub Checks 合并门禁（需要 GitHub App）
+- `REPOGUARD_GITHUB_CHECK_RUN_NAME`：分支保护中配置的必需状态检查名称，默认 `RepoGuard PR Review`
 
 敏感配置必须通过本地未跟踪的环境文件、文件化 Secret 或受保护的 CI Secret 注入。README 不保存真实密码、令牌、API Key、私钥、主机地址、主机指纹、备份位置或镜像仓库凭据；示例只允许使用占位符。缺少必要凭据时，应用和工作流应保持 fail-closed。
 
@@ -178,6 +181,36 @@ powershell -ExecutionPolicy Bypass -File scripts/production-readiness-check.ps1 
 - `REPOGUARD_GITHUB_WEBHOOK_SECRET_FILE`
 
 不要把这些变量的实际值写入 Git、命令参数、Shell 历史、容器镜像或日志。
+
+GitHub Checks 合并门禁：
+
+1. GitHub App 需要 `Checks: Read and write`、`Pull requests: Read and write`、`Contents: Read` 和 `Metadata: Read` 权限，并订阅 `pull_request`、`check_run` webhook。
+2. 设置 `REPOGUARD_GITHUB_CHECK_RUN_ENABLED=true`，并确保租户仓库绑定到该 App installation；系统会按 `queued → in_progress → completed` 顺序写入 Check Run。
+3. 在 GitHub 分支保护规则中，将 `REPOGUARD_GITHUB_CHECK_RUN_NAME`（默认 `RepoGuard PR Review`）设为必需状态检查。BLOCK Finding 会产生 failure annotation，人工复核期间为 `action_required`；Check Run 页面自带的 Re-run 会触发新一轮审查。
+
+企业版租户与 RBAC：
+
+1. 将前端 edition 设置为 `enterprise-experimental`，登录后平台管理员从“租户与仓库”进入控制台；所有写操作继续受服务端角色和乐观版本校验保护。
+2. `PLATFORM_ADMIN` 管理租户控制面，`TENANT_ADMIN` 管理租户成员，`RULE_ADMIN` 管理规则，`REVIEWER` 执行审查，`READ_ONLY` 只读；`ADMIN`/`VIEWER` 作为兼容角色保留。
+3. 顶部租户切换器把选择写入 `X-RepoGuard-Tenant` 请求头，不把租户标识放入 URL；启用 `REPOGUARD_TENANCY_ENABLED=true` 后，服务端只接受当前用户拥有的租户成员关系。
+
+仓库级语义上下文：
+
+1. LLM 审查会从变更文件提取类型/文件名符号，在 GitHub 默认分支树中确定性检索同目录调用方、实现/接口、测试和运行配置，并将命中内容作为关联上下文。
+2. 检索使用受限的 Caffeine 缓存和内容/文件/时间预算，不执行仓库代码；GitHub 未配置、默认分支不可用或请求失败时自动降级为仅使用 PR 变更上下文。
+3. 可通过 `REPOGUARD_LLM_SEMANTIC_INDEX_ENABLED`、`REPOGUARD_LLM_SEMANTIC_INDEX_MAX_FILES`、`REPOGUARD_LLM_SEMANTIC_INDEX_MAX_FILE_BYTES`、`REPOGUARD_LLM_SEMANTIC_INDEX_MAX_TOTAL_BYTES`、`REPOGUARD_LLM_SEMANTIC_INDEX_TIMEOUT_MS` 和缓存大小/TTL 变量调整预算。当前实现只做符号和路径检索，向量检索留待后续评估。
+
+GitHub suggestion 一键修复：
+
+1. 只有定位到变更行的 finding 才允许生成建议；`fixExample` 必须是完整替换代码块（例如 ```java ... ```）或 `suggestion:` 前缀，最多 5 行、4,000 字符，普通自然语言会被拒绝。
+2. 评论中会显示原生 `suggestion` 代码块和“请先确认”提示，作者可在 GitHub 页面确认后应用；系统不会自动提交作者分支，也不会为不完整证据创建修复 PR。
+3. 删除文件、PR 总评、已发布/非 actionable finding 和包含嵌套代码围栏或控制字符的内容不会生成可应用建议。
+
+LLM 评测与模型发布中心：
+
+1. 企业管理员可在 `/api/v1/config/review-calibration/release-center` 查看按租户隔离的影子版本、灰度版本、当前版本、历史质量对比和当月 token/费用预算；版本只接收数据集 ID、版本和 SHA-256 指纹等聚合证据，不保存原始 prompt 或模型响应。
+2. 通过 `/shadow` 登记候选版本，只有 precision ≥ 90%、recall ≥ 80%、锚定率 ≥ 95%、重复率/解析失败率 ≤ 5%、p95 ≤ 15 秒且数据集质量门禁通过后，才能按 1–99% 灰度或 100% 全量发布；同一租户同一 `releaseKey` 会幂等更新。
+3. 灰度路由使用审查任务 ID 的确定性桶分配，重试不会改变模型；运行时发现质量指标不安全或月度预算耗尽会自动回滚/停用 LLM 并回退规则审查。租户配额中的 `monthlyLlmTokenBudget` 与 `monthlyLlmCostBudget` 为 0 表示不设上限。
 
 运行角色边界：
 
@@ -234,7 +267,7 @@ $env:REPOGUARD_LOG_PATH = "../logs/backend"
 - `/api/v1/auth/**`：注册、登录、刷新、当前用户、登出。
 - `/api/v1/dashboard/**`：总览统计、趋势、风险分布、通知摘要。
 - `/api/v1/reviews/**`：审查任务列表、详情、手动触发、重试、评论预览与回写。
-- `/api/v1/github/webhooks`：GitHub `pull_request` webhook 自动触发审查任务。
+- `/api/v1/github/webhooks`：GitHub `pull_request` 自动触发审查，`check_run.rerequested` 支持页面重新运行。
 - `/api/v1/config/**`：系统设置、集成配置、连接测试和密钥重加密。
 - `/api/v1/message-queue/**`：RabbitMQ 健康、异常任务和重新入队。
 - `/api/v1/users/**`：用户管理。

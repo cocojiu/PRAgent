@@ -19,7 +19,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
  * Exercises the supported rolling-upgrade path against a real MySQL instance.
  *
  * <p>The test is opt-in because local unit-test runs do not provision a database. CI enables it
- * with an isolated database and verifies both the V76 expand state and the V77 contract state.
+ * with an isolated database and verifies the V76 expand state through the V93 CI SARIF upload state.
  */
 @EnabledIfEnvironmentVariable(named = "REPOGUARD_RUN_INTEGRATION_TESTS", matches = "true")
 class FlywayMigrationUpgradePathIntegrationTest {
@@ -49,6 +49,7 @@ class FlywayMigrationUpgradePathIntegrationTest {
                     .isFalse();
 
                 tenantId = insertTenant(connection, suffix);
+                insertTenantSingletonConfigs(connection, tenantId);
                 taskId = insertReviewTask(connection, tenantId, suffix);
                 attemptId = insertExecutionAttempt(connection, tenantId, taskId);
                 updateCurrentAttempt(connection, taskId, attemptId);
@@ -79,8 +80,190 @@ class FlywayMigrationUpgradePathIntegrationTest {
                     deleteTenant(connection, otherTenantId);
                 }
             }
+
+            migrateTo(url, username, password, "78");
+            try (Connection connection = open(url, username, password)) {
+                assertThat(latestSuccessfulMigration(connection)).isEqualTo("78");
+                assertThat(uniqueIndexExists(
+                    connection,
+                    "review_policy_config",
+                    "uk_review_policy_config_tenant"
+                )).isTrue();
+                assertThat(uniqueIndexExists(
+                    connection,
+                    "system_settings_config",
+                    "uk_system_settings_config_tenant"
+                )).isTrue();
+                long finalTenantId = tenantId;
+                assertThatThrownBy(() -> insertTenantSingletonConfigs(connection, finalTenantId))
+                    .isInstanceOf(SQLException.class);
+            }
+
+            migrateTo(url, username, password, "79");
+            try (Connection connection = open(url, username, password)) {
+                assertThat(latestSuccessfulMigration(connection)).isEqualTo("79");
+                assertThat(compositeUniqueIndexExists(
+                    connection,
+                    "github_check_run",
+                    "uk_github_check_run_tenant_task_sequence",
+                    3
+                )).isTrue();
+                assertThat(constraintExists(
+                    connection,
+                    "github_check_run",
+                    "fk_github_check_run_tenant_task"
+                )).isTrue();
+                insertGithubCheckRun(connection, tenantId, taskId, suffix);
+                long otherTenantId = insertTenant(connection, suffix + "-check-other");
+                long finalTaskIdForCheck = taskId;
+                try {
+                    assertThatThrownBy(() -> insertGithubCheckRun(connection, otherTenantId, finalTaskIdForCheck, suffix + "-cross"))
+                        .isInstanceOf(SQLException.class);
+                } finally {
+                    deleteTenant(connection, otherTenantId);
+                }
+            }
+
+            migrateTo(url, username, password, "93");
+            try (Connection connection = open(url, username, password)) {
+                assertThat(latestSuccessfulMigration(connection)).isEqualTo("93");
+                assertThat(columnExists(connection, "tenant_quota_config", "monthly_llm_token_budget"))
+                    .isTrue();
+                assertThat(columnExists(connection, "tenant_quota_config", "monthly_llm_cost_budget"))
+                    .isTrue();
+                assertThat(compositeUniqueIndexExists(
+                    connection,
+                    "llm_model_release",
+                    "uk_llm_model_release_tenant_key",
+                    2
+                )).isTrue();
+                assertThat(constraintExists(
+                    connection,
+                    "llm_model_release",
+                    "fk_llm_model_release_tenant"
+                )).isTrue();
+                assertThat(columnExists(connection, "review_rule_config", "detector_type")).isTrue();
+                assertThat(columnExists(connection, "review_rule_config", "matcher_expression")).isTrue();
+                assertThat(columnExists(connection, "review_rule_config", "exception_patterns")).isTrue();
+                assertThat(columnExists(connection, "review_rule_policy_snapshot", "detector_type")).isTrue();
+                assertThat(columnExists(connection, "sarif_import_batch", "attempt_id")).isTrue();
+                assertThat(compositeUniqueIndexExists(connection, "sarif_import_batch", "uk_sarif_batch_identity", 6))
+                    .isTrue();
+                assertThat(constraintExists(connection, "review_finding", "fk_review_finding_source_batch"))
+                    .isTrue();
+                assertThat(columnExists(connection, "llm_evaluation_report", "manifest_fingerprint")).isTrue();
+                assertThat(columnExists(connection, "llm_evaluation_report", "verifier_version")).isTrue();
+                assertThat(columnExists(connection, "llm_evaluation_report", "aggregation_version")).isTrue();
+                assertThat(columnExists(connection, "llm_model_release", "evaluation_report_id")).isTrue();
+                assertThat(constraintExists(connection, "llm_model_release", "fk_llm_model_release_evaluation_report"))
+                    .isTrue();
+                assertThat(columnExists(connection, "review_task", "llm_release_key")).isTrue();
+                assertThat(compositeUniqueIndexExists(
+                    connection, "llm_model_release_audit", "uk_llm_model_release_audit_tenant_id", 2
+                )).isTrue();
+                assertThat(constraintExists(
+                    connection, "llm_model_release_audit", "fk_llm_model_release_audit_release"
+                )).isTrue();
+                assertThat(compositeUniqueIndexExists(
+                    connection,
+                    "github_check_run_policy",
+                    "uk_github_check_run_policy_repository",
+                    3
+                )).isTrue();
+                assertThat(constraintExists(
+                    connection,
+                    "github_check_run_policy",
+                    "fk_github_check_run_policy_tenant"
+                )).isTrue();
+                assertThat(compositeUniqueIndexExists(
+                    connection,
+                    "llm_model_release_metric_snapshot",
+                    "uk_llm_release_metric_window",
+                    4
+                )).isTrue();
+                assertThat(constraintExists(
+                    connection,
+                    "llm_model_release_metric_snapshot",
+                    "fk_llm_release_metric_release"
+                )).isTrue();
+                assertThat(columnIsNullable(connection, "notification_event", "task_id")).isTrue();
+                assertThat(columnIsNullable(connection, "notification_delivery_log", "task_id")).isTrue();
+                assertThat(columnExists(connection, "llm_evaluation_report", "lifecycle_status")).isTrue();
+                assertThat(columnExists(connection, "llm_evaluation_report", "retention_days")).isTrue();
+                assertThat(columnExists(connection, "llm_evaluation_report", "expires_at")).isTrue();
+                assertThat(compositeUniqueIndexExists(
+                    connection,
+                    "llm_evaluation_report_lifecycle_audit",
+                    "uk_llm_evaluation_report_lifecycle_audit_operation",
+                    2
+                )).isTrue();
+                assertThat(constraintExists(
+                    connection,
+                    "llm_evaluation_report_lifecycle_audit",
+                    "fk_llm_evaluation_report_lifecycle_audit_report"
+                )).isTrue();
+                assertThat(compositeUniqueIndexExists(
+                    connection,
+                    "llm_model_release_drift_audit",
+                    "uk_llm_model_release_drift_audit_operation",
+                    2
+                )).isTrue();
+                assertThat(constraintExists(
+                    connection,
+                    "llm_model_release_drift_audit",
+                    "fk_llm_model_release_drift_audit_tenant"
+                )).isTrue();
+                assertThat(columnExists(connection, "sarif_ci_upload", "scan_run_id")).isTrue();
+                assertThat(columnExists(connection, "sarif_ci_upload", "completion_time")).isTrue();
+                assertThat(compositeUniqueIndexExists(
+                    connection,
+                    "sarif_ci_upload",
+                    "uk_sarif_ci_upload_identity",
+                    7
+                )).isTrue();
+                assertThat(constraintExists(
+                    connection,
+                    "sarif_ci_upload",
+                    "fk_sarif_ci_upload_batch"
+                )).isTrue();
+            }
         } finally {
             cleanup(url, username, password, tenantId, taskId, attemptId);
+        }
+    }
+
+    private void insertTenantSingletonConfigs(Connection connection, long tenantId) throws SQLException {
+        try (PreparedStatement reviewPolicy = connection.prepareStatement("""
+            insert into review_policy_config (
+                tenant_id, llm_enabled, llm_provider, model_name, base_url, api_key_value,
+                timeout_seconds, temperature, max_tokens, fallback_to_rules, worker_concurrency,
+                chunk_file_threshold, chunk_line_threshold, chunk_max_files, chunk_max_lines,
+                input_token_price_per_million, output_token_price_per_million, created_at, updated_at
+            )
+            select ?, llm_enabled, llm_provider, model_name, base_url, null,
+                   timeout_seconds, temperature, max_tokens, fallback_to_rules, worker_concurrency,
+                   chunk_file_threshold, chunk_line_threshold, chunk_max_files, chunk_max_lines,
+                   input_token_price_per_million, output_token_price_per_million, now(), now()
+              from review_policy_config where tenant_id = 1 order by id limit 1
+            """)) {
+            reviewPolicy.setLong(1, tenantId);
+            reviewPolicy.executeUpdate();
+        }
+        try (PreparedStatement systemSettings = connection.prepareStatement("""
+            insert into system_settings_config (
+                tenant_id, system_name, language, timezone, retention_days, max_diff_lines,
+                auto_comment, auto_retry, github_comment, high_risk_pr, failed_task,
+                notification_email, webhook_signature, secret_masking, public_repo_allowed,
+                token_ttl_days, created_at, updated_at
+            )
+            select ?, system_name, language, timezone, retention_days, max_diff_lines,
+                   auto_comment, auto_retry, github_comment, high_risk_pr, failed_task,
+                   notification_email, webhook_signature, secret_masking, public_repo_allowed,
+                   token_ttl_days, now(), now()
+              from system_settings_config where tenant_id = 1 order by id limit 1
+            """)) {
+            systemSettings.setLong(1, tenantId);
+            systemSettings.executeUpdate();
         }
     }
 
@@ -204,6 +387,23 @@ class FlywayMigrationUpgradePathIntegrationTest {
         }
     }
 
+    private void insertGithubCheckRun(Connection connection, long tenantId, long taskId, String suffix)
+        throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+            insert into github_check_run (
+                tenant_id, task_id, run_sequence, name, head_sha, external_id,
+                desired_stage, desired_version, applied_version, dispatch_attempts,
+                created_at, updated_at
+            ) values (?, ?, 1, 'RepoGuard PR Review', ?, ?, 'QUEUED', 1, 0, 0, now(), now())
+            """)) {
+            statement.setLong(1, tenantId);
+            statement.setLong(2, taskId);
+            statement.setString(3, COMMIT_SHA);
+            statement.setString(4, "repoguard-upgrade-" + suffix);
+            statement.executeUpdate();
+        }
+    }
+
     private long rowCount(Connection connection, String table, long tenantId, long taskId)
         throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(
@@ -230,6 +430,64 @@ class FlywayMigrationUpgradePathIntegrationTest {
             try (ResultSet result = statement.executeQuery()) {
                 assertThat(result.next()).isTrue();
                 return result.getLong(1) == 1L;
+            }
+        }
+    }
+
+    private boolean uniqueIndexExists(Connection connection, String table, String index)
+        throws SQLException {
+        return indexColumnCount(connection, table, index) == 1;
+    }
+
+    private boolean columnExists(Connection connection, String table, String column) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+            select count(*)
+              from information_schema.columns
+             where table_schema = database() and table_name = ? and column_name = ?
+            """)) {
+            statement.setString(1, table);
+            statement.setString(2, column);
+            try (ResultSet result = statement.executeQuery()) {
+                assertThat(result.next()).isTrue();
+                return result.getLong(1) == 1L;
+            }
+        }
+    }
+
+    private boolean columnIsNullable(Connection connection, String table, String column) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+            select is_nullable
+              from information_schema.columns
+             where table_schema = database() and table_name = ? and column_name = ?
+            """)) {
+            statement.setString(1, table);
+            statement.setString(2, column);
+            try (ResultSet result = statement.executeQuery()) {
+                assertThat(result.next()).isTrue();
+                return "YES".equalsIgnoreCase(result.getString(1));
+            }
+        }
+    }
+
+    private boolean compositeUniqueIndexExists(Connection connection, String table, String index, int expectedColumns)
+        throws SQLException {
+        return indexColumnCount(connection, table, index) == expectedColumns;
+    }
+
+    private int indexColumnCount(Connection connection, String table, String index)
+        throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+            select count(*) as column_count, min(non_unique) as non_unique
+              from information_schema.statistics
+             where table_schema = database() and table_name = ? and index_name = ?
+            """)) {
+            statement.setString(1, table);
+            statement.setString(2, index);
+            try (ResultSet result = statement.executeQuery()) {
+                assertThat(result.next()).isTrue();
+                return result.getInt("non_unique") == 0
+                    ? result.getInt("column_count")
+                    : 0;
             }
         }
     }
@@ -281,10 +539,27 @@ class FlywayMigrationUpgradePathIntegrationTest {
                     attempts.executeUpdate();
                 }
             }
+            try (PreparedStatement checkRuns = connection.prepareStatement(
+                "delete from github_check_run where tenant_id = ? and task_id = ?"
+            )) {
+                checkRuns.setLong(1, tenantId);
+                checkRuns.setLong(2, taskId);
+                checkRuns.executeUpdate();
+            }
             try (PreparedStatement tasks = connection.prepareStatement("delete from review_task where tenant_id = ? and id = ?")) {
                 tasks.setLong(1, tenantId);
                 tasks.setLong(2, taskId);
                 tasks.executeUpdate();
+            }
+            try (PreparedStatement policies = connection.prepareStatement(
+                "delete from review_policy_config where tenant_id = ?"
+            ); PreparedStatement settings = connection.prepareStatement(
+                "delete from system_settings_config where tenant_id = ?"
+            )) {
+                policies.setLong(1, tenantId);
+                policies.executeUpdate();
+                settings.setLong(1, tenantId);
+                settings.executeUpdate();
             }
             deleteTenant(connection, tenantId);
         }

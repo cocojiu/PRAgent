@@ -141,6 +141,19 @@ class ReviewTaskDetailDataLoaderTest {
     }
 
     @Test
+    void findingSourceFilterLoadsOnlyRequestedContribution() {
+        ReviewFinding sarif = finding();
+        sarif.setSource("SARIF");
+        when(reviewFindingMapper.selectPage(any(), any())).thenReturn(page(List.of(sarif)));
+
+        var result = loader.loadFindingsPage(521L, 1, 20, null, null, null, "sarif");
+
+        assertThat(result.items()).hasSize(1);
+        assertThat(result.items().getFirst().source()).isEqualTo("SARIF");
+        Mockito.verify(reviewFindingMapper).selectPage(any(), any());
+    }
+
+    @Test
     void constructorRejectsMissingFindingAssembler() {
         assertThatThrownBy(() -> new ReviewTaskDetailDataLoader(
             changedFileMapper,

@@ -39,7 +39,7 @@ class EnterpriseKubernetesDeploymentContractTest {
     }
 
     @Test
-    void runtimeUsesExternalSecretsV77AndInternalBackendAlias() throws IOException {
+    void runtimeUsesExternalSecretsV88AndInternalBackendAlias() throws IOException {
         List<Map<String, Object>> resources = resources();
         Map<String, Object> config = map(resource(resources, "ConfigMap", "repoguard-runtime").get("data"));
 
@@ -47,7 +47,7 @@ class EnterpriseKubernetesDeploymentContractTest {
             .containsEntry("REPOGUARD_TENANCY_ENABLED", "true")
             .containsEntry("REPOGUARD_ENTERPRISE_OIDC_ENABLED", "true")
             .containsEntry("REPOGUARD_GITHUB_APP_ENABLED", "true")
-            .containsEntry("REPOGUARD_SCHEMA_EXPECTED_VERSION", "77")
+            .containsEntry("REPOGUARD_SCHEMA_EXPECTED_VERSION", "88")
             .containsEntry("REPOGUARD_SCHEDULING_LEASE_SECONDS", "900")
             .containsEntry("REPOGUARD_SCHEDULING_HEARTBEAT_SECONDS", "60")
             .containsEntry("REPOGUARD_SCHEDULING_HEARTBEAT_THREADS", "2")

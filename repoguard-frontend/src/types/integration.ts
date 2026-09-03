@@ -48,6 +48,81 @@ export interface GithubIntegrationConfigRequest {
   defaultRepo?: string;
 }
 
+export interface GithubChecksDiagnostic {
+  code: string;
+  label: string;
+  status: string;
+  message: string;
+  blocking: boolean;
+}
+
+export interface GithubChecksWebhookStatus {
+  endpointUrl: string;
+  enabled: boolean;
+  signatureRequired: boolean;
+  secretConfigured: boolean;
+  repositoriesRestricted: boolean;
+  branchesRestricted: boolean;
+  lastDeliveryId?: string;
+  lastDeliveryStatus: string;
+  lastDeliveryAt?: string;
+}
+
+export interface GithubChecksPreview {
+  attempted: boolean;
+  created: boolean;
+  headSha?: string;
+  externalId?: string;
+  remoteCheckRunId?: number;
+  desiredStage: string;
+  desiredVersion: number;
+  appliedStage?: string;
+  appliedVersion: number;
+  retryAttempts: number;
+  annotationCount: number;
+  annotationTruncated: boolean;
+  status: string;
+  conclusion?: string;
+  message: string;
+}
+
+export interface GithubChecksSetupStatus {
+  organization: string;
+  repository: string;
+  appEnabled: boolean;
+  appConfigured: boolean;
+  installationId?: number;
+  installationAllowlisted: boolean;
+  repositoryAuthorized: boolean;
+  metadataPermission: boolean;
+  contentsPermission: boolean;
+  pullRequestsPermission: boolean;
+  checksPermission: boolean;
+  globalCheckRunEnabled: boolean;
+  repositoryCheckRunEnabled: boolean;
+  effectiveCheckRunEnabled: boolean;
+  policyVersion: number;
+  webhook: GithubChecksWebhookStatus;
+  diagnostics: GithubChecksDiagnostic[];
+  preview: GithubChecksPreview;
+  ready: boolean;
+  mergeGateGuidance: string;
+}
+
+export interface GithubChecksPreviewRequest {
+  organization: string;
+  repository: string;
+  pullRequestNumber: number;
+}
+
+export interface GithubChecksPolicyRequest {
+  organization: string;
+  repository: string;
+  enabled: boolean;
+  expectedVersion: number;
+  confirmed: boolean;
+}
+
 export interface ServiceIntegrationConfig {
   provider: string;
   status: "configured" | "not_configured" | "failed";

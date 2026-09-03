@@ -98,6 +98,8 @@
             </div>
           </div>
 
+          <TenantSwitcher v-if="enterpriseEditionEnabled" />
+
           <div class="top-action-menu-shell" @click.stop>
             <button
               class="user"
@@ -173,7 +175,11 @@ import {
 } from "@lucide/vue";
 import { logout } from "@/api/auth";
 import { hasAuthToken } from "@/api/client";
-import { fetchNotifications } from "@/api/notifications";
+import {
+  fetchNotificationReadKeys,
+  fetchNotifications,
+  markNotificationRead as markNotificationReadOnServer
+} from "@/api/notifications";
 import { createPageAwarePoller } from "@/composables/pageAwarePoller";
 import { pruneReadNotificationIds } from "@/layouts/notificationReadState";
 import { canAccessRouteMeta } from "@/router/accessPolicy";
@@ -184,6 +190,9 @@ import type { NotificationCenter, NotificationItem } from "@/types";
 
 const ChangePasswordDialog = defineAsyncComponent(
   () => import("@/features/auth/components/ChangePasswordDialog.vue")
+);
+const TenantSwitcher = defineAsyncComponent(
+  () => import("@/components/TenantSwitcher.vue")
 );
 const collapsed = ref(false);
 const route = useRoute();
@@ -207,13 +216,15 @@ const navItems = [
   { label: "消息队列", path: "/repoguard/message-queue", icon: RadioTower },
   { label: "通知运维", path: "/repoguard/notifications", icon: BellRing },
   { label: "用户管理", path: "/repoguard/users", icon: Users },
+  { label: "租户与仓库", path: "/repoguard/tenants", icon: Users },
   { label: "系统设置", path: "/repoguard/settings", icon: Cog }
 ];
 
 const canOpenPath = (path: string) => canAccessRouteMeta(router.resolve(path).meta, {
   authenticated: hasAuthToken(),
   managementAllowed: canManage.value,
-  enterpriseEnabled: enterpriseEditionEnabled
+  enterpriseEnabled: enterpriseEditionEnabled,
+  role: currentUser.value?.role
 });
 const visibleNavItems = computed(() => navItems.filter((item) => canOpenPath(item.path)));
 const currentTitle = computed(() => String(route.meta.title || "RepoGuard Agent"));
@@ -243,6 +254,7 @@ const markNotificationRead = (id: string) => {
   }
   readNotificationIds.value = new Set([...readNotificationIds.value, id]);
   persistReadNotificationIds();
+  void markNotificationReadOnServer({ notificationKey: id }).catch(() => undefined);
 };
 
 const isNotificationRead = (id: string) => readNotificationIds.value.has(id);
@@ -275,6 +287,19 @@ const loadNotifications = async (options: { force?: boolean } = {}) => {
   }
 };
 
+const loadServerReadNotificationIds = async () => {
+  if (!enterpriseEditionEnabled || !hasAuthToken()) {
+    return;
+  }
+  try {
+    const serverIds = await fetchNotificationReadKeys();
+    readNotificationIds.value = new Set([...readNotificationIds.value, ...serverIds]);
+    persistReadNotificationIds();
+  } catch {
+    // Local state remains the offline fallback when the read-state endpoint is unavailable.
+  }
+};
+
 const pruneReadNotifications = (items: NotificationItem[]) => {
   const pruned = pruneReadNotificationIds(readNotificationIds.value, items.map((item) => item.id));
   if (pruned.size === readNotificationIds.value.size) {
@@ -296,6 +321,9 @@ const markAllRead = () => {
   }
   readNotificationIds.value = new Set([...readNotificationIds.value, ...notifications.value.map((item) => item.id)]);
   persistReadNotificationIds();
+  notifications.value.forEach((item) => {
+    void markNotificationReadOnServer({ notificationKey: item.id }).catch(() => undefined);
+  });
   ElMessage.success("已将当前通知标记为已读");
 };
 
@@ -384,6 +412,7 @@ onMounted(() => {
   void refreshCurrentUser();
   if (enterpriseEditionEnabled) {
     loadReadNotificationIds();
+    void loadServerReadNotificationIds();
     notificationWarmupTimer = setTimeout(() => {
       notificationWarmupTimer = undefined;
       void loadNotifications();

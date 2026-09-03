@@ -25,6 +25,7 @@ import type { ManagedUser, UserCreateRequest, UserOperationAudit, UserRole, User
 import {
   isAuthResponse,
   isCurrentUser,
+  isGithubChecksSetupStatus,
   isGithubIntegrationConfig,
   isReviewPolicyConfig,
   isReviewTaskSummary,
@@ -44,10 +45,39 @@ import type {
   DataRetentionCleanupAudit,
   DataRetentionCleanupRequest,
   DataRetentionCleanupResponse,
+  EnterpriseIdentityBindingRequest,
+  EnterpriseTenant,
+  EnterpriseTenantCreateRequest,
+  EnterpriseTenantMembershipRequest,
+  EnterpriseTenantQuota,
+  EnterpriseTenantQuotaRequest,
+  EnterpriseTenantRepositoryRequest,
+  EnterpriseTenantStatusRequest,
+  LlmModelRelease,
+  LlmModelReleaseAudit,
+  LlmModelReleaseAuditExport,
+  LlmModelReleaseAuditVerification,
+  LlmModelReleaseCenter,
+  LlmModelReleaseMetric,
+  LlmModelReleaseDrift,
+  LlmModelReleaseDriftRepair,
+  LlmModelReleaseDriftRepairRequest,
+  LlmModelReleaseRequest,
+  LlmModelRollbackRequest,
+  LlmEvaluationExport,
+  LlmEvaluationReport,
+  LlmEvaluationReportComparison,
+  LlmEvaluationReportLifecycleRequest,
+  LlmEvaluationRequest,
+  LlmEvaluationRun,
+  LlmEvaluationRunRequest,
   CacheStats,
   GithubCommentPreview,
   GithubCommentPublicationHistory,
   GithubCommentPublish,
+  GithubChecksPolicyRequest,
+  GithubChecksPreviewRequest,
+  GithubChecksSetupStatus,
   GithubIntegrationConfig,
   GithubIntegrationConfigRequest,
   GithubPullRequestOptions,
@@ -60,6 +90,8 @@ import type {
   NotificationBindingRequest,
   NotificationBindingStatusRequest,
   NotificationCenter,
+  NotificationReadRequest,
+  NotificationReport,
   NotificationDelivery,
   NotificationEvent,
   PageResponse,
@@ -68,6 +100,7 @@ import type {
   ReviewQuery,
   ReviewExecutionAttempt,
   ReviewExecutionAttemptResult,
+  ReviewAttemptComparison,
   ReviewCalibrationQueue,
   ReviewRuleConfig,
   ReviewRuleConfigRequest,
@@ -88,6 +121,9 @@ import type {
   SystemHealthItem,
   SystemSettings,
   SystemSettingsRequest,
+  RepositoryPolicyPreviewResponse,
+  RepositorySuppressionRequest,
+  RepositorySuppressionResponse,
 } from "@/types";
 import { RequestError } from "@/utils/errors";
 
@@ -122,6 +158,7 @@ type ReviewFindingsPageInput = ReviewDetailPageInput & {
   severity?: string;
   category?: string;
   feedbackStatus?: string;
+  source?: string;
 };
 
 type ReviewChangedFilesPageInput = ReviewDetailPageInput & {
@@ -149,6 +186,28 @@ type UserPageInput = {
   status?: UserStatus | "";
   keyword?: string;
 };
+
+type EnterpriseTenantPageInput = {
+  page?: number;
+  pageSize?: number;
+  status?: string;
+};
+
+type EnterpriseTenantCreateInput = EnterpriseTenantCreateRequest;
+type EnterpriseTenantStatusInput = { tenantKey: string; payload: EnterpriseTenantStatusRequest };
+type EnterpriseTenantMembershipInput = {
+  tenantKey: string;
+  payload: EnterpriseTenantMembershipRequest;
+};
+type EnterpriseTenantRepositoryInput = {
+  tenantKey: string;
+  payload: EnterpriseTenantRepositoryRequest;
+};
+type EnterpriseTenantIdentityInput = {
+  tenantKey: string;
+  payload: EnterpriseIdentityBindingRequest;
+};
+type EnterpriseTenantQuotaInput = { tenantKey: string; payload: EnterpriseTenantQuotaRequest };
 
 type DataRetentionCleanupAuditInput = {
   page?: number;
@@ -191,6 +250,10 @@ export type ApiContract = {
     { taskId: number; attemptId: number; page?: number; pageSize?: number },
     ReviewExecutionAttemptResult
   >;
+  fetchReviewAttemptComparison: ApiOperation<
+    { taskId: number; candidateAttemptId: number; baselineAttemptId?: number; page?: number; pageSize?: number },
+    ReviewAttemptComparison
+  >;
   fetchReviewRepositories: ApiOperation<undefined, string[]>;
   fetchReviewStatus: ApiOperation<{ id: number }, ReviewTaskStatus>;
   fetchGithubCommentPreview: ApiOperation<GithubCommentPreviewInput, GithubCommentPreview>;
@@ -209,12 +272,35 @@ export type ApiContract = {
   triggerManualReview: ApiOperation<ManualReviewRequest, ManualReviewResponse>;
   fetchGithubIntegrationConfig: ApiOperation<undefined, GithubIntegrationConfig>;
   updateGithubIntegrationConfig: ApiOperation<GithubIntegrationConfigRequest, GithubIntegrationConfig>;
+  fetchGithubChecksSetup: ApiOperation<
+    { organization: string; repository: string },
+    GithubChecksSetupStatus
+  >;
+  previewGithubChecks: ApiOperation<GithubChecksPreviewRequest, GithubChecksSetupStatus>;
+  updateGithubChecksPolicy: ApiOperation<GithubChecksPolicyRequest, GithubChecksSetupStatus>;
   fetchMysqlIntegrationConfig: ApiOperation<undefined, ServiceIntegrationConfig>;
   updateMysqlIntegrationConfig: ApiOperation<ServiceIntegrationConfigRequest, ServiceIntegrationConfig>;
   fetchRabbitMqIntegrationConfig: ApiOperation<undefined, ServiceIntegrationConfig>;
   updateRabbitMqIntegrationConfig: ApiOperation<ServiceIntegrationConfigRequest, ServiceIntegrationConfig>;
   fetchReviewPolicyConfig: ApiOperation<undefined, ReviewPolicyConfig>;
   updateReviewPolicyConfig: ApiOperation<ReviewPolicyConfigRequest, ReviewPolicyConfig>;
+  fetchRepositoryPolicyPreview: ApiOperation<
+    { organization: string; repository: string; headSha?: string },
+    RepositoryPolicyPreviewResponse
+  >;
+  fetchRepositorySuppressions: ApiOperation<
+    { organization: string; repository: string; limit?: number },
+    RepositorySuppressionResponse[]
+  >;
+  createRepositorySuppression: ApiOperation<RepositorySuppressionRequest, RepositorySuppressionResponse>;
+  activateRepositorySuppression: ApiOperation<
+    { id: number; reason?: string },
+    RepositorySuppressionResponse
+  >;
+  revokeRepositorySuppression: ApiOperation<
+    { id: number; reason?: string },
+    RepositorySuppressionResponse
+  >;
   fetchSystemSettings: ApiOperation<undefined, SystemSettings>;
   updateSystemSettings: ApiOperation<SystemSettingsRequest, SystemSettings>;
   reEncryptSecrets: ApiOperation<SecretReEncryptionRequest, SecretReEncryptionJob>;
@@ -233,6 +319,54 @@ export type ApiContract = {
   fetchReviewCalibrationQueue: ApiOperation<
     { ruleId: string; limit?: number; includeIgnored?: boolean },
     ReviewCalibrationQueue
+  >;
+  fetchLlmModelReleaseCenter: ApiOperation<{ trendDays?: number }, LlmModelReleaseCenter>;
+  fetchLlmModelReleaseRuntimeMetrics: ApiOperation<
+    { releaseKey?: string; days?: number; limit?: number },
+    LlmModelReleaseMetric[]
+  >;
+  fetchLlmModelReleaseDrift: ApiOperation<undefined, LlmModelReleaseDrift>;
+  repairLlmModelReleaseDrift: ApiOperation<LlmModelReleaseDriftRepairRequest, LlmModelReleaseDriftRepair>;
+  fetchLlmModelReleaseAudits: ApiOperation<{
+    releaseId?: number;
+    releaseKey?: string;
+    operator?: string;
+    action?: string;
+    from?: string;
+    to?: string;
+    page?: number;
+    pageSize?: number;
+  }, PageResponse<LlmModelReleaseAudit>>;
+  verifyLlmModelReleaseAudit: ApiOperation<{ auditId: number }, LlmModelReleaseAuditVerification>;
+  exportLlmModelReleaseAudits: ApiOperation<{
+    releaseId?: number;
+    releaseKey?: string;
+    operator?: string;
+    action?: string;
+    from?: string;
+    to?: string;
+    format?: string;
+  }, LlmModelReleaseAuditExport>;
+  registerLlmModelShadowRelease: ApiOperation<LlmModelReleaseRequest, LlmModelRelease>;
+  promoteLlmModelRelease: ApiOperation<LlmModelReleaseRequest, LlmModelRelease>;
+  createLlmEvaluationReport: ApiOperation<LlmEvaluationRequest, LlmEvaluationReport>;
+  startLlmEvaluationRun: ApiOperation<LlmEvaluationRunRequest, LlmEvaluationRun>;
+  fetchLlmEvaluationRun: ApiOperation<{ runId: string }, LlmEvaluationRun>;
+  cancelLlmEvaluationRun: ApiOperation<{ runId: string }, LlmEvaluationRun>;
+  fetchLlmEvaluationReports: ApiOperation<{ limit?: number }, LlmEvaluationReport[]>;
+  fetchLlmEvaluationReport: ApiOperation<{ reportId: number }, LlmEvaluationReport>;
+  compareLlmEvaluationReports: ApiOperation<
+    { reportId: number; candidateReportId: number },
+    LlmEvaluationReportComparison
+  >;
+  exportLlmEvaluationReport: ApiOperation<{ reportId: number; format?: string }, LlmEvaluationExport>;
+  transitionLlmEvaluationReportLifecycle: ApiOperation<
+    { reportId: number; payload: LlmEvaluationReportLifecycleRequest },
+    LlmEvaluationReport
+  >;
+  rollbackLlmModelRelease: ApiOperation<
+    { releaseId: number; payload: LlmModelRollbackRequest },
+    LlmModelRelease
   >;
   createReviewRule: ApiOperation<ReviewRuleConfigRequest, ReviewRuleConfig>;
   updateReviewRule: ApiOperation<
@@ -277,11 +411,23 @@ export type ApiContract = {
   fetchMessageQueueHealth: ApiOperation<undefined, MessageQueueHealth>;
   requeueMessageQueueTask: ApiOperation<{ taskId: number }, MessageQueueRequeueResponse>;
   fetchNotifications: ApiOperation<undefined, NotificationCenter>;
+  markNotificationRead: ApiOperation<NotificationReadRequest, void>;
+  fetchNotificationReadKeys: ApiOperation<undefined, string[]>;
+  fetchNotificationReport: ApiOperation<{ period?: string }, NotificationReport>;
   fetchUsers: ApiOperation<UserPageInput, PageResponse<ManagedUser>>;
   fetchUserOperationAudits: ApiOperation<UserPageInput, PageResponse<UserOperationAudit>>;
   createUser: ApiOperation<UserCreateRequest, ManagedUser>;
   updateUserRole: ApiOperation<UserRoleInput, ManagedUser>;
   updateUserStatus: ApiOperation<UserStatusInput, ManagedUser>;
+  fetchEnterpriseTenants: ApiOperation<EnterpriseTenantPageInput, PageResponse<EnterpriseTenant>>;
+  fetchEnterpriseTenant: ApiOperation<{ tenantKey: string }, EnterpriseTenant>;
+  createEnterpriseTenant: ApiOperation<EnterpriseTenantCreateInput, EnterpriseTenant>;
+  updateEnterpriseTenantStatus: ApiOperation<EnterpriseTenantStatusInput, EnterpriseTenant>;
+  bindEnterpriseTenantMembership: ApiOperation<EnterpriseTenantMembershipInput, void>;
+  bindEnterpriseTenantRepository: ApiOperation<EnterpriseTenantRepositoryInput, void>;
+  bindEnterpriseTenantIdentity: ApiOperation<EnterpriseTenantIdentityInput, void>;
+  fetchEnterpriseTenantQuota: ApiOperation<{ tenantKey: string }, EnterpriseTenantQuota>;
+  updateEnterpriseTenantQuota: ApiOperation<EnterpriseTenantQuotaInput, EnterpriseTenantQuota>;
   reportFrontendPerformance: ApiOperation<FrontendPerformanceReport, void>;
 };
 
@@ -386,7 +532,8 @@ const apiEndpoints: ApiEndpointMap = {
       pageSize: input.pageSize,
       severity: input.severity,
       category: input.category,
-      feedbackStatus: input.feedbackStatus
+      feedbackStatus: input.feedbackStatus,
+      source: input.source
     })
   }),
   fetchReviewChangedFiles: generatedEndpoint("reviewControllerListChangedFiles", {
@@ -411,6 +558,14 @@ const apiEndpoints: ApiEndpointMap = {
   fetchReviewExecutionAttemptResult: generatedEndpoint("reviewExecutionAttemptControllerGetResult", {
     path: input => ({ taskId: input.taskId, attemptId: input.attemptId }),
     query: input => ({ page: input.page, pageSize: input.pageSize })
+  }),
+  fetchReviewAttemptComparison: generatedEndpoint("reviewExecutionAttemptComparisonControllerCompare", {
+    path: input => ({ taskId: input.taskId, candidateAttemptId: input.candidateAttemptId }),
+    query: input => ({
+      baselineAttemptId: input.baselineAttemptId,
+      page: input.page,
+      pageSize: input.pageSize
+    })
   }),
   fetchReviewRepositories: generatedEndpoint("reviewControllerListRepositories", {}),
   fetchReviewStatus: generatedEndpoint("reviewControllerGetReviewStatus", {
@@ -462,6 +617,24 @@ const apiEndpoints: ApiEndpointMap = {
     }),
     validateResponse: isGithubIntegrationConfig
   },
+  fetchGithubChecksSetup: {
+    ...generatedEndpoint("systemConfigControllerGetGithubChecksSetup", {
+      query: input => ({ organization: input.organization, repository: input.repository })
+    }),
+    validateResponse: isGithubChecksSetupStatus
+  },
+  previewGithubChecks: {
+    ...generatedEndpoint("systemConfigControllerPreviewGithubChecks", {
+      body: input => input
+    }),
+    validateResponse: isGithubChecksSetupStatus
+  },
+  updateGithubChecksPolicy: {
+    ...generatedEndpoint("systemConfigControllerUpdateGithubChecksPolicy", {
+      body: input => input
+    }),
+    validateResponse: isGithubChecksSetupStatus
+  },
   fetchMysqlIntegrationConfig: {
     ...generatedEndpoint("systemConfigControllerGetMysqlIntegration", {}),
     validateResponse: isServiceIntegrationConfig
@@ -492,6 +665,31 @@ const apiEndpoints: ApiEndpointMap = {
     }),
     validateResponse: isReviewPolicyConfig
   },
+  fetchRepositoryPolicyPreview: generatedEndpoint("repositoryPolicyControllerPreview", {
+    query: input => ({
+      organization: input.organization,
+      repository: input.repository,
+      headSha: input.headSha
+    })
+  }),
+  fetchRepositorySuppressions: generatedEndpoint("repositoryPolicyControllerListSuppressions", {
+    query: input => ({
+      organization: input.organization,
+      repository: input.repository,
+      limit: input.limit
+    })
+  }),
+  createRepositorySuppression: generatedEndpoint("repositoryPolicyControllerCreateSuppression", {
+    body: input => input
+  }),
+  activateRepositorySuppression: generatedEndpoint("repositoryPolicyControllerActivate", {
+    path: input => ({ id: input.id }),
+    query: input => ({ reason: input.reason })
+  }),
+  revokeRepositorySuppression: generatedEndpoint("repositoryPolicyControllerRevoke", {
+    path: input => ({ id: input.id }),
+    query: input => ({ reason: input.reason })
+  }),
   fetchSystemSettings: generatedEndpoint("systemConfigControllerGetSystemSettings", {}),
   updateSystemSettings: generatedEndpoint("systemConfigControllerUpdateSystemSettings", {
     body: input => input
@@ -540,6 +738,81 @@ const apiEndpoints: ApiEndpointMap = {
       limit: input.limit ?? 30,
       includeIgnored: input.includeIgnored ?? false
     })
+  }),
+  fetchLlmModelReleaseCenter: generatedEndpoint("reviewCalibrationControllerGetModelReleaseCenter", {
+    query: input => ({ trendDays: input.trendDays })
+  }),
+  fetchLlmModelReleaseRuntimeMetrics: generatedEndpoint("reviewCalibrationControllerListModelReleaseRuntimeMetrics", {
+    query: input => ({ releaseKey: input.releaseKey, days: input.days, limit: input.limit })
+  }),
+  fetchLlmModelReleaseDrift: generatedEndpoint("reviewCalibrationControllerInspectModelReleaseDrift", {}),
+  repairLlmModelReleaseDrift: generatedEndpoint("reviewCalibrationControllerRepairModelReleaseDrift", {
+    body: input => input
+  }),
+  fetchLlmModelReleaseAudits: generatedEndpoint("reviewCalibrationControllerListModelReleaseAudits", {
+    query: input => ({
+      releaseId: input.releaseId,
+      releaseKey: input.releaseKey,
+      operator: input.operator,
+      action: input.action,
+      from: input.from,
+      to: input.to,
+      page: input.page,
+      pageSize: input.pageSize
+    })
+  }),
+  verifyLlmModelReleaseAudit: generatedEndpoint("reviewCalibrationControllerVerifyModelReleaseAudit", {
+    path: input => ({ auditId: input.auditId })
+  }),
+  exportLlmModelReleaseAudits: generatedEndpoint("reviewCalibrationControllerExportModelReleaseAudits", {
+    query: input => ({
+      releaseId: input.releaseId,
+      releaseKey: input.releaseKey,
+      operator: input.operator,
+      action: input.action,
+      from: input.from,
+      to: input.to,
+      format: input.format
+    })
+  }),
+  registerLlmModelShadowRelease: generatedEndpoint("reviewCalibrationControllerRegisterShadowRelease", {
+    body: input => input
+  }),
+  promoteLlmModelRelease: generatedEndpoint("reviewCalibrationControllerPromoteModelRelease", {
+    body: input => input
+  }),
+  createLlmEvaluationReport: generatedEndpoint("reviewCalibrationControllerCreateEvaluationReport", {
+    body: input => input
+  }),
+  startLlmEvaluationRun: generatedEndpoint("reviewCalibrationControllerStartEvaluationRun", {
+    body: input => input
+  }),
+  fetchLlmEvaluationRun: generatedEndpoint("reviewCalibrationControllerGetEvaluationRun", {
+    path: input => ({ runId: input.runId })
+  }),
+  cancelLlmEvaluationRun: generatedEndpoint("reviewCalibrationControllerCancelEvaluationRun", {
+    path: input => ({ runId: input.runId })
+  }),
+  fetchLlmEvaluationReports: generatedEndpoint("reviewCalibrationControllerListEvaluationReports", {
+    query: input => ({ limit: input.limit })
+  }),
+  fetchLlmEvaluationReport: generatedEndpoint("reviewCalibrationControllerGetEvaluationReport", {
+    path: input => ({ reportId: input.reportId })
+  }),
+  compareLlmEvaluationReports: generatedEndpoint("reviewCalibrationControllerCompareEvaluationReports", {
+    path: input => ({ reportId: input.reportId, candidateReportId: input.candidateReportId })
+  }),
+  exportLlmEvaluationReport: generatedEndpoint("reviewCalibrationControllerExportEvaluationReport", {
+    path: input => ({ reportId: input.reportId }),
+    query: input => ({ format: input.format })
+  }),
+  transitionLlmEvaluationReportLifecycle: generatedEndpoint("reviewCalibrationControllerTransitionEvaluationReportLifecycle", {
+    path: input => ({ reportId: input.reportId }),
+    body: input => input.payload
+  }),
+  rollbackLlmModelRelease: generatedEndpoint("reviewCalibrationControllerRollbackModelRelease", {
+    path: input => ({ releaseId: input.releaseId }),
+    body: input => input.payload
   }),
   createReviewRule: generatedEndpoint("systemConfigControllerCreateReviewRule", {
     body: input => input
@@ -667,6 +940,13 @@ const apiEndpoints: ApiEndpointMap = {
     path: input => ({ taskId: input.taskId })
   }),
   fetchNotifications: generatedEndpoint("notificationControllerGetNotifications", {}),
+  markNotificationRead: generatedEndpoint("notificationControllerMarkRead", {
+    body: input => input
+  }),
+  fetchNotificationReadKeys: generatedEndpoint("notificationControllerReadKeys", {}),
+  fetchNotificationReport: generatedEndpoint("notificationControllerReport", {
+    query: input => ({ period: input.period })
+  }),
   fetchUsers: generatedEndpoint("userManagementControllerListUsers", {
     query: input => ({
       page: input.page,
@@ -689,6 +969,42 @@ const apiEndpoints: ApiEndpointMap = {
   updateUserStatus: generatedEndpoint("userManagementControllerUpdateStatus", {
     path: input => ({ id: input.id }),
     body: input => ({ status: input.status })
+  }),
+  fetchEnterpriseTenants: generatedEndpoint("enterpriseTenantControllerList", {
+    query: input => ({
+      page: input.page,
+      pageSize: input.pageSize,
+      status: input.status || undefined
+    })
+  }),
+  fetchEnterpriseTenant: generatedEndpoint("enterpriseTenantControllerGet", {
+    path: input => ({ tenantKey: input.tenantKey })
+  }),
+  createEnterpriseTenant: generatedEndpoint("enterpriseTenantControllerCreate", {
+    body: input => input
+  }),
+  updateEnterpriseTenantStatus: generatedEndpoint("enterpriseTenantControllerUpdateStatus", {
+    path: input => ({ tenantKey: input.tenantKey }),
+    body: input => input.payload
+  }),
+  bindEnterpriseTenantMembership: generatedEndpoint("enterpriseTenantControllerPutMembership", {
+    path: input => ({ tenantKey: input.tenantKey }),
+    body: input => input.payload
+  }),
+  bindEnterpriseTenantRepository: generatedEndpoint("enterpriseTenantControllerPutRepository", {
+    path: input => ({ tenantKey: input.tenantKey }),
+    body: input => input.payload
+  }),
+  bindEnterpriseTenantIdentity: generatedEndpoint("enterpriseTenantControllerPutIdentity", {
+    path: input => ({ tenantKey: input.tenantKey }),
+    body: input => input.payload
+  }),
+  fetchEnterpriseTenantQuota: generatedEndpoint("enterpriseTenantQuotaControllerGet", {
+    path: input => ({ tenantKey: input.tenantKey })
+  }),
+  updateEnterpriseTenantQuota: generatedEndpoint("enterpriseTenantQuotaControllerUpdate", {
+    path: input => ({ tenantKey: input.tenantKey }),
+    body: input => input.payload
   }),
   reportFrontendPerformance: {
     ...generatedEndpoint("frontendPerformanceControllerRecordPerformance", {

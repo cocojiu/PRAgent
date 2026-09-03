@@ -39,7 +39,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/users")
-@RequireRole("ADMIN")
+@RequireRole({"ADMIN", "PLATFORM_ADMIN", "TENANT_ADMIN"})
 @ApiRuntimeEnabled
 @EnterpriseEditionEnabled
 @Validated

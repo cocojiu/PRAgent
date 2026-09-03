@@ -96,7 +96,8 @@ class LlmOutboundContentSanitizer {
             )).toList(),
             context.budgetTruncated(),
             context.maxTotalChars(),
-            context.maxRelatedFiles()
+            context.maxRelatedFiles(),
+            sanitizeInline(context.repositoryContextSummary())
         );
         return sanitized.renderFor(diff);
     }

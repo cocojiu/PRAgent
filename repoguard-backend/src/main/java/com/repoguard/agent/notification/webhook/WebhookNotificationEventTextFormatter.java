@@ -12,6 +12,7 @@ class WebhookNotificationEventTextFormatter {
             case HUMAN_REVIEW_REQUIRED -> "待人工复核";
             case REVIEW_FAILED -> "审查失败";
             case GITHUB_COMMENT_PUBLISHED -> "GitHub 评论回写";
+            case MODEL_RELEASE_ALERT -> "模型发布告警";
             case UNKNOWN -> eventType;
         };
     }

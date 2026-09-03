@@ -2,6 +2,8 @@ package com.repoguard.agent.review;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.config.LlmReviewContextProperties;
@@ -164,6 +166,151 @@ class LlmReviewContextBuilderTest {
         assertThat(context.hasSliceFor(path)).isFalse();
         assertThat(context.unavailableFor(path)).isTrue();
         assertThat(context.renderFor(diff(List.of(stale)))).contains("UNAVAILABLE:head_sha_mismatch");
+    }
+
+    @Test
+    void recordsMissingContextAndSkipsExcludedOrDeletedFiles() {
+        PullRequestChangedFile missing = new PullRequestChangedFile(
+            "src/main/java/Missing.java", "modified", 1, 0, "", null
+        );
+        PullRequestChangedFile excluded = new PullRequestChangedFile(
+            "secret.pem", "modified", 0, 0, "",
+            ChangedFileContext.status("secret.pem", "head-a", ChangedFileContext.Status.EXCLUDED, "secret_file")
+        );
+        PullRequestChangedFile deleted = new PullRequestChangedFile(
+            "src/main/java/Deleted.java", "deleted", 0, 10, "",
+            ChangedFileContext.status(
+                "src/main/java/Deleted.java", "head-a", ChangedFileContext.Status.DELETED, "deleted_file"
+            )
+        );
+        PullRequestChangedFile unavailable = new PullRequestChangedFile(
+            "src/main/java/Unavailable.java", "modified", 1, 0, "",
+            ChangedFileContext.status(
+                "src/main/java/Unavailable.java", "head-a", ChangedFileContext.Status.UNAVAILABLE, "fetch_failed"
+            )
+        );
+
+        LlmReviewContext context = new LlmReviewContextBuilder().build(
+            diff(List.of(missing, excluded, deleted, unavailable))
+        );
+
+        assertThat(context.slices()).isEmpty();
+        assertThat(context.limitations())
+            .extracting(LlmReviewContext.ContextLimitation::filePath)
+            .containsExactlyInAnyOrder("src/main/java/Missing.java", "src/main/java/Unavailable.java");
+        assertThat(context.renderFor(diff(List.of(missing, unavailable))))
+            .contains("legacy_or_offline_input", "fetch_failed");
+    }
+
+    @Test
+    void recordsEmptyTextAndPrimaryBudgetTruncation() {
+        LlmReviewContextProperties properties = new LlmReviewContextProperties();
+        properties.setMaxTotalChars(4_096);
+        properties.setMaxSliceChars(4_096);
+        LlmReviewContextBuilder builder = new LlmReviewContextBuilder(null, properties, new DiffRiskClassifier());
+        PullRequestChangedFile empty = available(
+            "src/main/java/Empty.java", "", "@@ -1,0 +1,1 @@\n+class Empty {}"
+        );
+        PullRequestChangedFile large = available(
+            "src/main/java/Large.java", "class Large {" + "x".repeat(4_200) + "}",
+            "@@ -1,1 +1,1 @@\n+class Large {}"
+        );
+
+        LlmReviewContext context = builder.build(diff(List.of(empty, large)));
+
+        assertThat(context.limitations()).extracting(LlmReviewContext.ContextLimitation::reason)
+            .contains("empty_text_context");
+        assertThat(context.budgetTruncated()).isTrue();
+    }
+
+    @Test
+    void degradesWhenSemanticProviderThrows() {
+        RepositorySemanticContextProvider provider = mock(RepositorySemanticContextProvider.class);
+        PullRequestDiff pullRequest = diff(List.of(available(
+            "src/main/java/OrderService.java", "class OrderService {}", "@@ -1,1 +1,1 @@\n+class OrderService {}"
+        )));
+        doThrow(new IllegalStateException("index down")).when(provider).load(pullRequest);
+
+        LlmReviewContext context = new LlmReviewContextBuilder(
+            null, new LlmReviewContextProperties(), new DiffRiskClassifier(), provider
+        ).build(pullRequest);
+
+        assertThat(context.repositoryContextSummary()).contains("semantic_context_provider_failed");
+        assertThat(context.limitations()).extracting(LlmReviewContext.ContextLimitation::reason)
+            .contains("semantic_context_provider_failed");
+    }
+
+    @Test
+    void handlesUnavailableAndEmptyRulePolicy() {
+        ReviewRuleProvider provider = mock(ReviewRuleProvider.class);
+        doThrow(new IllegalStateException("policy down")).when(provider).getRulesById();
+        LlmReviewContext unavailable = new LlmReviewContextBuilder(
+            provider, new LlmReviewContextProperties(), new DiffRiskClassifier()
+        ).build(diff(List.of()));
+        assertThat(unavailable.rulePolicyContext()).isEqualTo("rule_policy_unavailable");
+
+        doReturn(Map.of()).when(provider).getRulesById();
+        LlmReviewContext empty = new LlmReviewContextBuilder(
+            provider, new LlmReviewContextProperties(), new DiffRiskClassifier()
+        ).build(diff(List.of()));
+        assertThat(empty.rulePolicyContext()).isEqualTo("no_enabled_rules");
+    }
+
+    @Test
+    void boundsBlankAndLongRulePolicyText() {
+        ReviewRuleSettings rule = new ReviewRuleSettings(
+            "RG-TEXT-001", "ENABLED", "**/*.java", "LOW", 50, EnforcementMode.COMMENT,
+            "   ", "guidance " + "x".repeat(500), "description " + "y".repeat(500)
+        );
+        ReviewRuleProvider provider = mock(ReviewRuleProvider.class);
+        when(provider.getRulesById()).thenReturn(Map.of("RG-TEXT-001", rule));
+        LlmReviewContextProperties properties = new LlmReviewContextProperties();
+        properties.setMaxRuleTextChars(80);
+
+        LlmReviewContext context = new LlmReviewContextBuilder(
+            provider, properties, new DiffRiskClassifier()
+        ).build(diff(List.of()));
+
+        assertThat(context.rulePolicyContext()).contains("description y", "positive=-", "falsePositive=guidance");
+        assertThat(context.rulePolicyContext()).doesNotContain("y".repeat(81));
+    }
+
+    @Test
+    void mergesDefaultBranchSemanticSlicesAndSummaryAfterPrimarySlices() {
+        RepositorySemanticContextProvider provider = mock(RepositorySemanticContextProvider.class);
+        LlmReviewContextProperties properties = new LlmReviewContextProperties();
+        LlmContextSlice caller = new LlmContextSlice(
+            "src/main/java/com/example/OrderFacade.java",
+            1,
+            1,
+            LlmContextSlice.Role.SOURCE,
+            "L1: OrderService service;",
+            java.util.Set.of("OrderService"),
+            100
+        );
+        PullRequestDiff pullRequest = diff(List.of(available(
+            "src/main/java/com/example/OrderService.java",
+            "class OrderService {}",
+            "@@ -1,0 +1,1 @@\n+class OrderService {}"
+        )));
+        when(provider.load(pullRequest)).thenReturn(new RepositorySemanticContext(
+            "main",
+            List.of(caller),
+            List.of(),
+            false,
+            "branch=main; deterministic=true; indexedFiles=1"
+        ));
+
+        LlmReviewContext context = new LlmReviewContextBuilder(
+            null,
+            properties,
+            new DiffRiskClassifier(),
+            provider
+        ).build(pullRequest);
+
+        assertThat(context.repositoryContextSummary()).contains("branch=main", "deterministic=true");
+        assertThat(context.renderFor(pullRequest))
+            .contains("[REPOSITORY_SEMANTIC_CONTEXT]", "OrderFacade.java", "[DIRECT_CALLER]");
     }
 
     private PullRequestChangedFile available(String path, String content, String patch) {

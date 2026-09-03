@@ -15,6 +15,7 @@ public class GithubWebhookProperties {
     private String secret;
     private boolean requireSignature = true;
     private boolean ignoreDraft = true;
+    private String endpointUrl = "/api/v1/github/webhooks";
     private int maxPayloadBytes = DEFAULT_MAX_PAYLOAD_BYTES;
     private int maxRequestsPerMinutePerIp = 120;
     private int maxRequestsPerMinutePerRepository = 60;
@@ -52,6 +53,14 @@ public class GithubWebhookProperties {
 
     public void setIgnoreDraft(boolean ignoreDraft) {
         this.ignoreDraft = ignoreDraft;
+    }
+
+    public String getEndpointUrl() {
+        return endpointUrl;
+    }
+
+    public void setEndpointUrl(String endpointUrl) {
+        this.endpointUrl = endpointUrl;
     }
 
     public int getMaxPayloadBytes() {

@@ -5,11 +5,13 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ReviewExecutionAttemptMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.review.LlmStatus;
+import com.repoguard.agent.review.ReviewTaskCheckRunLifecycle;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.LocalDateTime;
 import java.util.Objects;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,18 +21,45 @@ public class ReviewTaskClaimService {
     private final ReviewTaskMapper reviewTaskMapper;
     private final ReviewTaskStateMachine reviewTaskStateMachine;
     private final ReviewExecutionAttemptMapper attemptMapper;
+    private final ReviewTaskCheckRunLifecycle checkRunLifecycle;
     private final boolean useGenerationFence;
 
     @Autowired
     public ReviewTaskClaimService(
         ReviewTaskMapper reviewTaskMapper,
         ReviewTaskStateMachine reviewTaskStateMachine,
+        ReviewExecutionAttemptMapper attemptMapper,
+        ObjectProvider<ReviewTaskCheckRunLifecycle> checkRunLifecycleProvider
+    ) {
+        this(
+            reviewTaskMapper,
+            reviewTaskStateMachine,
+            attemptMapper,
+            checkRunLifecycleProvider.getIfAvailable(),
+            true
+        );
+    }
+
+    public ReviewTaskClaimService(
+        ReviewTaskMapper reviewTaskMapper,
+        ReviewTaskStateMachine reviewTaskStateMachine,
         ReviewExecutionAttemptMapper attemptMapper
+    ) {
+        this(reviewTaskMapper, reviewTaskStateMachine, attemptMapper, null, true);
+    }
+
+    private ReviewTaskClaimService(
+        ReviewTaskMapper reviewTaskMapper,
+        ReviewTaskStateMachine reviewTaskStateMachine,
+        ReviewExecutionAttemptMapper attemptMapper,
+        ReviewTaskCheckRunLifecycle checkRunLifecycle,
+        boolean useGenerationFence
     ) {
         this.reviewTaskMapper = Objects.requireNonNull(reviewTaskMapper, "reviewTaskMapper");
         this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
         this.attemptMapper = Objects.requireNonNull(attemptMapper, "attemptMapper");
-        this.useGenerationFence = true;
+        this.checkRunLifecycle = checkRunLifecycle;
+        this.useGenerationFence = useGenerationFence;
     }
 
     ReviewTaskClaimService(
@@ -40,6 +69,7 @@ public class ReviewTaskClaimService {
         this.reviewTaskMapper = Objects.requireNonNull(reviewTaskMapper, "reviewTaskMapper");
         this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
         this.attemptMapper = null;
+        this.checkRunLifecycle = null;
         this.useGenerationFence = false;
     }
 
@@ -70,6 +100,9 @@ public class ReviewTaskClaimService {
         task.setReviewClaimedBy(claimId);
         task.setPublishClaimedAt(null);
         task.setPublishClaimedBy(null);
+        if (checkRunLifecycle != null) {
+            checkRunLifecycle.inProgress(task);
+        }
         return true;
     }
 
@@ -92,6 +125,7 @@ public class ReviewTaskClaimService {
                 .set("llm_status", task.getLlmStatus())
                 .set("llm_provider", task.getLlmProvider())
                 .set("llm_model", task.getLlmModel())
+                .set("llm_release_key", task.getLlmReleaseKey())
                 .set("llm_duration_ms", task.getLlmDurationMs())
                 .set("llm_parse_status", task.getLlmParseStatus())
                 .set("llm_fallback_reason", task.getLlmFallbackReason())
@@ -112,6 +146,9 @@ public class ReviewTaskClaimService {
         );
         if (updated <= 0) {
             return false;
+        }
+        if (checkRunLifecycle != null) {
+            checkRunLifecycle.completed(task);
         }
         releaseReviewClaim(task);
         return true;

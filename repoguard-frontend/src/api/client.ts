@@ -12,6 +12,7 @@ import {
   saveAuthToken,
   saveAuthTokens
 } from "@/api/authSession";
+import { activeTenant } from "@/stores/tenantContext";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 const AUTH_FETCH_CREDENTIALS: RequestCredentials = "include";
@@ -106,6 +107,9 @@ const doRequest = async (
   }
   if (!headers.has(TRACE_ID_HEADER)) {
     headers.set(TRACE_ID_HEADER, generateTraceId());
+  }
+  if (activeTenant.value && !headers.has("X-RepoGuard-Tenant")) {
+    headers.set("X-RepoGuard-Tenant", activeTenant.value);
   }
 
   return fetch(buildUrl(path, params), {

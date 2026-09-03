@@ -18,7 +18,10 @@ public record ReviewRuleConfigDto(
     String detectorVersion,
     long configVersion,
     long policyVersion,
-    ReviewRuleQualityGateDto qualityGate
+    ReviewRuleQualityGateDto qualityGate,
+    String detectorType,
+    String matcherExpression,
+    String exceptionPatterns
 ) {
     public ReviewRuleConfigDto(
         String id,
@@ -54,7 +57,10 @@ public record ReviewRuleConfigDto(
             id == null ? "legacy-detector-v1" : id.toLowerCase(java.util.Locale.ROOT) + "-detector-v2",
             1,
             1,
-            emptyQualityGate()
+            emptyQualityGate(),
+            "BUILTIN",
+            "",
+            ""
         );
     }
 

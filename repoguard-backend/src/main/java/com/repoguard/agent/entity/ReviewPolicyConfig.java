@@ -1,5 +1,6 @@
 package com.repoguard.agent.entity;
 
+import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import java.math.BigDecimal;
@@ -8,8 +9,9 @@ import java.time.LocalDateTime;
 @TableName("review_policy_config")
 public class ReviewPolicyConfig {
 
-    @TableId
+    @TableId(type = IdType.AUTO)
     private Long id;
+    private Long tenantId;
     private Boolean llmEnabled;
     private String llmProvider;
     private String modelName;
@@ -35,6 +37,14 @@ public class ReviewPolicyConfig {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public Long getTenantId() {
+        return tenantId;
+    }
+
+    public void setTenantId(Long tenantId) {
+        this.tenantId = tenantId;
     }
 
     public Boolean getLlmEnabled() {

@@ -10,13 +10,18 @@ import org.springframework.stereotype.Component;
 public class OutboundEndpointProperties {
 
     private List<String> githubAllowedHosts = new ArrayList<>(List.of("api.github.com"));
+    private List<String> gitlabAllowedHosts = new ArrayList<>(List.of("gitlab.com"));
+    private List<String> giteeAllowedHosts = new ArrayList<>(List.of("gitee.com"));
+    private List<String> bitbucketAllowedHosts = new ArrayList<>(List.of("api.bitbucket.org"));
     private List<String> llmAllowedHosts = new ArrayList<>(List.of(
         "dashscope.aliyuncs.com",
         "api.openai.com"
     ));
     private List<String> notificationAllowedHosts = new ArrayList<>(List.of(
         "qyapi.weixin.qq.com",
-        "oapi.dingtalk.com"
+        "oapi.dingtalk.com",
+        "open.feishu.cn",
+        "*.slack.com"
     ));
     private List<String> infrastructureAllowedHosts = new ArrayList<>(List.of(
         "localhost",
@@ -33,6 +38,9 @@ public class OutboundEndpointProperties {
         "rabbitmq"
     ));
     private List<Integer> githubAllowedPorts = new ArrayList<>(List.of(443));
+    private List<Integer> gitlabAllowedPorts = new ArrayList<>(List.of(443));
+    private List<Integer> giteeAllowedPorts = new ArrayList<>(List.of(443));
+    private List<Integer> bitbucketAllowedPorts = new ArrayList<>(List.of(443));
     private List<Integer> llmAllowedPorts = new ArrayList<>(List.of(443));
     private List<Integer> notificationAllowedPorts = new ArrayList<>(List.of(443));
     private List<Integer> mysqlAllowedPorts = new ArrayList<>(List.of(3306));
@@ -44,6 +52,30 @@ public class OutboundEndpointProperties {
 
     public void setGithubAllowedHosts(List<String> githubAllowedHosts) {
         this.githubAllowedHosts = copy(githubAllowedHosts);
+    }
+
+    public List<String> getGitlabAllowedHosts() {
+        return gitlabAllowedHosts;
+    }
+
+    public void setGitlabAllowedHosts(List<String> gitlabAllowedHosts) {
+        this.gitlabAllowedHosts = copy(gitlabAllowedHosts);
+    }
+
+    public List<String> getGiteeAllowedHosts() {
+        return giteeAllowedHosts;
+    }
+
+    public void setGiteeAllowedHosts(List<String> giteeAllowedHosts) {
+        this.giteeAllowedHosts = copy(giteeAllowedHosts);
+    }
+
+    public List<String> getBitbucketAllowedHosts() {
+        return bitbucketAllowedHosts;
+    }
+
+    public void setBitbucketAllowedHosts(List<String> bitbucketAllowedHosts) {
+        this.bitbucketAllowedHosts = copy(bitbucketAllowedHosts);
     }
 
     public List<String> getLlmAllowedHosts() {
@@ -86,6 +118,30 @@ public class OutboundEndpointProperties {
         this.githubAllowedPorts = copyIntegers(githubAllowedPorts);
     }
 
+    public List<Integer> getGitlabAllowedPorts() {
+        return gitlabAllowedPorts;
+    }
+
+    public void setGitlabAllowedPorts(List<Integer> gitlabAllowedPorts) {
+        this.gitlabAllowedPorts = copyIntegers(gitlabAllowedPorts);
+    }
+
+    public List<Integer> getGiteeAllowedPorts() {
+        return giteeAllowedPorts;
+    }
+
+    public void setGiteeAllowedPorts(List<Integer> giteeAllowedPorts) {
+        this.giteeAllowedPorts = copyIntegers(giteeAllowedPorts);
+    }
+
+    public List<Integer> getBitbucketAllowedPorts() {
+        return bitbucketAllowedPorts;
+    }
+
+    public void setBitbucketAllowedPorts(List<Integer> bitbucketAllowedPorts) {
+        this.bitbucketAllowedPorts = copyIntegers(bitbucketAllowedPorts);
+    }
+
     public List<Integer> getLlmAllowedPorts() {
         return llmAllowedPorts;
     }
@@ -121,6 +177,9 @@ public class OutboundEndpointProperties {
     List<String> allowedHosts(OutboundEndpointType type) {
         return switch (type) {
             case GITHUB -> githubAllowedHosts;
+            case GITLAB -> gitlabAllowedHosts;
+            case GITEE -> giteeAllowedHosts;
+            case BITBUCKET -> bitbucketAllowedHosts;
             case LLM -> llmAllowedHosts;
             case NOTIFICATION -> notificationAllowedHosts;
             case MYSQL, RABBITMQ -> infrastructureAllowedHosts;
@@ -130,6 +189,9 @@ public class OutboundEndpointProperties {
     List<Integer> allowedPorts(OutboundEndpointType type) {
         return switch (type) {
             case GITHUB -> githubAllowedPorts;
+            case GITLAB -> gitlabAllowedPorts;
+            case GITEE -> giteeAllowedPorts;
+            case BITBUCKET -> bitbucketAllowedPorts;
             case LLM -> llmAllowedPorts;
             case NOTIFICATION -> notificationAllowedPorts;
             case MYSQL -> mysqlAllowedPorts;

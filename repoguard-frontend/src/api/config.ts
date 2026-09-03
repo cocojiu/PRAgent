@@ -3,12 +3,21 @@ import type { ApiRequestOptions } from "@/api/contracts";
 import type {
   DataRetentionCleanupRequest,
   GithubIntegrationConfigRequest,
+  GithubChecksPolicyRequest,
+  GithubChecksPreviewRequest,
+  LlmEvaluationRequest,
+  LlmEvaluationRunRequest,
+  LlmEvaluationReportLifecycleRequest,
+  LlmModelReleaseDriftRepairRequest,
+  LlmModelReleaseRequest,
+  LlmModelRollbackRequest,
   ReviewPolicyConfigRequest,
   ReviewEnforcementModeRequest,
   ReviewRuleConfigRequest,
   ReviewRuleStatusRequest,
   NotificationBindingRequest,
   NotificationBindingStatusRequest,
+  RepositorySuppressionRequest,
   SecretReEncryptionRequest,
   ServiceIntegrationConfigRequest,
   SystemSettingsRequest
@@ -28,6 +37,15 @@ export const fetchGithubIntegrationConfig = () =>
 export const updateGithubIntegrationConfig = (payload: GithubIntegrationConfigRequest) =>
   apiRequest("updateGithubIntegrationConfig", payload);
 
+export const fetchGithubChecksSetup = (organization: string, repository: string) =>
+  apiRequest("fetchGithubChecksSetup", { organization, repository });
+
+export const previewGithubChecks = (payload: GithubChecksPreviewRequest) =>
+  apiRequest("previewGithubChecks", payload);
+
+export const updateGithubChecksPolicy = (payload: GithubChecksPolicyRequest) =>
+  apiRequest("updateGithubChecksPolicy", payload);
+
 export const fetchMysqlIntegrationConfig = () =>
   apiRequest("fetchMysqlIntegrationConfig", undefined);
 
@@ -44,6 +62,27 @@ export const fetchReviewPolicyConfig = () => apiRequest("fetchReviewPolicyConfig
 
 export const updateReviewPolicyConfig = (payload: ReviewPolicyConfigRequest) =>
   apiRequest("updateReviewPolicyConfig", payload);
+
+export const fetchRepositoryPolicyPreview = (
+  organization: string,
+  repository: string,
+  headSha?: string
+) => apiRequest("fetchRepositoryPolicyPreview", { organization, repository, headSha });
+
+export const fetchRepositorySuppressions = (
+  organization: string,
+  repository: string,
+  limit = 100
+) => apiRequest("fetchRepositorySuppressions", { organization, repository, limit });
+
+export const createRepositorySuppression = (payload: RepositorySuppressionRequest) =>
+  apiRequest("createRepositorySuppression", payload);
+
+export const activateRepositorySuppression = (id: number, reason?: string) =>
+  apiRequest("activateRepositorySuppression", { id, reason });
+
+export const revokeRepositorySuppression = (id: number, reason?: string) =>
+  apiRequest("revokeRepositorySuppression", { id, reason });
 
 export const fetchSystemSettings = () => apiRequest("fetchSystemSettings", undefined);
 
@@ -86,6 +125,77 @@ export const fetchReviewCalibrationQueue = (
   ruleId: string,
   options: { limit?: number; includeIgnored?: boolean } = {}
 ) => apiRequest("fetchReviewCalibrationQueue", { ruleId, ...options });
+
+export const fetchLlmModelReleaseCenter = (trendDays = 30) =>
+  apiRequest("fetchLlmModelReleaseCenter", { trendDays });
+
+export const fetchLlmModelReleaseRuntimeMetrics = (
+  options: { releaseKey?: string; days?: number; limit?: number } = {}
+) => apiRequest("fetchLlmModelReleaseRuntimeMetrics", options);
+
+export const fetchLlmModelReleaseDrift = () => apiRequest("fetchLlmModelReleaseDrift", undefined);
+
+export const repairLlmModelReleaseDrift = (payload: LlmModelReleaseDriftRepairRequest) =>
+  apiRequest("repairLlmModelReleaseDrift", payload);
+
+export type LlmModelReleaseAuditQuery = {
+  releaseId?: number;
+  releaseKey?: string;
+  operator?: string;
+  action?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  pageSize?: number;
+};
+
+export const fetchLlmModelReleaseAudits = (options: LlmModelReleaseAuditQuery = {}) =>
+  apiRequest("fetchLlmModelReleaseAudits", options);
+
+export const verifyLlmModelReleaseAudit = (auditId: number) =>
+  apiRequest("verifyLlmModelReleaseAudit", { auditId });
+
+export const exportLlmModelReleaseAudits = (
+  options: Omit<LlmModelReleaseAuditQuery, "page" | "pageSize"> & { format?: "json" | "csv" } = {}
+) => apiRequest("exportLlmModelReleaseAudits", options);
+
+export const registerLlmModelShadowRelease = (payload: LlmModelReleaseRequest) =>
+  apiRequest("registerLlmModelShadowRelease", payload);
+
+export const promoteLlmModelRelease = (payload: LlmModelReleaseRequest) =>
+  apiRequest("promoteLlmModelRelease", payload);
+
+export const createLlmEvaluationReport = (payload: LlmEvaluationRequest) =>
+  apiRequest("createLlmEvaluationReport", payload);
+
+export const startLlmEvaluationRun = (payload: LlmEvaluationRunRequest) =>
+  apiRequest("startLlmEvaluationRun", payload);
+
+export const fetchLlmEvaluationRun = (runId: string) =>
+  apiRequest("fetchLlmEvaluationRun", { runId });
+
+export const cancelLlmEvaluationRun = (runId: string) =>
+  apiRequest("cancelLlmEvaluationRun", { runId });
+
+export const fetchLlmEvaluationReports = (limit = 30) =>
+  apiRequest("fetchLlmEvaluationReports", { limit });
+
+export const fetchLlmEvaluationReport = (reportId: number) =>
+  apiRequest("fetchLlmEvaluationReport", { reportId });
+
+export const compareLlmEvaluationReports = (reportId: number, candidateReportId: number) =>
+  apiRequest("compareLlmEvaluationReports", { reportId, candidateReportId });
+
+export const exportLlmEvaluationReport = (reportId: number, format: "json" | "html" = "json") =>
+  apiRequest("exportLlmEvaluationReport", { reportId, format });
+
+export const transitionLlmEvaluationReportLifecycle = (
+  reportId: number,
+  payload: LlmEvaluationReportLifecycleRequest
+) => apiRequest("transitionLlmEvaluationReportLifecycle", { reportId, payload });
+
+export const rollbackLlmModelRelease = (releaseId: number, payload: LlmModelRollbackRequest) =>
+  apiRequest("rollbackLlmModelRelease", { releaseId, payload });
 
 export const createReviewRule = (payload: ReviewRuleConfigRequest) =>
   apiRequest("createReviewRule", payload);

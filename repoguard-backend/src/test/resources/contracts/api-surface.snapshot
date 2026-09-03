@@ -3,10 +3,24 @@ GET /api/v1/auth/me query=[] body=- bodyRequired=false
 GET /api/v1/cache/stats query=[] body=- bodyRequired=false
 GET /api/v1/config/data-retention/cleanup-audits query=[page, pageSize, mode, status, backupReference] body=- bodyRequired=false
 GET /api/v1/config/integrations/github query=[] body=- bodyRequired=false
+GET /api/v1/config/integrations/github/checks query=[organization, repository] body=- bodyRequired=false
 GET /api/v1/config/integrations/mysql query=[] body=- bodyRequired=false
 GET /api/v1/config/integrations/rabbitmq query=[] body=- bodyRequired=false
 GET /api/v1/config/notification-bindings query=[page, pageSize, organization, repository, provider] body=- bodyRequired=false
+GET /api/v1/config/repository-policy/preview query=[organization, repository, headSha] body=- bodyRequired=false
+GET /api/v1/config/repository-policy/suppressions query=[organization, repository, limit] body=- bodyRequired=false
+GET /api/v1/config/review-calibration/evaluation-reports query=[limit] body=- bodyRequired=false
+GET /api/v1/config/review-calibration/evaluation-reports/{reportId} query=[] body=- bodyRequired=false
+GET /api/v1/config/review-calibration/evaluation-reports/{reportId}/compare/{candidateReportId} query=[] body=- bodyRequired=false
+GET /api/v1/config/review-calibration/evaluation-reports/{reportId}/export query=[format] body=- bodyRequired=false
+GET /api/v1/config/review-calibration/evaluation-runs/{runId} query=[] body=- bodyRequired=false
 GET /api/v1/config/review-calibration/queue query=[ruleId, limit, includeIgnored] body=- bodyRequired=false
+GET /api/v1/config/review-calibration/release-center query=[trendDays] body=- bodyRequired=false
+GET /api/v1/config/review-calibration/release-center/audits query=[releaseId, releaseKey, operator, action, from, to, page, pageSize] body=- bodyRequired=false
+GET /api/v1/config/review-calibration/release-center/audits/export query=[releaseId, releaseKey, operator, action, from, to, format] body=- bodyRequired=false
+GET /api/v1/config/review-calibration/release-center/audits/{auditId}/verify query=[] body=- bodyRequired=false
+GET /api/v1/config/review-calibration/release-center/drift query=[] body=- bodyRequired=false
+GET /api/v1/config/review-calibration/release-center/runtime-metrics query=[releaseKey, days, limit] body=- bodyRequired=false
 GET /api/v1/config/review-policy query=[] body=- bodyRequired=false
 GET /api/v1/config/review-rules query=[] body=- bodyRequired=false
 GET /api/v1/config/review-rules/{id}/versions query=[cursor, pageSize] body=- bodyRequired=false
@@ -30,13 +44,16 @@ GET /api/v1/message-queue/health query=[] body=- bodyRequired=false
 GET /api/v1/notification-deliveries query=[page, pageSize, status, taskId] body=- bodyRequired=false
 GET /api/v1/notification-events query=[page, pageSize, status, taskId] body=- bodyRequired=false
 GET /api/v1/notifications query=[] body=- bodyRequired=false
+GET /api/v1/notifications/read query=[] body=- bodyRequired=false
+GET /api/v1/notifications/reports query=[period] body=- bodyRequired=false
+GET /api/v1/review-workflow/queue query=[page, pageSize, assignee, overdue] body=- bodyRequired=false
 GET /api/v1/reviews query=[page, pageSize, repository, status, riskLevel, source, triggerSource, keyword, cursor] body=- bodyRequired=false
 GET /api/v1/reviews/github/pull-requests query=[] body=- bodyRequired=false
 GET /api/v1/reviews/repositories query=[] body=- bodyRequired=false
 GET /api/v1/reviews/summary query=[repository, status, riskLevel, source, triggerSource, keyword] body=- bodyRequired=false
 GET /api/v1/reviews/{id} query=[] body=- bodyRequired=false
 GET /api/v1/reviews/{id}/changed-files query=[page, pageSize, hasFinding] body=- bodyRequired=false
-GET /api/v1/reviews/{id}/findings query=[page, pageSize, severity, category, feedbackStatus] body=- bodyRequired=false
+GET /api/v1/reviews/{id}/findings query=[page, pageSize, severity, category, feedbackStatus, source] body=- bodyRequired=false
 GET /api/v1/reviews/{id}/github-comments/preview query=[page, pageSize, commentableOnly] body=- bodyRequired=false
 GET /api/v1/reviews/{id}/github-comments/publications query=[page, pageSize, status] body=- bodyRequired=false
 GET /api/v1/reviews/{id}/missing-tests query=[page, pageSize] body=- bodyRequired=false
@@ -46,6 +63,12 @@ GET /api/v1/reviews/{taskId}/attempts query=[] body=- bodyRequired=false
 GET /api/v1/reviews/{taskId}/attempts/{attemptId} query=[page, pageSize] body=- bodyRequired=false
 GET /api/v1/reviews/{taskId}/attempts/{attemptId}/changed-files query=[cursor, limit] body=- bodyRequired=false
 GET /api/v1/reviews/{taskId}/attempts/{attemptId}/findings query=[cursor, limit] body=- bodyRequired=false
+GET /api/v1/reviews/{taskId}/attempts/{candidateAttemptId}/comparison query=[baselineAttemptId, page, pageSize] body=- bodyRequired=false
+GET /api/v1/scanners/sarif/tasks/{taskId}/export query=[] body=- bodyRequired=false
+GET /api/v1/scm/providers query=[] body=- bodyRequired=false
+GET /api/v1/scm/providers/{provider}/change-requests query=[] body=- bodyRequired=false
+GET /api/v1/scm/providers/{provider}/tasks/{taskId}/diff query=[] body=- bodyRequired=false
+GET /api/v1/scm/providers/{provider}/tasks/{taskId}/head query=[] body=- bodyRequired=false
 GET /api/v1/system/health/summary query=[] body=- bodyRequired=false
 GET /api/v1/users query=[page, pageSize, role, status, keyword] body=- bodyRequired=false
 GET /api/v1/users/audits query=[page, pageSize] body=- bodyRequired=false
@@ -56,11 +79,24 @@ POST /api/v1/auth/refresh query=[] body=AuthRefreshRequest bodyRequired=false
 POST /api/v1/auth/refresh-token/reset query=[] body=AuthRefreshTokenResetRequest bodyRequired=true
 POST /api/v1/auth/register query=[] body=AuthRegisterRequest bodyRequired=true
 POST /api/v1/config/data-retention/cleanup query=[] body=DataRetentionCleanupRequest bodyRequired=false
+POST /api/v1/config/declarative-rules/{id}/dry-run query=[] body=DeclarativeRuleDryRunRequest bodyRequired=true
+POST /api/v1/config/integrations/github/checks/preview query=[] body=GithubChecksPreviewRequest bodyRequired=true
 POST /api/v1/config/integrations/github/test query=[] body=GithubIntegrationConfigRequest bodyRequired=false
 POST /api/v1/config/integrations/mysql/test query=[] body=ServiceIntegrationConfigRequest bodyRequired=false
 POST /api/v1/config/integrations/rabbitmq/test query=[] body=ServiceIntegrationConfigRequest bodyRequired=false
 POST /api/v1/config/notification-bindings query=[] body=NotificationBindingRequest bodyRequired=true
 POST /api/v1/config/notification-bindings/{id}/test query=[] body=- bodyRequired=false
+POST /api/v1/config/repository-policy/suppressions query=[] body=RepositorySuppressionRequest bodyRequired=true
+POST /api/v1/config/repository-policy/suppressions/{id}/activate query=[reason] body=- bodyRequired=false
+POST /api/v1/config/repository-policy/suppressions/{id}/revoke query=[reason] body=- bodyRequired=false
+POST /api/v1/config/review-calibration/evaluation-reports query=[] body=LlmEvaluationRequest bodyRequired=true
+POST /api/v1/config/review-calibration/evaluation-reports/{reportId}/lifecycle query=[] body=LlmEvaluationReportLifecycleRequest bodyRequired=true
+POST /api/v1/config/review-calibration/evaluation-runs query=[] body=LlmEvaluationRunRequest bodyRequired=true
+POST /api/v1/config/review-calibration/evaluation-runs/{runId}/cancel query=[] body=- bodyRequired=false
+POST /api/v1/config/review-calibration/release-center/drift/repair query=[] body=LlmModelReleaseDriftRepairRequest bodyRequired=true
+POST /api/v1/config/review-calibration/release-center/promote query=[] body=LlmModelReleaseRequest bodyRequired=true
+POST /api/v1/config/review-calibration/release-center/shadow query=[] body=LlmModelReleaseRequest bodyRequired=true
+POST /api/v1/config/review-calibration/release-center/{releaseId}/rollback query=[] body=LlmModelRollbackRequest bodyRequired=true
 POST /api/v1/config/review-policy/test query=[] body=ReviewPolicyConfigRequest bodyRequired=false
 POST /api/v1/config/review-rules query=[] body=ReviewRuleConfigRequest bodyRequired=true
 POST /api/v1/config/review-rules/{id}/versions/{policyVersion}/rollback query=[] body=ReviewRuleRollbackRequest bodyRequired=true
@@ -72,14 +108,23 @@ POST /api/v1/enterprise/tenants query=[] body=EnterpriseTenantCreateRequest body
 POST /api/v1/github/webhooks query=[] body=byte[] bodyRequired=true
 POST /api/v1/message-queue/tasks/{taskId}/requeue query=[] body=- bodyRequired=false
 POST /api/v1/notification-events/{id}/retry query=[] body=- bodyRequired=false
+POST /api/v1/notifications/read query=[] body=NotificationReadRequest bodyRequired=true
 POST /api/v1/observability/frontend/performance query=[] body=FrontendPerformanceReportRequest bodyRequired=true
+POST /api/v1/review-workflow/bot/{provider}/commands query=[] body=ReviewBotCommandRequest bodyRequired=true
+POST /api/v1/review-workflow/escalations query=[] body=- bodyRequired=false
 POST /api/v1/reviews/manual query=[] body=ManualReviewRequest bodyRequired=true
 POST /api/v1/reviews/{id}/findings/{findingId}/feedback query=[] body=FindingFeedbackRequest bodyRequired=true
 POST /api/v1/reviews/{id}/github-comments query=[] body=- bodyRequired=false
 POST /api/v1/reviews/{id}/human-review query=[] body=HumanReviewRequest bodyRequired=true
 POST /api/v1/reviews/{id}/retry query=[] body=- bodyRequired=false
+POST /api/v1/scanners/sarif/ci/tasks/{taskId}/credentials query=[attemptId] body=- bodyRequired=false
+POST /api/v1/scanners/sarif/ci/tasks/{taskId}/upload query=[] body=byte[] bodyRequired=true
+POST /api/v1/scanners/sarif/tasks/{taskId}/import query=[] body=SarifImportRequest bodyRequired=true
+POST /api/v1/scm/providers/{provider}/tasks/{taskId}/comments query=[] body=ScmCommentDraft bodyRequired=true
+POST /api/v1/scm/providers/{provider}/tasks/{taskId}/status query=[] body=ScmStatusRequest bodyRequired=true
 POST /api/v1/users query=[] body=UserCreateRequest bodyRequired=true
 PUT /api/v1/config/integrations/github query=[] body=GithubIntegrationConfigRequest bodyRequired=true
+PUT /api/v1/config/integrations/github/checks/policy query=[] body=GithubChecksPolicyRequest bodyRequired=true
 PUT /api/v1/config/integrations/mysql query=[] body=ServiceIntegrationConfigRequest bodyRequired=true
 PUT /api/v1/config/integrations/rabbitmq query=[] body=ServiceIntegrationConfigRequest bodyRequired=true
 PUT /api/v1/config/notification-bindings/{id} query=[] body=NotificationBindingRequest bodyRequired=true
@@ -94,5 +139,6 @@ PUT /api/v1/enterprise/tenants/{tenantKey}/memberships query=[] body=EnterpriseT
 PUT /api/v1/enterprise/tenants/{tenantKey}/quota query=[] body=EnterpriseTenantQuotaRequest bodyRequired=true
 PUT /api/v1/enterprise/tenants/{tenantKey}/repositories query=[] body=EnterpriseTenantRepositoryRequest bodyRequired=true
 PUT /api/v1/enterprise/tenants/{tenantKey}/status query=[] body=EnterpriseTenantStatusRequest bodyRequired=true
+PUT /api/v1/review-workflow/tasks/{taskId}/assignment query=[] body=ReviewAssignmentRequest bodyRequired=true
 PUT /api/v1/users/{id}/role query=[] body=UserRoleUpdateRequest bodyRequired=true
 PUT /api/v1/users/{id}/status query=[] body=UserStatusUpdateRequest bodyRequired=true

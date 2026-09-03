@@ -29,6 +29,9 @@ export interface ReviewRuleConfig {
   configVersion: number;
   policyVersion: number;
   qualityGate: ReviewRuleQualityGate;
+  detectorType: "BUILTIN" | "REGEX" | "AST" | string;
+  matcherExpression: string;
+  exceptionPatterns: string;
 }
 
 export interface ReviewRulesResponse {
@@ -136,6 +139,9 @@ export interface ReviewRuleConfigRequest {
   positiveExample: string;
   falsePositiveGuidance: string;
   enforcementMode: EnforcementMode;
+  detectorType?: "BUILTIN" | "REGEX" | "AST" | string;
+  matcherExpression?: string;
+  exceptionPatterns?: string;
 }
 
 export interface ReviewRuleStatusRequest {

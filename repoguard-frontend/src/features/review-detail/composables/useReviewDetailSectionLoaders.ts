@@ -41,6 +41,7 @@ export const useReviewDetailSectionLoaders = ({
   selectedTask
 }: UseReviewDetailSectionLoadersOptions) => {
   const findings = createPagedSectionState();
+  const findingsSource = ref<string | undefined>(undefined);
   const changedFiles = createPagedSectionState();
   const missingTests = createPagedSectionState();
   const timelineLoaded = ref(false);
@@ -56,6 +57,7 @@ export const useReviewDetailSectionLoaders = ({
 
   const resetDetailSections = () => {
     resetPagedSection(findings);
+    findingsSource.value = undefined;
     resetPagedSection(changedFiles);
     resetPagedSection(missingTests);
     timelineRequestSequence += 1;
@@ -117,7 +119,14 @@ export const useReviewDetailSectionLoaders = ({
       applyResult: (task, items, total) => ({ ...task, findings: items, findingTotal: total }),
       clearArchived: (task) => ({ ...task, findings: [] }),
       fetchPage: async (taskId) => {
-        const result = await fetchReviewFindings(taskId, { page, pageSize: DETAIL_SECTION_PAGE_SIZE });
+        const params: { page: number; pageSize: number; source?: string } = {
+          page,
+          pageSize: DETAIL_SECTION_PAGE_SIZE
+        };
+        if (findingsSource.value) {
+          params.source = findingsSource.value;
+        }
+        const result = await fetchReviewFindings(taskId, params);
         return { items: result.items.map(toReviewFindingViewModel), total: result.total };
       },
       page,
@@ -182,10 +191,16 @@ export const useReviewDetailSectionLoaders = ({
     findingsLoaded: findings.loaded,
     findingsLoading: findings.loading,
     findingsPage: findings.page,
+    findingsSource,
     loadChangedFilesFirstPage: () => loadChangedFilesPage(1),
     loadChangedFilesPage,
     loadFindingsFirstPage: () => loadFindingsPage(1),
     loadFindingsPage,
+    setFindingsSource: (source?: string) => {
+      findingsSource.value = source || undefined;
+      resetPagedSection(findings);
+      return loadFindingsPage(1);
+    },
     loadMissingTestsFirstPage: () => loadMissingTestsPage(1),
     loadMissingTestsPage,
     loadTimelineItems,

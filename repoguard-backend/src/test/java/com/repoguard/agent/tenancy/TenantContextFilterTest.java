@@ -3,6 +3,7 @@ package com.repoguard.agent.tenancy;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -76,6 +77,26 @@ class TenantContextFilterTest {
 
         filter.doFilter(request, response, chain);
 
+        assertThat(response.getStatus()).isEqualTo(200);
+    }
+
+    @Test
+    void controlPlaneTenantRequestKeepsGlobalPrincipalWithoutResolvingMembership() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/enterprise/tenants");
+        AuthenticatedPrincipal principal = new AuthenticatedPrincipal(
+            100L, "platform", "PLATFORM_ADMIN", 1000L, 4
+        );
+        request.setAttribute(RequestAuthenticationAttributes.AUTHENTICATED_PRINCIPAL, principal);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = (candidateRequest, candidateResponse) -> {
+            assertThat(TenantContext.currentTenantId()).isNull();
+            assertThat(candidateRequest.getAttribute(RequestAuthenticationAttributes.AUTHENTICATED_PRINCIPAL))
+                .isEqualTo(principal);
+        };
+
+        filter.doFilter(request, response, chain);
+
+        verifyNoInteractions(resolutionService);
         assertThat(response.getStatus()).isEqualTo(200);
     }
 

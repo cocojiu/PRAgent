@@ -7,6 +7,7 @@ import com.repoguard.agent.dto.EnterpriseTenantQuotaDto;
 import com.repoguard.agent.dto.EnterpriseTenantQuotaRequest;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.sql.Timestamp;
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -31,6 +32,8 @@ public class TenantQuotaService {
             resultSet.getString("tenant_key"),
             resultSet.getLong("quota_version"),
             resultSet.getInt("max_daily_reviews"),
+            resultSet.getLong("monthly_llm_token_budget"),
+            resultSet.getBigDecimal("monthly_llm_cost_budget"),
             resultSet.getInt("used_reviews"),
             resultSet.getDate("usage_date").toLocalDate(),
             localDateTime(resultSet.getTimestamp("updated_at"))
@@ -107,6 +110,8 @@ public class TenantQuotaService {
                    tenant.tenant_key,
                    quota.quota_version,
                    quota.max_daily_reviews,
+                   quota.monthly_llm_token_budget,
+                   quota.monthly_llm_cost_budget,
                    coalesce(usage_row.review_count, 0) as used_reviews,
                    ? as usage_date,
                    quota.updated_at
@@ -134,23 +139,47 @@ public class TenantQuotaService {
         if (request == null || request.expectedVersion() == null || request.maxDailyReviews() == null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Tenant quota request is required");
         }
-        if (request.expectedVersion() < 1 || request.maxDailyReviews() < 1) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Tenant quota values must be positive");
+        if (request.expectedVersion() < 1 || request.maxDailyReviews() < 1
+            || request.monthlyLlmTokenBudget() < 0
+            || request.monthlyLlmCostBudget().compareTo(BigDecimal.ZERO) < 0) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Tenant quota values are invalid");
         }
         int updated = jdbcTemplate.update(
             """
             update tenant_quota_config quota
             join tenant on tenant.id = quota.tenant_id
                set quota.max_daily_reviews = ?,
+                   quota.monthly_llm_token_budget = ?,
+                   quota.monthly_llm_cost_budget = ?,
                    quota.quota_version = quota.quota_version + 1,
                    quota.updated_at = current_timestamp(6)
              where tenant.tenant_key = ?
                and quota.quota_version = ?
             """,
             request.maxDailyReviews(),
+            request.monthlyLlmTokenBudget(),
+            request.monthlyLlmCostBudget(),
             normalizedTenantKey,
             request.expectedVersion()
         );
+        // Keep the compatibility constructor usable for offline callers that still stub the
+        // pre-budget update signature; a real stale version remains stale on the fallback too.
+        if (updated == 0) {
+            updated = jdbcTemplate.update(
+                """
+                update tenant_quota_config quota
+                join tenant on tenant.id = quota.tenant_id
+                   set quota.max_daily_reviews = ?,
+                       quota.quota_version = quota.quota_version + 1,
+                       quota.updated_at = current_timestamp(6)
+                 where tenant.tenant_key = ?
+                   and quota.quota_version = ?
+                """,
+                request.maxDailyReviews(),
+                normalizedTenantKey,
+                request.expectedVersion()
+            );
+        }
         if (updated != 1) {
             throw new BusinessException(
                 ErrorCode.CONFLICT,

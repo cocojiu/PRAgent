@@ -10,9 +10,11 @@ import com.repoguard.agent.dto.ReviewPolicyConfigRequest;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
 import com.repoguard.agent.security.SecretCryptoService;
+import com.repoguard.agent.tenancy.TenantContext;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 class ReviewPolicyConfigServiceImplTest {
 
@@ -27,7 +29,9 @@ class ReviewPolicyConfigServiceImplTest {
 
     @Test
     void getReviewPolicyCreatesDefaultsWhenMissing() {
-        var result = service.getReviewPolicy();
+        ReviewPolicyConfig inserted;
+        var captor = ArgumentCaptor.forClass(ReviewPolicyConfig.class);
+        var result = withTenant(23L, service::getReviewPolicy);
 
         assertThat(result.llmEnabled()).isTrue();
         assertThat(result.llmProvider()).isEqualTo("dashscope");
@@ -43,13 +47,16 @@ class ReviewPolicyConfigServiceImplTest {
         assertThat(result.chunkMaxLines()).isEqualTo(450);
         assertThat(result.inputTokenPricePerMillion()).isEqualByComparingTo(BigDecimal.ZERO);
         assertThat(result.outputTokenPricePerMillion()).isEqualByComparingTo(BigDecimal.ZERO);
-        verify(reviewPolicyConfigMapper).insert(any(ReviewPolicyConfig.class));
+        verify(reviewPolicyConfigMapper).insert(captor.capture());
+        inserted = captor.getValue();
+        assertThat(inserted.getId()).isNull();
+        assertThat(inserted.getTenantId()).isEqualTo(23L);
     }
 
     @Test
     void updateReviewPolicyKeepsExistingApiKeyWhenMaskedValueIsSubmitted() {
         ReviewPolicyConfig config = reviewPolicyConfig(secretCryptoService.encrypt("sk-existing-5678"));
-        when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);
+        when(reviewPolicyConfigMapper.selectByTenantId(1L)).thenReturn(config);
 
         var result = service.updateReviewPolicy(request("****5678"));
 
@@ -69,7 +76,7 @@ class ReviewPolicyConfigServiceImplTest {
     @Test
     void updateReviewPolicyClearsApiKeyWhenBlankValueIsSubmitted() {
         ReviewPolicyConfig config = reviewPolicyConfig(secretCryptoService.encrypt("sk-existing-5678"));
-        when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);
+        when(reviewPolicyConfigMapper.selectByTenantId(1L)).thenReturn(config);
 
         var result = service.updateReviewPolicy(request(""));
 
@@ -82,7 +89,7 @@ class ReviewPolicyConfigServiceImplTest {
     @Test
     void getReviewPolicyReportsDecryptFailedWithoutThrowing() {
         ReviewPolicyConfig config = reviewPolicyConfig("enc:v2:local:not-a-real-payload");
-        when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);
+        when(reviewPolicyConfigMapper.selectByTenantId(1L)).thenReturn(config);
 
         var result = service.getReviewPolicy();
 
@@ -93,7 +100,7 @@ class ReviewPolicyConfigServiceImplTest {
     @Test
     void updateReviewPolicyCanReplaceMismatchedExistingApiKeyWithoutDecryptingIt() {
         ReviewPolicyConfig config = reviewPolicyConfig("enc:v2:old-key:not-a-real-payload");
-        when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);
+        when(reviewPolicyConfigMapper.selectByTenantId(1L)).thenReturn(config);
 
         var result = service.updateReviewPolicy(request("sk-repaired-9999"));
 
@@ -106,7 +113,7 @@ class ReviewPolicyConfigServiceImplTest {
     @Test
     void updateReviewPolicyPreservesDamagedExistingApiKeyWhenMaskedValueIsSubmitted() {
         ReviewPolicyConfig config = reviewPolicyConfig("enc:v2:local:not-a-real-payload");
-        when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);
+        when(reviewPolicyConfigMapper.selectByTenantId(1L)).thenReturn(config);
 
         var result = service.updateReviewPolicy(request("****"));
 
@@ -120,7 +127,7 @@ class ReviewPolicyConfigServiceImplTest {
     @Test
     void updateReviewPolicyStoresNewApiKeyAndTrimsOptionalBaseUrl() {
         ReviewPolicyConfig config = reviewPolicyConfig(secretCryptoService.encrypt("sk-existing-5678"));
-        when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);
+        when(reviewPolicyConfigMapper.selectByTenantId(1L)).thenReturn(config);
 
         var result = service.updateReviewPolicy(new ReviewPolicyConfigRequest(
             true,
@@ -184,5 +191,11 @@ class ReviewPolicyConfigServiceImplTest {
         config.setCreatedAt(LocalDateTime.now());
         config.setUpdatedAt(LocalDateTime.now());
         return config;
+    }
+
+    private <T> T withTenant(long tenantId, java.util.function.Supplier<T> action) {
+        try (TenantContext.Scope _ = TenantContext.withTenant(tenantId)) {
+            return action.get();
+        }
     }
 }

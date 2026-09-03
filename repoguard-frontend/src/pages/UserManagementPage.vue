@@ -19,8 +19,7 @@
       <div class="filter-bar user-filter">
         <el-select v-model="roleFilter" placeholder="全部角色" clearable>
           <el-option label="全部角色" value="" />
-          <el-option label="管理员" value="ADMIN" />
-          <el-option label="观察员" value="VIEWER" />
+          <el-option v-for="option in roleOptions" :key="option.value" :label="option.label" :value="option.value" />
         </el-select>
         <el-select v-model="statusFilter" placeholder="全部状态" clearable>
           <el-option label="全部状态" value="" />
@@ -52,8 +51,7 @@
               size="small"
               @change="changeRole(row)"
             >
-              <el-option label="管理员" value="ADMIN" />
-              <el-option label="观察员" value="VIEWER" />
+              <el-option v-for="option in roleOptions" :key="option.value" :label="option.label" :value="option.value" />
             </el-select>
           </template>
         </el-table-column>
@@ -237,6 +235,16 @@ const metricIconMap = {
   orange: ShieldCheck,
   red: UserX
 } as const;
+
+const roleOptions: Array<{ label: string; value: UserRole }> = [
+  { label: "平台管理员", value: "PLATFORM_ADMIN" },
+  { label: "租户管理员", value: "TENANT_ADMIN" },
+  { label: "规则管理员", value: "RULE_ADMIN" },
+  { label: "审查员", value: "REVIEWER" },
+  { label: "只读用户", value: "READ_ONLY" },
+  { label: "管理员（兼容）", value: "ADMIN" },
+  { label: "观察员（兼容）", value: "VIEWER" }
+];
 
 const getMetricIcon = useMetricIcon(metricIconMap, Users);
 
@@ -438,8 +446,13 @@ const valueText = (value?: string) => {
     return "-";
   }
   const labels: Record<string, string> = {
-    ADMIN: "管理员",
-    VIEWER: "观察员",
+    ADMIN: "管理员（兼容）",
+    VIEWER: "观察员（兼容）",
+    PLATFORM_ADMIN: "平台管理员",
+    TENANT_ADMIN: "租户管理员",
+    RULE_ADMIN: "规则管理员",
+    REVIEWER: "审查员",
+    READ_ONLY: "只读用户",
     ACTIVE: "启用",
     DISABLED: "禁用"
   };

@@ -56,6 +56,28 @@ class GithubCommentPublishCandidateLoaderTest {
     }
 
     @Test
+    void loadOverviewAddsOneSummaryForPersistingFindings() {
+        GithubCommentPreviewFindingStat stat = new GithubCommentPreviewFindingStat(3L, 3L, 0L);
+        ReviewFinding persisting = finding(103L, "src/App.java", 21);
+        persisting.setComparisonStatus("PERSISTING");
+        when(reviewFindingMapper.selectGithubCommentPreviewFindingStat(521L)).thenReturn(stat);
+        when(reviewFindingMapper.selectList(any())).thenReturn(List.of(persisting));
+        when(reviewFindingMapper.selectFindingSeverityCounts(521L))
+            .thenReturn(new SeverityCounts(0L, 0L, 0L, 3L, 0L));
+        when(reviewFindingMapper.selectCount(any())).thenReturn(0L);
+        when(changedFileMapper.selectCount(any())).thenReturn(1L);
+        when(changedFileMapper.selectTopChangedFilesByChurn(521L, 3)).thenReturn(List.of());
+        when(publicationMapper.selectOne(any())).thenReturn(null);
+
+        var overview = loader.loadOverview(task());
+
+        assertThat(overview.prSummaryCandidate().commentBody())
+            .contains("持续问题汇总")
+            .contains("仍有 1 条问题")
+            .contains("src/App.java:21");
+    }
+
+    @Test
     void loadFindingCandidatesUsesKeysetQueryAndCandidateFilesOnly() {
         ReviewFinding lineFinding = finding(101L, "README.md", 8);
         ReviewFinding prFinding = finding(102L, "docs/missing.md", 12);

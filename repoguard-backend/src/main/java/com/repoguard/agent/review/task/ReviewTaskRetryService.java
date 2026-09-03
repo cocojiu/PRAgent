@@ -103,6 +103,50 @@ public class ReviewTaskRetryService {
         }
     }
 
+    /** Re-runs a terminal Check Run after GitHub sends the built-in rerequested event. */
+    public ReviewRetryResponse rerunFromGithubCheck(Long id, String requestedHeadSha) {
+        ReviewTask task = transitionStore.findById(id);
+        if (task == null) {
+            throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + id);
+        }
+        reviewTaskStateMachine.ensureGithubCheckRerunAllowed(task.getStatus());
+        if (!reviewTaskStateMachine.isSuperseded(task.getStatus())
+            && StringUtils.hasText(requestedHeadSha)
+            && !requestedHeadSha.trim().equalsIgnoreCase(task.getCommitSha())) {
+            throw new BusinessException(ErrorCode.CONFLICT, "GitHub Check Run head SHA does not match the review task");
+        }
+        LocalDateTime queuedAt = LocalDateTime.now();
+        int retryCount = task.getMqRetries() == null ? 1 : task.getMqRetries() + 1;
+        String replacementCommitSha = reviewTaskStateMachine.isSuperseded(task.getStatus())
+            ? pullRequestHeadProvider.fetchPullRequestHeadSha(task)
+            : task.getCommitSha();
+        if (!StringUtils.hasText(replacementCommitSha)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Review task commit SHA is unavailable");
+        }
+        transitionStore.retryReviewTask(task, retryCount, replacementCommitSha);
+        evictDashboardReviewActivity(task);
+        reviewTimelineAppender.completeCurrentAndAppend(
+            task.getId(), "GitHub Check Run requested a new review", queuedAt, ReviewTimelineStatus.CURRENT
+        );
+        ReviewTaskMessage message = new ReviewTaskMessage(
+            task.getId(), task.getOrganization(), task.getRepository(), task.getPrNumber(),
+            task.getCommitSha(), queuedAt, LogContext.currentTraceId(), 4
+        );
+        try {
+            boolean queued = reviewTaskAfterCommitPublisher.publishAfterCommit(task, message, queuedAt);
+            return new ReviewRetryResponse(
+                task.getId(), queued ? "queued" : "publish_failed",
+                queued ? "Review task queued for GitHub Check Run rerun" : "Review task saved, waiting for message publish compensation",
+                retryCount
+            );
+        } catch (ReviewTaskPublishException ex) {
+            reviewTaskAfterCommitPublisher.markPublishFailed(task, ex, queuedAt);
+            return new ReviewRetryResponse(
+                task.getId(), "publish_failed", "Review task saved, waiting for message publish compensation", retryCount
+            );
+        }
+    }
+
     private void evictDashboardReviewActivity(ReviewTask task) {
         cacheEvictionService.evictDashboardReviewActivity(task.getCreatedAt().toLocalDate());
     }

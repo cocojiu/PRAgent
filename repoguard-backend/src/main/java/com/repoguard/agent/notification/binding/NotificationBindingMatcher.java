@@ -13,6 +13,7 @@ public class NotificationBindingMatcher {
             case REVIEW_FAILED -> Boolean.TRUE.equals(binding.getNotifyReviewFailed());
             case HUMAN_REVIEW_REQUIRED -> Boolean.TRUE.equals(binding.getNotifyHumanReviewRequired());
             case GITHUB_COMMENT_PUBLISHED -> Boolean.TRUE.equals(binding.getNotifyGithubComment());
+            case MODEL_RELEASE_ALERT -> Boolean.TRUE.equals(binding.getNotifyReviewFailed());
             case UNKNOWN -> false;
         };
     }

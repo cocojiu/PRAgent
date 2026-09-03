@@ -13,17 +13,20 @@ public class RepoGuardMetrics {
     private final ExternalMetricsRecorder externalMetrics;
     private final ObservabilityMetricsRecorder observabilityMetrics;
     private final RabbitMetricsRecorder rabbitMetrics;
+    private final LlmReleaseMetricsRecorder llmReleaseMetrics;
 
     public RepoGuardMetrics(
         ReviewMetricsRecorder reviewMetrics,
         ExternalMetricsRecorder externalMetrics,
         ObservabilityMetricsRecorder observabilityMetrics,
-        RabbitMetricsRecorder rabbitMetrics
+        RabbitMetricsRecorder rabbitMetrics,
+        LlmReleaseMetricsRecorder llmReleaseMetrics
     ) {
         this.reviewMetrics = Objects.requireNonNull(reviewMetrics, "reviewMetrics");
         this.externalMetrics = Objects.requireNonNull(externalMetrics, "externalMetrics");
         this.observabilityMetrics = Objects.requireNonNull(observabilityMetrics, "observabilityMetrics");
         this.rabbitMetrics = Objects.requireNonNull(rabbitMetrics, "rabbitMetrics");
+        this.llmReleaseMetrics = Objects.requireNonNull(llmReleaseMetrics, "llmReleaseMetrics");
     }
 
     public static RepoGuardMetrics forTesting(
@@ -35,7 +38,8 @@ public class RepoGuardMetrics {
             new ReviewMetricsRecorder(metrics, failureClassifier),
             new ExternalMetricsRecorder(metrics),
             new ObservabilityMetricsRecorder(metrics),
-            new RabbitMetricsRecorder(metrics)
+            new RabbitMetricsRecorder(metrics),
+            new LlmReleaseMetricsRecorder(metrics)
         );
     }
 
@@ -164,6 +168,19 @@ public class RepoGuardMetrics {
 
     public void observabilityThresholdExceeded(String signal, String subject) {
         observabilityMetrics.thresholdExceeded(signal, subject);
+    }
+
+    public void llmReleaseSnapshot(String releaseKey, String provider, String model, long sampleCount,
+        long totalTokens, java.math.BigDecimal totalCost, long p95LatencyMs, java.math.BigDecimal parseFailureRate,
+        java.math.BigDecimal fallbackRate, String alertState) {
+        llmReleaseMetrics.snapshot(releaseKey, provider, model, sampleCount, totalTokens,
+            totalCost == null ? 0d : totalCost.doubleValue(), p95LatencyMs,
+            parseFailureRate == null ? 0d : parseFailureRate.doubleValue(),
+            fallbackRate == null ? 0d : fallbackRate.doubleValue(), alertState);
+    }
+
+    public void llmReleaseAlert(String releaseKey, String code, String action) {
+        llmReleaseMetrics.alert(releaseKey, code, action);
     }
 
     public void rabbitPublishFailed(String reason) {
