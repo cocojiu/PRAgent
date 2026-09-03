@@ -541,3 +541,12 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 提交/远程验收：实现提交 `c047a603`（新增：建设真实PR评估运行闭环）已推送；首轮 Pull Request Quality `33725974464` 因旧前端 fixture 缺失新版本字段失败，修复提交 `013bf531`（修复：兼容旧评估报告版本字段）后 Pull Request Quality `33726308656`、Repository Governance `33726303148`、Auto Create Pull Request `33726303239` 成功；随后修复迁移门禁名称提交 `c0fef33f`（修复：纳入V91迁移升级门禁）已推送，Pull Request Quality `33726660630`、Repository Governance `33726655773`、Auto Create Pull Request `33726655752` 成功，升级作业实际显示 V76→V91。
 边界：本地运行状态为进程内有界状态，重启会丢失排队进度但已完成报告可查；当前没有导入 50+ 个真实脱敏 PR、生产 LLM/权限/外部平台回写证据，报告失败/取消/预算耗尽不入库；V91 历史行的 verifier/aggregation 明确为 `legacy-unknown`。回滚：停止配置 `REPOGUARD_EVALUATION_DATA_ROOT` 以禁止新运行，并回退实现提交；V91 采用增量迁移，不回滚已发布迁移文件。
 下一步：取得真实授权数据集和生产验收证据后，才能把 FUNC-P0-001 标为完成；继续审计/实现 P1-001 未回写部分、P1-003 策略即代码和 P1-004 CI SARIF 通道，P2 条件项维持暂缓。
+
+2026-09-03 | 优化-71 | 全量优化项完成度审计
+状态：未全部完成；按第 14.18 节将“已完成”“代码已落地待外部验收”“部分实现”“条件暂缓”分开记录，不以接口、mock 或 Actions 绿灯替代真实业务验收。
+审计结论：`FIX-P0-001` 已完成（SARIF attempt 绑定、批次幂等/替换、真实 MySQL 升级路径和负例门禁均有证据）。`FUNC-P0-001` 已具备受控数据集加载、真实 pipeline preview、预算/取消/失败分类和聚合报告，但尚无 50～100 个真实脱敏 PR、2～3 个授权仓库、人工标签和可重复报告的真实运行证据，仍为代码已落地。`FUNC-P1-001` 已具备指纹和五类跨次比较及页面，但发布候选加载/计划仍未按 NEW/REGRESSED 回写且未将 PERSISTING 汇总为单条评论，属于部分实现；同样缺少人工复核真实样本证据。`FUNC-P1-002` 已具备服务端报告驱动的发布、灰度、预算和回滚，但没有真实 PR 数据集达标报告或生产发布/回滚记录，仍为代码已落地待验收。
+未完成项：`FUNC-P1-003` 尚未发现 `.repoguard.yml` 解析、平台/base/admin 优先级合并、head 变更预览或显式 suppression 提案/回放/审计实现；`FUNC-P1-004` 尚未发现短期 CI 凭证/OIDC、绑定 task/attempt/commit 的上传通道、压缩包防护、scan-run 幂等和 finding 来源筛选/批次状态 UI。两项均未进入可验收状态。
+已开发但外部验收未闭环：`FUNC-P1-005`～`FUNC-P1-009` 均有代码、前后端契约、本地门禁和远程 Actions 记录，但仍缺真实 GitHub App/PR、Prometheus/Alertmanager/租户流量、生产审计导出、真实授权报告生命周期操作或真实状态漂移故障演练，按规则不能标记为最终完成。
+条件项：`FUNC-P2-001`/`FUNC-P2-002` 因无真实非 GitHub 使用方或固定回归集成本/P95 基线暂缓；`FUNC-P2-003`/`FUNC-P2-004` 因无真实多实验需求或供应商故障/合规事件证据暂缓。优化-01～优化-58 的仓库范围代码、测试和 CI 记录保持原结论，但优化-36 的个人项目范围决策明确排除生产环境准出。
+验证证据：当前分支 `PRAgent-test` 与 `origin/PRAgent-test` 一致；最新提交 `77244a88` 对应 Pull Request Quality `33727031114`、Repository Governance `33727026689`、Auto Create Pull Request `33727026787` 均成功；本地最近一次后端 `mvn verify` 通过 2848 项（12 项条件跳过），前端生成检查/类型检查/ESLint/Vitest/Vite 构建均通过，`git diff --check` 通过。
+回滚与边界：审计只更新本进度文本，不修改业务代码；保留用户既有 `ArchitectureRatchetTest.java`、两个前端 `.test.ts` 文件和 `.tmp/` 未提交；不提交非 README Markdown 或测试相关脚本。P0 真实数据到位后先生成可重复报告，再按 P1-001、P1-003、P1-004 顺序补齐缺口并逐项执行真实验收。
