@@ -14,6 +14,12 @@ services:
       - --max-connections=60
       - --innodb-lock-wait-timeout=10
       - --max-execution-time=30000
+      # Historical pre-D1 restores run on the small production host and can
+      # pause the client/server handshake while Flyway replays DDL.  These
+      # limits apply only to the disposable smoke database.
+      - --connect-timeout=60
+      - --net-read-timeout=900
+      - --net-write-timeout=900
       - --server-id=1
       - --log-bin=mysql-bin
       - --binlog-format=ROW
