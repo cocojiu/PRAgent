@@ -597,3 +597,8 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 状态：外部验收仍未闭环，且发现真实生产探测阻塞；不修改探测规则掩盖故障，也不把该故障误判为代码门禁失败。
 证据：只读核查 GitHub 授权账号可访问的仓库仅有 `PRAgent`、`gpt-auto-register` 和无 PR 的公开 fork；没有满足 2～3 个授权仓库、50～100 个人工标注样本的评测数据集。当前环境没有 `semgrep`、`codeql`、`docker`、`kubectl` 或 `promtool` 可执行文件，也没有可用于真实评测的 LLM/OIDC/Prometheus 环境变量。`Production Availability` 最新定时运行 `33741385450`（以及此前连续运行）对 `https://pragent.top` 的 liveness、readiness、页面和匿名 API 均以 curl 28 连接超时失败，告警 Issue #151 仍为 open；`real-chain-smoke.yml` 没有成功运行记录。
 处理边界：PR 质量、仓库治理和自动建 PR 仍保持全绿；生产主机恢复、GitHub App/OIDC 配置、真实 scanner/LLM 凭据、评测数据授权及生产观测需要用户/运维明确授权后才能执行，不能通过改为跳过探测、使用 bot PR、合成样例或伪造指标关闭。未提交非 README Markdown、测试相关脚本或用户既有测试改动和 `.tmp/`。
+
+2026-09-03 | 优化-79 | 最终提交门禁与工作树边界复核
+状态：本轮进度记录提交后的远程门禁全部成功；优化项整体仍不能标记为“全部最终完成”，因为第 14.18 节要求的真实数据、生产凭据、线上性能和可用性证据仍未具备。
+证据：提交 `d58d0513` 已推送且 `PRAgent-test` 与 `origin/PRAgent-test` 一致；Pull Request Quality `33756165743`、Repository Governance `33756160665`、Auto Create Pull Request `33756160670` 均为 success，包含后端单元/契约、Spring MySQL/RabbitMQ 集成、Flyway、前端质量与浏览器 E2E、生产边缘、密钥差异、依赖审查和跟踪文件治理。工作树只保留用户已有 `ArchitectureRatchetTest.java`、两个前端 fixture 测试文件和 `.tmp/`，暂存区为空。
+结论：仓库范围内未发现新的代码优化缺口；仍需用户/运维提供授权评测数据、真实 GitHub App/OIDC/扫描器/LLM/观测环境并恢复 `pragent.top` 生产可用性后，才能按条目补齐最终业务验收。未提交非 README Markdown、测试相关脚本或用户既有改动。
