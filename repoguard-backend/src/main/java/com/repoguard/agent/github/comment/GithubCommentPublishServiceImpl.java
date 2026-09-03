@@ -41,6 +41,7 @@ public class GithubCommentPublishServiceImpl implements GithubCommentPublishServ
     private final GithubCommentPublishPlanBuilder publishPlanBuilder;
     private final GithubCommentDraftPublisher draftPublisher;
     private final GithubCommentPublicationRecorder publicationRecorder;
+    private final GithubCommentComparisonGate comparisonGate;
     private final String workerId = "github-comment-publish-" + UUID.randomUUID();
 
     @Autowired
@@ -53,7 +54,8 @@ public class GithubCommentPublishServiceImpl implements GithubCommentPublishServ
         GithubCommentPublishGuard publishGuard,
         GithubCommentPublishPlanBuilder publishPlanBuilder,
         GithubCommentDraftPublisher draftPublisher,
-        GithubCommentPublicationRecorder publicationRecorder
+        GithubCommentPublicationRecorder publicationRecorder,
+        GithubCommentComparisonGate comparisonGate
     ) {
         this(
             reviewTaskMapper,
@@ -64,7 +66,8 @@ public class GithubCommentPublishServiceImpl implements GithubCommentPublishServ
             publishGuard,
             publishPlanBuilder,
             draftPublisher,
-            publicationRecorder
+            publicationRecorder,
+            comparisonGate
         );
     }
 
@@ -77,7 +80,8 @@ public class GithubCommentPublishServiceImpl implements GithubCommentPublishServ
         GithubCommentPublishGuard publishGuard,
         GithubCommentPublishPlanBuilder publishPlanBuilder,
         GithubCommentDraftPublisher draftPublisher,
-        GithubCommentPublicationRecorder publicationRecorder
+        GithubCommentPublicationRecorder publicationRecorder,
+        GithubCommentComparisonGate comparisonGate
     ) {
         this.reviewTaskMapper = Objects.requireNonNull(reviewTaskMapper, "reviewTaskMapper");
         this.metricsRecorder = Objects.requireNonNull(metricsRecorder, "metricsRecorder");
@@ -88,6 +92,32 @@ public class GithubCommentPublishServiceImpl implements GithubCommentPublishServ
         this.publishPlanBuilder = Objects.requireNonNull(publishPlanBuilder, "publishPlanBuilder");
         this.draftPublisher = Objects.requireNonNull(draftPublisher, "draftPublisher");
         this.publicationRecorder = Objects.requireNonNull(publicationRecorder, "publicationRecorder");
+        this.comparisonGate = Objects.requireNonNull(comparisonGate, "comparisonGate");
+    }
+
+    public GithubCommentPublishServiceImpl(
+        ReviewTaskMapper reviewTaskMapper,
+        GithubCommentPublishMetricsRecorder metricsRecorder,
+        NotificationDispatchService notificationDispatchService,
+        Executor publishExecutor,
+        GithubCommentPublishCandidateLoader publishCandidateLoader,
+        GithubCommentPublishGuard publishGuard,
+        GithubCommentPublishPlanBuilder publishPlanBuilder,
+        GithubCommentDraftPublisher draftPublisher,
+        GithubCommentPublicationRecorder publicationRecorder
+    ) {
+        this(
+            reviewTaskMapper,
+            metricsRecorder,
+            notificationDispatchService,
+            publishExecutor,
+            publishCandidateLoader,
+            publishGuard,
+            publishPlanBuilder,
+            draftPublisher,
+            publicationRecorder,
+            GithubCommentComparisonGate.disabled()
+        );
     }
 
     @Override
@@ -97,6 +127,7 @@ public class GithubCommentPublishServiceImpl implements GithubCommentPublishServ
             throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + taskId);
         }
         publishGuard.ensurePublishAllowed(task);
+        comparisonGate.ensureCompared(task);
 
         GithubCommentPublishCandidateOverview overview = publishCandidateLoader.loadOverview(task);
         Long batchId = publicationRecorder.createBatch(task.getId(), overview.totalFindings());
@@ -147,6 +178,7 @@ public class GithubCommentPublishServiceImpl implements GithubCommentPublishServ
                 return;
             }
             publishGuard.ensurePublishAllowed(task);
+            comparisonGate.ensureCompared(task);
             GithubCommentPublishCandidateOverview overview = publishCandidateLoader.loadOverview(task);
             totalFindings = overview.totalFindings();
             GithubCommentPublishResponse response = executeGithubCommentPublishBatch(task, batchId, overview);

@@ -256,6 +256,7 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
           and (
               finding.feedback_status_norm in ('UNREVIEWED', 'VALID')
           )
+          and upper(coalesce(finding.comparison_status, 'UNMATCHED')) in ('NEW', 'REGRESSED')
           and finding.enforcement_mode <> 'OBSERVE'
         order by finding.id asc
         limit #{limit}

@@ -77,6 +77,7 @@ class ReviewFindingMapperSqlContractTest {
             .contains("publication.finding_id = finding.id")
             .contains("publication.published_success = 1")
             .contains("finding.feedback_status_norm in ('unreviewed', 'valid')")
+            .contains("upper(coalesce(finding.comparison_status, 'unmatched')) in ('new', 'regressed')")
             .contains("order by finding.id asc")
             .doesNotContain("publication.success = 1")
             .doesNotContain("trim(publication.github_url)")
