@@ -624,3 +624,9 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 根因与处理：原 `.github/workflows/real-chain-smoke.yml` 在前后健康检查中使用 `http://${DEPLOY_HOST}`。该变量是 SSH/源站地址，切换 ESA 后直接用源站 Host 请求返回 HTTP 421。将工作流改为固定的公开生产入口 `https://pragent.top/actuator/health/readiness`，保留 `DEPLOY_HOST` 仅用于 SSH 和远端资产访问；不放宽 production Environment 分支白名单。
 证据：test 分支旧工作流 run `33780561283` 在执行前被 production 分支保护拒绝；允许的 `main` Smoke run `33781014428` 经审批后复现原始 421，确认失败不是 LLM 或远端脚本。修复后提交 `58973f83` 的 Pull Request Quality `33781435257`、Repository Governance `33781429881`、Auto Create Pull Request `33781429876` 全部成功；Production Availability run `33781804046` 在 Azure `westcentralus` runner 上六个端点通过，`PROBE_HEALTHY=true`，Issue #151 保持 CLOSED。
 后续前置：真实隔离 Smoke 仍需将修复工作流合入 production 允许的 `main` 或由用户/运维明确批准受控分支策略，并确认远端隔离资产、生产 LLM/GitHub 权限和可接受的资源消耗；不通过临时关闭保护来制造绿灯。未提交非 README Markdown、测试相关脚本或用户既有改动。
+
+2026-09-04 | 优化-84 | CI 集成测试临时凭据脱敏
+状态：完成 CI 临时凭据日志脱敏并通过 test 分支完整远程门禁；不提交测试文件、不改变 production Environment 保护规则。
+变更：`.github/workflows/pr-quality.yml` 的集成测试改为先在 shell 变量中生成临时加密密钥、认证密钥和管理 API key，逐项调用 GitHub Actions `add-mask` 后再写入 `$GITHUB_ENV`，避免环境回显或失败日志暴露凭据；保留契约测试要求的变量赋值兼容形式，旧的可复用固定凭据仍未引入。
+处理与证据：首次脱敏实现提交 `e1f8bb91` 触发 Pull Request Quality `33782771829`，后端配置契约仍断言旧文本而失败；未提交测试文件，改以工作流兼容赋值修复提交 `445d69f8`。重新运行的 Pull Request Quality `33783414909`、Repository Governance `33783410552`、Auto Create Pull Request `33783410537` 全部成功，后端 2903 项测试、MySQL/RabbitMQ 集成、Flyway、前端浏览器 E2E、生产边缘、密钥差异和依赖门禁均通过。
+边界与回滚：本项只改 CI 工作流，回退 `e1f8bb91`/`445d69f8` 可恢复旧实现；保留用户已有 `ArchitectureRatchetTest.java`、两个前端 fixture 测试文件和 `.tmp/` 未提交，未提交非 README Markdown 或测试相关脚本。真实隔离 Smoke 及其他方案外部验收缺口仍按优化-83和第 14.18 节等待授权，不以本次 Actions 绿灯替代。
