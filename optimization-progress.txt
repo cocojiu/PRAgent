@@ -636,3 +636,9 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 变更：`.github/workflows/pr-quality.yml` 将 `ProductionRuntimeContextIntegrationTest` 的 stderr 合并到 stdout，使故意删除 exchange 触发的 `PublisherCallbackChannel is closed` 线程栈不再被 Actions 解析成失败注释；Maven 的实际退出码保持不变，测试失败仍会使 job 失败。
 验收证据：修复提交 `03ed702e` 的 Pull Request Quality `33784509234`、Repository Governance `33784504070`、Auto Create Pull Request `33784504098` 全部成功；集成测试 job 成功，复核其日志 `##[error]` 命令注释计数为 0，后端单元/契约、MySQL/RabbitMQ、Flyway、前端 E2E、生产边缘、密钥和依赖门禁均通过。
 边界与回滚：本项只调整 CI 输出流，不修改业务代码、测试文件或生产保护；回退 `03ed702e` 可恢复原输出行为。保留用户已有测试改动和 `.tmp/` 未提交，未提交非 README Markdown 或测试相关脚本；真实 Smoke 和其余外部验收缺口仍按第 14.18 节等待授权。
+
+2026-09-04 | 优化-86 | Tomcat 严重漏洞修复与生产部署验收
+状态：完成后端 Tomcat 安全依赖升级，并通过 test 分支完整质量门禁、主分支镜像构建与生产部署验收；生产环境已运行修复后的固定镜像。
+变更：在 `repoguard-backend/pom.xml` 显式锁定 `org.apache.tomcat.embed:tomcat-embed-core` 为 `11.0.25`，修复 Trivy 报告的 `CVE-2026-65182`、`CVE-2026-65905`、`CVE-2026-68525` 严重漏洞；未使用 `.trivyignore` 绕过扫描。
+证据：修复提交 `dc3feb9a` 推送至 `PRAgent-test`；PR #161 的 Pull Request Quality `33790832808`（重跑后）全部成功，后端测试与 Trivy 均通过；合并提交 `b016abb2c72f` 的 Release Images `33791946646` 成功，后端/前端镜像扫描均通过；生产部署 `33792890544` 经 `production` Environment 审批成功，backend、backend-worker、frontend、caddy、mysql、rabbitmq 均健康，release identity 与 `/healthz` 校验通过，运行标签为 `main-b016abb2c72f`。
+结论与边界：本项已完成并部署；保留用户已有 `ArchitectureRatchetTest.java`、两个前端 fixture 测试文件和 `.tmp/` 未提交，未提交非 README Markdown 或测试相关脚本。其余真实业务数据、生产凭据和外部验收仍按第 14.18 节的授权边界执行。
