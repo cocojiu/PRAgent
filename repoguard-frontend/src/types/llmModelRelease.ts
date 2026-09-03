@@ -107,8 +107,9 @@ export interface LlmEvaluationRequest {
   temperature: number;
   ruleVersion: string;
   codeRevision: string;
-  verifierVersion: string;
-  aggregationVersion: string;
+  /** Optional during the legacy report/request compatibility window. */
+  verifierVersion?: string;
+  aggregationVersion?: string;
   observations: LlmEvaluationObservationRequest[];
   minimumSamples?: number;
 }
@@ -194,8 +195,9 @@ export interface LlmEvaluationReport {
   temperature: number;
   ruleVersion: string;
   codeRevision: string;
-  verifierVersion: string;
-  aggregationVersion: string;
+  /** Legacy reports may not contain provenance fields until V91 is applied. */
+  verifierVersion?: string;
+  aggregationVersion?: string;
   expectedFindings: number;
   predictedFindings: number;
   truePositives: number;
