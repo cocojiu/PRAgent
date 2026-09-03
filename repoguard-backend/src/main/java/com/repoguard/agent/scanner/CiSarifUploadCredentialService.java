@@ -16,6 +16,7 @@ import java.util.Base64;
 import java.util.Objects;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -33,6 +34,7 @@ public class CiSarifUploadCredentialService {
     private final ReviewExecutionAttemptMapper attemptMapper;
     private final Clock clock;
 
+    @Autowired
     public CiSarifUploadCredentialService(
         AuthProperties authProperties,
         ReviewTaskMapper taskMapper,
