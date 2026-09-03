@@ -56,14 +56,17 @@ services:
       SPRING_PROFILES_ACTIVE: prod
       SERVER_PORT: 8081
       JAVA_TOOL_OPTIONS: ${SMOKE_JAVA_TOOL_OPTIONS:--XX:MaxRAMPercentage=70 -XX:+UseSerialGC}
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${SMOKE_MYSQL_DATABASE:-repoguard}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true&connectTimeout=3000&socketTimeout=30000
+      # The pre-D1 restore can leave MySQL busy while Flyway applies the
+      # accumulated migrations.  Keep the disposable smoke stack tolerant of
+      # that bounded startup window; production keeps its fast-fail defaults.
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${SMOKE_MYSQL_DATABASE:-repoguard}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true&connectTimeout=60000&socketTimeout=900000
       SPRING_DATASOURCE_USERNAME: ${SMOKE_MYSQL_USER:-repoguard}
       SPRING_DATASOURCE_PASSWORD: ${SMOKE_MYSQL_PASSWORD}
       SPRING_DATASOURCE_HIKARI_MAXIMUMPOOLSIZE: 6
       SPRING_DATASOURCE_HIKARI_MINIMUMIDLE: 1
       # Restore/import can briefly saturate MySQL; keep startup retries above the
       # normal production fast-fail budget so Flyway does not race the flush.
-      SPRING_DATASOURCE_HIKARI_CONNECTIONTIMEOUT: 30000
+      SPRING_DATASOURCE_HIKARI_CONNECTIONTIMEOUT: 900000
       SPRING_DATASOURCE_HIKARI_VALIDATIONTIMEOUT: 5000
       SPRING_RABBITMQ_HOST: rabbitmq
       SPRING_RABBITMQ_PORT: 5672
