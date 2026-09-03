@@ -47,6 +47,9 @@ concurrency:
   group: production-maintenance
   cancel-in-progress: false
 
+env:
+  PRODUCTION_BASE_URL: https://pragent.top
+
 jobs:
   smoke:
     name: GitHub and LLM real chain smoke
@@ -66,9 +69,7 @@ jobs:
 
       - name: Verify production health before isolated smoke
         shell: bash
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
-        run: curl -fsS "http://${DEPLOY_HOST}/actuator/health/readiness"
+        run: curl -fsS "${PRODUCTION_BASE_URL}/actuator/health/readiness"
 
       - name: Verify remote isolated smoke assets
         shell: bash
@@ -547,9 +548,7 @@ jobs:
       - name: Verify production health after isolated smoke
         if: always()
         shell: bash
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
-        run: curl -fsS "http://${DEPLOY_HOST}/actuator/health/readiness"
+        run: curl -fsS "${PRODUCTION_BASE_URL}/actuator/health/readiness"
 
       - name: Upload sanitized OBSERVE smoke summary
         if: always()
