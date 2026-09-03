@@ -533,3 +533,11 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 提交/远程验收：审计记录提交 `c984ad85`（记录：审计平台与增量复用条件项）已推送；Pull Request Quality `33691358234`、Repository Governance `33691354972`、Auto Create Pull Request `33691354924` 全部成功。
 后续触发：取得明确的非 GitHub 使用方或真实成本瓶颈，并提供脱敏平台 Smoke、固定真实回归集、召回/严重级别差异、成本与 P95 基线后，先更新优化方案与退出条件，再拆分实现；任一复用键变化、上下文不完整或高风险类别仍必须走完整审查。
 边界：本次只记录条件项审计，不修改代码；不提交非 README Markdown、测试相关脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
+
+2026-09-03 | 优化-70 | FUNC-P0-001 真实 PR 评估运行闭环与评测版本溯源
+状态：代码链路已落地，按方案完成定义仍待真实授权数据集验收，不宣称该 P0 条目最终完成。
+变更：新增受控数据根目录与路径/符号链接防护、REAL_PR manifest 校验、50～100 样本及 2～3 个匿名仓库约束、固定/滚动切分、授权/脱敏/人工复核和 SHA-256 指纹校验；评估运行复用生产 LLM pipeline 的 preview 路径，禁止 GitHub 评论、Checks、通知或修复分支副作用，并提供有界并发、token/费用/总时长预算、幂等 runKey、取消、失败分类和仅聚合报告持久化。新增管理员评估运行启动/查询/取消 API 与工作台；评估版本与报告补齐 verifier/aggregation 版本，V91 增量迁移显式标注历史数据 `legacy-unknown`，迁移契约和前后端 OpenAPI 同步。
+本地验证：后端 `mvn verify -DskipTests=false` 共 2848 项测试通过、12 项条件跳过，JaCoCo、架构、授权、OpenAPI、迁移契约门禁通过；评估相关定向测试 51 项通过；前端 OpenAPI 生成检查、`vue-tsc -b`、ESLint、Vitest 43 个文件/173 项通过，Vite 生产构建通过，`git diff --check` 通过。
+提交/远程验收：实现提交 `c047a603`（新增：建设真实PR评估运行闭环）已推送；首轮 Pull Request Quality `33725974464` 因旧前端 fixture 缺失新版本字段失败，修复提交 `013bf531`（修复：兼容旧评估报告版本字段）后 Pull Request Quality `33726308656`、Repository Governance `33726303148`、Auto Create Pull Request `33726303239` 成功；随后修复迁移门禁名称提交 `c0fef33f`（修复：纳入V91迁移升级门禁）已推送，Pull Request Quality `33726660630`、Repository Governance `33726655773`、Auto Create Pull Request `33726655752` 成功，升级作业实际显示 V76→V91。
+边界：本地运行状态为进程内有界状态，重启会丢失排队进度但已完成报告可查；当前没有导入 50+ 个真实脱敏 PR、生产 LLM/权限/外部平台回写证据，报告失败/取消/预算耗尽不入库；V91 历史行的 verifier/aggregation 明确为 `legacy-unknown`。回滚：停止配置 `REPOGUARD_EVALUATION_DATA_ROOT` 以禁止新运行，并回退实现提交；V91 采用增量迁移，不回滚已发布迁移文件。
+下一步：取得真实授权数据集和生产验收证据后，才能把 FUNC-P0-001 标为完成；继续审计/实现 P1-001 未回写部分、P1-003 策略即代码和 P1-004 CI SARIF 通道，P2 条件项维持暂缓。
