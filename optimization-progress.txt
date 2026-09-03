@@ -607,3 +607,8 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 状态：当前网络直接访问生产站点已恢复，但 GitHub-hosted runner 的正式探测仍失败；不能把本机可用性替代 Actions/目标出口验收，也不修改探测规则掩盖差异。
 证据：本机对 `https://pragent.top` 的 liveness、readiness、首页、登录页和 overview 均返回 HTTP 200，匿名 `/api/v1/auth/me` 返回 HTTP 401，响应耗时约 0.06～0.21 秒。手动生产工作流 `33761885768` 在 GitHub Actions `ubuntu-24.04`、Azure `westcentralus` runner 上对同一六个端点连续收到 `curl: (28) Failed to connect to pragent.top port 443 after 8002 ms`，随后按既有逻辑更新告警 Issue #151 并失败。
 结论与处理边界：应用从当前网络可用，剩余阻塞是 GitHub Actions 出口到生产入口的网络/防火墙/白名单或路由差异；需要运维允许 GitHub-hosted runner 出口或提供同网段 self-hosted runner 后才能获得正式恢复证据。未修改业务代码、未关闭告警、未提交非 README Markdown、测试相关脚本或用户既有改动。
+
+2026-09-03 | 优化-81 | 生产入口与主机防火墙诊断
+状态：完成只读的生产主机、容器入口和云防火墙复核；未修改探测规则、生产服务或网络策略，GitHub-hosted runner 的外部可用性仍未恢复。
+证据：允许分支 `main` 的只读生产观测 run `33767117081` 经 `production` Environment 审批后成功 SSH 到生产主机；服务器 `0.0.0.0:80`/`:443` 由 docker-proxy 监听，UFW 为 inactive，nftables 未发现入站默认拒绝；阿里云轻量应用服务器的 TCP 443 规则为 `0.0.0.0/0` 且已启用。远程 Compose、Caddy、MySQL、RabbitMQ、后端、前端、Docker Proxy、Loki、Alloy 和 Grafana 状态健康，仓库与生产 Compose SHA 一致。主分支生产可用性 run `33772197847` 在 Azure `eastus2` runner 仍对六个端点重复 `curl: (28)` 超时，`PRAgent-test` 的 `33761885768` 在 `westcentralus` 亦同样失败。
+结论与处理边界：阻塞已定位到 GitHub-hosted runner 到中国大陆源站 IPv4 的跨境路由/边缘接入差异，不是仓库代码、Caddy、Docker、生产主机或轻量服务器防火墙配置。正式闭环只能通过全球可达的 ESA/CDN/代理入口并更新 DNS，或注册受控的同网段 self-hosted runner；在获得明确基础设施授权前，不改生产网络、不把 origin-side SSH 探测当作外部验收，也不关闭 Issue #151。未提交非 README Markdown、测试相关脚本或用户既有改动。
