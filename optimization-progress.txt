@@ -571,3 +571,11 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 本地验证：后端完整 `mvn clean verify -DskipTests=false` 共 2902 项测试通过、0 失败、12 项按环境条件跳过，JaCoCo 分支覆盖率 70.31%，架构棘轮、架构预算、迁移、授权和 OpenAPI 契约门禁通过；前端 `npm run quality` 通过 43 个测试文件/174 项测试、生成客户端检查、类型检查、ESLint、覆盖率和 Vite 构建；`git diff --check` 通过。
 提交/远程验收：实现提交 `a65307e9`（优化：建设 CI 原生 SARIF 上传通道）、构造器修复提交 `5aa0c186`（修复：声明 CI 凭据服务的注入构造器）和契约修复提交 `633a3cf3`（修复：同步审查发现来源筛选契约）均已推送 `origin/PRAgent-test`；最终 Pull Request Quality `33749602745` 的 8 个作业全部成功，Repository Governance `33749596968`、Auto Create Pull Request `33749596962` 亦成功。
 边界与回滚：上传端点仍需生产网关/部署层限制请求体并配置真实 OIDC 或短期密钥，当前代码测试使用受控字节数组和模拟凭据；尚未在真实 CodeQL/Semgrep、真实 GitHub PR 或生产租户执行导入/替换/中断恢复及人工来源验收。可回退实现提交并保留 V93 增量迁移，不删除已发布迁移；本记录未提交非 README Markdown、测试相关脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
+
+2026-09-03 | 优化-75 | 全量优化项完成度审计（P1-004 后）
+状态：严格按方案第 14.18 节复核后，整体优化项仍不能标记为“全部最终完成”；所有已排期的代码项均已有实现、权限/契约/失败路径、中文提交、test 分支推送和远程 Actions 证据，剩余差异是“真实业务/生产验收待授权”或“条件项暂缓”，不是遗漏的代码待办。
+覆盖范围：第 4 章主优化池 `OPT-API-001`～`OPT-API-005`、`OPT-SQL-001`～`OPT-SQL-006`、`OPT-LINK-001`～`OPT-LINK-005` 的代码落地保持完成，但 2C4G 真实 `EXPLAIN`、P95、响应体、缓存命中率、浏览器 long task 和外部发布恢复数据仍按方案作为线上准出证据；优化-01～优化-58 的历史条目均已有各自代码/测试/Actions 记录，个人项目范围按优化-36 不把企业生产环境验收伪造为已完成。
+第 14 章条目结论：`FIX-P0-001` 已完成（V82/V93 迁移、真实 MySQL 升级路径、SARIF/attempt 绑定与幂等/替换负例）；`FUNC-P0-001`、`FUNC-P1-001`～`FUNC-P1-009` 均为代码已落地待真实数据或生产凭据/业务验收，其中 P1-001 的跨次状态回写已在优化-72 补齐，P1-003 的策略与抑制链路已在优化-73 补齐，P1-004 的 CI SARIF 通道已在优化-74 补齐；`FUNC-P2-001`～`FUNC-P2-004` 均按方案条件暂缓，不在缺少真实非 GitHub 使用方、固定回归集收益基线、多实验需求或供应商事故证据时扩展范围。
+数量汇总：第 14 章当前共 15 个条目，1 个严格代码/集成验收完成、10 个代码完成待外部验收、4 个条件暂缓；未发现尚未实现但应继续排期的条目。候选项的真实外部证据缺口包括 50～100 个授权脱敏 PR 与人工标签、真实 GitHub App/OIDC/PR、Prometheus/Alertmanager/租户流量、生产审计导出/报告生命周期/漂移演练以及 CodeQL/Semgrep 标准 SARIF。
+验证与远程状态：当前 `PRAgent-test` 与 `origin/PRAgent-test` 均为 `2a190a53`；最近 P1-004 实现/修复提交为 `a65307e9`、`5aa0c186`、`633a3cf3`，进度提交为 `2a190a53`；最终 Pull Request Quality `33750258399`、Repository Governance `33750254796`、Auto Create Pull Request `33750254778` 全部成功。完整后端 `mvn clean verify -DskipTests=false` 为 2902 项通过、0 失败、12 项条件跳过，JaCoCo 分支 70.31%；前端 `npm run quality` 为 43 个测试文件/174 项通过；`git diff --check` 通过。
+边界：本次只更新审计记录，不修改方案 Markdown；不把 mock、合成样例或 Actions 绿灯当作真实业务验收，不新增未定义需求。未提交非 README Markdown、测试相关脚本或用户既有 `ArchitectureRatchetTest.java`、两个前端 fixture 测试文件和 `.tmp/`。后续如获得外部数据/凭据，必须先补真实验收证据，再单独更新对应条目的状态。
