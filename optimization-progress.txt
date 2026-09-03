@@ -564,3 +564,10 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 本地验证：后端 `mvn clean verify -DskipTests=false` 共 2877 项测试通过、0 失败、12 项按环境条件跳过；JaCoCo 指令 0.8932、分支 0.7004、行 0.8917，架构、迁移、租户、授权和 OpenAPI 契约门禁通过；前端 `npm run quality` 通过 43 个文件/173 项测试、类型检查、生成客户端检查、ESLint、覆盖率和构建；`git diff --check` 通过。
 提交/远程验收：实现提交 `8e136e20`（新增：建设仓库策略即代码与误报抑制）已推送 `origin/PRAgent-test`；Pull Request Quality `33739480092` 的 10 个作业全部成功（含 MySQL/RabbitMQ、后端覆盖率/CVE、前端浏览器质量、Flyway、生产边缘、密钥与依赖门禁），Repository Governance `33739475479`、Auto Create Pull Request `33739475524` 亦成功。
 边界与回滚：服务端不接受仓库文件中的 endpoint、token、webhook 或执行命令；head 只用于预览，平台安全底线不可被仓库策略降低；suppression 必须有理由、操作人和到期时间且可撤销。真实 GitHub App/PR 和人工审批仍需另行授权；可回退 `8e136e20` 与 V92 前的应用版本（不删除已发布迁移）。本记录未提交非 README Markdown、测试相关脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
+
+2026-09-03 | 优化-74 | FUNC-P1-004 CI 原生 SARIF 上传通道与来源/批次可见性
+状态：代码链路、完整本地质量门禁、中文提交、test 分支推送和远程 Actions 验收通过；真实 CodeQL/Semgrep 标准样例、生产 GitHub App/OIDC 凭据和人工业务验收仍待授权，按第 14.18 节保留外部验收边界。
+变更：新增短期、任务与 attempt/commit/repository 绑定的 CI 凭据及匿名上传接口；上传元数据包含工具、版本、scan run、SARIF 指纹和完成时间，拒绝过期、旧 attempt、错 commit、跨仓库和未来时间。新增有界 SARIF 2.1.0 raw/zip 解码，限制 20 个文档、总解压 8 MiB、单文档 2 MiB、压缩比 10 倍和路径穿越/多文档/格式错误；同一 scan run 幂等，内容变化按同工具/版本/commit 替换，跨来源不互相覆盖。审查发现导出保留 tool/rule，详情接口支持 source 筛选并返回 SARIF 批次状态与批次号；新增 V93 元数据表、租户隔离、迁移/授权/OpenAPI/前后端契约和回归测试。
+本地验证：后端完整 `mvn clean verify -DskipTests=false` 共 2902 项测试通过、0 失败、12 项按环境条件跳过，JaCoCo 分支覆盖率 70.31%，架构棘轮、架构预算、迁移、授权和 OpenAPI 契约门禁通过；前端 `npm run quality` 通过 43 个测试文件/174 项测试、生成客户端检查、类型检查、ESLint、覆盖率和 Vite 构建；`git diff --check` 通过。
+提交/远程验收：实现提交 `a65307e9`（优化：建设 CI 原生 SARIF 上传通道）、构造器修复提交 `5aa0c186`（修复：声明 CI 凭据服务的注入构造器）和契约修复提交 `633a3cf3`（修复：同步审查发现来源筛选契约）均已推送 `origin/PRAgent-test`；最终 Pull Request Quality `33749602745` 的 8 个作业全部成功，Repository Governance `33749596968`、Auto Create Pull Request `33749596962` 亦成功。
+边界与回滚：上传端点仍需生产网关/部署层限制请求体并配置真实 OIDC 或短期密钥，当前代码测试使用受控字节数组和模拟凭据；尚未在真实 CodeQL/Semgrep、真实 GitHub PR 或生产租户执行导入/替换/中断恢复及人工来源验收。可回退实现提交并保留 V93 增量迁移，不删除已发布迁移；本记录未提交非 README Markdown、测试相关脚本或用户既有 `ArchitectureRatchetTest.java`/`.tmp/`。
