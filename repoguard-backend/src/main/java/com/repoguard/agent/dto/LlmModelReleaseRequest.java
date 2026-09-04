@@ -43,7 +43,7 @@ public record LlmModelReleaseRequest(@NotBlank @Size(max = 128) String releaseKe
     /** Aggregate-only input for a real-PR evaluation; source and provider payloads stay outside this API. */
     public record LlmEvaluationRequest(@NotBlank @Size(max = 128) String datasetId,
         @NotBlank @Size(max = 64) String datasetVersion,
-        @NotBlank @Pattern(regexp = "(?i)REAL_PR|OFFLINE_SYNTHETIC") String datasetKind,
+        @NotBlank @Pattern(regexp = "(?i)REAL_PR|PROVISIONAL_REAL_PR|OFFLINE_SYNTHETIC") String datasetKind,
         @NotNull @Min(0) @Max(3) Integer sourceRepositoryCount, @NotNull @Min(0) @Max(100) Integer sampleCount,
         @NotNull @Min(0) @Max(100) Integer fixedRegressionSamples, @NotNull @Min(0) @Max(100) Integer rollingObservationSamples,
         @NotNull Boolean authorized, @NotNull Boolean anonymized, @NotNull Boolean humanReviewed,
@@ -55,7 +55,7 @@ public record LlmModelReleaseRequest(@NotBlank @Size(max = 128) String releaseKe
         @NotBlank @Size(max = 96) String ruleVersion, @NotBlank @Size(max = 128) String codeRevision,
         @NotBlank @Size(max = 96) String verifierVersion, @NotBlank @Size(max = 96) String aggregationVersion,
         @NotNull @Size(min = 1, max = 100) List<@Valid LlmEvaluationObservationRequest> observations,
-        @Min(30) @Max(100) Integer minimumSamples) {
+        @Min(20) @Max(100) Integer minimumSamples) {
 
         public LlmEvaluationRequest(String datasetId, String datasetVersion, String datasetKind,
             Integer sourceRepositoryCount, Integer sampleCount, Integer fixedRegressionSamples,

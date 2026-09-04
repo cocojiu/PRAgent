@@ -26,7 +26,12 @@ public record LlmEvaluationDatasetMetadata(
 
     public enum DatasetKind {
         REAL_PR,
+        PROVISIONAL_REAL_PR,
         OFFLINE_SYNTHETIC
+    }
+
+    public boolean provisional() {
+        return kind == DatasetKind.PROVISIONAL_REAL_PR;
     }
 
     public LlmEvaluationDatasetMetadata {
@@ -149,20 +154,33 @@ public record LlmEvaluationDatasetMetadata(
         int observationsWithoutSampleContext
     ) {
         List<String> blockers = new ArrayList<>();
-        if (kind != DatasetKind.REAL_PR) {
+        if (kind != DatasetKind.REAL_PR && kind != DatasetKind.PROVISIONAL_REAL_PR) {
             blockers.add("DATASET_NOT_REAL_PR");
         }
-        if (sourceRepositoryCount < 2) {
-            blockers.add("DATASET_REPOSITORIES_BELOW_2");
-        }
-        if (sourceRepositoryCount > 3) {
-            blockers.add("DATASET_REPOSITORIES_ABOVE_3");
-        }
-        if (sampleCount < 50) {
-            blockers.add("DATASET_SAMPLES_BELOW_50");
-        }
-        if (sampleCount > 100) {
-            blockers.add("DATASET_SAMPLES_ABOVE_100");
+        if (provisional()) {
+            if (sourceRepositoryCount != 1) {
+                blockers.add("PROVISIONAL_DATASET_REPOSITORIES_MUST_EQUAL_1");
+            }
+            if (sampleCount < 20) {
+                blockers.add("PROVISIONAL_DATASET_SAMPLES_BELOW_20");
+            }
+            if (sampleCount > 49) {
+                blockers.add("PROVISIONAL_DATASET_SAMPLES_ABOVE_49");
+            }
+            blockers.add("PROVISIONAL_DATASET_NOT_PROMOTABLE");
+        } else {
+            if (sourceRepositoryCount < 2) {
+                blockers.add("DATASET_REPOSITORIES_BELOW_2");
+            }
+            if (sourceRepositoryCount > 3) {
+                blockers.add("DATASET_REPOSITORIES_ABOVE_3");
+            }
+            if (sampleCount < 50) {
+                blockers.add("DATASET_SAMPLES_BELOW_50");
+            }
+            if (sampleCount > 100) {
+                blockers.add("DATASET_SAMPLES_ABOVE_100");
+            }
         }
         if (observedSamples != sampleCount) {
             blockers.add("DATASET_SAMPLE_COUNT_MISMATCH:" + observedSamples + "/" + sampleCount);

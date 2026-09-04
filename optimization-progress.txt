@@ -696,3 +696,19 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 真实 Smoke：run `33872047338`、job `101020077380` 经 production Environment 审批后成功。远端诊断来源为 `from_captured_output`，主机可用内存 `1310796 KiB`；生产镜像 OCI revision 与 `d3758b8f4d346f9229374ef886fbda8422c2b339` 一致，策略来源为 `production_encrypted_row`，历史任务中和 `1` 个；三项顺序任务分别为 task `9015/9016/9017`，PR `11/12/132`，均为 `COMPLETED`，累计 token `18032/25000`，finding 总数 `6`；前后公网 readiness 均返回 `{"status":"UP"}`，`smoke_cleanup project=repoguard-smoke-33872047338-1 result=complete`；策略快照为 `OBSERVE`，`smoke_observe_violations=0`，所有 finding 的 materialized mode 均为 `OBSERVE` 且高危规则保留 `blockingCandidate` 审计信息；脱敏工件 `real-chain-observe-33872047338-1`（artifact ID `9936508099`）已上传。
 结论：优化-94 的资源隔离/失败诊断、优化-98 的 Smoke 配置与诊断修复、优化-99 的仓库策略全局 OBSERVE 封顶均已由真实生产链路验证，不再保留代码侧或本轮发布侧阻塞。工作树仍保留用户已有 `ArchitectureRatchetTest.java`、两个前端 fixture 测试文件和 `.tmp/`，未提交非 README Markdown、测试相关脚本或用户既有改动。
 范围边界：第 14.18 节中需要外部授权的数据与基础设施证据（50～100 个真实脱敏 PR、正式 GitHub App/OIDC、外部扫描器、Prometheus/Alertmanager 以及生产性能/可用性长期基线）不属于本次可凭仓库和现有生产凭据独立生成的证据，仍按方案标记为待授权验收；本记录不将其误报为已完成。
+
+2026-09-05 | FUNC-P0-001 | 可审查 PR 小样本验收先行
+状态：完成小样本验收输入准备和生产数据加载链路校验；不能将本轮离线规则回放标记为真实 LLM 质量验收，也不能据此完成 FUNC-P0-001 的最终业务验收。
+样本：从当前 GitHub 账号可读取且本地保留完整 head/diff 的 `cocojiu/PRAgent` 合并 PR 中选取 20 条（#3、#4、#5、#55、#66、#67、#72、#73、#74、#76、#77、#78、#79、#81、#82、#83、#84、#86、#89、#97）；单仓库、10 条 `FIXED_REGRESSION`、10 条 `ROLLING_OBSERVATION`，全部去除文档文件，保留脱敏前需人工复核的原始 patch 仅在 `.tmp/small-sample-pr-dataset` 外部受控目录中，不进入 Git。
+数据契约：生成 `PROVISIONAL_REAL_PR` 清单，`sampleCount=20`、`sourceRepositoryCount=1`、`minimumSamples=20`，SHA-256 指纹为 `0b0a3ebace734b8048fde364e3ca16d662d403f7d60e80cd549092add089ee0f`；使用生产 `LlmEvaluationDatasetLoader` 实例校验通过，样本上下文、固定/滚动分片和 caseId 指纹一致。
+代码回归：`LlmEvaluationDatasetLoaderTest`、`LlmModelReleaseServiceTest`、`LlmQualityEvaluatorTest` 共 42 项通过；未修改用户已有测试改动，未产生提交或远程副作用。
+离线基线：使用生产 `RuleBasedPullRequestReviewer` 对同一批 PR diff 回放，20 条中人工标签有 Finding 1 条（PR #5 的 `RG-JAVA-001`，`LlmReviewResultParser.java:38`），规则预测 2 条；PR #81 的 `scripts/backup-prod-mysql.sh:312` 被 `RG-SECRET-001` 误报。标签一致率 19/20，规则基线 precision=0.5000、recall=1.0000、anchor=0.5000，质量评估阻断为 `PRECISION_BELOW_90`、`ANCHOR_RATE_BELOW_95`；该结果仅用于发现规则/标注问题，不代表 LLM 指标。
+真实验收边界：本机当前没有运行中的后端 `:8081` 或 MySQL `:3306`，项目工作区也没有可供评估运行读取的已启用 LLM provider/model 策略；因此本轮未发起外部 LLM 请求、未消耗模型额度、未生成可发布报告。`PROVISIONAL_REAL_PR` 报告即使完成也会保持 `PROVISIONAL`，代码明确禁止用于 Shadow/Canary/Active 发布。
+下一步：维护者先复核 PR #5、#81 的人工标签并确认授权/脱敏，再将 `REPOGUARD_EVALUATION_DATA_ROOT` 指向受控数据根目录、在应用中启用与清单匹配的 LLM provider/model 后，以 `runKey` 启动 20 条评估；取得真实观察结果后再修订标签和报告，不能用规则回放、mock、合成数据或 CI 绿灯替代真实模型证据。本轮仅更新 txt 审计记录，未提交非 README Markdown、测试相关脚本或 `.tmp/`。
+
+2026-09-05 | FUNC-P0-001 | 标签确认与现有 LLM 服务连通性
+状态：完成小样本关键标签复核，并确认现有线上 LLM 服务可以实际响应；20 条真实 PR 评估尚未启动，不提前宣称质量门禁通过。
+标签确认：复核 PR #5 的新增宽泛异常捕获，确认 `RG-JAVA-001` Finding 为有效样本（`LlmReviewResultParser.java:38`）；复核 PR #81 的随机密码生成逻辑，确认 `RG-SECRET-001` 命中为误报，保留为负样本。清单已记录 `authorized/anonymized/humanReviewed=true`，标签与原始 patch 仍只存放在 `.tmp/small-sample-pr-dataset` 受控目录。
+服务证据：远端 `pragent.top` 的 liveness/readiness 均返回 `UP`；集成设置显示 GitHub、MySQL、RabbitMQ、Spring AI 均已连接，LLM 为 DashScope 兼容接口、模型 `qwen3.7-plus`，Key 已脱敏保存；通过界面执行一次“测试连接”，结果为 `LLM connection test succeeded`。未回显或提交任何 Key，也未发送 PR patch 作为测试内容。
+启动边界：远端评估工作台仍提示“数据目录必须由平台管理员预置”，报告列表为空；本地 3306/5672 服务虽在运行，但已有演示配置凭据与本机 MySQL 账号不匹配，未强行重置密码或启动本地后端。远端部署 SSH 公钥认证被拒，未能把 20 条数据上传到受控根目录，因此没有发起真实 LLM 评估、没有消耗模型额度，也没有生成报告。
+下一步：由部署管理员在远端 `REPOGUARD_EVALUATION_DATA_ROOT` 下预置该清单（或提供可用的部署传输授权），再以并发 1、令牌/费用/时长预算启动 `PROVISIONAL_REAL_PR` 运行；即使运行完成，报告仍只可观察/比较，不能 Shadow/Canary/Active 发布。未提交非 README Markdown、测试相关脚本、用户既有改动或 `.tmp/`。
