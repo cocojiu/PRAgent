@@ -242,8 +242,11 @@ services:
       REPOGUARD_RUNTIME_ROLE: ${REPOGUARD_RUNTIME_ROLE:-combined}
       REPOGUARD_API_INSTANCE_COUNT: ${REPOGUARD_API_INSTANCE_COUNT:-1}
       REPOGUARD_AUTH_REGISTRATION_ENABLED: ${REPOGUARD_AUTH_REGISTRATION_ENABLED:-false}
+      REPOGUARD_EVALUATION_DATA_ROOT: ${REPOGUARD_EVALUATION_DATA_ROOT:-/var/lib/repoguard/evaluation-data}
       SPRING_DATASOURCE_HIKARI_MAXIMUMPOOLSIZE: ${API_DB_MAX_POOL_SIZE:-8}
       SPRING_DATASOURCE_HIKARI_MINIMUMIDLE: ${API_DB_MIN_IDLE:-2}
+    volumes:
+      - repoguard_evaluation_data:/var/lib/repoguard/evaluation-data:ro
     secrets: *backend-secrets
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8081/actuator/health/readiness | grep -q 'UP'"]
@@ -401,6 +404,8 @@ volumes:
     name: ${MYSQL_VOLUME_NAME:-repoguard_mysql_data}
   repoguard_rabbitmq_data:
     name: ${RABBITMQ_VOLUME_NAME:-repoguard_rabbitmq_data}
+  repoguard_evaluation_data:
+    name: ${REPOGUARD_EVALUATION_DATA_VOLUME_NAME:-repoguard_evaluation_data}
   repoguard_caddy_data:
     name: ${CADDY_DATA_VOLUME_NAME:-repoguard_caddy_data}
   repoguard_caddy_config:
