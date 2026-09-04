@@ -290,10 +290,9 @@ jobs:
       - name: Install and audit frontend dependencies
         working-directory: repoguard-frontend
         run: |
-          npm ci
-          # 审计完整依赖树，避免 npm audit 在仅提交生产依赖时回退到已退役的 quick 接口。
-          # 包含 devDependencies 不会放宽门禁，反而覆盖构建链依赖的高危/严重漏洞。
-          npm audit --audit-level=high --registry=https://registry.npmjs.org
+          # 使用 npm ci 的单次内置审计；audit-level 仍会让高危/严重漏洞返回非零。
+          # 避免安装后再次调用已退役的 npm audit quick endpoint。
+          npm ci --audit=true --audit-level=high --registry=https://registry.npmjs.org
 
       - name: Build frontend after PR quality
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/PRAgent-test' }}
