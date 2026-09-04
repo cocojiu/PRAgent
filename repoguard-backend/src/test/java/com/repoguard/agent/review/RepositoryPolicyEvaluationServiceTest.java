@@ -132,8 +132,36 @@ class RepositoryPolicyEvaluationServiceTest {
 
         assertThat(adjusted.findings()).hasSize(1);
         assertThat(adjusted.findings().getFirst().severity()).isEqualTo("HIGH");
-        assertThat(adjusted.findings().getFirst().enforcementMode()).isEqualTo("BLOCK");
+        assertThat(adjusted.findings().getFirst().enforcementMode()).isEqualTo("OBSERVE");
         assertThat(adjusted.findings().getFirst().isBlocking()).isFalse();
+        assertThat(adjusted.findings().getFirst().policyReason()).contains("strategy_enforcement_cap_observe");
+    }
+
+    @Test
+    void observeStrategyCapsPlatformRuleFloorWhenMaterializingFindings() {
+        ReviewRuleSettings rule = new ReviewRuleSettings(
+            "RG-AUTH-001", "ENABLED", "", "HIGH", 90, EnforcementMode.BLOCK, "", "", ""
+        );
+        RepositoryPolicyEvaluationService.RepositoryPolicyEvaluation evaluation = service.evaluate(
+            ReviewPolicySettings.empty(), Map.of("RG-AUTH-001", rule),
+            RepositoryPolicyDocument.empty(), RepositoryPolicyDocument.empty(), List.of(), List.of()
+        );
+        ReviewFindingResult blocking = new ReviewFindingResult(
+            "HIGH", "RULE", "RG-AUTH-001", "src/Auth.java", 1,
+            "missing authorization", "add authorization", "HIGH", "evidence", "impact", "fix",
+            true, "SECURITY", "BLOCK", "block_policy_satisfied", "MissingAuthorizationBoundary",
+            "caller can reach endpoint", List.of(), true, "VERIFIED", FindingProvenance.legacy("RULE", "RG-AUTH-001", "HIGH", "HIGH")
+        );
+
+        ReviewResult adjusted = service.applyFindings(ReviewResult.completed("HIGH", List.of(blocking)), evaluation);
+
+        assertThat(adjusted.riskLevel()).isEqualTo("INFO");
+        assertThat(adjusted.findings()).singleElement().satisfies(finding -> {
+            assertThat(finding.enforcementMode()).isEqualTo("OBSERVE");
+            assertThat(finding.isBlocking()).isFalse();
+            assertThat(finding.blockingCandidate()).isTrue();
+            assertThat(finding.policyReason()).contains("strategy_enforcement_cap_observe");
+        });
     }
 
     @Test

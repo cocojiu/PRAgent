@@ -276,11 +276,16 @@ public class RepositoryPolicyEvaluationService {
             return finding;
         }
         String severity = decision.effectiveSeverity();
-        EnforcementMode mode = decision.effectiveEnforcement();
+        EnforcementMode configuredMode = decision.effectiveEnforcement();
+        EnforcementMode mode = capByStrategy(configuredMode, evaluation.effectiveSettings());
         boolean blocking = mode == EnforcementMode.BLOCK
             && (finding.isBlocking() || finding.blockingCandidate())
             && HIGH_IMPACT.contains(severity)
             && "HIGH".equalsIgnoreCase(finding.confidence());
+        String policyReason = decision.conflict() == null ? finding.policyReason() : decision.conflict();
+        if (mode != configuredMode) {
+            policyReason = appendStrategyCapReason(policyReason, mode);
+        }
         if (severity.equalsIgnoreCase(finding.severity())
             && mode.name().equalsIgnoreCase(finding.enforcementMode())
             && blocking == finding.isBlocking()) {
@@ -301,7 +306,7 @@ public class RepositoryPolicyEvaluationService {
             blocking,
             finding.reviewDimension(),
             mode.name(),
-            decision.conflict() == null ? finding.policyReason() : decision.conflict(),
+            policyReason,
             finding.issueType(),
             finding.preconditions(),
             finding.relatedFiles(),
@@ -309,6 +314,45 @@ public class RepositoryPolicyEvaluationService {
             finding.verificationStatus(),
             finding.provenance()
         );
+    }
+
+    /**
+     * A repository rule may retain its platform floor in the policy decision, but it must not
+     * bypass the active server strategy when a finding is materialized.  In particular, the
+     * OBSERVE baseline is required to produce evidence without comments or blocking decisions.
+     */
+    private EnforcementMode capByStrategy(EnforcementMode configuredMode, ReviewPolicySettings settings) {
+        EnforcementMode strategyMode = effectiveStrategyMode(settings == null ? null : settings.strategyRelease());
+        return rank(configuredMode) <= rank(strategyMode) ? configuredMode : strategyMode;
+    }
+
+    private EnforcementMode effectiveStrategyMode(ReviewStrategyRelease release) {
+        if (release == null || !release.replayVerified() || !release.supportsRuntimeVersions()) {
+            return EnforcementMode.OBSERVE;
+        }
+        return release.enforcementMode();
+    }
+
+    private String appendStrategyCapReason(String current, EnforcementMode effectiveMode) {
+        String marker = "strategy_enforcement_cap_" + effectiveMode.name().toLowerCase(Locale.ROOT);
+        if (!StringUtils.hasText(current)) {
+            return marker;
+        }
+        String separator = "; ";
+        int availableCurrentLength = 255 - separator.length() - marker.length();
+        String normalizedCurrent = current.trim();
+        String retainedCurrent = normalizedCurrent.length() <= availableCurrentLength
+            ? normalizedCurrent
+            : normalizedCurrent.substring(0, availableCurrentLength);
+        return retainedCurrent + separator + marker;
+    }
+
+    private int rank(EnforcementMode mode) {
+        return switch (mode) {
+            case OBSERVE -> 1;
+            case COMMENT -> 2;
+            case BLOCK -> 3;
+        };
     }
 
     private int severityRank(String value) {
