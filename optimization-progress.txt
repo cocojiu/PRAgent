@@ -696,7 +696,6 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 真实 Smoke：run `33872047338`、job `101020077380` 经 production Environment 审批后成功。远端诊断来源为 `from_captured_output`，主机可用内存 `1310796 KiB`；生产镜像 OCI revision 与 `d3758b8f4d346f9229374ef886fbda8422c2b339` 一致，策略来源为 `production_encrypted_row`，历史任务中和 `1` 个；三项顺序任务分别为 task `9015/9016/9017`，PR `11/12/132`，均为 `COMPLETED`，累计 token `18032/25000`，finding 总数 `6`；前后公网 readiness 均返回 `{"status":"UP"}`，`smoke_cleanup project=repoguard-smoke-33872047338-1 result=complete`；策略快照为 `OBSERVE`，`smoke_observe_violations=0`，所有 finding 的 materialized mode 均为 `OBSERVE` 且高危规则保留 `blockingCandidate` 审计信息；脱敏工件 `real-chain-observe-33872047338-1`（artifact ID `9936508099`）已上传。
 结论：优化-94 的资源隔离/失败诊断、优化-98 的 Smoke 配置与诊断修复、优化-99 的仓库策略全局 OBSERVE 封顶均已由真实生产链路验证，不再保留代码侧或本轮发布侧阻塞。工作树仍保留用户已有 `ArchitectureRatchetTest.java`、两个前端 fixture 测试文件和 `.tmp/`，未提交非 README Markdown、测试相关脚本或用户既有改动。
 范围边界：第 14.18 节中需要外部授权的数据与基础设施证据（50～100 个真实脱敏 PR、正式 GitHub App/OIDC、外部扫描器、Prometheus/Alertmanager 以及生产性能/可用性长期基线）不属于本次可凭仓库和现有生产凭据独立生成的证据，仍按方案标记为待授权验收；本记录不将其误报为已完成。
-
 2026-09-05 | FUNC-P0-001 | 可审查 PR 小样本验收先行
 状态：完成小样本验收输入准备和生产数据加载链路校验；不能将本轮离线规则回放标记为真实 LLM 质量验收，也不能据此完成 FUNC-P0-001 的最终业务验收。
 样本：从当前 GitHub 账号可读取且本地保留完整 head/diff 的 `cocojiu/PRAgent` 合并 PR 中选取 20 条（#3、#4、#5、#55、#66、#67、#72、#73、#74、#76、#77、#78、#79、#81、#82、#83、#84、#86、#89、#97）；单仓库、10 条 `FIXED_REGRESSION`、10 条 `ROLLING_OBSERVATION`，全部去除文档文件，保留脱敏前需人工复核的原始 patch 仅在 `.tmp/small-sample-pr-dataset` 外部受控目录中，不进入 Git。
