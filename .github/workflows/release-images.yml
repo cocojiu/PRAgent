@@ -582,8 +582,31 @@ jobs:
           test -s config/rabbitmq/rabbitmq.conf || { echo "Missing RabbitMQ deployment config"; exit 1; }
           test -s docker-compose.metrics-bridge.yml || { echo "Missing metrics bridge overlay"; exit 1; }
           test -s scripts/migrate-prod-secret-files.sh || { echo "Missing production secret migration script"; exit 1; }
+          ssh_args=(
+            -o ConnectTimeout=15
+            -o ConnectionAttempts=1
+            -o ServerAliveInterval=15
+            -o ServerAliveCountMax=20
+            -i ~/.ssh/deploy_key
+            -p "${DEPLOY_PORT:-22}"
+          )
+          scp_args=(
+            -o ConnectTimeout=15
+            -o ConnectionAttempts=1
+            -o ServerAliveInterval=15
+            -o ServerAliveCountMax=20
+            -i ~/.ssh/deploy_key
+            -P "${DEPLOY_PORT:-22}"
+          )
+          run_remote() {
+            timeout --signal=TERM --kill-after=10s 120s ssh "${ssh_args[@]}" "$@"
+          }
+          run_transfer() {
+            timeout --signal=TERM --kill-after=10s 120s scp "${scp_args[@]}" "$@"
+          }
+          echo "每个生产资产 SSH/SCP 操作最长 120 秒，失败将终止本次部署并保留远程回滚资产。"
           asset_backup_dir="${DEPLOY_PATH}/.deploy-backup/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+          run_remote "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "set -eu
              mkdir -p '${DEPLOY_PATH}/scripts' \
                       '${DEPLOY_PATH}/performance/remote' \
@@ -605,18 +628,18 @@ jobs:
              fi"
           echo "DEPLOY_ASSET_BACKUP_DIR=.deploy-backup/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
           # Upload bind sources before the compose file that references them.
-          scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" config/rabbitmq/rabbitmq.conf "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/config/rabbitmq/rabbitmq.conf"
-          scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" docker-compose.prod.yml "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/docker-compose.prod.yml"
-          scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" docker-compose.metrics-bridge.yml "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/docker-compose.metrics-bridge.yml"
-          scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" docker-compose.smoke.yml "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/docker-compose.smoke.yml"
-          scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" Caddyfile "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/Caddyfile"
-          scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" scripts/deploy-prod.sh "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/scripts/deploy-prod.sh"
-          scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" scripts/migrate-prod-secret-files.sh "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/scripts/migrate-prod-secret-files.sh"
-          scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" \
+          run_transfer config/rabbitmq/rabbitmq.conf "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/config/rabbitmq/rabbitmq.conf"
+          run_transfer docker-compose.prod.yml "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/docker-compose.prod.yml"
+          run_transfer docker-compose.metrics-bridge.yml "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/docker-compose.metrics-bridge.yml"
+          run_transfer docker-compose.smoke.yml "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/docker-compose.smoke.yml"
+          run_transfer Caddyfile "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/Caddyfile"
+          run_transfer scripts/deploy-prod.sh "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/scripts/deploy-prod.sh"
+          run_transfer scripts/migrate-prod-secret-files.sh "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/scripts/migrate-prod-secret-files.sh"
+          run_transfer \
             performance/remote/run-isolated-real-chain-smoke.sh \
             performance/remote/run-real-chain-smoke.sh \
             "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/performance/remote/"
-          ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+          run_remote "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "chmod 0700 '${DEPLOY_PATH}/scripts/migrate-prod-secret-files.sh' \
                         '${DEPLOY_PATH}/performance/remote/run-isolated-real-chain-smoke.sh' \
                         '${DEPLOY_PATH}/performance/remote/run-real-chain-smoke.sh'"
