@@ -110,7 +110,14 @@ class ProductionDeploymentContractTest {
             .contains("test -s config/rabbitmq/rabbitmq.conf")
             .contains("${DEPLOY_PATH}/config/rabbitmq")
             .contains("${asset_backup_dir}/config/rabbitmq/rabbitmq.conf")
-            .contains("DEPLOY_ASSET_BACKUP_DIR=.deploy-backup/");
+            .contains("DEPLOY_ASSET_BACKUP_DIR=.deploy-backup/")
+            .contains("ssh_args=(")
+            .contains("scp_args=(")
+            .contains("-o ConnectTimeout=15")
+            .contains("-o ConnectionAttempts=1")
+            .contains("timeout --signal=TERM --kill-after=10s 120s ssh")
+            .contains("timeout --signal=TERM --kill-after=10s 120s scp")
+            .contains("每个生产资产 SSH/SCP 操作最长 120 秒");
 
         int uploadSection = workflow.indexOf("# Upload bind sources before the compose file");
         assertThat(uploadSection).isNotNegative();

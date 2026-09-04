@@ -406,7 +406,7 @@ class ProductionConfigurationContractTest {
             .contains("docker network inspect repoguard_observability")
             .contains("docker-compose.metrics-bridge.yml");
         assertThat(release)
-            .contains("scp -i ~/.ssh/deploy_key -P \"${DEPLOY_PORT:-22}\" docker-compose.metrics-bridge.yml")
+            .contains("run_transfer docker-compose.metrics-bridge.yml")
             .contains("'${asset_backup_dir}/docker-compose.metrics-bridge.yml'");
         for (String workflow : List.of(release, prQuality)) {
             assertThat(workflow)
