@@ -36,6 +36,13 @@ class IsolatedRealChainSmokeContractTest {
             .doesNotContain("15672:15672")
             .doesNotContain("REPOGUARD_OUTBOUND_LLM_ALLOWED_HOSTS: ${")
             .contains("REPOGUARD_OUTBOUND_LLM_ALLOWED_HOSTS: dashscope.aliyuncs.com,api.openai.com,token-plan-cn.xiaomimimo.com")
+            .contains("SMOKE_MYSQL_INNODB_BUFFER_POOL_SIZE:-160M")
+            .contains("SMOKE_MYSQL_MEM_LIMIT:-416m")
+            .contains("SMOKE_RABBITMQ_MEM_LIMIT:-160m")
+            .contains("SMOKE_BACKEND_MEM_LIMIT:-448m")
+            .contains("SMOKE_MYSQL_CPU_SHARES")
+            .contains("SMOKE_RABBITMQ_CPU_SHARES")
+            .contains("SMOKE_BACKEND_CPU_SHARES")
             .contains("127.0.0.1:${SMOKE_BACKEND_PORT}:8081");
     }
 
@@ -99,6 +106,9 @@ class IsolatedRealChainSmokeContractTest {
             .contains("exec \"${REAL_DOCKER_BIN}\" exec")
             .contains("exec \"${REAL_BASH_BIN}\" \"$@\"")
             .contains("cleanup_runtime_compatibility")
+            .contains("smoke_min_available_memory_kib=1200000")
+            .contains("smoke_host_mem_available_kib=")
+            .contains("diagnose_isolated_stack")
             .contains("SMOKE_TASK_RUNNER")
             .contains("SMOKE_SMALL_SPEC")
             .contains("SMOKE_MEDIUM_SPEC")

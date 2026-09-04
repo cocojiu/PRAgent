@@ -10,8 +10,10 @@ services:
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
-      - --innodb-buffer-pool-size=256M
-      - --max-connections=60
+      # Keep the disposable stack below a 1 GiB aggregate budget on the
+      # shared 2C4G host; production containers must retain the headroom.
+      - --innodb-buffer-pool-size=${SMOKE_MYSQL_INNODB_BUFFER_POOL_SIZE:-160M}
+      - --max-connections=${SMOKE_MYSQL_MAX_CONNECTIONS:-40}
       - --innodb-lock-wait-timeout=10
       - --max-execution-time=30000
       # Historical pre-D1 restores run on the small production host and can
@@ -33,7 +35,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 24
-    mem_limit: ${SMOKE_MYSQL_MEM_LIMIT:-700m}
+    mem_limit: ${SMOKE_MYSQL_MEM_LIMIT:-416m}
+    cpu_shares: ${SMOKE_MYSQL_CPU_SHARES:-128}
 
   rabbitmq:
     image: rabbitmq:3.13.7@sha256:87178a0ee3e2f52980ba356d38646ed1056705ff2d5ff281f8965456eaa0c1e3
@@ -49,7 +52,8 @@ services:
       timeout: 5s
       retries: 12
       start_period: 10s
-    mem_limit: ${SMOKE_RABBITMQ_MEM_LIMIT:-384m}
+    mem_limit: ${SMOKE_RABBITMQ_MEM_LIMIT:-160m}
+    cpu_shares: ${SMOKE_RABBITMQ_CPU_SHARES:-64}
 
   backend:
     image: ${SMOKE_BACKEND_IMAGE}
@@ -61,14 +65,14 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: prod
       SERVER_PORT: 8081
-      JAVA_TOOL_OPTIONS: ${SMOKE_JAVA_TOOL_OPTIONS:--XX:MaxRAMPercentage=70 -XX:+UseSerialGC}
+      JAVA_TOOL_OPTIONS: ${SMOKE_JAVA_TOOL_OPTIONS:--XX:MaxRAMPercentage=55 -XX:+UseSerialGC}
       # The pre-D1 restore can leave MySQL busy while Flyway applies the
       # accumulated migrations.  Keep the disposable smoke stack tolerant of
       # that bounded startup window; production keeps its fast-fail defaults.
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${SMOKE_MYSQL_DATABASE:-repoguard}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true&connectTimeout=60000&socketTimeout=900000
       SPRING_DATASOURCE_USERNAME: ${SMOKE_MYSQL_USER:-repoguard}
       SPRING_DATASOURCE_PASSWORD: ${SMOKE_MYSQL_PASSWORD}
-      SPRING_DATASOURCE_HIKARI_MAXIMUMPOOLSIZE: 6
+      SPRING_DATASOURCE_HIKARI_MAXIMUMPOOLSIZE: 4
       SPRING_DATASOURCE_HIKARI_MINIMUMIDLE: 1
       # Restore/import can briefly saturate MySQL; keep startup retries above the
       # normal production fast-fail budget so Flyway does not race the flush.
@@ -115,7 +119,7 @@ services:
       REPOGUARD_ASYNC_RECOVERY_QUEUE_CAPACITY: 100
       REPOGUARD_SCHEDULER_POOL_SIZE: 2
       REPOGUARD_SCHEDULER_SHUTDOWN_WAIT: 10s
-      REPOGUARD_LLM_BULKHEAD_MAX_CONCURRENT_CALLS: 3
+      REPOGUARD_LLM_BULKHEAD_MAX_CONCURRENT_CALLS: 2
       REPOGUARD_LLM_BULKHEAD_MAX_WAIT_MILLIS: 250
     ports:
       - "127.0.0.1:${SMOKE_BACKEND_PORT}:8081"
@@ -124,7 +128,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 30
-    mem_limit: ${SMOKE_BACKEND_MEM_LIMIT:-800m}
+    mem_limit: ${SMOKE_BACKEND_MEM_LIMIT:-448m}
+    cpu_shares: ${SMOKE_BACKEND_CPU_SHARES:-256}
 
 volumes:
   mysql_data:

@@ -326,7 +326,37 @@ jobs:
           risk_sample_commit="${10}"
           risk_sample_branch="${11}"
           production_env="${deploy_path}/.env"
+          smoke_project="repoguard-smoke-${smoke_run_id}-${smoke_run_attempt}"
           docker_compat_dir=""
+
+          host_mem_available_kib="$(awk '/^MemAvailable:/ { print $2; exit }' /proc/meminfo)"
+          case "${host_mem_available_kib:-}" in
+            ''|*[!0-9]*)
+              echo "Unable to determine host available memory before isolated smoke." >&2
+              exit 75
+              ;;
+          esac
+          # Production already reserves roughly 2.3 GiB on the 4 GiB host.
+          # Require a bounded safety margin before starting the disposable
+          # stack; the Compose defaults below consume at most about 1 GiB.
+          smoke_min_available_memory_kib=1200000
+          echo "smoke_host_mem_available_kib=${host_mem_available_kib}"
+          if [ "${host_mem_available_kib}" -lt "${smoke_min_available_memory_kib}" ]; then
+            echo "Insufficient host memory for isolated smoke: available_kib=${host_mem_available_kib} required_kib=${smoke_min_available_memory_kib}." >&2
+            exit 75
+          fi
+
+          diagnose_isolated_stack() {
+            echo "smoke_host_mem_after_failure=$(awk '/^MemAvailable:/ { print $2; exit }' /proc/meminfo 2>/dev/null || true)"
+            for service in mysql rabbitmq backend; do
+              container="$(${real_docker_bin:-docker} ps -aq --filter "label=com.docker.compose.project=${smoke_project}" --filter "label=com.docker.compose.service=${service}" | head -n 1)"
+              if [ -n "${container}" ]; then
+                ${real_docker_bin:-docker} inspect --format "smoke_container=${service}|status={{.State.Status}}|exit={{.State.ExitCode}}|oom={{.State.OOMKilled}}|restarts={{.RestartCount}}|memory={{.HostConfig.Memory}}" "${container}" 2>/dev/null || true
+              else
+                echo "smoke_container=${service}|status=missing"
+              fi
+            done
+          }
 
           cleanup_runtime_compatibility() {
             if [ -n "${docker_compat_dir}" ]; then
@@ -532,6 +562,7 @@ jobs:
 
           policy_probe_status=0
           if [ "${smoke_status}" -ne 0 ]; then
+            diagnose_isolated_stack || true
             if kill -0 "${policy_probe_pid}" 2>/dev/null; then
               kill "${policy_probe_pid}" 2>/dev/null || true
             fi
