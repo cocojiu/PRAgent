@@ -654,7 +654,6 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 根因证据：Real Chain Smoke run `33833094238` 在 `main-b53dc8aaa99b` 镜像上启动了 2C4G 生产主机的隔离 MySQL/RabbitMQ/Backend；旧 Smoke 默认内存上限合计约 1.884 GiB，与生产容器约 2.3 GiB 上限叠加后，隔离后端持续出现连接重置/503，SSH 在 `03:49:03Z` 断开，后置公网健康检查返回 Cloudflare 525。上传的脱敏摘要显示策略探针通过但 `smoke_exit_status=255`，未创建真实任务；该运行已确认不能作为真实 LLM/GitHub 验收证据。
 变更：`docker-compose.smoke.yml` 将默认 MySQL/RabbitMQ/Backend 内存上限收敛为 `416m/160m/448m`（约 1 GiB），MySQL buffer pool/连接数降为可配置的 `160M/40`，JVM 默认堆比例降为 55%，Hikari 池和 LLM bulkhead 降低，并加入 CPU shares；`.github/workflows/real-chain-smoke.yml` 在启动隔离栈前检查 `MemAvailable` 至少 `1200000 KiB`，不足时 fail-closed（退出 75），失败时输出容器状态、OOMKilled、重启次数和内存水位等脱敏诊断。
 验证与边界：`IsolatedRealChainSmokeContractTest`、`LlmCapacityConfigurationContractTest` 共 8 项通过，`git diff --check` 通过；待生产主机恢复后须以新 test 分支镜像重新执行受保护 Smoke，并确认三任务、策略 OBSERVE、清理和公网健康均通过。当前恢复部署 run `33834808543` 仍在等待 SSH，生产实例需重启确认；在恢复和复验前不得宣称优化-94 或第 14.18 节真实链路完成。未提交非 README Markdown、测试相关脚本或用户既有测试改动和 `.tmp/`。
-
 2026-09-04 | 优化-95 | 生产部署资产传输超时与 SSH 失败快照
 状态：针对主分支生产部署在共享轻量主机上连续卡住的真实证据，补充资产上传阶段的连接/保活/单操作超时护栏；代码待 test 分支远程门禁验收，生产主机仍需恢复后再重试部署。
 根因证据：主分支镜像发布成功后，手动部署 run `33838423243` 与重试 run `33839209753` 均在 `Upload deployment and smoke assets` 阶段无日志进展，分别运行约 7 分钟后取消；`Prepare SSH key` 已成功，远程端口可连接但会话无法完成远程备份或 SCP。取消任务未进入 `Pull and restart`，未执行生产重启；服务器控制台显示内存约 2.89/4 GiB，期间公网健康端点出现短暂超时/502 后恢复 200。
