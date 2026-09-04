@@ -670,3 +670,4 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 根因证据：主分支 Release Images run `33842314727` 中 `npm ci` 已成功并报告 `found 0 vulnerabilities`，随后显式完整树 `npm audit` 仍在约 6 分 43 秒后回退到已退役的 `/-/npm/v1/security/audits/quick` 并返回 HTTP 400 `Invalid package tree`。因此失败来自安装后重复审计请求，不是漏洞命中或 lockfile 安装失败。
 变更：将 `.github/workflows/release-images.yml` 合并为 `npm ci --audit=true --audit-level=high --registry=https://registry.npmjs.org` 单次命令；npm 的 `audit-level=high` 继续对高危/严重漏洞返回非零，且覆盖完整 lockfile 依赖树，不再发起第二次 quick 请求。
 验证与边界：本项只调整 CI 审计调用方式，不跳过审计、不放宽安全级别、不修改业务代码或依赖版本；未提交非 README Markdown、测试相关脚本或用户既有测试改动和 `.tmp/`。
+部署验收：主分支镜像发布 run `33843609255` 已成功，镜像标签为 `main-c8aad7d5c4ba`；受保护部署 run `33844700680` 与重试 run `33845178223` 均在首个资产备份 SSH 的 banner 握手阶段约 20 秒内返回 `Connection timed out during banner exchange`/exit 255，未进入资产 SCP、Pull and restart 或回滚步骤。公网入口同期出现 readiness 502/超时，liveness 与 SSH 端口存在间歇性恢复，当前判断为生产主机 SSH 服务/资源不稳定，等待运维确认重启后再重试。
