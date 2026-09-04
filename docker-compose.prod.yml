@@ -169,8 +169,12 @@ services:
         - CMD-SHELL
         - 'MYSQL_PWD="$$(cat "$$MYSQL_ROOT_PASSWORD_FILE")" mysqladmin ping -h 127.0.0.1 -uroot --silent'
       interval: 10s
-      timeout: 5s
+      # The 2C4G host can briefly delay mysqladmin while the application stack
+      # is restarting. Give a real database response enough time to complete
+      # instead of accumulating false unhealthy results.
+      timeout: 30s
       retries: 12
+      start_period: 30s
     mem_limit: ${MYSQL_MEM_LIMIT:-640m}
     cpu_shares: ${MYSQL_CPU_SHARES:-768}
     logging:
