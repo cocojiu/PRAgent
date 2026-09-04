@@ -658,4 +658,5 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 状态：针对主分支生产部署在共享轻量主机上连续卡住的真实证据，补充资产上传阶段的连接/保活/单操作超时护栏；代码待 test 分支远程门禁验收，生产主机仍需恢复后再重试部署。
 根因证据：主分支镜像发布成功后，手动部署 run `33838423243` 与重试 run `33839209753` 均在 `Upload deployment and smoke assets` 阶段无日志进展，分别运行约 7 分钟后取消；`Prepare SSH key` 已成功，远程端口可连接但会话无法完成远程备份或 SCP。取消任务未进入 `Pull and restart`，未执行生产重启；服务器控制台显示内存约 2.89/4 GiB，期间公网健康端点出现短暂超时/502 后恢复 200。
 变更：`.github/workflows/release-images.yml` 在上传步骤集中定义 SSH/SCP 参数，增加 `ConnectTimeout=15`、单次连接尝试、ServerAlive 保活，并以 GNU `timeout` 将远程备份、每次 SCP 和权限收尾限制为 120 秒；超时即 fail-closed，避免无限占用 `production-deploy` 并发锁，同时保留已创建的远程回滚资产。新增 `ProductionDeploymentContractTest` 断言这些护栏存在。
+失败修复记录：首次 PR Quality run `33839965936` 的后端 2903 项测试中，`ProductionConfigurationContractTest.deploymentAndCiKeepTheOptionalMetricsTopology` 仍断言旧裸 `scp` 文本而失败；已将契约更新为新的 `run_transfer` 调用，本地 `ProductionConfigurationContractTest`/`ProductionDeploymentContractTest` 共 29 项通过，待远程重跑确认。
 验证与边界：需通过定向/完整后端门禁、test 分支 Actions、主分支合并与发布后再用于下一次部署；本项只限制失败等待，不替代服务器重启或资源扩容，也不放宽 production Environment。当前未宣称部署成功；未提交非 README Markdown、测试相关脚本或用户既有测试改动和 `.tmp/`。
