@@ -677,3 +677,10 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 边界：本次重启/部署未关闭 production Environment 保护或修改探测规则；未提交非 README Markdown、测试相关脚本、用户既有测试改动和 `.tmp/`。第 14.18 节要求的真实 50～100 个脱敏 PR、真实 GitHub App/OIDC/扫描器/LLM/Prometheus 与线上性能数据仍按授权边界保留，优化项整体不宣称全部最终完成。
 
 最终部署补充：进度记录合并提交 `423df871df0a1e2e2a4718b7745ccfe9d1143c15` 的 Release Images run `33857984735` 成功，生成 `main-423df871df0a` 并通过后端/前端构建、SBOM、供应链证明和高危/严重漏洞扫描；随后受保护部署 run `33859953399` 经 production Environment 审批成功，Deploy job `100981876726` 用时 4m42s，资产上传与 Pull and restart 全部通过。backend、backend-worker、frontend、caddy、mysql、rabbitmq 均为 `healthy`，release identity 均为 `main-423df871df0a` 且 commit 与 `423df871df0a1e2e2a4718b7745ccfe9d1143c15` 一致，远端 `/healthz` 通过。最终 Production Availability run `33860504804`（GitHub-hosted runner，Azure `westus`）成功并输出 `PROBE_HEALTHY=true`，公网六端点与匿名认证预期通过。
+
+2026-09-04 | 优化-98 | 真实 Smoke 配置校验与失败诊断修复
+状态：代码修复完成，待 test 分支远程门禁、主分支合并和真实 Smoke 复验。
+根因证据：受保护真实 Smoke run `33864083031` 已通过 SSH、生产健康和远端资产校验，但隔离后端启动时因 `repoguard.async.llm-chunk-threads=2` 等于 `app.external-call.resilience.llm.bulkhead-max-concurrent-calls=2` 被 `ReviewTimeoutLayeringValidator` 拒绝；失败收尾阶段又在 GitHub runner 侧调用了只定义于远端 here-document 的 `diagnose_isolated_stack`，产生 `command not found`，掩盖了首个启动错误。
+变更：`docker-compose.smoke.yml` 将共享 2C4G 主机的隔离链路 `REPOGUARD_REVIEW_PIPELINE_MAX_IN_FLIGHT_CHUNKS` 与 `REPOGUARD_ASYNC_LLM_CHUNK_THREADS` 收敛为 1，保留 bulkhead 2 以预留非分片 LLM permit；容量契约同步断言 1/1/2。`.github/workflows/real-chain-smoke.yml` 增加 runner 侧从已脱敏 SSH 输出提取诊断的同名 fallback，并明确远端函数不跨 SSH shell 作用域。
+验证计划：定向容量/Smoke 契约、完整 Pull Request Quality、中文提交推送 `PRAgent-test` 后，合并 `main` 并重新批准受保护真实 Smoke；须确认三个顺序任务、真实 LLM/GitHub 状态、OBSERVE 策略、finding 元数据、资源清理和前后健康检查全部通过。
+边界：本项只修正隔离 Smoke 的容量配置和错误诊断，不降低真实链路断言、不关闭 production Environment 保护，不提交非 README Markdown、测试相关脚本或用户既有测试改动和 `.tmp/`。

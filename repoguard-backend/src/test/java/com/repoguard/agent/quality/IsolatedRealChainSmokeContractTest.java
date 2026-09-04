@@ -109,6 +109,8 @@ class IsolatedRealChainSmokeContractTest {
             .contains("smoke_min_available_memory_kib=1200000")
             .contains("smoke_host_mem_available_kib=")
             .contains("diagnose_isolated_stack")
+            .contains("smoke_remote_diagnostics=from_captured_output")
+            .contains("diagnose_isolated_stack() {")
             .contains("SMOKE_TASK_RUNNER")
             .contains("SMOKE_SMALL_SPEC")
             .contains("SMOKE_MEDIUM_SPEC")

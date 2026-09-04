@@ -553,6 +553,17 @@ jobs:
             "${backup_path}" "${max_total_tokens}" "${backend_image}" \
             "${smoke_run_id}" "${smoke_run_attempt}"
           ISOLATED_SMOKE
+          # The remote here-document owns the Docker-side diagnostic function.
+          # Keep a runner-side fallback too: a function defined in the remote
+          # shell is not available after SSH returns with a failure status.
+          diagnose_isolated_stack() {
+            echo "smoke_remote_diagnostics=from_captured_output"
+            if [ -f "${smoke_output_log}" ]; then
+              LC_ALL=C grep -E \
+                '^smoke_(host_mem_|container=|failure_logs|cleanup|created |result=|progress |summary |stop=|finding=|finding_count=|observe_violations=)' \
+                "${smoke_output_log}" | tail -n 80 || true
+            fi
+          }
           smoke_pipeline_status=("${PIPESTATUS[@]}")
           set -e
           smoke_status="${smoke_pipeline_status[0]}"
