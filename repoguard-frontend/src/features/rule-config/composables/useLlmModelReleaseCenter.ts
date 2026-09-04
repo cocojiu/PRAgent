@@ -173,6 +173,10 @@ export const useLlmModelReleaseCenter = () => {
       errorMessage.value = "请先填写发布键并选择可复用的服务端评估报告";
       return;
     }
+    if (report.status !== "COMPLETED") {
+      errorMessage.value = "小样本验收报告不能用于模型发布";
+      return;
+    }
     await runAction("shadow", () =>
       registerLlmModelShadowRelease(buildLlmModelReleaseRequest(report, releaseKey.value, 0))
     );
@@ -185,6 +189,10 @@ export const useLlmModelReleaseCenter = () => {
     const key = release?.releaseKey ?? releaseKey.value;
     if (!key.trim() || !report) {
       errorMessage.value = "请先选择与发布版本匹配的服务端评估报告";
+      return;
+    }
+    if (report.status !== "COMPLETED") {
+      errorMessage.value = "小样本验收报告不能用于模型发布";
       return;
     }
     const trafficPercent = release?.state === "CANARY"

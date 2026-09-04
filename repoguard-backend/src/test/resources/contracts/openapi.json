@@ -11558,7 +11558,7 @@
           "datasetKind" : {
             "type" : "string",
             "minLength" : 1,
-            "pattern" : "(?i)REAL_PR|OFFLINE_SYNTHETIC"
+            "pattern" : "(?i)REAL_PR|PROVISIONAL_REAL_PR|OFFLINE_SYNTHETIC"
           },
           "sourceRepositoryCount" : {
             "type" : "integer",
@@ -11664,7 +11664,7 @@
           "minimumSamples" : {
             "type" : "integer",
             "format" : "int32",
-            "minimum" : 30,
+            "minimum" : 20,
             "maximum" : 100
           }
         },

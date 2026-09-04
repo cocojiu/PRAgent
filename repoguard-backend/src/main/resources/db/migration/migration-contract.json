@@ -7,7 +7,7 @@
     "externalDatabaseSupported": true,
     "publishedMigrationPolicy": "IMMUTABLE",
     "newInstallationStrategy": "VALIDATED_SCHEMA_SNAPSHOT_THEN_BASELINE",
-  "candidateVersion": 93,
+  "candidateVersion": 94,
     "requiredEvidence": [
       "empty database migration to the candidate version",
       "schema structure diff against the supported production shape",
@@ -279,6 +279,18 @@
       "nMinusOneCompatible": true,
       "interruptedRecovery": "rerun the additive CI upload migration after checking Flyway state; SARIF batches remain independently replayable",
       "rollbackStrategy": "forward fix or restore the validated V92 predecessor backup; do not delete published migration"
+    },
+    {
+      "version": 94,
+      "file": "V94__provisional_llm_evaluation_mode.sql",
+      "phase": "EXPAND",
+      "estimatedRows": "metadata-only check constraint replacement; existing evaluation report rows are not rewritten",
+      "lockType": "metadata-only table DDL",
+      "maxDurationSeconds": 300,
+      "maxDiskMegabytes": 256,
+      "nMinusOneCompatible": false,
+      "interruptedRecovery": "verify the two llm_evaluation_report check constraints and rerun the migration before accepting provisional reports",
+      "rollbackStrategy": "forward fix the allowed status and dataset-kind sets; do not rewrite or delete the published migration"
     }
   ]
 }

@@ -61,7 +61,7 @@ public class LlmModelReleaseRepository {
                     precision_wilson_lower_bound, anchor_rate, duplicate_rate, parse_failure_rate, severity_confusion_json,
                     total_latency_ms, total_tokens, total_cost, blockers_json, eligible, metrics_json, created_by, created_at)
                     values (
-                        ?, ?, 'COMPLETED', 'ACTIVE', ?, ?,
+                        ?, ?, ?, 'ACTIVE', ?, ?,
                         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
@@ -84,7 +84,8 @@ public class LlmModelReleaseRepository {
         int retentionDays, LocalDateTime expiresAt) {
         LlmEvaluationDatasetMetadata d = report.dataset();
         LlmEvaluationVersion v = report.version();
-        return new Object[] {tenantId, reportKey, retentionDays, expiresAt, d.datasetId(), d.datasetVersion(), d.kind().name(), d.sourceRepositoryCount(),
+        String status = d.provisional() ? "PROVISIONAL" : "COMPLETED";
+        return new Object[] {tenantId, reportKey, status, retentionDays, expiresAt, d.datasetId(), d.datasetVersion(), d.kind().name(), d.sourceRepositoryCount(),
             d.sampleCount(), d.fixedRegressionSamples(), d.rollingObservationSamples(), d.authorized(), d.anonymized(),
             d.humanReviewed(), d.sampleFingerprint(), report.sampleFingerprint(), v.provider(), v.model(), v.promptVersion(),
             v.contextVersion(), v.schemaVersion(), v.chunkPolicyVersion(), v.temperature(), v.ruleVersion(), v.codeRevision(),

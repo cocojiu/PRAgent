@@ -89,7 +89,7 @@ export interface LlmEvaluationObservationRequest {
 export interface LlmEvaluationRequest {
   datasetId: string;
   datasetVersion: string;
-  datasetKind: "REAL_PR" | "OFFLINE_SYNTHETIC" | string;
+  datasetKind: "REAL_PR" | "PROVISIONAL_REAL_PR" | "OFFLINE_SYNTHETIC" | string;
   sourceRepositoryCount: number;
   sampleCount: number;
   fixedRegressionSamples: number;
@@ -174,7 +174,7 @@ export interface LlmEvaluationMetrics {
 export interface LlmEvaluationReport {
   id: number;
   reportKey: string;
-  status: string;
+  status: "COMPLETED" | "PROVISIONAL" | "FAILED" | "CANCELLED" | string;
   datasetId: string;
   datasetVersion: string;
   datasetKind: string;

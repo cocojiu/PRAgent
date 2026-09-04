@@ -72,7 +72,8 @@
                   v-for="report in reports"
                   :key="report.id"
                   :value="report.id"
-                  :label="`#${report.id} · ${report.provider}/${report.model} · ${report.datasetId}@${report.datasetVersion}`"
+                  :disabled="report.status !== 'COMPLETED'"
+                  :label="`${report.status === 'PROVISIONAL' ? '[小样本] ' : ''}#${report.id} · ${report.provider}/${report.model} · ${report.datasetId}@${report.datasetVersion}`"
                 />
               </el-select>
             </el-form-item>
@@ -80,10 +81,10 @@
               <el-input-number v-model="canaryTraffic" :min="1" :max="100" :disabled="!canManage" />
             </el-form-item>
             <el-form-item>
-              <el-button type="primary" :disabled="!canManage" :loading="action === 'shadow'" @click="registerShadow">
+              <el-button type="primary" :disabled="!canManage || !selectedReport || selectedReport.status !== 'COMPLETED'" :loading="action === 'shadow'" @click="registerShadow">
                 注册 Shadow
               </el-button>
-              <el-button type="success" :disabled="!canManage || !selectedReport" :loading="action.startsWith('promote-')" @click="promote()">
+              <el-button type="success" :disabled="!canManage || !selectedReport || selectedReport.status !== 'COMPLETED'" :loading="action.startsWith('promote-')" @click="promote()">
                 发布 Canary
               </el-button>
             </el-form-item>
@@ -92,7 +93,7 @@
             v-if="selectedReport"
             class="release-report-evidence"
             :type="selectedReport.eligible && !selectedReport.blockers.length ? 'success' : 'warning'"
-            :title="selectedReport.blockers.length ? `报告阻断：${selectedReport.blockers.join('；')}` : '指标由服务端报告提供，客户端不可修改'"
+            :title="selectedReport.status === 'PROVISIONAL' ? '小样本报告不可用于模型发布' : selectedReport.blockers.length ? `报告阻断：${selectedReport.blockers.join('；')}` : '指标由服务端报告提供，客户端不可修改'"
             :closable="false"
           >
             <template #default>

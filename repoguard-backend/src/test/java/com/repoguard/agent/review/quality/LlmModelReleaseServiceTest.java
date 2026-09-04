@@ -226,6 +226,22 @@ class LlmModelReleaseServiceTest {
     }
 
     @Test
+    void promotionRejectsProvisionalEvaluationReport() {
+        LlmModelReleaseRepository.StoredEvaluationReport completed = evidence(true);
+        LlmModelReleaseRepository.StoredEvaluationReport provisional =
+            new LlmModelReleaseRepository.StoredEvaluationReport(
+                78L, "provisional-report", "PROVISIONAL", "tester", LocalDateTime.now(), completed.report()
+            );
+        when(repository.findEvaluationReport(42L, 78L)).thenReturn(provisional);
+
+        assertThatThrownBy(() -> service.promote(request(FINGERPRINT, 20, true, 78L), "operator"))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("小样本验收报告不能用于模型发布");
+
+        verify(repository, never()).save(anyLong(), any(), anyString(), anyInt(), anyString(), anyString());
+    }
+
+    @Test
     void comparisonMarksCandidateRegression() {
         when(repository.findEvaluationReport(42L, 80L)).thenReturn(badEvidence());
 

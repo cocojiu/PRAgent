@@ -191,6 +191,50 @@ class LlmQualityEvaluatorTest {
     }
 
     @Test
+    void provisionalRealDatasetProducesMetricsButCanNeverPassPromotionGate() {
+        LlmEvaluationVersion reproducibleVersion = new LlmEvaluationVersion(
+            "openai", "gpt-test", "review-prompt-v2", "review-context-v2", "review-schema-v2",
+            "chunk-v1", new BigDecimal("0.20"), "rules-v3", "abc123"
+        );
+        List<LlmEvaluationObservation> observations = new ArrayList<>();
+        for (int i = 0; i < 20; i++) {
+            boolean expectedFinding = i < 5;
+            observations.add(sample(
+                "provisional-pr-" + i,
+                expectedFinding,
+                expectedFinding ? "HIGH" : "NONE",
+                expectedFinding,
+                expectedFinding ? "HIGH" : "NONE",
+                true,
+                expectedFinding ? "finding-" + i : "",
+                true,
+                i < 10
+                    ? LlmEvaluationObservation.EvaluationSplit.FIXED_REGRESSION
+                    : LlmEvaluationObservation.EvaluationSplit.ROLLING_OBSERVATION,
+                "repo-a",
+                context(i, expectedFinding)
+            ));
+        }
+        String fingerprint = LlmQualityEvaluator.evaluate(reproducibleVersion, observations, 20)
+            .sampleFingerprint();
+        LlmEvaluationDatasetMetadata dataset = new LlmEvaluationDatasetMetadata(
+            "provisional-real-pr-v1", "2026-09-05",
+            LlmEvaluationDatasetMetadata.DatasetKind.PROVISIONAL_REAL_PR,
+            1, 20, 10, 10, true, true, true, fingerprint
+        );
+
+        LlmEvaluationReport report = LlmQualityEvaluator.evaluate(
+            reproducibleVersion, dataset, observations, 20
+        );
+
+        assertThat(report.precision()).isEqualByComparingTo("1.0000");
+        assertThat(report.recall()).isEqualByComparingTo("1.0000");
+        assertThat(report.eligible()).isFalse();
+        assertThat(report.qualityGatePassed()).isFalse();
+        assertThat(report.blockers()).contains("PROVISIONAL_DATASET_NOT_PROMOTABLE");
+    }
+
+    @Test
     void explicitRealDatasetBlocksManifestFingerprintDrift() {
         LlmEvaluationVersion reproducibleVersion = new LlmEvaluationVersion(
             "openai",

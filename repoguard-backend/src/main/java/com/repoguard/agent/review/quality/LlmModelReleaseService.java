@@ -293,18 +293,17 @@ public class LlmModelReleaseService {
             normalizeOperator(operator), null
         );
     }
-
     private LlmModelReleaseRepository.StoredEvaluationReport trustedEvaluation(LlmModelReleaseRequest request) {
         if (request == null || request.evaluationReportId() == null || request.evaluationReportId() < 1) throw new BusinessException(ErrorCode.BAD_REQUEST, "模型发布必须绑定服务端评估报告");
         LlmModelReleaseRepository.StoredEvaluationReport evidence = releaseRepository.findEvaluationReport(TenantContext.currentTenantIdOrDefault(), request.evaluationReportId());
-        if (!"COMPLETED".equalsIgnoreCase(evidence.status())) throw new BusinessException(ErrorCode.BAD_REQUEST, "评估报告未完成，不能发布模型");
+        if (!"COMPLETED".equalsIgnoreCase(evidence.status())) throw new BusinessException(ErrorCode.BAD_REQUEST,
+            "PROVISIONAL".equalsIgnoreCase(evidence.status()) ? "小样本验收报告不能用于模型发布" : "评估报告未完成，不能发布模型");
         if (!lifecycleService.usableForNewRelease(evidence, LocalDateTime.now())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "评估报告已过期、冻结或撤销授权，不能作为新发布证据");
         }
         if (!matches(request, evidence.report())) throw new BusinessException(ErrorCode.BAD_REQUEST, "模型发布请求与评估报告版本或数据集不一致");
         return evidence;
     }
-
     private boolean matches(LlmModelReleaseRequest request, LlmEvaluationReport report) {
         return equalsIgnoreCase(request.provider(), report.version().provider()) && equalsIgnoreCase(request.modelName(), report.version().model()) && equalsText(request.promptVersion(), report.version().promptVersion()) && equalsText(request.contextVersion(), report.version().contextVersion()) && equalsText(request.schemaVersion(), report.version().schemaVersion()) && equalsText(request.datasetId(), report.dataset().datasetId()) && equalsText(request.datasetVersion(), report.dataset().datasetVersion()) && equalsIgnoreCase(request.datasetFingerprint(), report.dataset().sampleFingerprint());
     }
@@ -330,7 +329,8 @@ public class LlmModelReleaseService {
             LlmEvaluationDatasetMetadata dataset = new LlmEvaluationDatasetMetadata(requireText(request.datasetId(), "datasetId"), requireText(request.datasetVersion(), "datasetVersion"), kind, required(request.sourceRepositoryCount(), "sourceRepositoryCount"), required(request.sampleCount(), "sampleCount"), required(request.fixedRegressionSamples(), "fixedRegressionSamples"), required(request.rollingObservationSamples(), "rollingObservationSamples"), Boolean.TRUE.equals(request.authorized()), Boolean.TRUE.equals(request.anonymized()), Boolean.TRUE.equals(request.humanReviewed()), requireFingerprint(request.sampleFingerprint()));
             LlmEvaluationVersion version = new LlmEvaluationVersion(requireText(request.provider(), "provider"), requireText(request.model(), "model"), requireText(request.promptVersion(), "promptVersion"), requireText(request.contextVersion(), "contextVersion"), requireText(request.schemaVersion(), "schemaVersion"), requireText(request.chunkPolicyVersion(), "chunkPolicyVersion"), request.temperature(), requireText(request.ruleVersion(), "ruleVersion"), requireText(request.codeRevision(), "codeRevision"), requireText(request.verifierVersion(), "verifierVersion"), requireText(request.aggregationVersion(), "aggregationVersion"));
             List<LlmEvaluationObservation> observations = (request.observations() == null ? List.<LlmEvaluationObservationRequest>of() : request.observations()).stream().map(this::observation).toList();
-            return new EvaluationInput(version, dataset, observations, request.minimumSamples() == null ? 50 : request.minimumSamples());
+            int defaultMinimumSamples = kind == LlmEvaluationDatasetMetadata.DatasetKind.PROVISIONAL_REAL_PR ? 20 : 50;
+            return new EvaluationInput(version, dataset, observations, request.minimumSamples() == null ? defaultMinimumSamples : request.minimumSamples());
         } catch (BusinessException ex) {
             throw ex;
         } catch (RuntimeException ex) {

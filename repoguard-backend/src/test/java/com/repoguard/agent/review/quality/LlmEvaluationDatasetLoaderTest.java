@@ -47,6 +47,31 @@ class LlmEvaluationDatasetLoaderTest {
     }
 
     @Test
+    void loadsSingleRepositoryProvisionalDatasetWithTwentySamples(@TempDir Path tempDir) throws Exception {
+        Path datasetDirectory = Files.createDirectories(tempDir.resolve("provisional-dataset"));
+        List<String> sampleFiles = new ArrayList<>();
+        for (int index = 0; index < 20; index++) {
+            String fileName = "samples/case-" + index + ".json";
+            sampleFiles.add(fileName);
+            Path samplePath = datasetDirectory.resolve(fileName);
+            Files.createDirectories(samplePath.getParent());
+            Files.writeString(samplePath, objectMapper.writeValueAsString(provisionalSample(index)));
+        }
+        Files.writeString(
+            datasetDirectory.resolve("manifest.json"),
+            objectMapper.writeValueAsString(provisionalManifest(sampleFiles))
+        );
+
+        LlmEvaluationDatasetLoader.Dataset loaded = loader(properties(tempDir))
+            .load(datasetDirectory.toString());
+
+        assertThat(loaded.cases()).hasSize(20);
+        assertThat(loaded.metadata().kind()).isEqualTo(DatasetKind.PROVISIONAL_REAL_PR);
+        assertThat(loaded.metadata().sourceRepositoryCount()).isEqualTo(1);
+        assertThat(loaded.minimumSamples()).isEqualTo(20);
+    }
+
+    @Test
     void rejectsUnconfiguredOrOutOfRootDirectories(@TempDir Path tempDir) {
         LlmEvaluationRunProperties empty = new LlmEvaluationRunProperties();
         LlmEvaluationDatasetLoader emptyLoader = loader(empty);
@@ -154,6 +179,15 @@ class LlmEvaluationDatasetLoaderTest {
         );
     }
 
+    private LlmEvaluationDatasetLoader.Manifest provisionalManifest(List<String> sampleFiles) {
+        return new LlmEvaluationDatasetLoader.Manifest(
+            "dataset-provisional-real-pr", "2026-09-05", DatasetKind.PROVISIONAL_REAL_PR, 1,
+            sampleFiles.size(), 10, 10, true, true, true, "b".repeat(64), "openai", "gpt-test",
+            "prompt-v1", "context-v1", "schema-v1", "chunk-v1", BigDecimal.valueOf(0.2),
+            "rules-v1", "commit-1", "verifier-v1", "aggregation-v1", sampleFiles, 20
+        );
+    }
+
     private List<String> sampleFileNames() {
         List<String> files = new ArrayList<>();
         for (int index = 0; index < 50; index++) {
@@ -185,6 +219,17 @@ class LlmEvaluationDatasetLoaderTest {
             Boolean.FALSE,
             Boolean.FALSE,
             Boolean.FALSE
+        );
+    }
+
+    private LlmEvaluationDatasetLoader.EvaluationCase provisionalSample(int index) {
+        LlmEvaluationDatasetLoader.EvaluationCase sample = sample(index);
+        return new LlmEvaluationDatasetLoader.EvaluationCase(
+            sample.caseId(), "repo-a", index < 10 ? "FIXED_REGRESSION" : "ROLLING_OBSERVATION",
+            sample.language(), sample.fileTypeGroup(), sample.expectedLocationKey(), sample.expectedFinding(),
+            sample.expectedSeverity(), sample.organization(), sample.repository(), sample.prNumber(), sample.headSha(),
+            sample.title(), sample.branch(), sample.files(), sample.usefulComment(), sample.commentPublished(),
+            sample.commentFixed(), sample.commentIgnored()
         );
     }
 }

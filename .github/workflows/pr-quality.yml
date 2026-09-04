@@ -298,7 +298,7 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
-      - name: Run V76 to V93 upgrade-path test
+      - name: Run V76 to V94 upgrade-path test
         working-directory: repoguard-backend
         run: ./mvnw -B -Dtest=FlywayMigrationUpgradePathIntegrationTest test
 

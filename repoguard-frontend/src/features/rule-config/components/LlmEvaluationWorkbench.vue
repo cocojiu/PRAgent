@@ -107,8 +107,8 @@
       </el-table-column>
       <el-table-column label="门禁" width="110">
         <template #default="{ row }">
-          <el-tag :type="row.eligible && !row.blockers.length ? 'success' : 'warning'">
-            {{ row.eligible && !row.blockers.length ? 'PASS' : 'BLOCKED' }}
+          <el-tag :type="reportGateType(row)">
+            {{ reportGateLabel(row) }}
           </el-tag>
         </template>
       </el-table-column>
@@ -129,8 +129,8 @@
     <el-alert
       v-if="selectedReport"
       class="evaluation-report-detail"
-      :type="selectedReport.eligible && !selectedReport.blockers.length ? 'success' : 'warning'"
-      :title="selectedReport.blockers.length ? selectedReport.blockers.join('；') : '报告满足当前质量门禁，可作为模型发布证据'"
+      :type="selectedReport.status === 'PROVISIONAL' ? 'info' : selectedReport.eligible && !selectedReport.blockers.length ? 'success' : 'warning'"
+      :title="reportDetailTitle(selectedReport)"
       show-icon
       :closable="false"
     >
@@ -249,6 +249,25 @@ const runAlertType = (status: string) => {
   if (status === "COMPLETE") return "success";
   if (status === "FAILED" || status === "CANCELLED") return "warning";
   return "info";
+};
+
+const reportGateLabel = (report: LlmEvaluationReport) => {
+  if (report.status === "PROVISIONAL") return "PROVISIONAL";
+  return report.eligible && !report.blockers.length ? "PASS" : "BLOCKED";
+};
+
+const reportGateType = (report: LlmEvaluationReport) => {
+  if (report.status === "PROVISIONAL") return "info";
+  return report.eligible && !report.blockers.length ? "success" : "warning";
+};
+
+const reportDetailTitle = (report: LlmEvaluationReport) => {
+  if (report.status === "PROVISIONAL") {
+    return "小样本验收报告仅供观察、比较和导出，不能作为模型发布证据";
+  }
+  return report.blockers.length
+    ? report.blockers.join("；")
+    : "报告满足当前质量门禁，可作为模型发布证据";
 };
 
 const downloadReport = async (format: "json" | "html") => {

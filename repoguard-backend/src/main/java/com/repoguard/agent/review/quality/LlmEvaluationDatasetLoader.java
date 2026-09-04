@@ -232,14 +232,21 @@ public class LlmEvaluationDatasetLoader {
         public void validate() {
             requireText(datasetId, "datasetId");
             requireText(datasetVersion, "datasetVersion");
-            if (datasetKind != LlmEvaluationDatasetMetadata.DatasetKind.REAL_PR
+            boolean provisional = datasetKind == LlmEvaluationDatasetMetadata.DatasetKind.PROVISIONAL_REAL_PR;
+            if ((datasetKind != LlmEvaluationDatasetMetadata.DatasetKind.REAL_PR && !provisional)
                 || sampleFiles == null || sampleFiles.isEmpty() || sampleFiles.size() > MAX_SAMPLES) {
                 throw invalidData("评估数据清单样本文件列表无效");
             }
-            if (sampleCount < 50 || sampleCount > MAX_SAMPLES || sampleFiles.size() != sampleCount) {
+            int minimumDatasetSamples = provisional ? 20 : 50;
+            int maximumDatasetSamples = provisional ? 49 : MAX_SAMPLES;
+            if (sampleCount < minimumDatasetSamples || sampleCount > maximumDatasetSamples
+                || sampleFiles.size() != sampleCount) {
                 throw invalidData("评估数据清单样本数量无效");
             }
-            if (sourceRepositoryCount < 2 || sourceRepositoryCount > 3 || fixedRegressionSamples < 1
+            boolean repositoryCountInvalid = provisional
+                ? sourceRepositoryCount != 1
+                : sourceRepositoryCount < 2 || sourceRepositoryCount > 3;
+            if (repositoryCountInvalid || fixedRegressionSamples < 1
                 || rollingObservationSamples < 1 || fixedRegressionSamples + rollingObservationSamples != sampleCount) {
                 throw invalidData("评估数据清单分片或仓库数量无效");
             }
@@ -260,8 +267,12 @@ public class LlmEvaluationDatasetLoader {
             if (temperature == null || temperature.signum() < 0 || temperature.compareTo(new BigDecimal("2.0")) > 0) {
                 throw invalidData("评估温度参数无效");
             }
-            if (minimumSamples < 30 || minimumSamples > 100) {
-                throw invalidData("评估最小样本数必须在 30 到 100 之间");
+            int minimumGateSamples = provisional ? 20 : 30;
+            int maximumGateSamples = provisional ? sampleCount : 100;
+            if (minimumSamples < minimumGateSamples || minimumSamples > maximumGateSamples) {
+                throw invalidData(provisional
+                    ? "小样本评估最小样本数必须在 20 到数据集样本数之间"
+                    : "评估最小样本数必须在 30 到 100 之间");
             }
         }
     }
