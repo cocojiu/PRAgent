@@ -660,3 +660,8 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 变更：`.github/workflows/release-images.yml` 在上传步骤集中定义 SSH/SCP 参数，增加 `ConnectTimeout=15`、单次连接尝试、ServerAlive 保活，并以 GNU `timeout` 将远程备份、每次 SCP 和权限收尾限制为 120 秒；超时即 fail-closed，避免无限占用 `production-deploy` 并发锁，同时保留已创建的远程回滚资产。新增 `ProductionDeploymentContractTest` 断言这些护栏存在。
 失败修复记录：首次 PR Quality run `33839965936` 的后端 2903 项测试中，`ProductionConfigurationContractTest.deploymentAndCiKeepTheOptionalMetricsTopology` 仍断言旧裸 `scp` 文本而失败；已将契约更新为新的 `run_transfer` 调用，本地 `ProductionConfigurationContractTest`/`ProductionDeploymentContractTest` 共 29 项通过，待远程重跑确认。
 验证与边界：需通过定向/完整后端门禁、test 分支 Actions、主分支合并与发布后再用于下一次部署；本项只限制失败等待，不替代服务器重启或资源扩容，也不放宽 production Environment。当前未宣称部署成功；未提交非 README Markdown、测试相关脚本或用户既有测试改动和 `.tmp/`。
+2026-09-04 | 优化-96 | 修复主分支前端依赖审计接口失败
+状态：修复优化-95 之后主分支镜像流水线暴露的前端审计失败；待 test 分支远程门禁和主分支发布重新验收。
+根因证据：Release Images run `33840878560` 的 `npm ci` 在 3 分钟内成功并报告 0 漏洞，但显式 `npm audit --omit=dev` 将不完整的生产依赖树提交给 npm，bulk advisory 无效后回退到已退役的 quick endpoint，最终返回 HTTP 400 `Invalid package tree`。这不是漏洞命中，也不是代码构建失败。
+变更：`.github/workflows/release-images.yml` 的审计改为不使用 `--omit=dev`，直接审计 lockfile 的完整依赖树；仍以 `--audit-level=high` 阻断高危及严重漏洞，覆盖构建工具链依赖并避免触发 quick endpoint 回退。
+验证与边界：本项只调整发布流水线审计输入，不修改依赖版本或业务代码；需通过 test 分支全部 Actions 后再合并主分支并重新生成镜像。未提交非 README Markdown、测试相关脚本或用户既有测试改动和 `.tmp/`。
