@@ -62,7 +62,7 @@ class LlmCapacityConfigurationContractTest {
             .containsEntry("REPOGUARD_REVIEW_PIPELINE_MAX_IN_FLIGHT_CHUNKS", 2)
             .containsEntry("REPOGUARD_ASYNC_LLM_CHUNK_THREADS", 2)
             .containsEntry("REPOGUARD_ASYNC_LLM_CHUNK_QUEUE_CAPACITY", 100)
-            .containsEntry("REPOGUARD_LLM_BULKHEAD_MAX_CONCURRENT_CALLS", 3)
+            .containsEntry("REPOGUARD_LLM_BULKHEAD_MAX_CONCURRENT_CALLS", 2)
             .containsEntry("REPOGUARD_LLM_BULKHEAD_MAX_WAIT_MILLIS", 250);
     }
 
