@@ -665,9 +665,13 @@ jobs:
           health_url="${health_url%%,*}"
           health_url="${health_url%% *}"
           test -n "${health_url}" || { echo "HEALTH_URL resolved to an empty value"; exit 1; }
-          printf '%s' "${ALIYUN_REGISTRY_PASSWORD}" | ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+          printf '%s' "${ALIYUN_REGISTRY_PASSWORD}" | ssh \
+            -o ServerAliveInterval=15 -o ServerAliveCountMax=80 \
+            -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "docker login '${ALIYUN_DEPLOY_REGISTRY}' -u '${ALIYUN_REGISTRY_USERNAME}' --password-stdin"
-          ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+          ssh \
+            -o ServerAliveInterval=15 -o ServerAliveCountMax=80 \
+            -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "cd '${DEPLOY_PATH}' && \
              BACKEND_IMAGE='${backend_image}' \
              FRONTEND_IMAGE='${frontend_image}' \
