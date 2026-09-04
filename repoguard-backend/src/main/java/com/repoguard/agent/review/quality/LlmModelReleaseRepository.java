@@ -65,7 +65,7 @@ public class LlmModelReleaseRepository {
                         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, current_timestamp(6)
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, current_timestamp(6)
                     )
                     """, Statement.RETURN_GENERATED_KEYS);
                 bind(statement, evaluationValues(tenantId, reportKey, report, operator, normalizedRetentionDays, expiresAt));
