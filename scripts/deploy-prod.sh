@@ -15,9 +15,15 @@ DEPLOY_STATE_DIR="${DEPLOY_STATE_DIR:-.deploy-state}"
 PREFLIGHT_ONLY="${PREFLIGHT_ONLY:-false}"
 MIGRATE_LEGACY_SECRET_FILES="${MIGRATE_LEGACY_SECRET_FILES:-false}"
 INITIALIZE_MISSING_ENCRYPTION_SALT="${INITIALIZE_MISSING_ENCRYPTION_SALT:-false}"
-# The split Worker starts after the API and RabbitMQ are ready.  On the small
-# production host its queue negotiation can take longer than the API health
-# check, so keep a dedicated 180-second window for this service.
+# On the small production host, restarting the application stack can briefly
+# starve the long-lived MySQL/RabbitMQ health checks. Keep a dedicated
+# eight-minute infrastructure window so a recoverable startup stall is not
+# mistaken for a failed deployment.
+INFRASTRUCTURE_HEALTH_ATTEMPTS=240
+
+# The split Worker starts after the API and RabbitMQ are ready. Its queue
+# negotiation can take longer than the API health check, so keep a dedicated
+# 180-second window for this service.
 BACKEND_WORKER_HEALTH_ATTEMPTS=90
 
 if [ ! -f "$COMPOSE_FILE" ]; then
@@ -732,10 +738,10 @@ rollback_deployment() {
   # Bind-file contents are not part of Compose's service hash. A forced broker
   # recreation is required to reload the restored consumer_timeout.
   compose up -d --no-deps --force-recreate rabbitmq
-  if ! wait_service_health mysql 45; then
+  if ! wait_service_health mysql "$INFRASTRUCTURE_HEALTH_ATTEMPTS"; then
     rollback_healthy=false
   fi
-  if wait_service_health rabbitmq 45; then
+  if wait_service_health rabbitmq "$INFRASTRUCTURE_HEALTH_ATTEMPTS"; then
     record_rabbitmq_config_digest
   else
     rollback_healthy=false
@@ -909,8 +915,8 @@ if [ "$rabbitmq_config_changed" = "true" ]; then
 else
   compose up -d --no-deps rabbitmq
 fi
-wait_service_health mysql 45
-wait_service_health rabbitmq 45
+wait_service_health mysql "$INFRASTRUCTURE_HEALTH_ATTEMPTS"
+wait_service_health rabbitmq "$INFRASTRUCTURE_HEALTH_ATTEMPTS"
 
 if has_compose_service backend-worker; then
   worker_container_id="$(compose ps -q backend-worker 2>/dev/null || true)"
