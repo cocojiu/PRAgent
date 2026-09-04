@@ -683,3 +683,9 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 变更：`docker-compose.smoke.yml` 将共享 2C4G 主机的隔离链路 `REPOGUARD_REVIEW_PIPELINE_MAX_IN_FLIGHT_CHUNKS` 与 `REPOGUARD_ASYNC_LLM_CHUNK_THREADS` 收敛为 1，保留 bulkhead 2 以预留非分片 LLM permit；容量契约同步断言 1/1/2。`.github/workflows/real-chain-smoke.yml` 增加 runner 侧从已脱敏 SSH 输出提取诊断的同名 fallback，并明确远端函数不跨 SSH shell 作用域。
 验证计划：定向容量/Smoke 契约、完整 Pull Request Quality、中文提交推送 `PRAgent-test` 后，合并 `main` 并重新批准受保护真实 Smoke；须确认三个顺序任务、真实 LLM/GitHub 状态、OBSERVE 策略、finding 元数据、资源清理和前后健康检查全部通过。
 边界：本项只修正隔离 Smoke 的容量配置和错误诊断，不降低真实链路断言、不关闭 production Environment 保护，不提交非 README Markdown、测试相关脚本或用户既有测试改动和 `.tmp/`。
+2026-09-04 | 优化-99 | 仓库策略运行时遵循 OBSERVE 全局策略
+状态：代码修复和本地回归完成，待 test 分支远程门禁、主分支发布及真实 Smoke 复验。
+根因证据：最新主分支真实 Smoke run `33868655543` 已成功部署容量修复并完成三个真实任务、LLM/GitHub 调用、清理和前后公网健康检查，但 `smoke_observe_violations=4` 使步骤失败。`LlmReviewPipeline` 的全局策略门禁先将结果降为 OBSERVE，随后 `GithubRepositoryPolicyRuntime` 的 `RepositoryPolicyEvaluationService.applyFindings` 又按高危规则平台安全下限恢复了 BLOCK/COMMENT 模式；这违反优化方案中 OBSERVE“生成结果但不评论、不阻断”的验收口径。脱敏摘要同时确认三任务均为 `COMPLETED`，策略快照为 `OBSERVE|1|1`，失败不是外部链路或资源故障。
+变更：`RepositoryPolicyEvaluationService` 在物化 Finding 前按有效 `ReviewStrategyRelease` 对仓库规则处置模式再次封顶；未验证、版本不兼容或 OBSERVE 快照统一 fail-closed 到 OBSERVE，保留平台规则决策和 `blockingCandidate` 审计信息，并追加 `strategy_enforcement_cap_observe` 原因。新增服务回归覆盖高危平台规则在 OBSERVE 下不阻断且风险聚合为 INFO；原有规则覆盖测试同步断言实际 Finding 不越过全局策略。
+本地验证：`RepositoryPolicyEvaluationServiceTest`、`ReviewStrategyEnforcementGateTest`、`ReviewExecutionReviewProcessorTest`、`LlmReviewPipelineTest` 共 27 项通过，`git diff --check` 通过；工作区用户已有测试改动和 `.tmp/` 未触碰。
+下一步：按中文提交推送 `PRAgent-test`，通过 Pull Request Quality 后合并 `main`、发布新镜像并重新批准受保护真实 Smoke；必须取得 `smoke_observe_violations=0` 及三任务、策略、finding 元数据、清理和前后健康证据后，才能完成优化-94/98/99 的代码与真实链路验收。未提交非 README Markdown 或测试相关脚本。
