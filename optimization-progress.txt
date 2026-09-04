@@ -642,3 +642,9 @@ CI 证据：Pull Request Quality #33373980597、PR Repository Governance #333739
 变更：在 `repoguard-backend/pom.xml` 显式锁定 `org.apache.tomcat.embed:tomcat-embed-core` 为 `11.0.25`，修复 Trivy 报告的 `CVE-2026-65182`、`CVE-2026-65905`、`CVE-2026-68525` 严重漏洞；未使用 `.trivyignore` 绕过扫描。
 证据：修复提交 `dc3feb9a` 推送至 `PRAgent-test`；PR #161 的 Pull Request Quality `33790832808`（重跑后）全部成功，后端测试与 Trivy 均通过；合并提交 `b016abb2c72f` 的 Release Images `33791946646` 成功，后端/前端镜像扫描均通过；生产部署 `33792890544` 经 `production` Environment 审批成功，backend、backend-worker、frontend、caddy、mysql、rabbitmq 均健康，release identity 与 `/healthz` 校验通过，运行标签为 `main-b016abb2c72f`。
 结论与边界：本项已完成并部署；保留用户已有 `ArchitectureRatchetTest.java`、两个前端 fixture 测试文件和 `.tmp/` 未提交，未提交非 README Markdown 或测试相关脚本。其余真实业务数据、生产凭据和外部验收仍按第 14.18 节的授权边界执行。
+
+2026-09-04 | 优化-87～优化-93 | 生产发布可靠性与健康检查补强
+状态：完成本轮生产发布链路的超时、健康检查和连接保活补强；每项修复均以中文提交推送 `PRAgent-test`，经过 Pull Request Quality/Repository Governance 门禁后合并 `main`，最新配置已完成生产部署与公网可用性验收。
+变更：Smoke Compose 提高 MySQL 恢复连接、迁移启动和通信超时（`5e4f4537`、`b1701796`、`288b14b4`）；生产部署脚本将 Worker 健康等待延长至 180 秒、MySQL/RabbitMQ 基础设施等待延长至 8 分钟（`d5c9f172`、`97f6479e`）；生产 SSH 增加 `ServerAliveInterval=15`/`ServerAliveCountMax=80` 保活（`69cdf531`）；生产 MySQL Docker 健康检查改为 30 秒超时、30 秒启动缓冲和 12 次重试，避免 2C4G 主机上的 `mysqladmin` 偶发超时（`5f8117fa`）。
+验收证据：相关 PR #167～#170 的质量门禁全部成功；最新主分支合并提交 `b53dc8aaa99b` 的 Release Images `33829232452` 完成后端/前端构建、SBOM、供应链证明和双镜像高危/严重漏洞扫描；生产部署 `33830041539` 使用 `main-b53dc8aaa99b` 成功，核心 `Pull and restart` 通过；Production Availability `33831679859` 六个公网端点通过并输出 `PROBE_HEALTHY=true`，告警 Issue 保持关闭。
+边界与回滚：本轮只调整发布/Smoke 基础设施容错，不改变 production Environment 保护；如需回滚可使用对应修复前镜像/提交，部署脚本仍保留失败自动回滚路径。真实 50～100 个脱敏 PR、GitHub App/OIDC/扫描器/LLM/Prometheus 等第 14.18 节外部验收仍未凭 mock 或 Actions 绿灯宣称完成；本记录未提交非 README Markdown、测试相关脚本或用户既有测试改动和 `.tmp/`。
