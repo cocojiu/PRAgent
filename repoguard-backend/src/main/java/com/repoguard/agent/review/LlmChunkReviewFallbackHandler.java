@@ -1,6 +1,7 @@
 package com.repoguard.agent.review;
 
 import com.repoguard.agent.observability.RepoGuardMetrics;
+import com.repoguard.agent.external.ExternalCallException;
 import java.util.List;
 import java.util.Objects;
 import org.slf4j.Logger;
@@ -49,6 +50,21 @@ final class LlmChunkReviewFallbackHandler {
         // RuleMergeStage evaluates the full diff once after chunk aggregation. Running the
         // rule engine here would rescan it once per failed, expired, rejected, or capped chunk
         // and can keep a 2C4G worker CPU-bound long after the LLM budget is exhausted.
-        return LlmChunkReviewOutcome.fallback(DEFERRED_RULE_REVIEW);
+        return LlmChunkReviewOutcome.fallback(DEFERRED_RULE_REVIEW, category);
+    }
+
+    String category(RuntimeException failure) {
+        Throwable current = failure;
+        while (current != null) {
+            if (current instanceof ExternalCallException external) {
+                return external.getCategory();
+            }
+            String message = current.getMessage();
+            if (message != null && message.startsWith("Unable to parse LLM review result")) {
+                return "llm_parse_failed";
+            }
+            current = current.getCause();
+        }
+        return CHUNK_PARTIAL_FAILURE_CATEGORY;
     }
 }

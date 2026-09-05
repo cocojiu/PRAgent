@@ -30,10 +30,29 @@ public record LlmEvaluationMetrics(
     long verifiedFindings,
     BigDecimal ruleContributionRate,
     BigDecimal llmContributionRate,
-    BigDecimal verifiedContributionRate
+    BigDecimal verifiedContributionRate,
+    int parseFailures,
+    int transportFailures,
+    BigDecimal transportFailureRate
 ) {
 
     private static final int SCALE = 4;
+
+    public LlmEvaluationMetrics(
+        int labeledComments, int usefulComments, int falsePositiveComments, int publishAttempts,
+        int publishedComments, int fixedComments, int ignoredComments, BigDecimal usefulCommentRate,
+        BigDecimal falsePositiveCommentRate, BigDecimal publishSuccessRate, BigDecimal fixRate,
+        BigDecimal ignoredRate, long p50LatencyMs, long p95LatencyMs, BigDecimal averageLatencyMs,
+        BigDecimal averageTokensPerSample, BigDecimal averageCostPerSample, long ruleFindings,
+        long llmFindings, long verifiedFindings, BigDecimal ruleContributionRate,
+        BigDecimal llmContributionRate, BigDecimal verifiedContributionRate
+    ) {
+        this(labeledComments, usefulComments, falsePositiveComments, publishAttempts, publishedComments,
+            fixedComments, ignoredComments, usefulCommentRate, falsePositiveCommentRate, publishSuccessRate,
+            fixRate, ignoredRate, p50LatencyMs, p95LatencyMs, averageLatencyMs, averageTokensPerSample,
+            averageCostPerSample, ruleFindings, llmFindings, verifiedFindings, ruleContributionRate,
+            llmContributionRate, verifiedContributionRate, 0, 0, BigDecimal.ZERO);
+    }
 
     public LlmEvaluationMetrics {
         labeledComments = Math.max(0, labeledComments);
@@ -59,6 +78,9 @@ public record LlmEvaluationMetrics(
         ruleContributionRate = normalizeRate(ruleContributionRate);
         llmContributionRate = normalizeRate(llmContributionRate);
         verifiedContributionRate = normalizeRate(verifiedContributionRate);
+        parseFailures = Math.max(0, parseFailures);
+        transportFailures = Math.max(0, transportFailures);
+        transportFailureRate = normalizeRate(transportFailureRate);
     }
 
     public static LlmEvaluationMetrics from(List<LlmEvaluationObservation> observations) {
@@ -85,6 +107,8 @@ public record LlmEvaluationMetrics(
         long rule = samples.stream().mapToLong(LlmEvaluationObservation::ruleFindingCount).sum();
         long llm = samples.stream().mapToLong(LlmEvaluationObservation::llmFindingCount).sum();
         long verified = samples.stream().mapToLong(LlmEvaluationObservation::verifiedFindingCount).sum();
+        int parseFailures = (int) samples.stream().filter(LlmEvaluationObservation::parseFailed).count();
+        int transportFailures = (int) samples.stream().filter(LlmEvaluationObservation::transportFailed).count();
         long contributions = rule + llm + verified;
         long latencyTotal = samples.stream().mapToLong(LlmEvaluationObservation::latencyMs).sum();
         long tokenTotal = samples.stream().mapToLong(LlmEvaluationObservation::totalTokens).sum();
@@ -118,7 +142,10 @@ public record LlmEvaluationMetrics(
             verified,
             ratio(rule, contributions),
             ratio(llm, contributions),
-            ratio(verified, contributions)
+            ratio(verified, contributions),
+            parseFailures,
+            transportFailures,
+            ratio(transportFailures, samples.size())
         );
     }
 

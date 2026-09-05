@@ -1,6 +1,8 @@
 package com.repoguard.agent.external;
 
 import java.net.SocketTimeoutException;
+import java.net.http.HttpTimeoutException;
+import java.nio.channels.InterruptedByTimeoutException;
 import java.util.Locale;
 import java.util.concurrent.TimeoutException;
 import org.springframework.util.StringUtils;
@@ -76,6 +78,8 @@ public final class ExternalFailureSignals {
         Throwable current = throwable;
         while (current != null) {
             if (current instanceof SocketTimeoutException
+                || current instanceof HttpTimeoutException
+                || current instanceof InterruptedByTimeoutException
                 || (includeGenericTimeoutException && current instanceof TimeoutException)) {
                 return true;
             }

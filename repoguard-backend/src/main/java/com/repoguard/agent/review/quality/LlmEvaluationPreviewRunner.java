@@ -132,8 +132,23 @@ public class LlmEvaluationPreviewRunner {
             verifiedFindings,
             split,
             sample.sourceRepositoryKey(),
-            context
+            context,
+            failureCategories(result)
         );
+    }
+
+    private String failureCategories(ReviewResult result) {
+        String detail = result.statusDetail();
+        String marker = "llmFailureCategories=";
+        if (detail != null) {
+            int start = detail.indexOf(marker);
+            if (start >= 0) {
+                String value = detail.substring(start + marker.length());
+                int end = value.indexOf(';');
+                return end < 0 ? value : value.substring(0, end);
+            }
+        }
+        return "fallback".equalsIgnoreCase(result.llmStatus()) ? "llm_fallback" : "";
     }
 
     private LlmEvaluationObservation.EvaluationSplit split(String value) {

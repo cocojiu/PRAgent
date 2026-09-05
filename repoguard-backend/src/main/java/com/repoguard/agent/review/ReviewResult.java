@@ -219,6 +219,25 @@ public record ReviewResult(
         );
     }
 
+    public ReviewResult withStatusDetail(String detail) {
+        return new ReviewResult(
+            riskLevel,
+            llmStatus,
+            appendLimited(statusDetail, detail, 512),
+            findings,
+            llmProvider,
+            llmModel,
+            llmDurationMs,
+            llmParseStatus,
+            llmPromptSummary,
+            llmPromptTokens,
+            llmCompletionTokens,
+            llmTotalTokens,
+            llmEstimatedCost,
+            executionProvenance
+        );
+    }
+
     private static String normalizeLlmParseStatus(String llmParseStatus) {
         if (llmParseStatus == null || llmParseStatus.isBlank()) {
             return null;
