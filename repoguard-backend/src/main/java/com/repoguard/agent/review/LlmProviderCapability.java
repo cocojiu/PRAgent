@@ -1,16 +1,14 @@
 package com.repoguard.agent.review;
 
 import java.util.Map;
+import org.springframework.http.HttpHeaders;
 
-/**
- * Provider capability used to decide whether an OpenAI-compatible response_format can be sent.
- * Unknown providers intentionally return {@link LlmStructuredOutputMode#NONE} and continue to
- * use the existing parser/repair path.
- */
 public record LlmProviderCapability(
     String provider,
     LlmStructuredOutputMode structuredOutputMode
 ) {
+    private static final int DASHSCOPE_TIMEOUT_FLOOR_SECONDS = 210;
+    private static final String DASHSCOPE_WAIT_TIMEOUT_SECONDS = "30";
 
     public LlmProviderCapability {
         provider = provider == null ? "unknown" : provider.trim().toLowerCase(java.util.Locale.ROOT);
@@ -19,6 +17,21 @@ public record LlmProviderCapability(
 
     public boolean supportsStructuredOutput() {
         return structuredOutputMode.enabled();
+    }
+
+    public int requestTimeoutSeconds(Integer configuredTimeoutSeconds) {
+        int configured = Math.max(1, configuredTimeoutSeconds == null ? 60 : configuredTimeoutSeconds);
+        return isDashScope() ? Math.max(DASHSCOPE_TIMEOUT_FLOOR_SECONDS, configured) : configured;
+    }
+
+    public void applyTransportHeaders(HttpHeaders headers) {
+        if (isDashScope()) {
+            headers.set("X-DashScope-Wait-Timeout", DASHSCOPE_WAIT_TIMEOUT_SECONDS);
+        }
+    }
+
+    private boolean isDashScope() {
+        return "dashscope".equals(provider);
     }
 
     public Map<String, Object> responseFormat(String schemaName, Map<String, Object> schema) {

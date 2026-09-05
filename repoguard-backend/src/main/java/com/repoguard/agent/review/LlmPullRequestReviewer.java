@@ -257,9 +257,9 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         if (endpointPolicy != null) {
             endpointPolicy.validate(OutboundEndpointType.LLM, settings.baseUrl());
         }
-        RestClient restClient = restClient(settings);
-        String apiKey = settings.apiKey();
         LlmProviderCapability capability = LlmProviderCapabilities.forProvider(settings.llmProvider());
+        RestClient restClient = restClient(settings, capability);
+        String apiKey = settings.apiKey();
         Map<String, Object> structuredPayload = requestPayload(
             settings,
             systemPrompt,
@@ -286,7 +286,8 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
                 response = executeLlm(operation, () -> executeRequest(
                     restClient,
                     apiKey,
-                    structuredPayload
+                    structuredPayload,
+                    capability
                 ));
             } catch (RuntimeException ex) {
                 ExternalCallException classified = ExternalCallErrorClassifier.llm(ex);
@@ -303,7 +304,8 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
                 response = executeLlm(operation + "_legacy_format", () -> executeRequest(
                     restClient,
                     apiKey,
-                    legacyPayload
+                    legacyPayload,
+                    capability
                 ));
             }
             metrics.llmRequestDuration(Duration.ofNanos(System.nanoTime() - startedAt), "success");
@@ -338,13 +340,11 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
     }
 
     private JsonNode executeRequest(
-        RestClient restClient,
-        String apiKey,
-        Map<String, Object> payload
-    ) {
+        RestClient restClient, String apiKey, Map<String, Object> payload, LlmProviderCapability capability) {
         return restClient.post()
             .uri("/chat/completions")
             .header("Authorization", "Bearer " + apiKey.trim())
+            .headers(capability::applyTransportHeaders)
             .contentType(MediaType.APPLICATION_JSON)
             .accept(MediaType.APPLICATION_JSON)
             .body(payload)
@@ -419,9 +419,9 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         return resilience.llm(operation, supplier);
     }
 
-    private RestClient restClient(ReviewPolicySettings settings) {
+    private RestClient restClient(ReviewPolicySettings settings, LlmProviderCapability capability) {
         String baseUrl = settings.baseUrl().trim();
-        int timeoutSeconds = Math.max(1, settings.timeoutSeconds() == null ? 60 : settings.timeoutSeconds());
+        int timeoutSeconds = capability.requestTimeoutSeconds(settings.timeoutSeconds());
         CachedRestClient current = cachedRestClient.get();
         if (current != null && current.matches(baseUrl, timeoutSeconds)) {
             return current.client();
@@ -442,7 +442,6 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
     }
 
     private record CachedRestClient(String baseUrl, int timeoutSeconds, RestClient client) {
-
         private boolean matches(String candidateBaseUrl, int candidateTimeoutSeconds) {
             return timeoutSeconds == candidateTimeoutSeconds && baseUrl.equals(candidateBaseUrl);
         }
