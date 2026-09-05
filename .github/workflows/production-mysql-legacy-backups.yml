@@ -4,14 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-        description: Inventory/encrypt legacy backups, or perform the approved one-time admin reset
+        description: Inventory plaintext SQL backups or create and verify encrypted copies
         required: true
         default: inventory
         type: choice
         options:
           - inventory
           - encrypt
-          - reset-admin-password
 
 permissions:
   contents: read
@@ -23,7 +22,6 @@ concurrency:
 jobs:
   legacy-backups:
     name: Inventory or encrypt legacy plaintext backups
-    if: ${{ inputs.operation != 'reset-admin-password' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production
@@ -253,146 +251,5 @@ jobs:
           status="$(jq -r '.status // empty' <<<"${health}")"
           [[ "${status}" == "UP" ]] || {
             echo "Production health is not UP after legacy backup operation." >&2
-            exit 1
-          }
-
-  reset-admin-password:
-    name: Reset production admin password
-    if: ${{ inputs.operation == 'reset-admin-password' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    environment: production
-    steps:
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-
-      - name: Prepare SSH key
-        uses: ./.github/actions/bootstrap-production-ssh
-        with:
-          deploy-host: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
-          deploy-port: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
-          deploy-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
-          deploy-known-hosts: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-
-      - name: Validate reset request and generate BCrypt hash
-        id: credential
-        shell: bash
-        env:
-          RESET_PASSWORD: ${{ secrets.REPOGUARD_ADMIN_PASSWORD_RESET }}
-        run: |
-          set -euo pipefail
-          test -n "${RESET_PASSWORD}" || {
-            echo "Missing production secret REPOGUARD_ADMIN_PASSWORD_RESET" >&2
-            exit 2
-          }
-          test "${#RESET_PASSWORD}" -ge 8 || {
-            echo "Reset password must contain at least 8 characters" >&2
-            exit 2
-          }
-          [[ "${RESET_PASSWORD}" =~ [A-Za-z] ]] && [[ "${RESET_PASSWORD}" =~ [0-9] ]] || {
-            echo "Reset password must contain both letters and digits" >&2
-            exit 2
-          }
-
-          if ! command -v htpasswd >/dev/null 2>&1; then
-            sudo apt-get update -qq
-            sudo apt-get install -y --no-install-recommends apache2-utils >/dev/null
-          fi
-          password_hash="$(htpasswd -bnBC 12 '' "${RESET_PASSWORD}" | tr -d ':\n')"
-          [[ "${password_hash}" =~ ^\$2[aby]\$12\$[./A-Za-z0-9]{53}$ ]] || {
-            echo "Generated password hash is invalid" >&2
-            exit 1
-          }
-          echo "::add-mask::${password_hash}"
-          echo "password_hash=${password_hash}" >> "${GITHUB_OUTPUT}"
-
-      - name: Rotate admin password and revoke active refresh tokens
-        shell: bash
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
-          PASSWORD_HASH: ${{ steps.credential.outputs.password_hash }}
-        run: |
-          set -euo pipefail
-          account=admin
-          test -n "${DEPLOY_PATH}" || { echo "Missing DEPLOY_PATH" >&2; exit 2; }
-          test -n "${DEPLOY_USER}" || { echo "Missing DEPLOY_USER" >&2; exit 2; }
-          case "${DEPLOY_PATH}" in
-            /opt/repoguard | /opt/repoguard/*) ;;
-            *) echo "DEPLOY_PATH must stay under /opt/repoguard" >&2; exit 2 ;;
-          esac
-
-          printf -v reset_args ' %q' "${DEPLOY_PATH}" "${account}" "${PASSWORD_HASH}"
-          ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "bash -s --${reset_args}" <<'REMOTE_RESET'
-          set -euo pipefail
-          deploy_path="$1"
-          account="$2"
-          password_hash="$3"
-          [[ "${account}" == "admin" ]] || exit 2
-          [[ "${password_hash}" =~ ^\$2[aby]\$12\$[./A-Za-z0-9]{53}$ ]] || exit 2
-
-          cd "${deploy_path}"
-          mysql_container="$(docker compose --env-file .env -f docker-compose.prod.yml ps -q mysql)"
-          test -n "${mysql_container}" || {
-            echo "Production MySQL container is unavailable" >&2
-            exit 1
-          }
-
-          changed="$({
-            docker exec \
-              --env "RESET_ACCOUNT=${account}" \
-              --env "RESET_PASSWORD_HASH=${password_hash}" \
-              "${mysql_container}" sh -lc '
-                set -eu
-                if [ -n "${MYSQL_ROOT_PASSWORD:-}" ]; then
-                  root_password="${MYSQL_ROOT_PASSWORD}"
-                elif [ -n "${MYSQL_ROOT_PASSWORD_FILE:-}" ] && [ -r "${MYSQL_ROOT_PASSWORD_FILE}" ]; then
-                  root_password="$(cat "${MYSQL_ROOT_PASSWORD_FILE}")"
-                else
-                  echo "MySQL root password source is unavailable" >&2
-                  exit 64
-                fi
-                sql="START TRANSACTION;
-                  UPDATE user_account
-                  SET password_hash='\''${RESET_PASSWORD_HASH}'\'',
-                      session_version=COALESCE(session_version, 0) + 1,
-                      failed_login_count=0,
-                      locked_until=NULL,
-                      updated_at=NOW()
-                  WHERE username='\''${RESET_ACCOUNT}'\''
-                    AND status='\''ACTIVE'\''
-                    AND role IN ('\''ADMIN'\'', '\''PLATFORM_ADMIN'\'');
-                  SET @changed=ROW_COUNT();
-                  UPDATE user_refresh_token
-                  SET status='\''REVOKED'\'', revoked_at=NOW(), updated_at=NOW()
-                  WHERE user_id=(SELECT id FROM user_account WHERE username='\''${RESET_ACCOUNT}'\'' LIMIT 1)
-                    AND status='\''ACTIVE'\'';
-                  COMMIT;
-                  SELECT @changed;"
-                MYSQL_PWD="${root_password}" exec mysql \
-                  --batch --skip-column-names --user=root "${MYSQL_DATABASE}" --execute="${sql}"
-              '
-          } | tail -n 1)"
-          test "${changed}" = "1" || {
-            echo "The active admin account was not reset" >&2
-            exit 1
-          }
-          echo "Password reset completed for the active admin account."
-          REMOTE_RESET
-
-      - name: Verify production health
-        shell: bash
-        run: |
-          set -euo pipefail
-          health="$(curl --fail --silent --show-error \
-            --retry 3 --retry-delay 3 --retry-all-errors \
-            --connect-timeout 8 --max-time 20 \
-            https://pragent.top/actuator/health/readiness)"
-          status="$(jq -r '.status // empty' <<<"${health}")"
-          [[ "${status}" == "UP" ]] || {
-            echo "Production health is not UP after admin password reset" >&2
             exit 1
           }
