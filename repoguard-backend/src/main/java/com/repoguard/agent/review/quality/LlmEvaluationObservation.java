@@ -29,7 +29,8 @@ public record LlmEvaluationObservation(
     long verifiedFindingCount,
     EvaluationSplit split,
     String sourceRepositoryKey,
-    LlmEvaluationSampleContext sampleContext
+    LlmEvaluationSampleContext sampleContext,
+    String failureCategories
 ) {
 
     public enum EvaluationSplit {
@@ -39,92 +40,33 @@ public record LlmEvaluationObservation(
     }
 
     public LlmEvaluationObservation(
-        String caseId,
-        String category,
-        boolean expectedFinding,
-        String expectedSeverity,
-        boolean predictedFinding,
-        String predictedSeverity,
-        boolean anchorValid,
-        String predictionKey,
-        boolean parseSucceeded,
-        long latencyMs,
-        long totalTokens,
+        String caseId, String category, boolean expectedFinding, String expectedSeverity,
+        boolean predictedFinding, String predictedSeverity, boolean anchorValid, String predictionKey,
+        boolean parseSucceeded, long latencyMs, long totalTokens,
         BigDecimal estimatedCost
     ) {
         this(
-            caseId,
-            category,
-            expectedFinding,
-            expectedSeverity,
-            predictedFinding,
-            predictedSeverity,
-            anchorValid,
-            predictionKey,
-            parseSucceeded,
-            latencyMs,
-            totalTokens,
-            estimatedCost,
-            null,
-            false,
-            null,
-            null,
-            null,
-            0,
-            0,
-            0,
-            EvaluationSplit.UNSPECIFIED,
-            "",
-            LlmEvaluationSampleContext.unknown()
+            caseId, category, expectedFinding, expectedSeverity, predictedFinding, predictedSeverity,
+            anchorValid, predictionKey, parseSucceeded, latencyMs, totalTokens, estimatedCost,
+            null, false, null, null, null, 0, 0, 0, EvaluationSplit.UNSPECIFIED, "",
+            LlmEvaluationSampleContext.unknown(), ""
         );
     }
 
     public LlmEvaluationObservation(
-        String caseId,
-        String category,
-        boolean expectedFinding,
-        String expectedSeverity,
-        boolean predictedFinding,
-        String predictedSeverity,
-        boolean anchorValid,
-        String predictionKey,
-        boolean parseSucceeded,
-        long latencyMs,
-        long totalTokens,
-        BigDecimal estimatedCost,
-        Boolean usefulComment,
-        boolean commentPublishAttempted,
-        Boolean commentPublished,
-        Boolean commentFixed,
-        Boolean commentIgnored,
-        long ruleFindingCount,
-        long llmFindingCount,
+        String caseId, String category, boolean expectedFinding, String expectedSeverity,
+        boolean predictedFinding, String predictedSeverity, boolean anchorValid, String predictionKey,
+        boolean parseSucceeded, long latencyMs, long totalTokens, BigDecimal estimatedCost,
+        Boolean usefulComment, boolean commentPublishAttempted, Boolean commentPublished,
+        Boolean commentFixed, Boolean commentIgnored, long ruleFindingCount, long llmFindingCount,
         long verifiedFindingCount
     ) {
         this(
-            caseId,
-            category,
-            expectedFinding,
-            expectedSeverity,
-            predictedFinding,
-            predictedSeverity,
-            anchorValid,
-            predictionKey,
-            parseSucceeded,
-            latencyMs,
-            totalTokens,
-            estimatedCost,
-            usefulComment,
-            commentPublishAttempted,
-            commentPublished,
-            commentFixed,
-            commentIgnored,
-            ruleFindingCount,
-            llmFindingCount,
-            verifiedFindingCount,
-            EvaluationSplit.UNSPECIFIED,
-            "",
-            LlmEvaluationSampleContext.unknown()
+            caseId, category, expectedFinding, expectedSeverity, predictedFinding, predictedSeverity,
+            anchorValid, predictionKey, parseSucceeded, latencyMs, totalTokens, estimatedCost,
+            usefulComment, commentPublishAttempted, commentPublished, commentFixed, commentIgnored,
+            ruleFindingCount, llmFindingCount, verifiedFindingCount, EvaluationSplit.UNSPECIFIED, "",
+            LlmEvaluationSampleContext.unknown(), ""
         );
     }
 
@@ -152,29 +94,11 @@ public record LlmEvaluationObservation(
         EvaluationSplit split
     ) {
         this(
-            caseId,
-            category,
-            expectedFinding,
-            expectedSeverity,
-            predictedFinding,
-            predictedSeverity,
-            anchorValid,
-            predictionKey,
-            parseSucceeded,
-            latencyMs,
-            totalTokens,
-            estimatedCost,
-            usefulComment,
-            commentPublishAttempted,
-            commentPublished,
-            commentFixed,
-            commentIgnored,
-            ruleFindingCount,
-            llmFindingCount,
-            verifiedFindingCount,
-            split,
-            "",
-            LlmEvaluationSampleContext.unknown()
+            caseId, category, expectedFinding, expectedSeverity, predictedFinding, predictedSeverity,
+            anchorValid, predictionKey, parseSucceeded, latencyMs, totalTokens, estimatedCost,
+            usefulComment, commentPublishAttempted, commentPublished, commentFixed, commentIgnored,
+            ruleFindingCount, llmFindingCount, verifiedFindingCount, split, "",
+            LlmEvaluationSampleContext.unknown(), ""
         );
     }
 
@@ -203,30 +127,28 @@ public record LlmEvaluationObservation(
         String sourceRepositoryKey
     ) {
         this(
-            caseId,
-            category,
-            expectedFinding,
-            expectedSeverity,
-            predictedFinding,
-            predictedSeverity,
-            anchorValid,
-            predictionKey,
-            parseSucceeded,
-            latencyMs,
-            totalTokens,
-            estimatedCost,
-            usefulComment,
-            commentPublishAttempted,
-            commentPublished,
-            commentFixed,
-            commentIgnored,
-            ruleFindingCount,
-            llmFindingCount,
-            verifiedFindingCount,
-            split,
-            sourceRepositoryKey,
-            LlmEvaluationSampleContext.unknown()
+            caseId, category, expectedFinding, expectedSeverity, predictedFinding, predictedSeverity,
+            anchorValid, predictionKey, parseSucceeded, latencyMs, totalTokens, estimatedCost,
+            usefulComment, commentPublishAttempted, commentPublished, commentFixed, commentIgnored,
+            ruleFindingCount, llmFindingCount, verifiedFindingCount, split, sourceRepositoryKey,
+            LlmEvaluationSampleContext.unknown(), ""
         );
+    }
+
+    public LlmEvaluationObservation(
+        String caseId, String category, boolean expectedFinding, String expectedSeverity,
+        boolean predictedFinding, String predictedSeverity, boolean anchorValid, String predictionKey,
+        boolean parseSucceeded, long latencyMs, long totalTokens, BigDecimal estimatedCost,
+        Boolean usefulComment, boolean commentPublishAttempted, Boolean commentPublished,
+        Boolean commentFixed, Boolean commentIgnored, long ruleFindingCount, long llmFindingCount,
+        long verifiedFindingCount, EvaluationSplit split, String sourceRepositoryKey,
+        LlmEvaluationSampleContext sampleContext
+    ) {
+        this(caseId, category, expectedFinding, expectedSeverity, predictedFinding, predictedSeverity,
+            anchorValid, predictionKey, parseSucceeded, latencyMs, totalTokens, estimatedCost,
+            usefulComment, commentPublishAttempted, commentPublished, commentFixed, commentIgnored,
+            ruleFindingCount, llmFindingCount, verifiedFindingCount, split, sourceRepositoryKey,
+            sampleContext, "");
     }
 
     public LlmEvaluationObservation {
@@ -242,12 +164,29 @@ public record LlmEvaluationObservation(
         split = split == null ? EvaluationSplit.UNSPECIFIED : split;
         sourceRepositoryKey = normalizeRepositoryKey(sourceRepositoryKey);
         sampleContext = sampleContext == null ? LlmEvaluationSampleContext.unknown() : sampleContext;
+        failureCategories = normalizeFailureCategories(failureCategories);
         if (Boolean.TRUE.equals(commentFixed) && Boolean.TRUE.equals(commentIgnored)) {
             throw new IllegalArgumentException("A comment cannot be both fixed and ignored");
         }
         ruleFindingCount = Math.max(0, ruleFindingCount);
         llmFindingCount = Math.max(0, llmFindingCount);
         verifiedFindingCount = Math.max(0, verifiedFindingCount);
+    }
+
+    public boolean parseFailed() {
+        return containsFailureCategory("llm_parse_failed")
+            || (failureCategories.isEmpty() && !parseSucceeded);
+    }
+
+    public boolean transportFailed() {
+        return !failureCategories.isEmpty()
+            && java.util.Arrays.stream(failureCategories.split(","))
+                .anyMatch(category -> !"llm_parse_failed".equals(category));
+    }
+
+    private boolean containsFailureCategory(String expected) {
+        return java.util.Arrays.stream(failureCategories.split(","))
+            .anyMatch(expected::equals);
     }
 
     private static String normalize(String value, String field) {
@@ -272,5 +211,17 @@ public record LlmEvaluationObservation(
             );
         }
         return normalized;
+    }
+
+    private static String normalizeFailureCategories(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        return java.util.Arrays.stream(value.toLowerCase(java.util.Locale.ROOT).split(","))
+            .map(String::trim)
+            .filter(category -> category.matches("[a-z0-9][a-z0-9_-]{0,63}"))
+            .distinct()
+            .sorted()
+            .collect(java.util.stream.Collectors.joining(","));
     }
 }

@@ -73,8 +73,10 @@ public class ExternalCallResilience {
         RateLimiter rateLimiter
     ) {
         Supplier<T> decorated = supplier;
-        decorated = CircuitBreaker.decorateSupplier(circuitBreaker, decorated);
+        // Retry is inside the circuit breaker so one logical external call contributes
+        // one final outcome instead of counting every retry attempt as a breaker failure.
         decorated = Retry.decorateSupplier(retry, decorated);
+        decorated = CircuitBreaker.decorateSupplier(circuitBreaker, decorated);
         decorated = RateLimiter.decorateSupplier(rateLimiter, decorated);
         try {
             return decorated.get();

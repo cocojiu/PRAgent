@@ -73,7 +73,7 @@ final class LlmChunkReviewResultAggregator {
                 zeroToNull(aggregation.promptTokens()),
                 zeroToNull(aggregation.completionTokens())
             )
-        );
+        ).withStatusDetail(aggregation.failureDetail());
     }
 
     private ChunkAggregation addOutcome(
@@ -81,7 +81,7 @@ final class LlmChunkReviewResultAggregator {
         LlmChunkReviewOutcome outcome
     ) {
         return outcome.callResult() == null
-            ? aggregation.addFallbackResult(outcome.review(), reviewMerger)
+            ? aggregation.addFallbackResult(outcome.review(), outcome.failureCategory(), reviewMerger)
             : aggregation.addLlmResult(
                 outcome.review(),
                 outcome.callResult(),
@@ -101,7 +101,8 @@ final class LlmChunkReviewResultAggregator {
         int completionTokens,
         int totalTokens,
         int failedChunks,
-        LlmVerificationSummary verificationSummary
+        LlmVerificationSummary verificationSummary,
+        List<String> failureCategories
     ) {
         static ChunkAggregation empty() {
             return new ChunkAggregation(
@@ -111,7 +112,8 @@ final class LlmChunkReviewResultAggregator {
                 0,
                 0,
                 0,
-                LlmVerificationSummary.empty()
+                LlmVerificationSummary.empty(),
+                List.of()
             );
         }
 
@@ -132,18 +134,22 @@ final class LlmChunkReviewResultAggregator {
                 completionTokens + safeInt(callResult.completionTokens()),
                 totalTokens + safeInt(callResult.totalTokens()),
                 failedChunks,
-                verificationSummary.add(verification)
+                verificationSummary.add(verification),
+                failureCategories
             );
         }
 
         ChunkAggregation addFallbackResult(
             ReviewResult ruleReview,
+            String failureCategory,
             LlmRuleReviewMerger reviewMerger
         ) {
             List<ReviewFindingResult> nextFindings = new ArrayList<>(findings);
             if (ruleReview.findings() != null) {
                 nextFindings.addAll(ruleReview.findings());
             }
+            List<String> nextFailureCategories = new ArrayList<>(failureCategories);
+            nextFailureCategories.add(failureCategory);
             return new ChunkAggregation(
                 reviewMerger.maxRisk(riskLevel, ruleReview.riskLevel()),
                 nextFindings,
@@ -151,8 +157,19 @@ final class LlmChunkReviewResultAggregator {
                 completionTokens,
                 totalTokens,
                 failedChunks + 1,
-                verificationSummary
+                verificationSummary,
+                List.copyOf(nextFailureCategories)
             );
+        }
+
+        String failureDetail() {
+            List<String> categories = failureCategories.stream()
+                .filter(Objects::nonNull)
+                .filter(category -> !category.isBlank())
+                .distinct()
+                .sorted()
+                .toList();
+            return categories.isEmpty() ? null : "llmFailureCategories=" + String.join(",", categories);
         }
 
         private static int safeInt(Integer value) {

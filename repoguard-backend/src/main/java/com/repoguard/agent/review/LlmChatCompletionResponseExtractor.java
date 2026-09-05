@@ -2,6 +2,7 @@ package com.repoguard.agent.review;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.repoguard.agent.external.ExternalCallException;
 import java.util.List;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
@@ -19,6 +20,11 @@ public class LlmChatCompletionResponseExtractor {
     public LlmChatCompletionResponse extract(JsonNode root) {
         if (root == null || root.isMissingNode() || root.isNull()) {
             throw new IllegalStateException("Empty LLM HTTP response");
+        }
+        if ("length".equalsIgnoreCase(root.at("/choices/0/finish_reason").asText())) {
+            throw new ExternalCallException(
+                "LLM", "llm_response_truncated", false, null, "finishReason=length", null
+            );
         }
         return new LlmChatCompletionResponse(
             extractContent(root),
@@ -75,6 +81,9 @@ public class LlmChatCompletionResponseExtractor {
                     return text;
                 }
             }
+            // Some OpenAI-compatible providers return structured content as an
+            // object instead of a JSON-encoded string.
+            return node.toString();
         }
         return "";
     }

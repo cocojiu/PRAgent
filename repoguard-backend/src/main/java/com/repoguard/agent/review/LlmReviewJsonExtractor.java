@@ -46,8 +46,14 @@ public class LlmReviewJsonExtractor {
 
     private String stripJsonFence(String content) {
         String trimmed = content == null ? "" : content.trim();
+        if (!trimmed.isEmpty() && trimmed.charAt(0) == '\uFEFF') {
+            trimmed = trimmed.substring(1).trim();
+        }
         if (trimmed.startsWith("```")) {
-            trimmed = trimmed.replaceFirst("^```\\s*(?:json)?\\s*", "").replaceFirst("\\s*```$", "").trim();
+            trimmed = trimmed
+                .replaceFirst("^```\\s*(?i:json)?\\s*", "")
+                .replaceFirst("\\s*```$", "")
+                .trim();
         }
         return trimmed;
     }

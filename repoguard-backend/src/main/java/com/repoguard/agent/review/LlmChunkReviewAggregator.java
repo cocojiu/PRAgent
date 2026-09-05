@@ -137,7 +137,7 @@ class LlmChunkReviewAggregator {
                     verified.summary()
                 );
             } catch (RuntimeException ex) {
-                return fallbackHandler.fallback(chunk, CHUNK_PARTIAL_FAILURE_CATEGORY, ex);
+                return fallbackHandler.fallback(chunk, fallbackHandler.category(ex), ex);
             }
         }
     }

@@ -26,6 +26,7 @@ public final class LlmQualityEvaluator {
     private static final BigDecimal MIN_ANCHOR_RATE = new BigDecimal("0.95");
     private static final BigDecimal MAX_DUPLICATE_RATE = new BigDecimal("0.05");
     private static final BigDecimal MAX_PARSE_FAILURE_RATE = new BigDecimal("0.05");
+    private static final BigDecimal MAX_TRANSPORT_FAILURE_RATE = new BigDecimal("0.05");
 
     private LlmQualityEvaluator() {
     }
@@ -96,7 +97,8 @@ public final class LlmQualityEvaluator {
         int anchored = (int) samples.stream()
             .filter(sample -> sample.predictedFinding() && sample.anchorValid())
             .count();
-        int parseFailures = (int) samples.stream().filter(sample -> !sample.parseSucceeded()).count();
+        int parseFailures = (int) samples.stream().filter(LlmEvaluationObservation::parseFailed).count();
+        int transportFailures = (int) samples.stream().filter(LlmEvaluationObservation::transportFailed).count();
         int duplicatePredictions = duplicatePredictions(samples);
         String observedFingerprint = sampleFingerprint(samples);
         int observedFixedRegressionSamples = (int) samples.stream()
@@ -124,6 +126,7 @@ public final class LlmQualityEvaluator {
         BigDecimal anchorRate = ratio(anchored, predicted);
         BigDecimal duplicateRate = ratio(duplicatePredictions, predicted);
         BigDecimal parseFailureRate = ratio(parseFailures, samples.size());
+        BigDecimal transportFailureRate = ratio(transportFailures, samples.size());
         List<String> blockers = new ArrayList<>();
         if (samples.size() < minimumSamples) {
             blockers.add("INSUFFICIENT_SAMPLE:" + samples.size() + "/" + minimumSamples);
@@ -142,6 +145,9 @@ public final class LlmQualityEvaluator {
         }
         if (parseFailureRate.compareTo(MAX_PARSE_FAILURE_RATE) > 0) {
             blockers.add("PARSE_FAILURE_RATE_ABOVE_5");
+        }
+        if (transportFailureRate.compareTo(MAX_TRANSPORT_FAILURE_RATE) > 0) {
+            blockers.add("TRANSPORT_FAILURE_RATE_ABOVE_5");
         }
         List<String> datasetBlockers = dataset == null
             ? List.of()

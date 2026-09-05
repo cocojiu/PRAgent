@@ -434,7 +434,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
             RestClient client = restClientBuilder
                 .clone()
                 .baseUrl(baseUrl)
-                .requestFactory(ExternalHttpRequestFactory.sameTimeoutSeconds(timeoutSeconds, 60))
+                .requestFactory(ExternalHttpRequestFactory.cappedConnectTimeoutSeconds(timeoutSeconds, 60, 10))
                 .build();
             cachedRestClient.set(new CachedRestClient(baseUrl, timeoutSeconds, client));
             return client;

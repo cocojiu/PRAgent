@@ -22,23 +22,27 @@ public class ExternalCallResilienceConfig {
         ExternalCallRetryMetricsRecorder retryMetricsRecorder
     ) {
         return new ExternalCallResilience(
-            circuitBreaker("github", properties.getGithub()),
+            circuitBreaker("github", properties.getGithub(), ExternalCallErrorClassifier::github),
             retry("github", properties.getGithub(), ExternalCallErrorClassifier::github, retryMetricsRecorder),
             rateLimiter("github", properties.getGithub()),
-            circuitBreaker("llm", properties.getLlm()),
+            circuitBreaker("llm", properties.getLlm(), ExternalCallErrorClassifier::llm),
             retry("llm", properties.getLlm(), ExternalCallErrorClassifier::llm, retryMetricsRecorder),
             rateLimiter("llm", properties.getLlm()),
             bulkhead("llm", properties.getLlm())
         );
     }
 
-    private CircuitBreaker circuitBreaker(String name, ExternalCallResilienceProperties.Instance properties) {
+    private CircuitBreaker circuitBreaker(
+        String name,
+        ExternalCallResilienceProperties.Instance properties,
+        Function<RuntimeException, ExternalCallException> classifier
+    ) {
         CircuitBreakerConfig config = CircuitBreakerConfig.custom()
             .failureRateThreshold(Math.max(1, properties.getCircuitBreakerFailureRateThreshold()))
             .slidingWindowSize(Math.max(2, properties.getCircuitBreakerSlidingWindowSize()))
             .minimumNumberOfCalls(Math.max(1, properties.getCircuitBreakerMinimumCalls()))
             .waitDurationInOpenState(Duration.ofSeconds(Math.max(1, properties.getCircuitBreakerWaitOpenSeconds())))
-            .recordException(throwable -> true)
+            .recordException(throwable -> isRetryable(classifier, throwable))
             .build();
         return CircuitBreaker.of("repoguard-" + name, config);
     }

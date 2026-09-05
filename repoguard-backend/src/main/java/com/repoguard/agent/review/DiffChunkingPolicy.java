@@ -10,8 +10,8 @@ record DiffChunkingPolicy(
     int largePrLineThreshold
 ) {
 
-    private static final int MAX_FILES_PER_CHUNK = 4;
-    private static final int MAX_LINES_PER_CHUNK = 450;
+    private static final int MAX_FILES_PER_CHUNK = 2;
+    private static final int MAX_LINES_PER_CHUNK = 250;
     private static final int LARGE_PR_FILE_THRESHOLD = 6;
     private static final int LARGE_PR_LINE_THRESHOLD = 700;
 

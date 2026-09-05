@@ -36,6 +36,16 @@ public final class ExternalHttpRequestFactory {
         return simple(timeout, timeout);
     }
 
+    public static ClientHttpRequestFactory cappedConnectTimeoutSeconds(
+        Integer readTimeoutSeconds,
+        int defaultReadTimeoutSeconds,
+        int maxConnectTimeoutSeconds
+    ) {
+        int readSeconds = normalizedTimeoutSeconds(readTimeoutSeconds, defaultReadTimeoutSeconds);
+        int connectSeconds = Math.min(readSeconds, Math.max(MIN_TIMEOUT_SECONDS, maxConnectTimeoutSeconds));
+        return simple(Duration.ofSeconds(connectSeconds), Duration.ofSeconds(readSeconds));
+    }
+
     static int normalizedTimeoutSeconds(Integer timeoutSeconds, int defaultTimeoutSeconds) {
         return Math.max(MIN_TIMEOUT_SECONDS, timeoutSeconds == null ? defaultTimeoutSeconds : timeoutSeconds);
     }
