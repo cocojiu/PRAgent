@@ -98,7 +98,7 @@ class SensitiveLiteralRule implements ReviewRule {
         String normalized = value.trim().toLowerCase(Locale.ROOT);
         if (normalized.isBlank()
             || normalized.matches("[*x•_-]{4,}")
-            || normalized.matches("\\$\\{[^}]+}")
+            || normalized.matches(".*\\$(?:\\{[^}]+}|[a-z_][a-z0-9_]*|\\([^)]*\\)).*")
             || normalized.matches("\\{\\{[^}]+}}")
             || normalized.matches("%[a-z0-9_]+%")) {
             return true;

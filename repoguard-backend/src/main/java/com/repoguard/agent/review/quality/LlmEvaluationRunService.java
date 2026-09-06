@@ -175,6 +175,7 @@ public class LlmEvaluationRunService {
                 LlmEvaluationObservation observation = future.get(remaining, TimeUnit.NANOSECONDS);
                 observations.add(observation);
                 state.add(observation);
+                org.slf4j.LoggerFactory.getLogger(LlmEvaluationRunService.class).info("Evaluation sample completed runId={} caseId={} expectedFinding={} predictedFinding={} predictedSeverity={} ruleFindings={} llmFindings={} parseFailed={} transportFailed={} predictionKey={}", state.runId, observation.caseId(), observation.expectedFinding(), observation.predictedFinding(), observation.predictedSeverity(), observation.ruleFindingCount(), observation.llmFindingCount(), observation.parseFailed(), observation.transportFailed(), observation.predictionKey());
                 if (state.totalTokens.get() > state.maxTokens
                     || state.totalCost.get().compareTo(state.maxCost) > 0) {
                     throw new BudgetExceededException();

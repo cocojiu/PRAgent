@@ -66,6 +66,21 @@ class SensitiveLiteralRuleTest {
             "static final String TOKEN_KEY = \"github.token\";",
             Map.of()
         ))).isEmpty();
+        assertThat(rule.evaluate(context(
+            "scripts/backup.sh",
+            "MYSQL_PWD=\"$MYSQL_ROOT_PASSWORD\"",
+            Map.of()
+        ))).isEmpty();
+        assertThat(rule.evaluate(context(
+            "scripts/backup.sh",
+            "password=\"prefix-${RUNTIME_SECRET}\"",
+            Map.of()
+        ))).isEmpty();
+        assertThat(rule.evaluate(context(
+            "scripts/backup.sh",
+            "password=\"$(openssl rand -hex 32)\"",
+            Map.of()
+        ))).isEmpty();
     }
 
     @Test
