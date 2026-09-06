@@ -125,7 +125,7 @@ class IsolatedRealChainSmokeContractTest {
             .contains("REPOGUARD_GITHUB_WEBHOOK_SECRET=\"$(openssl rand -hex 32)\"")
             .contains("smoke_backend_revision=")
             .contains("smoke_strategy_policy=")
-            .contains("review-prompt-v2|review-context-v2|review-schema-v2|high-risk-verifier-v1|server-risk-v2|OBSERVE|1|1")
+            .contains("review-prompt-v3|review-context-v2|review-schema-v2|high-risk-verifier-v1|server-risk-v2|OBSERVE|1|1")
             .contains("SMOKE_SUMMARY_PATH: ${{ runner.temp }}/real-chain-smoke-summary.txt")
             .contains("write_observe_summary")
             .contains("smoke_exit_status=")
@@ -208,7 +208,7 @@ class IsolatedRealChainSmokeContractTest {
     private static Path repositoryRoot() {
         Path current = Path.of("").toAbsolutePath();
         while (current != null) {
-            if (Files.isDirectory(current.resolve(".git")) && Files.isDirectory(current.resolve("repoguard-backend"))) {
+            if (Files.exists(current.resolve(".git")) && Files.isDirectory(current.resolve("repoguard-backend"))) {
                 return current;
             }
             current = current.getParent();

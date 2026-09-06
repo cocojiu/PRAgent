@@ -221,7 +221,7 @@ jobs:
           fi
 
           smoke_project="repoguard-smoke-${SMOKE_RUN_ID}-${SMOKE_RUN_ATTEMPT}"
-          expected_strategy_policy="1|review-prompt-v2|review-context-v2|review-schema-v2|high-risk-verifier-v1|server-risk-v2|OBSERVE|1|1"
+          expected_strategy_policy="1|review-prompt-v3|review-context-v2|review-schema-v2|high-risk-verifier-v1|server-risk-v2|OBSERVE|1|1"
           policy_probe_log="$(mktemp)"
           smoke_output_log="$(mktemp "${RUNNER_TEMP}/real-chain-smoke-output.XXXXXX.log")"
           policy_probe_pid=""
