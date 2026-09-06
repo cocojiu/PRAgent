@@ -37,7 +37,7 @@ class LlmReviewPromptBuilderTest {
             "PR repo-guard-demo/spring-boot-demo#512; commit=" + COMMIT_SHA
                 + "; files=6; additions=18; deletions=14; "
                 + "sampleFiles=src/A.java, src/B.java, src/C.java, src/D.java, src/E.java, ...; "
-                + "promptVersion=review-prompt-v2; contextVersion=review-context-v2; "
+                + "promptVersion=review-prompt-v3; contextVersion=review-context-v2; "
                 + "schemaVersion=review-schema-v2; verifierVersion=high-risk-verifier-v1"
         );
     }
@@ -63,7 +63,7 @@ class LlmReviewPromptBuilderTest {
                 + "; chunked=true; chunks=2; files=2; additions=15; "
                 + "deletions=10; aggregateRisk=HIGH; aggregateFindings=4; failedChunks=1; "
                 + "chunkReasons=too_many_files,large_patch,security_sensitive; "
-                + "promptVersion=review-prompt-v2; contextVersion=review-context-v2; "
+                + "promptVersion=review-prompt-v3; contextVersion=review-context-v2; "
                 + "schemaVersion=review-schema-v2; verifierVersion=high-risk-verifier-v1"
         );
     }
@@ -89,13 +89,16 @@ class LlmReviewPromptBuilderTest {
         assertThat(prompt).contains("a".repeat(6000));
         assertThat(prompt).doesNotContain("a".repeat(6001));
         assertThat(prompt).contains(
-            "review-prompt-v2",
+            "review-prompt-v3",
             "review-schema-v2",
             "issueType",
             "preconditions",
             "relatedFiles",
             "fixExample",
             "blockingCandidate",
+            "变更前后反事实判断",
+            "无法证明时直接省略",
+            "新增校验、权限、边界、等待、重试、清理、错误保留、脱敏或依赖升级通常是加固",
             "lineNumber 必须是当前 diff 中变更后的新增行",
             "无法精确替换时返回空字符串"
         );

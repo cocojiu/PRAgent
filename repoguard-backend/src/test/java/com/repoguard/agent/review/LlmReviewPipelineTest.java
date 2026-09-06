@@ -401,7 +401,7 @@ class LlmReviewPipelineTest {
         assertThat(result.llmCompletionTokens()).isEqualTo(30);
         assertThat(result.llmTotalTokens()).isEqualTo(160);
         assertThat(result.llmPromptSummary()).contains(
-            "promptVersion=review-prompt-v2",
+            "promptVersion=review-prompt-v3",
             "verificationAttempted=1",
             "verificationPassed=1",
             "rulesApplied=true"
