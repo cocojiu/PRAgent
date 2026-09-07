@@ -37,7 +37,7 @@ class LlmReviewPromptBuilderTest {
             "PR repo-guard-demo/spring-boot-demo#512; commit=" + COMMIT_SHA
                 + "; files=6; additions=18; deletions=14; "
                 + "sampleFiles=src/A.java, src/B.java, src/C.java, src/D.java, src/E.java, ...; "
-                + "promptVersion=review-prompt-v4; contextVersion=review-context-v2; "
+                + "promptVersion=review-prompt-v5; contextVersion=review-context-v2; "
                 + "schemaVersion=review-schema-v2; verifierVersion=high-risk-verifier-v1"
         );
     }
@@ -63,7 +63,7 @@ class LlmReviewPromptBuilderTest {
                 + "; chunked=true; chunks=2; files=2; additions=15; "
                 + "deletions=10; aggregateRisk=HIGH; aggregateFindings=4; failedChunks=1; "
                 + "chunkReasons=too_many_files,large_patch,security_sensitive; "
-                + "promptVersion=review-prompt-v4; contextVersion=review-context-v2; "
+                + "promptVersion=review-prompt-v5; contextVersion=review-context-v2; "
                 + "schemaVersion=review-schema-v2; verifierVersion=high-risk-verifier-v1"
         );
     }
@@ -89,7 +89,7 @@ class LlmReviewPromptBuilderTest {
         assertThat(prompt).contains("a".repeat(6000));
         assertThat(prompt).doesNotContain("a".repeat(6001));
         assertThat(prompt).contains(
-            "review-prompt-v4",
+            "review-prompt-v5",
             "review-schema-v2",
             "issueType",
             "preconditions",
@@ -100,8 +100,14 @@ class LlmReviewPromptBuilderTest {
             "无法证明时直接省略",
             "候选声称修改造成回归、兼容性下降或替换错误",
             "全新可达行为仍可基于明确调用路径报告",
+            "语义未变的换行、缩进或对象/参数列表展开不是新增行为",
+            "不得把仅因格式重排而出现在新增行中的既有字段或参数当作问题证据或主锚点",
             "新增校验、权限、边界、等待、重试、清理、错误保留、脱敏或依赖升级通常是加固",
             "兼容参数替换、就绪探测、退出码/诊断保留、确定性校验、路径过滤和依赖版本覆盖本身不是问题",
+            "不得猜测仓库身份、账号可分配性、令牌权限或部署环境会失败",
+            "若上下文已展示所需权限且当前 diff 未删除或削弱它，不得报告权限不足",
+            "必须区分算术命令和算术展开的退出状态",
+            "立即保存 `$?`、输出固定诊断并以原状态退出的 ERR trap",
             "lineNumber 必须是当前 diff 中变更后的新增行",
             "无法精确替换时返回空字符串"
         );
