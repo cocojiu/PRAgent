@@ -38,7 +38,7 @@ class LlmReviewPromptBuilderTest {
                 + "; files=6; additions=18; deletions=14; "
                 + "sampleFiles=src/A.java, src/B.java, src/C.java, src/D.java, src/E.java, ...; "
                 + "promptVersion=review-prompt-v5; contextVersion=review-context-v2; "
-                + "schemaVersion=review-schema-v2; verifierVersion=high-risk-verifier-v1"
+                + "schemaVersion=review-schema-v2; verifierVersion=finding-verifier-v2"
         );
     }
 
@@ -64,7 +64,7 @@ class LlmReviewPromptBuilderTest {
                 + "deletions=10; aggregateRisk=HIGH; aggregateFindings=4; failedChunks=1; "
                 + "chunkReasons=too_many_files,large_patch,security_sensitive; "
                 + "promptVersion=review-prompt-v5; contextVersion=review-context-v2; "
-                + "schemaVersion=review-schema-v2; verifierVersion=high-risk-verifier-v1"
+                + "schemaVersion=review-schema-v2; verifierVersion=finding-verifier-v2"
         );
     }
 
@@ -119,6 +119,14 @@ class LlmReviewPromptBuilderTest {
         ReviewTask task = new ReviewTask();
         task.setTitle("Protect admin route");
         String path = "src/AdminController.java";
+        PullRequestChangedFile unrelatedA = new PullRequestChangedFile(
+            "src/UnrelatedA.java", "modified", 1, 0, "x".repeat(20_000),
+            ChangedFileContext.available("src/UnrelatedA.java", COMMIT_SHA, "class UnrelatedA {}")
+        );
+        PullRequestChangedFile unrelatedB = new PullRequestChangedFile(
+            "src/UnrelatedB.java", "modified", 1, 0, "y".repeat(20_000),
+            ChangedFileContext.available("src/UnrelatedB.java", COMMIT_SHA, "class UnrelatedB {}")
+        );
         PullRequestChangedFile file = new PullRequestChangedFile(
             path,
             "modified",
@@ -132,7 +140,7 @@ class LlmReviewPromptBuilderTest {
             "spring-boot-demo",
             512,
             COMMIT_SHA,
-            List.of(file)
+            List.of(unrelatedA, unrelatedB, file)
         );
         ReviewFindingResult candidate = new ReviewFindingResult(
             "HIGH",
@@ -161,15 +169,19 @@ class LlmReviewPromptBuilderTest {
 
         assertThat(builder.verificationSystemPrompt()).contains("尝试推翻候选");
         assertThat(prompt).contains(
-            "high-risk-verifier-v1",
+            "finding-verifier-v2",
             "请尝试推翻",
             "MISSING_AUTHORIZATION",
             "src/SecurityConfig.java",
             "addedLineValid",
             "protectionPresent",
             "Context version: review-context-v2",
-            "[SOURCE] src/AdminController.java:L1-L1"
+            "[SOURCE] src/AdminController.java:L1-L1",
+            "--- src/AdminController.java",
+            "+void update() {}"
         );
+        assertThat(prompt.indexOf("--- src/AdminController.java"))
+            .isLessThan(prompt.indexOf("--- src/UnrelatedA.java"));
     }
 
     @Test

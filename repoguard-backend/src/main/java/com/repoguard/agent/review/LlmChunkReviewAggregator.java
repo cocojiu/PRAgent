@@ -86,7 +86,7 @@ class LlmChunkReviewAggregator {
         List<LlmChunkReviewOutcome> outcomes = chunkReviewScheduler.schedule(
             chunks,
             budget,
-            chunk -> reviewChunk(context, settings, chunk, reviewResultParser, traceId, budget),
+            chunk -> reviewChunk(context, settings, fullDiff, chunk, reviewResultParser, traceId, budget),
             fallbackHandler::fallback
         );
         return resultAggregator.aggregate(
@@ -99,8 +99,7 @@ class LlmChunkReviewAggregator {
     }
 
     private LlmChunkReviewOutcome reviewChunk(
-        ReviewPipelineContext context,
-        ReviewPolicySettings settings,
+        ReviewPipelineContext context, ReviewPolicySettings settings, PullRequestDiff fullDiff,
         PullRequestDiffChunk chunk,
         LlmReviewResultParser reviewResultParser,
         String traceId,
@@ -127,7 +126,7 @@ class LlmChunkReviewAggregator {
                 );
                 LlmHighRiskVerificationOutcome verified = verificationService.verify(
                     context,
-                    chunk.diff(),
+                    fullDiff,
                     parsed,
                     budget
                 );

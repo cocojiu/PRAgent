@@ -80,24 +80,24 @@ class LlmReviewQualityScorer {
             contextUnavailable
         );
         Integer lineNumber = lineCheck.validAddedLine() ? finding.lineNumber() : null;
-        boolean highRiskCandidate = isHighRisk(finding.severity()) || finding.blockingCandidate();
+        boolean verificationCandidate = requiresVerification(finding.severity()) || finding.blockingCandidate();
         boolean strongEvidence = lineCheck.validAddedLine()
             && score >= 80
             && schemaComplete
             && !contextUnavailable;
         String severity = effectiveSeverity(finding.severity(), strongEvidence);
-        boolean verificationPending = highRiskCandidate && strongEvidence;
+        boolean verificationPending = verificationCandidate && lineCheck.validAddedLine() && schemaComplete;
         String enforcementMode = verificationPending
             ? EnforcementMode.COMMENT.name()
             : EnforcementMode.OBSERVE.name();
         String policyReason = verificationPending
             ? "llm_candidate_requires_adversarial_verification"
-            : highRiskCandidate
+            : verificationCandidate
                 ? "llm_candidate_precheck_rejected:" + lineCheck.reason()
                 : "llm_observation_only";
         String verificationStatus = verificationPending
             ? LlmVerificationStatus.PENDING.name()
-            : highRiskCandidate
+            : verificationCandidate
                 ? LlmVerificationStatus.PRECHECK_REJECTED.name()
                 : LlmVerificationStatus.NOT_REQUIRED.name();
 
@@ -153,8 +153,8 @@ class LlmReviewQualityScorer {
         return effective;
     }
 
-    private boolean isHighRisk(String severity) {
-        return "HIGH".equalsIgnoreCase(severity) || "CRITICAL".equalsIgnoreCase(severity);
+    private boolean requiresVerification(String severity) {
+        return "MEDIUM".equalsIgnoreCase(severity) || "HIGH".equalsIgnoreCase(severity) || "CRITICAL".equalsIgnoreCase(severity);
     }
 
     private String effectiveSeverity(String severity, boolean strongEvidence) {

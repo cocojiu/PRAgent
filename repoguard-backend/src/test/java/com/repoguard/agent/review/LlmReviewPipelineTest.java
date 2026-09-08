@@ -612,7 +612,7 @@ class LlmReviewPipelineTest {
     private String verifiedDecisionJson() {
         return """
             {
-              "schemaVersion": "high-risk-verifier-v1",
+              "schemaVersion": "finding-verifier-v2",
               "verdict": "VERIFIED",
               "evidenceSupported": true,
               "preconditionsSatisfied": true,
