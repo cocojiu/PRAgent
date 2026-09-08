@@ -270,6 +270,7 @@ jobs:
           set -euo pipefail
           project="$1"
           expected_policy="$2"
+          last_strategy_policy=""
           for _ in $(seq 1 120); do
             mysql_container="$(
               docker ps -q \
@@ -283,16 +284,18 @@ jobs:
                   2>/dev/null || true
               )"
               if [ -n "${strategy_policy}" ]; then
-                echo "smoke_strategy_policy=${strategy_policy}"
-                test "${strategy_policy}" = "${expected_policy}" || {
-                  echo "Active review strategy is not the expected OBSERVE baseline." >&2
-                  exit 1
-                }
-                exit 0
+                last_strategy_policy="${strategy_policy}"
+                if [ "${strategy_policy}" = "${expected_policy}" ]; then
+                  echo "smoke_strategy_policy=${strategy_policy}"
+                  exit 0
+                fi
               fi
             fi
             sleep 5
           done
+          if [ -n "${last_strategy_policy}" ]; then
+            echo "smoke_strategy_policy=${last_strategy_policy}"
+          fi
           echo "Timed out waiting for the isolated OBSERVE strategy snapshot." >&2
           exit 1
           POLICY_PROBE
