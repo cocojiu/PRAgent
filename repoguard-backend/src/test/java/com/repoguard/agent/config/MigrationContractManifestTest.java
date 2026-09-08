@@ -25,7 +25,7 @@ class MigrationContractManifestTest {
     private static final Path MIGRATION_DIR = Path.of("src/main/resources/db/migration");
     private static final Path MANIFEST = MIGRATION_DIR.resolve("migration-contract.json");
     private static final Pattern MIGRATION_VERSION = Pattern.compile("^V(\\d+)__");
-    private static final Set<String> ALLOWED_PHASES = Set.of("BASELINE", "EXPAND", "CONTRACT");
+    private static final Set<String> ALLOWED_PHASES = Set.of("BASELINE", "EXPAND", "MIGRATE", "CONTRACT");
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Test

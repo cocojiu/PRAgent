@@ -7,7 +7,7 @@
     "externalDatabaseSupported": true,
     "publishedMigrationPolicy": "IMMUTABLE",
     "newInstallationStrategy": "VALIDATED_SCHEMA_SNAPSHOT_THEN_BASELINE",
-  "candidateVersion": 94,
+    "candidateVersion": 95,
     "requiredEvidence": [
       "empty database migration to the candidate version",
       "schema structure diff against the supported production shape",
@@ -291,6 +291,18 @@
       "nMinusOneCompatible": false,
       "interruptedRecovery": "verify the two llm_evaluation_report check constraints and rerun the migration before accepting provisional reports",
       "rollbackStrategy": "forward fix the allowed status and dataset-kind sets; do not rewrite or delete the published migration"
+    },
+    {
+      "version": 95,
+      "file": "V95__review_strategy_runtime_v5.sql",
+      "phase": "MIGRATE",
+      "estimatedRows": "at most one new active OBSERVE strategy snapshot per tenant with an outdated runtime protocol",
+      "lockType": "bounded row locks on active review strategy snapshots",
+      "maxDurationSeconds": 300,
+      "maxDiskMegabytes": 256,
+      "nMinusOneCompatible": true,
+      "interruptedRecovery": "verify every affected tenant has exactly one active snapshot; preserve inactive source snapshots and forward-fix any tenant left without an active row",
+      "rollbackStrategy": "activate a new OBSERVE snapshot copied from the preserved source snapshot; never reactivate or rewrite historical rows in place"
     }
   ]
 }

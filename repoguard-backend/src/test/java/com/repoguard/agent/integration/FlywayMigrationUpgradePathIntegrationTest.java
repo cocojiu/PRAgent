@@ -19,7 +19,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
  * Exercises the supported rolling-upgrade path against a real MySQL instance.
  *
  * <p>The test is opt-in because local unit-test runs do not provision a database. CI enables it
- * with an isolated database and verifies the V76 expand state through the V94 provisional evaluation state.
+ * with an isolated database and verifies the V76 expand state through the V95 runtime strategy state.
  */
 @EnabledIfEnvironmentVariable(named = "REPOGUARD_RUN_INTEGRATION_TESTS", matches = "true")
 class FlywayMigrationUpgradePathIntegrationTest {
@@ -38,6 +38,7 @@ class FlywayMigrationUpgradePathIntegrationTest {
         Long tenantId = null;
         Long taskId = null;
         Long attemptId = null;
+        Long previousStrategySnapshotId = null;
         String suffix = UUID.randomUUID().toString().replace("-", "");
 
         try {
@@ -226,6 +227,28 @@ class FlywayMigrationUpgradePathIntegrationTest {
                     "sarif_ci_upload",
                     "fk_sarif_ci_upload_batch"
                 )).isTrue();
+                previousStrategySnapshotId = activeStrategySnapshotId(connection, 1L);
+            }
+
+            migrateTo(url, username, password, "95");
+            try (Connection connection = open(url, username, password)) {
+                assertThat(latestSuccessfulMigration(connection)).isEqualTo("95");
+                assertThat(previousStrategySnapshotId).isNotNull();
+                assertThat(activeStrategySnapshotCount(connection, 1L)).isEqualTo(1L);
+                assertThat(strategySnapshotActive(connection, previousStrategySnapshotId)).isFalse();
+                long expectedSourceSnapshotId = previousStrategySnapshotId;
+                assertThat(activeStrategySnapshot(connection, 1L)).satisfies(snapshot -> {
+                    assertThat(snapshot.id()).isNotEqualTo(expectedSourceSnapshotId);
+                    assertThat(snapshot.promptVersion()).isEqualTo("review-prompt-v5");
+                    assertThat(snapshot.contextVersion()).isEqualTo("review-context-v2");
+                    assertThat(snapshot.schemaVersion()).isEqualTo("review-schema-v2");
+                    assertThat(snapshot.verifierVersion()).isEqualTo("finding-verifier-v2");
+                    assertThat(snapshot.aggregationVersion()).isEqualTo("server-risk-v2");
+                    assertThat(snapshot.enforcementMode()).isEqualTo("OBSERVE");
+                    assertThat(snapshot.replayVerified()).isTrue();
+                    assertThat(snapshot.changeType()).isEqualTo("RUNTIME_VERSION_UPGRADE");
+                    assertThat(snapshot.sourceSnapshotId()).isEqualTo(expectedSourceSnapshotId);
+                });
             }
         } finally {
             cleanup(url, username, password, tenantId, taskId, attemptId);
@@ -506,6 +529,62 @@ class FlywayMigrationUpgradePathIntegrationTest {
         }
     }
 
+    private long activeStrategySnapshotCount(Connection connection, long tenantId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+            "select count(*) from review_strategy_policy_snapshot where tenant_id = ? and active = 1"
+        )) {
+            statement.setLong(1, tenantId);
+            try (ResultSet result = statement.executeQuery()) {
+                assertThat(result.next()).isTrue();
+                return result.getLong(1);
+            }
+        }
+    }
+
+    private Long activeStrategySnapshotId(Connection connection, long tenantId) throws SQLException {
+        return activeStrategySnapshot(connection, tenantId).id();
+    }
+
+    private StrategySnapshot activeStrategySnapshot(Connection connection, long tenantId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+            select id, prompt_version, context_version, schema_version, verifier_version,
+                   aggregation_version, enforcement_mode, replay_verified, change_type, source_snapshot_id
+              from review_strategy_policy_snapshot
+             where tenant_id = ? and active = 1
+             order by id desc
+             limit 1
+            """)) {
+            statement.setLong(1, tenantId);
+            try (ResultSet result = statement.executeQuery()) {
+                assertThat(result.next()).isTrue();
+                return new StrategySnapshot(
+                    result.getLong("id"),
+                    result.getString("prompt_version"),
+                    result.getString("context_version"),
+                    result.getString("schema_version"),
+                    result.getString("verifier_version"),
+                    result.getString("aggregation_version"),
+                    result.getString("enforcement_mode"),
+                    result.getBoolean("replay_verified"),
+                    result.getString("change_type"),
+                    result.getObject("source_snapshot_id", Long.class)
+                );
+            }
+        }
+    }
+
+    private boolean strategySnapshotActive(Connection connection, long snapshotId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+            "select active from review_strategy_policy_snapshot where id = ?"
+        )) {
+            statement.setLong(1, snapshotId);
+            try (ResultSet result = statement.executeQuery()) {
+                assertThat(result.next()).isTrue();
+                return result.getBoolean(1);
+            }
+        }
+    }
+
     private void deleteTenant(Connection connection, long tenantId) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("delete from tenant where id = ?")) {
             statement.setLong(1, tenantId);
@@ -577,4 +656,17 @@ class FlywayMigrationUpgradePathIntegrationTest {
         String value = System.getenv(name);
         return value == null ? fallback : value;
     }
+
+    private record StrategySnapshot(
+        long id,
+        String promptVersion,
+        String contextVersion,
+        String schemaVersion,
+        String verifierVersion,
+        String aggregationVersion,
+        String enforcementMode,
+        boolean replayVerified,
+        String changeType,
+        Long sourceSnapshotId
+    ) {}
 }
