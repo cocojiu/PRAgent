@@ -138,6 +138,56 @@ class LlmChunkReviewAggregatorTest {
     }
 
     @Test
+    void verifiesChunkCandidatesAgainstTheFullDiff() {
+        PullRequestDiff fullDiff = diff("src/A.java", "src/B.java");
+        LlmHighRiskVerificationService verificationService = org.mockito.Mockito.mock(
+            LlmHighRiskVerificationService.class
+        );
+        org.mockito.Mockito.when(verificationService.verify(
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.same(fullDiff),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any()
+        )).thenAnswer(invocation -> new LlmHighRiskVerificationOutcome(
+            invocation.getArgument(2),
+            null,
+            new LlmVerificationSummary(0, 0, 0, 0)
+        ));
+        LlmChunkReviewAggregator verifyingAggregator = new LlmChunkReviewAggregator(
+            new LlmReviewPromptBuilder(),
+            new LlmRuleReviewMerger(new RiskLevelRanker()),
+            new LlmReviewQualityScorer(),
+            new LlmReviewCostEstimator(),
+            metrics,
+            Runnable::run,
+            64,
+            1,
+            verificationService
+        );
+        ReviewPipelineContext context = new ReviewPipelineContext(
+            new ReviewTask(), fullDiff, settings(), "promptSummary", System.nanoTime(),
+            (ignoredSettings, ignoredTask, chunkDiff) -> new LlmCallResult(
+                llmJson(chunkDiff.files().getFirst().filename()), 100, 25, 125
+            )
+        );
+
+        verifyingAggregator.aggregate(
+            context,
+            fullDiff,
+            List.of(chunk(1, 2, "src/A.java"), chunk(2, 2, "src/B.java")),
+            parser,
+            budget()
+        );
+
+        org.mockito.Mockito.verify(verificationService, times(2)).verify(
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.same(fullDiff),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any()
+        );
+    }
+
+    @Test
     void reviewsChunksInParallelBoundedByExecutorThreadsAndKeepsChunkOrder() {
         ThreadPoolExecutor boundedExecutor = new BoundedExecutorFactory(
             new SimpleMeterRegistry(),

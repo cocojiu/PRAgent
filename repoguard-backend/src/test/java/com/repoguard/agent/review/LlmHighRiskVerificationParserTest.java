@@ -18,7 +18,7 @@ class LlmHighRiskVerificationParserTest {
         LlmHighRiskVerificationDecision decision = parser.parse("""
             ```json
             {
-              "schemaVersion": "high-risk-verifier-v1",
+              "schemaVersion": "finding-verifier-v2",
               "verdict": "VERIFIED",
               "evidenceSupported": true,
               "preconditionsSatisfied": true,
@@ -129,7 +129,7 @@ class LlmHighRiskVerificationParserTest {
         String confidence
     ) {
         return decisionJson(
-            "high-risk-verifier-v1",
+            "finding-verifier-v2",
             verdict,
             evidenceSupported,
             preconditionsSatisfied,

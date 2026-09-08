@@ -125,12 +125,11 @@ class LlmHighRiskVerificationService {
                 }
                 usage = LlmCallResult.combine(usage, callResult);
                 LlmHighRiskVerificationDecision decision = parser.apply(callResult.content());
-                ReviewFindingResult verifiedFinding = policyResolver.resolveVerifiedLlmCandidate(
-                    finding,
-                    decision,
-                    effectiveEnforcementMode(context.settings())
-                );
-                resolved.add(verifiedFinding);
+                if (decision.verified() || decision.verdict() == LlmHighRiskVerificationDecision.Verdict.UNCERTAIN) {
+                    resolved.add(policyResolver.resolveVerifiedLlmCandidate(
+                        finding, decision, effectiveEnforcementMode(context.settings())
+                    ));
+                }
                 if (decision.verified()) {
                     verified++;
                 } else {

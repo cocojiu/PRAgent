@@ -43,6 +43,33 @@ class LlmReviewQualityScorerTest {
     }
 
     @Test
+    void queuesGroundedMediumCandidateForAdversarialVerification() {
+        ReviewFindingResult candidate = finding(
+            "src/main/java/com/example/AdminController.java",
+            12,
+            "Admin endpoint is missing authorization checks",
+            "Require an ADMIN role before executing the handler"
+        );
+        candidate = new ReviewFindingResult(
+            "MEDIUM", candidate.source(), candidate.ruleId(), candidate.filePath(), candidate.lineNumber(),
+            candidate.message(), candidate.recommendation(), candidate.confidence(), candidate.evidence(),
+            candidate.impact(), candidate.fixExample(), false, candidate.reviewDimension(), candidate.enforcementMode(),
+            candidate.policyReason(), candidate.issueType(), candidate.preconditions(), candidate.relatedFiles(),
+            false, candidate.verificationStatus(), candidate.provenance()
+        );
+
+        ReviewFindingResult finding = scorer.score(
+            ReviewResult.completed("MEDIUM", List.of(candidate)),
+            diff("@@ -11,0 +12,1 @@\n+saveSettings();")
+        ).findings().getFirst();
+
+        assertThat(finding.severity()).isEqualTo("MEDIUM");
+        assertThat(finding.verificationStatus()).isEqualTo("PENDING");
+        assertThat(finding.enforcementMode()).isEqualTo("COMMENT");
+        assertThat(finding.blockingCandidate()).isFalse();
+    }
+
+    @Test
     void clearsLineNumberAndDowngradesConfidenceWhenFileIsMissingFromDiff() {
         ReviewResult result = scorer.score(
             ReviewResult.completed("HIGH", List.of(finding(
@@ -91,7 +118,7 @@ class LlmReviewQualityScorerTest {
     }
 
     @Test
-    void missingExactHeadContextRejectsHighRiskPrecheckEvenWithValidAddedLine() {
+    void missingExactHeadContextStillQueuesGroundedCandidateForFullDiffVerification() {
         ReviewFindingResult candidate = finding(
             "src/main/java/com/example/AdminController.java",
             12,
@@ -125,9 +152,9 @@ class LlmReviewQualityScorerTest {
 
         assertThat(finding.severity()).isEqualTo("MEDIUM");
         assertThat(finding.confidence()).isEqualTo("MEDIUM");
-        assertThat(finding.enforcementMode()).isEqualTo("OBSERVE");
-        assertThat(finding.verificationStatus()).isEqualTo("PRECHECK_REJECTED");
-        assertThat(finding.blockingCandidate()).isFalse();
+        assertThat(finding.enforcementMode()).isEqualTo("COMMENT");
+        assertThat(finding.verificationStatus()).isEqualTo("PENDING");
+        assertThat(finding.blockingCandidate()).isTrue();
         assertThat(finding.evidence()).contains("LLM quality score=65", "context=unavailable");
     }
 

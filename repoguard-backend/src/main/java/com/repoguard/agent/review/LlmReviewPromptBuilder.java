@@ -115,7 +115,7 @@ class LlmReviewPromptBuilder {
                 outboundContentSanitizer.sanitizeInline(diff.headSha()),
                 outboundContentSanitizer.sanitizeInline(task == null ? "" : task.getTitle()),
                 outboundContentSanitizer.sanitizeContext(effectiveContext, diff),
-                compactDiff(diff)
+                compactDiff(diff, null, 6_000, 20_000)
             );
     }
 
@@ -128,7 +128,7 @@ class LlmReviewPromptBuilder {
         LlmReviewContext effectiveContext = context == null ? LlmReviewContext.legacy() : context;
         return """
             验证协议版本：%s
-            请尝试推翻下面的 HIGH/CRITICAL 或 blockingCandidate 候选，而不是为它辩护。
+            请尝试推翻下面的 MEDIUM/HIGH/CRITICAL 或 blockingCandidate 候选，而不是为它辩护。
             逐项检查：主锚点是否为新增行、证据是否存在、前置条件是否可达、关联调用是否成立、
             是否已有权限/事务/幂等/校验/回滚等保护。证据不足必须返回 UNCERTAIN 或 REJECTED。
 
@@ -190,7 +190,7 @@ class LlmReviewPromptBuilder {
                 outboundContentSanitizer.sanitizeInline(diff.headSha()),
                 outboundContentSanitizer.sanitizeInline(task == null ? "" : task.getTitle()),
                 outboundContentSanitizer.sanitizeContext(effectiveContext, diff),
-                compactDiff(diff)
+                compactDiff(diff, candidate.filePath(), 16_000, 30_000)
             );
     }
 
@@ -282,20 +282,22 @@ class LlmReviewPromptBuilder {
             + "; verificationUnavailable=" + verification.unavailable();
     }
 
-    private String compactDiff(PullRequestDiff diff) {
+    private String compactDiff(PullRequestDiff diff, String preferredPath, int fileLimit, int totalLimit) {
         StringBuilder builder = new StringBuilder();
         if (diff.files() == null) {
             return builder.toString();
         }
-        for (PullRequestChangedFile file : diff.files()) {
+        List<PullRequestChangedFile> files = diff.files().stream().sorted(java.util.Comparator.comparing(
+            file -> preferredPath == null || !preferredPath.equalsIgnoreCase(file.filename()))).toList();
+        for (PullRequestChangedFile file : files) {
             builder.append("\n--- ")
                 .append(outboundContentSanitizer.sanitizeInline(file.filename()))
                 .append('\n');
             String sanitizedPatch = outboundContentSanitizer.sanitizePatch(file.filename(), file.patch());
             if (sanitizedPatch != null) {
-                builder.append(sanitizedPatch, 0, Math.min(sanitizedPatch.length(), 6000)).append('\n');
+                builder.append(sanitizedPatch, 0, Math.min(sanitizedPatch.length(), fileLimit)).append('\n');
             }
-            if (builder.length() > 20000) {
+            if (builder.length() > totalLimit) {
                 builder.append("\n[diff truncated]\n");
                 break;
             }

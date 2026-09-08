@@ -88,7 +88,7 @@ class LlmHighRiskVerificationServiceTest {
     }
 
     @Test
-    void rejectedOrProtectedCandidateDegradesToMediumObserve() {
+    void rejectedOrProtectedCandidateIsRemovedFromReviewOutput() {
         StubCaller caller = new StubCaller(
             true,
             result(rejectedJson(), 2, 1, 3),
@@ -102,16 +102,28 @@ class LlmHighRiskVerificationServiceTest {
             activeBudget()
         );
 
-        assertThat(outcome.review().findings()).allSatisfy(finding -> {
-            assertThat(finding.severity()).isEqualTo("MEDIUM");
-            assertThat(finding.enforcementMode()).isEqualTo("OBSERVE");
-            assertThat(finding.isBlocking()).isFalse();
-            assertThat(finding.blockingCandidate()).isFalse();
-            assertThat(finding.verificationStatus()).isEqualTo("REJECTED");
-        });
+        assertThat(outcome.review().findings()).isEmpty();
         assertThat(outcome.review().riskLevel()).isEqualTo("INFO");
         assertThat(outcome.summary()).isEqualTo(new LlmVerificationSummary(2, 0, 2, 0));
         assertThat(outcome.verificationUsage().totalTokens()).isEqualTo(6);
+    }
+
+    @Test
+    void uncertainCandidateRemainsObservableInsteadOfBeingSilentlyDropped() {
+        StubCaller caller = new StubCaller(true, result(uncertainJson(), 2, 1, 3));
+
+        LlmHighRiskVerificationOutcome outcome = service(new LlmVerificationProperties()).verify(
+            context(caller),
+            diff(),
+            ReviewResult.completed("MEDIUM", List.of(candidate("MEDIUM"))),
+            activeBudget()
+        );
+
+        assertThat(outcome.review().findings()).singleElement().satisfies(finding -> {
+            assertThat(finding.verificationStatus()).isEqualTo("UNCERTAIN");
+            assertThat(finding.enforcementMode()).isEqualTo("OBSERVE");
+        });
+        assertThat(outcome.summary()).isEqualTo(new LlmVerificationSummary(1, 0, 1, 0));
     }
 
     @Test
@@ -313,6 +325,10 @@ class LlmHighRiskVerificationServiceTest {
         return decisionJson("VERIFIED", true, true, true, true, "Class-level role guard", "HIGH");
     }
 
+    private String uncertainJson() {
+        return decisionJson("UNCERTAIN", true, false, true, false, "none", "MEDIUM");
+    }
+
     private String decisionJson(
         String verdict,
         boolean evidenceSupported,
@@ -324,7 +340,7 @@ class LlmHighRiskVerificationServiceTest {
     ) {
         return """
             {
-              "schemaVersion": "high-risk-verifier-v1",
+              "schemaVersion": "finding-verifier-v2",
               "verdict": "%s",
               "evidenceSupported": %s,
               "preconditionsSatisfied": %s,
