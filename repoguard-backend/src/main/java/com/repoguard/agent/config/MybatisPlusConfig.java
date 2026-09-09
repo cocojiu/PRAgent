@@ -46,6 +46,7 @@ public class MybatisPlusConfig {
         "review_rule_config",
         "review_rule_policy_snapshot",
         "review_strategy_policy_snapshot",
+        "llm_evaluation_run",
         "llm_evaluation_report",
         "llm_evaluation_report_lifecycle_audit",
         "llm_model_release_audit",

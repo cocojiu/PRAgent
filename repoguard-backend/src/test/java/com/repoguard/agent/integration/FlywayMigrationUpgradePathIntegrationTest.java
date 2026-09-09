@@ -19,7 +19,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
  * Exercises the supported rolling-upgrade path against a real MySQL instance.
  *
  * <p>The test is opt-in because local unit-test runs do not provision a database. CI enables it
- * with an isolated database and verifies the V76 expand state through the V95 runtime strategy state.
+ * with an isolated database and verifies the V76 expand state through the V96 durable evaluation state.
  */
 @EnabledIfEnvironmentVariable(named = "REPOGUARD_RUN_INTEGRATION_TESTS", matches = "true")
 class FlywayMigrationUpgradePathIntegrationTest {
@@ -249,6 +249,30 @@ class FlywayMigrationUpgradePathIntegrationTest {
                     assertThat(snapshot.changeType()).isEqualTo("RUNTIME_VERSION_UPGRADE");
                     assertThat(snapshot.sourceSnapshotId()).isEqualTo(expectedSourceSnapshotId);
                 });
+            }
+
+            migrateTo(url, username, password, "96");
+            try (Connection connection = open(url, username, password)) {
+                assertThat(latestSuccessfulMigration(connection)).isEqualTo("96");
+                assertThat(columnExists(connection, "llm_evaluation_run", "run_id")).isTrue();
+                assertThat(columnExists(connection, "llm_evaluation_run", "failure_code")).isTrue();
+                assertThat(compositeUniqueIndexExists(
+                    connection,
+                    "llm_evaluation_run",
+                    "uk_llm_evaluation_run_tenant_id",
+                    2
+                )).isTrue();
+                assertThat(compositeUniqueIndexExists(
+                    connection,
+                    "llm_evaluation_run",
+                    "uk_llm_evaluation_run_tenant_key",
+                    2
+                )).isTrue();
+                assertThat(constraintExists(
+                    connection,
+                    "llm_evaluation_run",
+                    "fk_llm_evaluation_run_report"
+                )).isTrue();
             }
         } finally {
             cleanup(url, username, password, tenantId, taskId, attemptId);

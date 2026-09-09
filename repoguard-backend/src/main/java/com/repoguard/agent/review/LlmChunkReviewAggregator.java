@@ -136,6 +136,9 @@ class LlmChunkReviewAggregator {
                     verified.summary()
                 );
             } catch (RuntimeException ex) {
+                if (ex instanceof LlmEvaluationBudget.BudgetExceededException) {
+                    throw ex;
+                }
                 return fallbackHandler.fallback(chunk, fallbackHandler.category(ex), ex);
             }
         }

@@ -420,6 +420,72 @@ class LlmPullRequestReviewerTest {
         }
     }
 
+    @Test
+    void evaluationBudgetBlocksStructuredOutputFallbackBeforeSecondHttpRequest() throws Exception {
+        ReviewPolicyProvider reviewPolicyProvider = org.mockito.Mockito.mock(ReviewPolicyProvider.class);
+        RuleBasedPullRequestReviewer ruleBasedReviewer = org.mockito.Mockito.mock(RuleBasedPullRequestReviewer.class);
+        AtomicInteger requests = new AtomicInteger();
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/chat/completions", exchange -> {
+            requests.incrementAndGet();
+            byte[] response = "{\"error\":\"response_format json_schema is unsupported\"}"
+                .getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            exchange.sendResponseHeaders(400, response.length);
+            exchange.getResponseBody().write(response);
+            exchange.close();
+        });
+        server.start();
+        try {
+            ReviewPolicySettings settings = llmSettings(
+                99,
+                700,
+                4,
+                450,
+                "http://127.0.0.1:" + server.getAddress().getPort()
+            );
+            ReviewTask task = new ReviewTask();
+            PullRequestDiff diff = new PullRequestDiff(
+                "repo-guard-demo",
+                "spring-boot-demo",
+                512,
+                List.of()
+            );
+            LlmReviewPromptBuilder promptBuilder = new LlmReviewPromptBuilder();
+            LlmReviewContext context = promptBuilder.buildContext(diff);
+            LlmEvaluationBudget probe = new LlmEvaluationBudget(100_000, BigDecimal.TEN);
+            probe.reserve(
+                promptBuilder.systemPrompt(),
+                promptBuilder.buildPrompt(task, diff, context),
+                settings.maxTokens(),
+                settings.inputTokenPricePerMillion(),
+                settings.outputTokenPricePerMillion()
+            );
+            LlmEvaluationBudget budget = new LlmEvaluationBudget(probe.accountedTokens(), BigDecimal.TEN);
+            when(reviewPolicyProvider.getSettings()).thenReturn(settings);
+            when(ruleBasedReviewer.review(any(PullRequestDiff.class))).thenReturn(
+                ReviewResult.completed("INFO", List.of())
+            );
+            when(ruleBasedReviewer.review(any(PullRequestDiff.class), any(ReviewDeadline.class))).thenReturn(
+                ReviewResult.completed("INFO", List.of())
+            );
+
+            assertThatThrownBy(() -> reviewer(reviewPolicyProvider, ruleBasedReviewer, null, null)
+                .reviewForEvaluation(
+                    task,
+                    diff,
+                    ReviewDeadline.unlimited(),
+                    "openai",
+                    "gpt-test",
+                    budget
+                ))
+                .isInstanceOf(LlmEvaluationBudget.BudgetExceededException.class);
+            assertThat(requests).hasValue(1);
+        } finally {
+            server.stop(0);
+        }
+    }
+
     @SuppressWarnings("unchecked")
     private static Map<String, Object> readRequestBody(java.io.InputStream body) throws java.io.IOException {
         return (Map<String, Object>) (Map<?, ?>) new ObjectMapper().readValue(body, Map.class);

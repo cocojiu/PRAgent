@@ -1,6 +1,7 @@
 package com.repoguard.agent.review.quality;
 
 import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.review.LlmEvaluationBudget;
 import com.repoguard.agent.review.LlmParseStatus;
 import com.repoguard.agent.review.LlmPullRequestReviewer;
 import com.repoguard.agent.review.PullRequestChangedFile;
@@ -37,6 +38,16 @@ public class LlmEvaluationPreviewRunner {
         String model,
         ReviewDeadline deadline
     ) {
+        return run(sample, provider, model, deadline, null);
+    }
+
+    public LlmEvaluationObservation run(
+        LlmEvaluationDatasetLoader.EvaluationCase sample,
+        String provider,
+        String model,
+        ReviewDeadline deadline,
+        LlmEvaluationBudget budget
+    ) {
         Objects.requireNonNull(sample, "sample");
         Objects.requireNonNull(deadline, "deadline");
         deadline.requireRemaining("evaluation_case");
@@ -68,7 +79,9 @@ public class LlmEvaluationPreviewRunner {
             sample.headSha(),
             files
         );
-        ReviewResult result = reviewer.reviewForEvaluation(task, diff, deadline, provider, model);
+        ReviewResult result = budget == null
+            ? reviewer.reviewForEvaluation(task, diff, deadline, provider, model)
+            : reviewer.reviewForEvaluation(task, diff, deadline, provider, model, budget);
         return observation(sample, result);
     }
 

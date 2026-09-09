@@ -7,7 +7,7 @@
     "externalDatabaseSupported": true,
     "publishedMigrationPolicy": "IMMUTABLE",
     "newInstallationStrategy": "VALIDATED_SCHEMA_SNAPSHOT_THEN_BASELINE",
-    "candidateVersion": 95,
+    "candidateVersion": 96,
     "requiredEvidence": [
       "empty database migration to the candidate version",
       "schema structure diff against the supported production shape",
@@ -16,9 +16,9 @@
     ],
     "decisionEvidence": [
       "application-prod.yml requires an externally supplied datasource",
-      "FlywayMigrationUpgradePathIntegrationTest verifies the V76 to V77, V77 to V78, V78 to V79, V79 to V80, V80 to V81, V81 to V82, V82 to V83, V83 to V84, V84 to V85, V85 to V86, V86 to V87, V87 to V88, V88 to V89, V89 to V90, V90 to V91 and V91 to V92 upgrade paths"
+      "FlywayMigrationUpgradePathIntegrationTest verifies the supported incremental upgrade path through V96"
     ],
-    "reconsiderWhen": "A V91 schema snapshot and all required rehearsal evidence are versioned together.",
+    "reconsiderWhen": "A V96 schema snapshot and all required rehearsal evidence are versioned together.",
     "rollbackStrategy": "restore a validated backup and apply a forward fix; never rewrite or delete a published migration"
   },
   "defaults": {
@@ -303,6 +303,18 @@
       "nMinusOneCompatible": true,
       "interruptedRecovery": "verify every affected tenant has exactly one active snapshot; preserve inactive source snapshots and forward-fix any tenant left without an active row",
       "rollbackStrategy": "activate a new OBSERVE snapshot copied from the preserved source snapshot; never reactivate or rewrite historical rows in place"
+    },
+    {
+      "version": 96,
+      "file": "V96__durable_llm_evaluation_runs.sql",
+      "phase": "EXPAND",
+      "estimatedRows": "one aggregate execution-state row per new LLM evaluation run; no backfill",
+      "lockType": "metadata-only new table creation",
+      "maxDurationSeconds": 300,
+      "maxDiskMegabytes": 256,
+      "nMinusOneCompatible": true,
+      "interruptedRecovery": "rerun the additive table migration after checking Flyway state; completed reports and legacy in-memory runs remain untouched",
+      "rollbackStrategy": "forward fix or restore the validated V95 predecessor backup; never delete a published migration"
     }
   ]
 }

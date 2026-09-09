@@ -1,6 +1,8 @@
 package com.repoguard.agent.dto;
 
+import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -17,7 +19,8 @@ public record LlmEvaluationRunRequest(
     @NotBlank @Size(max = 512) String dataDirectory,
     @NotNull @Min(1) @Max(8) Integer maxConcurrency,
     @NotNull @Min(1) @Max(1_000_000) Long maxTokens,
-    @NotNull @DecimalMin("0.0") BigDecimal maxCost,
+    @NotNull @DecimalMin("0.0") @DecimalMax("999999999999.99999999")
+    @Digits(integer = 12, fraction = 8) BigDecimal maxCost,
     @NotNull @Min(1) @Max(3_600) Integer maxDurationSeconds
 ) {
 }

@@ -6,8 +6,10 @@ import com.repoguard.agent.config.LlmEvaluationRunExecutorConfig;
 import com.repoguard.agent.dto.LlmEvaluationRunDto;
 import com.repoguard.agent.dto.LlmEvaluationRunRequest;
 import com.repoguard.agent.dto.LlmModelReleaseDto;
+import com.repoguard.agent.review.LlmEvaluationBudget;
 import com.repoguard.agent.review.ReviewDeadline;
 import com.repoguard.agent.tenancy.TenantContext;
+import jakarta.annotation.PostConstruct;
 import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -25,11 +27,9 @@ import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
@@ -39,26 +39,40 @@ import org.springframework.stereotype.Service;
 @Service
 public class LlmEvaluationRunService {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(LlmEvaluationRunService.class);
     private static final int MAX_RUN_KEY_LENGTH = 128;
     private static final int MAX_OPERATOR_LENGTH = 128;
+    private static final long MAX_RUN_TOKENS = 1_000_000L;
+    private static final BigDecimal MAX_RUN_COST = new BigDecimal("999999999999.99999999");
 
     private final LlmEvaluationDatasetLoader datasetLoader;
     private final LlmEvaluationPreviewRunner previewRunner;
     private final LlmModelReleaseService modelReleaseService;
+    private final LlmEvaluationRunStore store;
     private final ExecutorService executor;
-    private final ConcurrentMap<RunKey, RunState> byKey = new ConcurrentHashMap<>();
-    private final ConcurrentMap<String, RunState> byId = new ConcurrentHashMap<>();
+    private final ConcurrentMap<RunKey, LlmEvaluationRunState> byKey = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, LlmEvaluationRunState> byId = new ConcurrentHashMap<>();
 
     public LlmEvaluationRunService(
         LlmEvaluationDatasetLoader datasetLoader,
         LlmEvaluationPreviewRunner previewRunner,
         LlmModelReleaseService modelReleaseService,
+        LlmEvaluationRunStore store,
         @Qualifier(LlmEvaluationRunExecutorConfig.EVALUATION_RUN_EXECUTOR) ExecutorService executor
     ) {
         this.datasetLoader = datasetLoader;
         this.previewRunner = previewRunner;
         this.modelReleaseService = modelReleaseService;
+        this.store = store;
         this.executor = executor;
+    }
+
+    @PostConstruct
+    void recoverInterruptedRuns() {
+        int recovered = store.recoverInterrupted(LocalDateTime.now());
+        if (recovered > 0) {
+            LOGGER.warn("Recovered {} expired LLM evaluation runs after process restart", recovered);
+        }
     }
 
     public LlmEvaluationRunDto start(LlmEvaluationRunRequest request, String operator) {
@@ -68,8 +82,9 @@ public class LlmEvaluationRunService {
         String runKey = text(request.runKey(), "runKey", MAX_RUN_KEY_LENGTH);
         String directory = text(request.dataDirectory(), "dataDirectory", 512);
         if (request.maxConcurrency() == null || request.maxConcurrency() < 1 || request.maxConcurrency() > 8
-            || request.maxTokens() == null || request.maxTokens() < 1
+            || request.maxTokens() == null || request.maxTokens() < 1 || request.maxTokens() > MAX_RUN_TOKENS
             || request.maxCost() == null || request.maxCost().signum() < 0
+            || request.maxCost().compareTo(MAX_RUN_COST) > 0 || request.maxCost().scale() > 8
             || request.maxDurationSeconds() == null || request.maxDurationSeconds() < 1
             || request.maxDurationSeconds() > 3_600) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "评估运行预算参数无效");
@@ -77,11 +92,11 @@ public class LlmEvaluationRunService {
         Path validatedDirectory = datasetLoader.validateDirectory(directory);
         long tenantId = TenantContext.currentTenantIdOrDefault();
         RunKey key = new RunKey(tenantId, runKey);
-        RunState existing = byKey.get(key);
+        LlmEvaluationRunState existing = byKey.get(key);
         if (existing != null) {
             return existing.dto();
         }
-        RunState state = new RunState(
+        LlmEvaluationRunState state = new LlmEvaluationRunState(
             tenantId,
             UUID.randomUUID().toString(),
             runKey,
@@ -92,7 +107,11 @@ public class LlmEvaluationRunService {
             request.maxDurationSeconds(),
             normalizeOperator(operator)
         );
-        RunState raced = byKey.putIfAbsent(key, state);
+        LlmEvaluationRunStore.StoredRun stored = store.createOrGet(state.stored());
+        if (!state.runId.equals(stored.runId())) {
+            return stored.dto();
+        }
+        LlmEvaluationRunState raced = byKey.putIfAbsent(key, state);
         if (raced != null) {
             return raced.dto();
         }
@@ -101,18 +120,42 @@ public class LlmEvaluationRunService {
             state.future = executor.submit(() -> execute(state));
         } catch (RejectedExecutionException ex) {
             state.fail("RUNNER_UNAVAILABLE");
+            persist(state);
             throw new BusinessException(ErrorCode.TOO_MANY_REQUESTS, "评估运行队列已满");
         }
         return state.dto();
     }
 
     public LlmEvaluationRunDto get(String runId) {
-        return stateForTenant(runId).dto();
+        String normalizedRunId = normalizedRunId(runId);
+        long tenantId = TenantContext.currentTenantIdOrDefault();
+        LlmEvaluationRunState local = byId.get(normalizedRunId);
+        if (local != null && local.tenantId == tenantId) {
+            return local.dto();
+        }
+        LlmEvaluationRunStore.StoredRun stored = store.findByRunId(tenantId, normalizedRunId);
+        if (stored == null) {
+            throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "评估运行不存在");
+        }
+        return stored.dto();
     }
 
     public LlmEvaluationRunDto cancel(String runId) {
-        RunState state = stateForTenant(runId);
+        String normalizedRunId = normalizedRunId(runId);
+        long tenantId = TenantContext.currentTenantIdOrDefault();
+        LlmEvaluationRunState state = byId.get(normalizedRunId);
+        if (state == null || state.tenantId != tenantId) {
+            LlmEvaluationRunStore.StoredRun stored = store.findByRunId(tenantId, normalizedRunId);
+            if (stored == null) {
+                throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "评估运行不存在");
+            }
+            if (stored.terminal()) {
+                return stored.dto();
+            }
+            state = LlmEvaluationRunState.from(stored);
+        }
         state.requestCancel();
+        persist(state);
         Future<?> future = state.future;
         if (future != null) {
             future.cancel(true);
@@ -120,25 +163,24 @@ public class LlmEvaluationRunService {
         return state.dto();
     }
 
-    private RunState stateForTenant(String runId) {
+    private String normalizedRunId(String runId) {
         if (runId == null || runId.isBlank()) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "runId 不能为空");
         }
-        RunState state = byId.get(runId.trim());
-        if (state == null || state.tenantId != TenantContext.currentTenantIdOrDefault()) {
-            throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "评估运行不存在");
-        }
-        return state;
+        return runId.trim();
     }
 
-    private void execute(RunState state) {
+    private void execute(LlmEvaluationRunState state) {
         if (!state.markRunning()) {
             return;
         }
+        persist(state);
+        LlmEvaluationBudget budget = new LlmEvaluationBudget(state.maxTokens, state.maxCost);
         ExecutorService casesExecutor = null;
         try {
             LlmEvaluationDatasetLoader.Dataset dataset = datasetLoader.load(state.dataDirectory);
             state.totalSamples.set(dataset.cases().size());
+            persist(state);
             ReviewDeadline deadline = ReviewDeadline.startingNow(
                 Duration.ofSeconds(state.maxDurationSeconds)
             );
@@ -159,7 +201,8 @@ public class LlmEvaluationRunService {
                     sample,
                     dataset.version().provider(),
                     dataset.version().model(),
-                    deadline
+                    deadline,
+                    budget
                 )));
             }
 
@@ -175,10 +218,25 @@ public class LlmEvaluationRunService {
                 LlmEvaluationObservation observation = future.get(remaining, TimeUnit.NANOSECONDS);
                 observations.add(observation);
                 state.add(observation);
-                org.slf4j.LoggerFactory.getLogger(LlmEvaluationRunService.class).info("Evaluation sample completed runId={} caseId={} expectedFinding={} predictedFinding={} predictedSeverity={} ruleFindings={} llmFindings={} parseFailed={} transportFailed={} predictionKey={}", state.runId, observation.caseId(), observation.expectedFinding(), observation.predictedFinding(), observation.predictedSeverity(), observation.ruleFindingCount(), observation.llmFindingCount(), observation.parseFailed(), observation.transportFailed(), observation.predictionKey());
+                persist(state);
+                LOGGER.info(
+                    "Evaluation sample completed runId={} caseId={} expectedFinding={} predictedFinding={} "
+                        + "predictedSeverity={} ruleFindings={} llmFindings={} parseFailed={} "
+                        + "transportFailed={} predictionKey={}",
+                    state.runId,
+                    observation.caseId(),
+                    observation.expectedFinding(),
+                    observation.predictedFinding(),
+                    observation.predictedSeverity(),
+                    observation.ruleFindingCount(),
+                    observation.llmFindingCount(),
+                    observation.parseFailed(),
+                    observation.transportFailed(),
+                    observation.predictionKey()
+                );
                 if (state.totalTokens.get() > state.maxTokens
                     || state.totalCost.get().compareTo(state.maxCost) > 0) {
-                    throw new BudgetExceededException();
+                    throw new LlmEvaluationBudget.BudgetExceededException();
                 }
             }
             if (state.cancelled.get()) {
@@ -196,20 +254,31 @@ public class LlmEvaluationRunService {
                     state.operator
                 );
                 state.complete(report.id());
+                persist(state);
             }
         } catch (CancellationException ex) {
             state.cancelled.set(true);
             state.cancel();
-        } catch (TimeoutException | BudgetExceededException ex) {
+            state.accountBudget(budget);
+            persist(state);
+        } catch (TimeoutException | LlmEvaluationBudget.BudgetExceededException ex) {
+            state.accountBudget(budget);
             state.fail("BUDGET_EXHAUSTED");
+            persist(state);
         } catch (ExecutionException ex) {
+            state.accountBudget(budget);
             state.fail(classifyFailure(ex.getCause()));
+            persist(state);
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
             state.cancelled.set(true);
             state.cancel();
+            state.accountBudget(budget);
+            persist(state);
         } catch (RuntimeException ex) {
+            state.accountBudget(budget);
             state.fail(classifyFailure(ex));
+            persist(state);
         } finally {
             if (casesExecutor != null) {
                 casesExecutor.shutdownNow();
@@ -218,7 +287,7 @@ public class LlmEvaluationRunService {
     }
 
     private String classifyFailure(Throwable failure) {
-        if (failure instanceof BudgetExceededException || failure instanceof TimeoutException) {
+        if (failure instanceof LlmEvaluationBudget.BudgetExceededException || failure instanceof TimeoutException) {
             return "BUDGET_EXHAUSTED";
         }
         if (failure instanceof BusinessException) {
@@ -228,6 +297,10 @@ public class LlmEvaluationRunService {
             return "RUNNER_UNAVAILABLE";
         }
         return "INTERNAL_FAILURE";
+    }
+
+    private void persist(LlmEvaluationRunState state) {
+        store.save(state.stored());
     }
 
     private String text(String value, String field, int maxLength) {
@@ -249,126 +322,4 @@ public class LlmEvaluationRunService {
 
     private record RunKey(long tenantId, String runKey) { }
 
-    private static final class BudgetExceededException extends RuntimeException {
-        private static final long serialVersionUID = 1L;
-    }
-
-    private static final class RunState {
-        private final long tenantId;
-        private final String runId;
-        private final String runKey;
-        private final String dataDirectory;
-        private final int maxConcurrency;
-        private final long maxTokens;
-        private final BigDecimal maxCost;
-        private final int maxDurationSeconds;
-        private final String operator;
-        private final AtomicReference<String> status = new AtomicReference<>("QUEUED");
-        private final AtomicBoolean cancelled = new AtomicBoolean();
-        private final AtomicInteger totalSamples = new AtomicInteger();
-        private final AtomicInteger completedSamples = new AtomicInteger();
-        private final AtomicLong totalTokens = new AtomicLong();
-        private final AtomicReference<BigDecimal> totalCost = new AtomicReference<>(BigDecimal.ZERO);
-        private final AtomicReference<Long> reportId = new AtomicReference<>();
-        private final AtomicReference<String> failureCode = new AtomicReference<>();
-        private final LocalDateTime submittedAt = LocalDateTime.now();
-        private volatile LocalDateTime startedAt;
-        private volatile LocalDateTime finishedAt;
-        private volatile Future<?> future;
-
-        private RunState(
-            long tenantId,
-            String runId,
-            String runKey,
-            String dataDirectory,
-            int maxConcurrency,
-            long maxTokens,
-            BigDecimal maxCost,
-            int maxDurationSeconds,
-            String operator
-        ) {
-            this.tenantId = tenantId;
-            this.runId = runId;
-            this.runKey = runKey;
-            this.dataDirectory = dataDirectory;
-            this.maxConcurrency = maxConcurrency;
-            this.maxTokens = maxTokens;
-            this.maxCost = maxCost;
-            this.maxDurationSeconds = maxDurationSeconds;
-            this.operator = operator;
-        }
-
-        private boolean markRunning() {
-            boolean running = status.compareAndSet("QUEUED", "RUNNING");
-            if (running) {
-                startedAt = LocalDateTime.now();
-            }
-            return running;
-        }
-
-        private void add(LlmEvaluationObservation observation) {
-            completedSamples.incrementAndGet();
-            totalTokens.addAndGet(Math.max(0L, observation.totalTokens()));
-            totalCost.accumulateAndGet(
-                observation.estimatedCost() == null ? BigDecimal.ZERO : observation.estimatedCost().max(BigDecimal.ZERO),
-                BigDecimal::add
-            );
-        }
-
-        private synchronized void requestCancel() {
-            cancelled.set(true);
-            cancel();
-        }
-
-        private synchronized void cancel() {
-            String current = status.get();
-            if (!"COMPLETE".equals(current) && !"FAILED".equals(current)) {
-                status.set("CANCELLED");
-                finishedAt = LocalDateTime.now();
-                failureCode.set("CANCELLED");
-            }
-        }
-
-        private synchronized void complete(Long id) {
-            if (cancelled.get()) {
-                cancel();
-                return;
-            }
-            if (status.compareAndSet("RUNNING", "COMPLETE")) {
-                reportId.set(id);
-                finishedAt = LocalDateTime.now();
-            }
-        }
-
-        private synchronized void fail(String code) {
-            if (cancelled.get()) {
-                cancel();
-                return;
-            }
-            String current = status.get();
-            if (!"COMPLETE".equals(current) && !"CANCELLED".equals(current)) {
-                status.set("FAILED");
-                failureCode.set(code);
-                finishedAt = LocalDateTime.now();
-            }
-        }
-
-        private LlmEvaluationRunDto dto() {
-            int total = totalSamples.get();
-            return new LlmEvaluationRunDto(
-                runId,
-                runKey,
-                status.get(),
-                Math.max(0, total),
-                completedSamples.get(),
-                totalTokens.get(),
-                totalCost.get(),
-                reportId.get(),
-                failureCode.get(),
-                submittedAt,
-                startedAt,
-                finishedAt
-            );
-        }
-    }
 }
