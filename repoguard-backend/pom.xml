@@ -20,7 +20,7 @@
     <properties>
         <java.version>25</java.version>
         <mybatis-plus.version>3.5.17</mybatis-plus.version>
-        <netty.version>4.2.16.Final</netty.version>
+        <netty.version>4.2.17.Final</netty.version>
         <rabbit-amqp-client.version>5.33.1</rabbit-amqp-client.version>
         <resilience4j.version>2.4.0</resilience4j.version>
         <tomcat.version>11.0.25</tomcat.version>
