@@ -187,6 +187,27 @@ class LlmReviewPipelineTest {
     }
 
     @Test
+    void evaluationBudgetExhaustionIsNeverConvertedToRulesFallback() {
+        PullRequestDiff diff = diff();
+        when(ruleBasedReviewer.review(diff)).thenReturn(ReviewResult.completed("LOW", List.of()));
+        LlmReviewCaller caller = (settings, task, callDiff) -> {
+            throw new LlmEvaluationBudget.BudgetExceededException();
+        };
+
+        assertThatThrownBy(() -> pipeline(
+            ruleBasedReviewer,
+            promptBuilder,
+            reviewMerger,
+            qualityScorer,
+            costEstimator,
+            reviewResultParser,
+            fallbackReasonClassifier,
+            diffChunker
+        ).execute(context(diff, caller)))
+            .isInstanceOf(LlmEvaluationBudget.BudgetExceededException.class);
+    }
+
+    @Test
     void executeClassifiesExternalFailureAndLogsWarn() {
         PullRequestDiff diff = diff();
         when(ruleBasedReviewer.review(diff)).thenReturn(ReviewResult.completed("LOW", List.of()));

@@ -15,12 +15,16 @@ import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.dto.LlmModelReleaseDto;
 import com.repoguard.agent.dto.LlmEvaluationRunDto;
 import com.repoguard.agent.dto.LlmEvaluationRunRequest;
+import com.repoguard.agent.review.LlmEvaluationBudget;
 import com.repoguard.agent.review.ReviewDeadline;
 import com.repoguard.agent.tenancy.TenantContext;
 import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -34,6 +38,7 @@ class LlmEvaluationRunServiceTest {
     private final LlmEvaluationDatasetLoader datasetLoader = org.mockito.Mockito.mock(LlmEvaluationDatasetLoader.class);
     private final LlmEvaluationPreviewRunner previewRunner = org.mockito.Mockito.mock(LlmEvaluationPreviewRunner.class);
     private final LlmModelReleaseService modelReleaseService = org.mockito.Mockito.mock(LlmModelReleaseService.class);
+    private final FakeRunStore store = new FakeRunStore();
     private TenantContext.Scope tenantScope;
 
     @AfterEach
@@ -53,14 +58,16 @@ class LlmEvaluationRunServiceTest {
             when(datasetLoader.validateDirectory("dataset")).thenReturn(Path.of("C:/evaluation/dataset"));
             when(datasetLoader.load(anyString())).thenReturn(dataset);
             LlmEvaluationObservation observation = observation(3, new BigDecimal("0.02"));
-            when(previewRunner.run(any(), anyString(), anyString(), any(ReviewDeadline.class))).thenReturn(observation);
+            when(previewRunner.run(
+                any(), anyString(), anyString(), any(ReviewDeadline.class), any(LlmEvaluationBudget.class)
+            )).thenReturn(observation);
             LlmModelReleaseDto.EvaluationReportDto report = org.mockito.Mockito.mock(LlmModelReleaseDto.EvaluationReportDto.class);
             when(report.id()).thenReturn(77L);
             when(modelReleaseService.createEvaluationReport(any(), any(), any(), anyInt(), anyString()))
                 .thenReturn(report);
 
             LlmEvaluationRunService service = new LlmEvaluationRunService(
-                datasetLoader, previewRunner, modelReleaseService, executor
+                datasetLoader, previewRunner, modelReleaseService, store, executor
             );
             LlmEvaluationRunDto queued = service.start(request("run-1", 100, "1.00"), "operator");
             LlmEvaluationRunDto same = service.start(request("run-1", 100, "1.00"), "operator");
@@ -72,9 +79,82 @@ class LlmEvaluationRunServiceTest {
             assertThat(completed.totalTokens()).isEqualTo(3);
             assertThat(completed.totalCost()).isEqualByComparingTo("0.02");
             assertThat(completed.reportId()).isEqualTo(77L);
+            ExecutorService restartedExecutor = Executors.newSingleThreadExecutor();
+            try {
+                LlmEvaluationRunService restarted = new LlmEvaluationRunService(
+                    datasetLoader, previewRunner, modelReleaseService, store, restartedExecutor
+                );
+                assertThat(restarted.get(queued.runId())).isEqualTo(completed);
+            } finally {
+                restartedExecutor.shutdownNow();
+            }
             verify(modelReleaseService).createEvaluationReport(
                 eq(dataset.version()), eq(dataset.metadata()), any(), anyInt(), anyString()
             );
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void startupRecoveryMarksPersistedInFlightRunsAsInterrupted() {
+        tenantScope = TenantContext.withTenant(42L);
+        LocalDateTime submittedAt = LocalDateTime.now().minusMinutes(2);
+        store.createOrGet(new LlmEvaluationRunStore.StoredRun(
+            42L,
+            "persisted-run",
+            "persisted-key",
+            "RUNNING",
+            "C:/evaluation/dataset",
+            1,
+            100L,
+            BigDecimal.ONE,
+            60,
+            "operator",
+            20,
+            3,
+            30L,
+            new BigDecimal("0.01"),
+            null,
+            null,
+            submittedAt,
+            submittedAt.plusSeconds(1),
+            null
+        ));
+        store.createOrGet(new LlmEvaluationRunStore.StoredRun(
+            42L,
+            "active-run",
+            "active-key",
+            "RUNNING",
+            "C:/evaluation/dataset",
+            1,
+            100L,
+            BigDecimal.ONE,
+            60,
+            "operator",
+            20,
+            3,
+            30L,
+            new BigDecimal("0.01"),
+            null,
+            null,
+            LocalDateTime.now(),
+            LocalDateTime.now(),
+            null
+        ));
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            LlmEvaluationRunService service = new LlmEvaluationRunService(
+                datasetLoader, previewRunner, modelReleaseService, store, executor
+            );
+            service.recoverInterruptedRuns();
+
+            LlmEvaluationRunDto recovered = service.get("persisted-run");
+            assertThat(recovered.status()).isEqualTo("FAILED");
+            assertThat(recovered.failureCode()).isEqualTo("RUN_INTERRUPTED");
+            assertThat(recovered.completedSamples()).isEqualTo(3);
+            assertThat(recovered.finishedAt()).isNotNull();
+            assertThat(service.get("active-run").status()).isEqualTo("RUNNING");
         } finally {
             executor.shutdownNow();
         }
@@ -90,12 +170,14 @@ class LlmEvaluationRunServiceTest {
                 .thenThrow(new BusinessException(ErrorCode.BAD_REQUEST, "invalid manifest"))
                 .thenReturn(dataset(sample()));
             LlmEvaluationRunService service = new LlmEvaluationRunService(
-                datasetLoader, previewRunner, modelReleaseService, executor
+                datasetLoader, previewRunner, modelReleaseService, store, executor
             );
             LlmEvaluationRunDto invalid = service.start(request("invalid", 100, "1.00"), "operator");
             assertThat(await(service, invalid.runId(), "FAILED").failureCode()).isEqualTo("DATASET_INVALID");
 
-            when(previewRunner.run(any(), anyString(), anyString(), any(ReviewDeadline.class)))
+            when(previewRunner.run(
+                any(), anyString(), anyString(), any(ReviewDeadline.class), any(LlmEvaluationBudget.class)
+            ))
                 .thenReturn(observation(10, new BigDecimal("0.02")));
             LlmEvaluationRunDto budget = service.start(request("budget", 1, "1.00"), "operator");
             assertThat(await(service, budget.runId(), "FAILED").failureCode()).isEqualTo("BUDGET_EXHAUSTED");
@@ -114,7 +196,9 @@ class LlmEvaluationRunServiceTest {
         try {
             when(datasetLoader.validateDirectory(anyString())).thenReturn(Path.of("C:/evaluation/dataset"));
             when(datasetLoader.load(anyString())).thenReturn(dataset(sample()));
-            when(previewRunner.run(any(), anyString(), anyString(), any(ReviewDeadline.class))).thenAnswer(invocation -> {
+            when(previewRunner.run(
+                any(), anyString(), anyString(), any(ReviewDeadline.class), any(LlmEvaluationBudget.class)
+            )).thenAnswer(invocation -> {
                 entered.countDown();
                 try {
                     release.await(2, TimeUnit.SECONDS);
@@ -125,7 +209,7 @@ class LlmEvaluationRunServiceTest {
                 return observation(1, BigDecimal.ZERO);
             });
             LlmEvaluationRunService service = new LlmEvaluationRunService(
-                datasetLoader, previewRunner, modelReleaseService, executor
+                datasetLoader, previewRunner, modelReleaseService, store, executor
             );
             LlmEvaluationRunDto started = service.start(request("cancel", 100, "1.00"), "operator");
             assertThat(entered.await(2, TimeUnit.SECONDS)).isTrue();
@@ -152,7 +236,7 @@ class LlmEvaluationRunServiceTest {
         tenantScope = TenantContext.withTenant(42L);
         ExecutorService executor = org.mockito.Mockito.mock(ExecutorService.class);
         LlmEvaluationRunService service = new LlmEvaluationRunService(
-            datasetLoader, previewRunner, modelReleaseService, executor
+            datasetLoader, previewRunner, modelReleaseService, store, executor
         );
         assertThatThrownBy(() -> service.start(null, "operator"))
             .isInstanceOf(BusinessException.class)
@@ -209,6 +293,70 @@ class LlmEvaluationRunServiceTest {
             "case-1", "jvm", false, "NONE", false, "NONE", true, "", true,
             10, tokens, cost
         );
+    }
+
+    private static final class FakeRunStore implements LlmEvaluationRunStore {
+        private final Map<String, StoredRun> runs = new ConcurrentHashMap<>();
+
+        @Override
+        public StoredRun createOrGet(StoredRun candidate) {
+            return runs.computeIfAbsent(key(candidate.tenantId(), candidate.runKey()), ignored -> candidate);
+        }
+
+        @Override
+        public StoredRun findByRunId(long tenantId, String runId) {
+            return runs.values().stream()
+                .filter(run -> run.tenantId() == tenantId && run.runId().equals(runId))
+                .findFirst()
+                .orElse(null);
+        }
+
+        @Override
+        public void save(StoredRun run) {
+            runs.put(key(run.tenantId(), run.runKey()), run);
+        }
+
+        @Override
+        public int recoverInterrupted(LocalDateTime recoveredAt) {
+            int recovered = 0;
+            for (Map.Entry<String, StoredRun> entry : runs.entrySet()) {
+                StoredRun run = entry.getValue();
+                if (!"QUEUED".equals(run.status()) && !"RUNNING".equals(run.status())) {
+                    continue;
+                }
+                LocalDateTime executionStart = run.startedAt() == null ? run.submittedAt() : run.startedAt();
+                if (executionStart.plusSeconds(run.maxDurationSeconds()).isAfter(recoveredAt)) {
+                    continue;
+                }
+                entry.setValue(new StoredRun(
+                    run.tenantId(),
+                    run.runId(),
+                    run.runKey(),
+                    "FAILED",
+                    run.dataDirectory(),
+                    run.maxConcurrency(),
+                    run.maxTokens(),
+                    run.maxCost(),
+                    run.maxDurationSeconds(),
+                    run.operator(),
+                    run.totalSamples(),
+                    run.completedSamples(),
+                    run.totalTokens(),
+                    run.totalCost(),
+                    run.reportId(),
+                    "RUN_INTERRUPTED",
+                    run.submittedAt(),
+                    run.startedAt(),
+                    recoveredAt
+                ));
+                recovered++;
+            }
+            return recovered;
+        }
+
+        private String key(long tenantId, String runKey) {
+            return tenantId + ":" + runKey;
+        }
     }
 
 }

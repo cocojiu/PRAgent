@@ -128,6 +128,9 @@ class LlmReviewPipeline {
             }
             return applyStrategyEnforcement(context, state.result());
         } catch (RuntimeException ex) {
+            if (ex instanceof LlmEvaluationBudget.BudgetExceededException) {
+                throw ex;
+            }
             if (context.deadline() != null && context.deadline().exhausted()) {
                 return applyStrategyEnforcement(
                     context,

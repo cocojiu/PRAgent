@@ -136,6 +136,9 @@ class LlmHighRiskVerificationService {
                     rejected++;
                 }
             } catch (RuntimeException ex) {
+                if (ex instanceof LlmEvaluationBudget.BudgetExceededException) {
+                    throw ex;
+                }
                 LOGGER.warn(
                     "LLM high-risk verification unavailable operation=llm_high_risk_verification "
                         + "result=degraded file={} line={} exceptionType={}",

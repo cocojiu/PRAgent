@@ -34,6 +34,16 @@ public class LlmChatCompletionResponseExtractor {
         );
     }
 
+    LlmCallResult extractUsage(JsonNode root) {
+        JsonNode usage = root == null ? null : root.path("usage");
+        return new LlmCallResult(
+            "",
+            usage == null ? null : intValue(usage.path("prompt_tokens")),
+            usage == null ? null : intValue(usage.path("completion_tokens")),
+            usage == null ? null : intValue(usage.path("total_tokens"))
+        );
+    }
+
     public LlmChatCompletionResponse extract(String response) throws java.io.IOException {
         return extract(objectMapper.readTree(response == null ? "" : response));
     }
