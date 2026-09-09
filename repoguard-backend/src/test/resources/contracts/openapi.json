@@ -11748,7 +11748,8 @@
           },
           "maxCost" : {
             "type" : "number",
-            "minimum" : 0.0
+            "minimum" : 0.0,
+            "maximum" : 999999999999.99999999
           },
           "maxDurationSeconds" : {
             "type" : "integer",
