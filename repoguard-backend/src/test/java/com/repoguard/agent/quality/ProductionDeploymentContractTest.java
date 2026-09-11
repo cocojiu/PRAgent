@@ -22,6 +22,14 @@ import org.yaml.snakeyaml.Yaml;
 class ProductionDeploymentContractTest {
 
     @Test
+    void evaluationRuntimeRevisionUsesThePublishedImageCommit() throws IOException {
+        String dockerfile = read(repositoryRoot().resolve("repoguard-backend/Dockerfile"));
+        String workflow = read(repositoryRoot().resolve(".github/workflows/release-images.yml"));
+        assertThat(dockerfile).contains("ARG OCI_REVISION", "ENV REPOGUARD_RUNTIME_REVISION=${OCI_REVISION}");
+        assertThat(workflow).contains("OCI_REVISION=${{ github.sha }}");
+    }
+
+    @Test
     void requiredBindSourcesUseFailClosedLongSyntax() throws IOException {
         Map<String, Object> services = services();
 
@@ -412,7 +420,7 @@ class ProductionDeploymentContractTest {
     private Path repositoryRoot() {
         Path current = Path.of("").toAbsolutePath();
         while (current != null) {
-            if (Files.isDirectory(current.resolve(".git"))
+            if (Files.exists(current.resolve(".git"))
                 && Files.isDirectory(current.resolve("repoguard-backend"))) {
                 return current;
             }

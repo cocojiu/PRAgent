@@ -28,6 +28,8 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -50,6 +52,7 @@ public class LlmEvaluationRunService {
     private final LlmModelReleaseService modelReleaseService;
     private final LlmEvaluationRunStore store;
     private final ExecutorService executor;
+    private final String runtimeRevision;
     private final ConcurrentMap<RunKey, LlmEvaluationRunState> byKey = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, LlmEvaluationRunState> byId = new ConcurrentHashMap<>();
 
@@ -60,11 +63,25 @@ public class LlmEvaluationRunService {
         LlmEvaluationRunStore store,
         @Qualifier(LlmEvaluationRunExecutorConfig.EVALUATION_RUN_EXECUTOR) ExecutorService executor
     ) {
+        this(datasetLoader, previewRunner, modelReleaseService, store, executor, "unknown");
+    }
+
+    @Autowired
+    public LlmEvaluationRunService(
+        LlmEvaluationDatasetLoader datasetLoader,
+        LlmEvaluationPreviewRunner previewRunner,
+        LlmModelReleaseService modelReleaseService,
+        LlmEvaluationRunStore store,
+        @Qualifier(LlmEvaluationRunExecutorConfig.EVALUATION_RUN_EXECUTOR) ExecutorService executor,
+        @Value("${REPOGUARD_RUNTIME_REVISION:unknown}") String runtimeRevision
+    ) {
         this.datasetLoader = datasetLoader;
         this.previewRunner = previewRunner;
         this.modelReleaseService = modelReleaseService;
         this.store = store;
         this.executor = executor;
+        this.runtimeRevision = runtimeRevision != null && runtimeRevision.matches("[0-9a-fA-F]{40}")
+            ? runtimeRevision.toLowerCase(java.util.Locale.ROOT) : "unknown";
     }
 
     @PostConstruct
@@ -170,6 +187,14 @@ public class LlmEvaluationRunService {
         return runId.trim();
     }
 
+    LlmEvaluationVersion runtimeVersion(LlmEvaluationVersion declared) {
+        return new LlmEvaluationVersion(
+            declared.provider(), declared.model(), declared.promptVersion(), declared.contextVersion(),
+            declared.schemaVersion(), declared.chunkPolicyVersion(), declared.temperature(),
+            declared.ruleVersion(), runtimeRevision, declared.verifierVersion(), declared.aggregationVersion()
+        );
+    }
+
     private void execute(LlmEvaluationRunState state) {
         if (!state.markRunning()) {
             return;
@@ -216,13 +241,14 @@ public class LlmEvaluationRunService {
                     throw new TimeoutException("evaluation deadline exhausted");
                 }
                 LlmEvaluationObservation observation = future.get(remaining, TimeUnit.NANOSECONDS);
+                budget.requireAvailable();
                 observations.add(observation);
                 state.add(observation);
                 persist(state);
                 LOGGER.info(
                     "Evaluation sample completed runId={} caseId={} expectedFinding={} predictedFinding={} "
                         + "predictedSeverity={} ruleFindings={} llmFindings={} parseFailed={} "
-                        + "transportFailed={} predictionKey={}",
+                        + "transportFailed={} predictionKey={} failureCategories={}",
                     state.runId,
                     observation.caseId(),
                     observation.expectedFinding(),
@@ -232,7 +258,8 @@ public class LlmEvaluationRunService {
                     observation.llmFindingCount(),
                     observation.parseFailed(),
                     observation.transportFailed(),
-                    observation.predictionKey()
+                    observation.predictionKey(),
+                    observation.failureCategories()
                 );
                 if (state.totalTokens.get() > state.maxTokens
                     || state.totalCost.get().compareTo(state.maxCost) > 0) {
@@ -247,7 +274,7 @@ public class LlmEvaluationRunService {
                     throw new CancellationException();
                 }
                 LlmModelReleaseDto.EvaluationReportDto report = modelReleaseService.createEvaluationReport(
-                    dataset.version(),
+                    runtimeVersion(dataset.version()),
                     dataset.metadata(),
                     observations,
                     dataset.minimumSamples(),

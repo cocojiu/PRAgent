@@ -327,7 +327,7 @@ class LlmReviewPipeline {
                 parsed.llmTotalTokens(),
                 parsed.llmEstimatedCost(),
                 ReviewExecutionProvenance.from(settings.strategyRelease())
-            );
+            ).withStatusDetail(parsed.statusDetail());
             if (ruleReview.statusDetail() != null
                 && ruleReview.statusDetail().contains(ReviewBudgetExceededException.CATEGORY)) {
                 completed = completed.withIncompleteInput(

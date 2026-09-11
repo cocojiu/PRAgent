@@ -11,6 +11,8 @@ FROM ${JAVA_IMAGE}
 ARG OCI_VERSION
 ARG OCI_REVISION
 
+ENV REPOGUARD_RUNTIME_REVISION=${OCI_REVISION}
+
 LABEL org.opencontainers.image.version="${OCI_VERSION}" \
       org.opencontainers.image.revision="${OCI_REVISION}"
 

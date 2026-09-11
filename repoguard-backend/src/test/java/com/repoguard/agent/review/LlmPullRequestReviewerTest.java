@@ -612,6 +612,7 @@ class LlmPullRequestReviewerTest {
 
         assertThat(result.llmStatus()).isEqualTo("COMPLETED");
         assertThat(result.llmParseStatus()).isEqualTo("partial_fallback");
+        assertThat(result.statusDetail()).contains("llmFailureCategories=");
         assertThat(result.riskLevel()).isEqualTo("MEDIUM");
         assertThat(result.findings()).extracting(ReviewFindingResult::source).contains("LLM", "RULE");
         assertThat(result.llmPromptSummary()).contains("chunked=true", "failedChunks=1", "rulesApplied=true");
