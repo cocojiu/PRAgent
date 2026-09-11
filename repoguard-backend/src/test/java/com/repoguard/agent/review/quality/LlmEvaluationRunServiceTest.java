@@ -67,7 +67,8 @@ class LlmEvaluationRunServiceTest {
                 .thenReturn(report);
 
             LlmEvaluationRunService service = new LlmEvaluationRunService(
-                datasetLoader, previewRunner, modelReleaseService, store, executor
+                datasetLoader, previewRunner, modelReleaseService, store, executor,
+                "15afe07737b5f90515cef13b8b37e6ac332c182f"
             );
             LlmEvaluationRunDto queued = service.start(request("run-1", 100, "1.00"), "operator");
             LlmEvaluationRunDto same = service.start(request("run-1", 100, "1.00"), "operator");
@@ -89,8 +90,58 @@ class LlmEvaluationRunServiceTest {
                 restartedExecutor.shutdownNow();
             }
             verify(modelReleaseService).createEvaluationReport(
-                eq(dataset.version()), eq(dataset.metadata()), any(), anyInt(), anyString()
+                eq(service.runtimeVersion(dataset.version())), eq(dataset.metadata()), any(), anyInt(), anyString()
             );
+            assertThat(service.runtimeVersion(dataset.version()).codeRevision())
+                .isEqualTo("15afe07737b5f90515cef13b8b37e6ac332c182f");
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void missingRuntimeRevisionDoesNotBorrowTheDatasetRevision() {
+        LlmEvaluationRunService service = new LlmEvaluationRunService(
+            datasetLoader, previewRunner, modelReleaseService, store, null
+        );
+        LlmEvaluationVersion version = service.runtimeVersion(dataset(sample()).version());
+        assertThat(version.codeRevision()).isEqualTo("unknown");
+        assertThat(version.reproducible()).isFalse();
+    }
+
+    @Test
+    void invalidRuntimeRevisionCannotBeUsedAsReleaseEvidence() {
+        LlmEvaluationRunService service = new LlmEvaluationRunService(
+            datasetLoader, previewRunner, modelReleaseService, store, null, "main-latest"
+        );
+        assertThat(service.runtimeVersion(dataset(sample()).version()).codeRevision()).isEqualTo("unknown");
+    }
+
+    @Test
+    void swallowedBudgetFailureCannotProduceACompletedReport() throws Exception {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            when(datasetLoader.validateDirectory("dataset")).thenReturn(Path.of("C:/evaluation/dataset"));
+            when(datasetLoader.load(anyString())).thenReturn(dataset(sample()));
+            when(previewRunner.run(any(), anyString(), anyString(), any(ReviewDeadline.class),
+                any(LlmEvaluationBudget.class))).thenAnswer(invocation -> {
+                    LlmEvaluationBudget budget = invocation.getArgument(4);
+                    try {
+                        budget.reserve("system", "user", 2000, BigDecimal.ZERO, BigDecimal.ZERO);
+                    } catch (LlmEvaluationBudget.BudgetExceededException ignored) {
+                        // Reproduce an external-call wrapper returning a rule fallback.
+                    }
+                    return observation(0, BigDecimal.ZERO);
+                });
+            LlmEvaluationRunService service = new LlmEvaluationRunService(
+                datasetLoader, previewRunner, modelReleaseService, store, executor
+            );
+            LlmEvaluationRunDto run = service.start(request("swallowed-budget", 100, "1.00"), "operator");
+            LlmEvaluationRunDto failed = await(service, run.runId(), "FAILED");
+            assertThat(failed.failureCode()).isEqualTo("BUDGET_EXHAUSTED");
+            assertThat(failed.reportId()).isNull();
+            assertThat(failed.completedSamples()).isZero();
+            verify(modelReleaseService, never()).createEvaluationReport(any(), any(), any(), anyInt(), anyString());
         } finally {
             executor.shutdownNow();
         }

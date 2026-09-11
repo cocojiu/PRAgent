@@ -22,6 +22,10 @@ class LlmEvaluationBudgetTest {
 
         assertThat(budget.accountedTokens()).isZero();
         assertThat(budget.accountedCost()).isZero();
+        assertThatThrownBy(budget::requireAvailable)
+            .isInstanceOf(LlmEvaluationBudget.BudgetExceededException.class);
+        assertThatThrownBy(() -> budget.reserve("", "", 0, BigDecimal.ZERO, BigDecimal.ZERO))
+            .isInstanceOf(LlmEvaluationBudget.BudgetExceededException.class);
     }
 
     @Test

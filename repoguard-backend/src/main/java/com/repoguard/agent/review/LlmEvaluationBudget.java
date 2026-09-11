@@ -23,6 +23,7 @@ public final class LlmEvaluationBudget {
     private final long maxTokens;
     private final BigDecimal maxCost;
     private long accountedTokens;
+    private boolean exhausted;
     private BigDecimal accountedCost = BigDecimal.ZERO;
 
     public LlmEvaluationBudget(long maxTokens, BigDecimal maxCost) {
@@ -40,6 +41,7 @@ public final class LlmEvaluationBudget {
         BigDecimal inputPricePerMillion,
         BigDecimal outputPricePerMillion
     ) {
+        requireAvailable();
         long inputUpperBound = saturatedAdd(
             utf8Length(systemPrompt),
             utf8Length(userPrompt),
@@ -56,6 +58,7 @@ public final class LlmEvaluationBudget {
         long nextTokens = saturatedAdd(accountedTokens, tokenUpperBound);
         BigDecimal nextCost = accountedCost.add(costUpperBound);
         if (nextTokens > maxTokens || nextCost.compareTo(maxCost) > 0) {
+            exhausted = true;
             throw new BudgetExceededException();
         }
         accountedTokens = nextTokens;
@@ -65,6 +68,13 @@ public final class LlmEvaluationBudget {
 
     public synchronized long accountedTokens() {
         return accountedTokens;
+    }
+
+    /** Remains exhausted even if a downstream fallback swallowed the original exception. */
+    public synchronized void requireAvailable() {
+        if (exhausted) {
+            throw new BudgetExceededException();
+        }
     }
 
     public synchronized BigDecimal accountedCost() {
@@ -115,6 +125,7 @@ public final class LlmEvaluationBudget {
         accountedTokens = Math.max(0L, saturatedAdd(accountedTokens - reservedTokens, actualTokens));
         accountedCost = accountedCost.subtract(reservedCost).add(actualCost).max(BigDecimal.ZERO);
         if (accountedTokens > maxTokens || accountedCost.compareTo(maxCost) > 0) {
+            exhausted = true;
             throw new BudgetExceededException();
         }
     }
