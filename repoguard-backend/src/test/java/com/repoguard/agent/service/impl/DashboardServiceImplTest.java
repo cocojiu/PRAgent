@@ -451,7 +451,7 @@ class DashboardServiceImplTest {
         assertThat(qwen.taskCount()).isEqualTo(3);
         assertThat(qwen.averageDuration()).isEqualTo("1.7 s");
         assertThat(qwen.averageTokens()).isEqualTo("1200");
-        assertThat(qwen.averageCost()).isEqualTo("$0.000123");
+        assertThat(qwen.averageCost()).isEqualTo("¥0.000123（估算）");
         assertThat(qwen.parseSuccessRate()).isEqualTo("33.3%");
         assertThat(qwen.fallbackRate()).isEqualTo("33.3%");
         assertThat(qwen.partialFallbackRate()).isEqualTo("33.3%");

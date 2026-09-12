@@ -38,7 +38,7 @@ class DashboardLlmQualityStatsAssemblerTest {
             20L,
             "1.3 s",
             "1234",
-            "$0.123456",
+            "¥0.123456（估算）",
             "95.0%",
             "10.0%",
             "5.0%",
@@ -78,7 +78,7 @@ class DashboardLlmQualityStatsAssemblerTest {
         assertThat(assembler.assembleByModel(null)).isEmpty();
         assertThat(assembler.assembleByRepository(null)).isEmpty();
         assertThat(assembler.assembleByModel(List.of(modelStat)).get(0))
-            .isEqualTo(new LlmQualityByModelDto(null, 0L, "\u2014", "0", "$0.000000", "0.0%", "0.0%", "0.0%", "0.0%", "0.0%"));
+            .isEqualTo(new LlmQualityByModelDto(null, 0L, "\u2014", "0", "未计价或无可确认费用", "0.0%", "0.0%", "0.0%", "0.0%", "0.0%"));
         assertThat(assembler.assembleByRepository(List.of(repositoryStat)).get(0))
             .isEqualTo(new LlmQualityByRepositoryDto(null, 0L, "0.0%", "0.0%", "0.0%", "0.0%"));
     }
