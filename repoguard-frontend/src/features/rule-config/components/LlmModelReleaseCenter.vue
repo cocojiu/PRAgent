@@ -155,7 +155,9 @@
         <el-table-column prop="taskCount" label="任务数" width="90" />
         <el-table-column prop="averageDuration" label="平均耗时" width="110" />
         <el-table-column prop="averageTokens" label="平均 Token" width="120" />
-        <el-table-column prop="averageCost" label="平均费用" width="110" />
+        <el-table-column prop="averageCost" label="平均费用（历史原值）" width="190">
+          <template #default="{ row }">{{ Number(row.averageCost) > 0 ? row.averageCost : "未计价或无可确认费用" }}</template>
+        </el-table-column>
         <el-table-column prop="parseSuccessRate" label="解析成功" width="110" />
         <el-table-column prop="fallbackRate" label="Fallback" width="100" />
         <template #empty><el-empty description="暂无趋势数据" /></template>
@@ -350,7 +352,7 @@ const auditActionText = (action: string) => ({
 const tokenText = (value: number) => value < 0 ? "未设置" : value.toLocaleString();
 const budgetText = (budget: LlmModelBudget) => budget.tokenBudget > 0
   ? `${tokenText(budget.tokenUsed)} / ${tokenText(budget.tokenBudget)}`
-  : budget.costBudget > 0 ? `$${Number(budget.costUsed).toFixed(2)} / $${Number(budget.costBudget).toFixed(2)}` : "未设置";
+  : budget.costBudget > 0 ? `¥${Number(budget.costUsed).toFixed(6)} / ¥${Number(budget.costBudget).toFixed(6)}（估算预算）` : "未设置";
 
 const downloadAudits = async (format: "json" | "csv") => {
   const exported = await exportAudits(format);

@@ -106,4 +106,34 @@ class LlmEvaluationBudgetTest {
             new BigDecimal("2.00")
         )).isInstanceOf(LlmEvaluationBudget.BudgetExceededException.class);
     }
+
+    @Test
+    void incompleteUsageKeepsConservativeReservation() {
+        for (LlmCallResult usage : new LlmCallResult[] {
+            new LlmCallResult("{}", null, null, 125),
+            new LlmCallResult("{}", 100, null, 125),
+            new LlmCallResult("{}", null, 25, 125),
+            new LlmCallResult("{}", 100, 25, 150),
+            new LlmCallResult("{}", -1, 25, 25)
+        }) {
+            LlmEvaluationBudget budget = new LlmEvaluationBudget(10000, BigDecimal.TEN);
+            var reservation = budget.reserve("system", "user", 2000, new BigDecimal("2"), new BigDecimal("8"));
+            long tokens = budget.accountedTokens();
+            BigDecimal cost = budget.accountedCost();
+            reservation.complete(usage, new BigDecimal("2"), new BigDecimal("8"));
+            assertThat(budget.accountedTokens()).isEqualTo(tokens);
+            assertThat(budget.accountedCost()).isEqualByComparingTo(cost);
+        }
+    }
+
+    @Test
+    void reportedExcessWithoutSplitCanExhaustCostBudget() {
+        LlmEvaluationBudget budget = new LlmEvaluationBudget(100000, new BigDecimal("0.03"));
+        var reservation = budget.reserve("", "", 1000, new BigDecimal("2"), new BigDecimal("8"));
+        assertThatThrownBy(() -> reservation.complete(
+            new LlmCallResult("{}", null, null, 10000), new BigDecimal("2"), new BigDecimal("8")
+        )).isInstanceOf(LlmEvaluationBudget.BudgetExceededException.class);
+        assertThat(budget.accountedCost()).isEqualByComparingTo("0.08");
+        assertThatThrownBy(budget::requireAvailable).isInstanceOf(LlmEvaluationBudget.BudgetExceededException.class);
+    }
 }

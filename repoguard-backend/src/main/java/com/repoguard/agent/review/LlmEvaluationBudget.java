@@ -122,6 +122,17 @@ public final class LlmEvaluationBudget {
             inputPricePerMillion,
             outputPricePerMillion
         );
+        if (promptTokens == null || completionTokens == null
+            || promptTokens < 0 || completionTokens < 0
+            || reportedTotal > saturatedAdd(actualPromptTokens, actualCompletionTokens)) {
+            // A total without a complete split cannot establish a billed amount. Keep the
+            // reservation and price any reported excess at the more expensive token rate.
+            BigDecimal worstCase = BigDecimal.valueOf(actualTokens)
+                .multiply(nonNegative(inputPricePerMillion).max(nonNegative(outputPricePerMillion)))
+                .divide(ONE_MILLION, MathContext.DECIMAL128);
+            actualCost = reservedCost.max(worstCase);
+            actualTokens = Math.max(reservedTokens, actualTokens);
+        }
         accountedTokens = Math.max(0L, saturatedAdd(accountedTokens - reservedTokens, actualTokens));
         accountedCost = accountedCost.subtract(reservedCost).add(actualCost).max(BigDecimal.ZERO);
         if (accountedTokens > maxTokens || accountedCost.compareTo(maxCost) > 0) {

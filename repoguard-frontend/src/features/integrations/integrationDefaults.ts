@@ -85,8 +85,8 @@ export const defaultIntegrationItems: IntegrationConfig[] = [
       { label: "Chunk Line Threshold", value: "700", type: "text" },
       { label: "Chunk Max Files", value: "4", type: "text" },
       { label: "Chunk Max Lines", value: "450", type: "text" },
-      { label: "Input $/1M Tokens", value: "0", type: "text" },
-      { label: "Output $/1M Tokens", value: "0", type: "text" }
+      { label: "Input CNY/1M Tokens", value: "0", type: "text" },
+      { label: "Output CNY/1M Tokens", value: "0", type: "text" }
     ]
   }
 ];

@@ -102,8 +102,8 @@ export const buildReviewPolicyIntegrationPatch = (config: ReviewPolicyConfig): I
     { label: "Chunk Line Threshold", value: String(config.chunkLineThreshold ?? 700), type: "text" },
     { label: "Chunk Max Files", value: String(config.chunkMaxFiles ?? 4), type: "text" },
     { label: "Chunk Max Lines", value: String(config.chunkMaxLines ?? 450), type: "text" },
-    { label: "Input $/1M Tokens", value: String(config.inputTokenPricePerMillion ?? 0), type: "text" },
-    { label: "Output $/1M Tokens", value: String(config.outputTokenPricePerMillion ?? 0), type: "text" }
+    { label: "Input CNY/1M Tokens", value: String(config.inputTokenPricePerMillion ?? 0), type: "text" },
+    { label: "Output CNY/1M Tokens", value: String(config.outputTokenPricePerMillion ?? 0), type: "text" }
   ]
 });
 

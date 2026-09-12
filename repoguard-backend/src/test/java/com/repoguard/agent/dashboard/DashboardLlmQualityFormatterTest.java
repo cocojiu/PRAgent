@@ -27,10 +27,10 @@ class DashboardLlmQualityFormatterTest {
 
     @Test
     void formatsAverageCost() {
-        assertThat(formatter.averageCost(null)).isEqualTo("$0.000000");
-        assertThat(formatter.averageCost(BigDecimal.ZERO)).isEqualTo("$0.000000");
-        assertThat(formatter.averageCost(new BigDecimal("0.0001234"))).isEqualTo("$0.000123");
-        assertThat(formatter.averageCost(new BigDecimal("0.0001235"))).isEqualTo("$0.000124");
+        assertThat(formatter.averageCost(null)).isEqualTo("未计价或无可确认费用");
+        assertThat(formatter.averageCost(BigDecimal.ZERO)).isEqualTo("未计价或无可确认费用");
+        assertThat(formatter.averageCost(new BigDecimal("0.0001234"))).isEqualTo("¥0.000123（估算）");
+        assertThat(formatter.averageCost(new BigDecimal("0.0001235"))).isEqualTo("¥0.000124（估算）");
     }
 
     @Test

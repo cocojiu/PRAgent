@@ -31,9 +31,9 @@ public class DashboardLlmQualityFormatter {
 
     public String averageCost(BigDecimal averageCost) {
         if (averageCost == null || averageCost.compareTo(BigDecimal.ZERO) <= 0) {
-            return "$0.000000";
+            return "未计价或无可确认费用";
         }
-        return "$" + averageCost.setScale(6, RoundingMode.HALF_UP).toPlainString();
+        return "¥" + averageCost.setScale(6, RoundingMode.HALF_UP).toPlainString() + "（估算）";
     }
 
     public String rate(long value, long total) {

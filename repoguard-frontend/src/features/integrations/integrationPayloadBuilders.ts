@@ -73,13 +73,13 @@ export const buildSpringAiPayload = (
     inputTokenPricePerMillion: numberFieldValue(
       formState,
       "spring-ai",
-      "Input $/1M Tokens",
+      "Input CNY/1M Tokens",
       reviewPolicyConfig?.inputTokenPricePerMillion ?? 0
     ),
     outputTokenPricePerMillion: numberFieldValue(
       formState,
       "spring-ai",
-      "Output $/1M Tokens",
+      "Output CNY/1M Tokens",
       reviewPolicyConfig?.outputTokenPricePerMillion ?? 0
     )
   };

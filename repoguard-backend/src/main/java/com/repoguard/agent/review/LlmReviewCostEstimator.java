@@ -9,7 +9,12 @@ import org.springframework.stereotype.Component;
 class LlmReviewCostEstimator {
 
     BigDecimal estimate(ReviewPolicySettings settings, Integer promptTokens, Integer completionTokens) {
-        if (settings == null || promptTokens == null && completionTokens == null) {
+        if (settings == null || promptTokens == null || completionTokens == null
+            || promptTokens < 0 || completionTokens < 0
+            || settings.inputTokenPricePerMillion() == null
+            || settings.outputTokenPricePerMillion() == null
+            || settings.inputTokenPricePerMillion().signum() <= 0
+            || settings.outputTokenPricePerMillion().signum() <= 0) {
             return null;
         }
         BigDecimal inputCost = BigDecimal.valueOf(safeInt(promptTokens))
