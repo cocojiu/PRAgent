@@ -34,11 +34,19 @@ class LlmReviewCostEstimatorTest {
     }
 
     @Test
-    void estimatesCostWhenOnlyOneTokenSideIsPresent() {
+    void doesNotPresentPartialUsageAsCompleteCost() {
         assertThat(estimator.estimate(settings(BigDecimal.valueOf(0.5), BigDecimal.valueOf(1.5)), 100, null))
-            .isEqualByComparingTo("0.000050");
+            .isNull();
         assertThat(estimator.estimate(settings(BigDecimal.valueOf(0.5), BigDecimal.valueOf(1.5)), null, 20))
-            .isEqualByComparingTo("0.000030");
+            .isNull();
+        assertThat(estimator.estimate(settings(BigDecimal.ONE, BigDecimal.ZERO), 100, 20)).isNull();
+        assertThat(estimator.estimate(settings(BigDecimal.ONE, BigDecimal.ONE), -1, 20)).isNull();
+    }
+
+    @Test
+    void estimatesCnyStandardInputAndOutputPrices() {
+        assertThat(estimator.estimate(settings(new BigDecimal("2"), new BigDecimal("8")), 1000, 200))
+            .isEqualByComparingTo("0.003600");
     }
 
     @Test

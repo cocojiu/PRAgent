@@ -1,3 +1,4 @@
+import { estimatedCostText } from "@/utils/estimatedCost";
 import type {
   FindingFeedbackStatus,
   GithubCommentPreview,
@@ -372,7 +373,7 @@ export const llmTokenUsageText = (llm?: ReviewTaskDetail["llm"]) => {
 
 export const llmCostText = (llm?: ReviewTaskDetail["llm"]) => {
   const cost = llm?.estimatedCost;
-  return cost ? `$${cost}` : "未配置单价";
+  return estimatedCostText(cost);
 };
 
 export const llmParseStatusText = (llm?: ReviewTaskDetail["llm"]) => {

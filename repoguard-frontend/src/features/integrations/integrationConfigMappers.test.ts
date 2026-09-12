@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { buildSpringAiPayload } from "./integrationPayloadBuilders";
 import {
   buildGithubIntegrationPatch,
   buildReviewPolicyIntegrationPatch,
@@ -6,6 +7,15 @@ import {
 } from "./integrationConfigMappers";
 
 describe("integration config mappers", () => {
+  it("round trips CNY price fields without losing configured values", () => {
+    const config = { ...configuredConfig(), inputTokenPricePerMillion: 2, outputTokenPricePerMillion: 8 };
+    const patch = buildReviewPolicyIntegrationPatch(config);
+    expect(patch.fields.some((field) => field.label.includes("$/"))).toBe(false);
+    const form = { "spring-ai": Object.fromEntries(patch.fields.map((field) => [field.label, String(field.value)])) };
+    const payload = buildSpringAiPayload(form, config);
+    expect(payload.inputTokenPricePerMillion).toBe(2);
+    expect(payload.outputTokenPricePerMillion).toBe(8);
+  });
   it("shows GitHub key mismatch as an actionable secret diagnostic", () => {
     const patch = buildGithubIntegrationPatch({
       provider: "GITHUB",
