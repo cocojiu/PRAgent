@@ -1,4 +1,4 @@
-FROM nginxinc/nginx-unprivileged:1.31.3-alpine-slim@sha256:d9fa63891743a11eb56ca1b22d8cc227491df183ca3da2cf1bf2c6e010bf19a5
+FROM nginxinc/nginx-unprivileged:1.31.5-alpine-slim@sha256:c94666682d7ecbfa0a1767fbe882cd1d82509333d15716c765f42bbef0d3809f
 
 USER root
 RUN apk upgrade --no-cache libcrypto3 libssl3
