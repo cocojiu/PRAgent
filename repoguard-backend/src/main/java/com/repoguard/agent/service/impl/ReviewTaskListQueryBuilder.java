@@ -3,6 +3,8 @@ package com.repoguard.agent.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.repoguard.agent.dto.ReviewQuery;
 import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.review.HumanReviewStatus;
+import com.repoguard.agent.review.ReviewTaskStatus;
 import com.repoguard.agent.review.ReviewTaskCursorCodec;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -77,6 +79,11 @@ public class ReviewTaskListQueryBuilder {
         }
         if (StringUtils.hasText(criteria.status())) {
             wrapper.eq(ReviewTask::getStatus, criteria.status());
+            if (ReviewTaskStatus.PENDING_HUMAN_REVIEW.code().equals(criteria.status())) {
+                // Query the current task state, never historical attempt results or stale flags.
+                wrapper.eq(ReviewTask::getHumanReviewRequired, true)
+                    .eq(ReviewTask::getHumanReviewStatus, HumanReviewStatus.PENDING.code());
+            }
         }
         if (StringUtils.hasText(criteria.riskLevel())) {
             wrapper.eq(ReviewTask::getRiskLevel, criteria.riskLevel());

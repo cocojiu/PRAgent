@@ -11,7 +11,7 @@ const formatDuration = (seconds: number) => {
   return `${minutes} 分 ${restSeconds} 秒`;
 };
 
-export const useReviewTasksList = () => {
+export const useReviewTasksList = (initialStatus: ReviewStatus | "" = "") => {
   const loading = ref(false);
   const errorMessage = ref("");
   const reviewTasks = ref<ReviewTask[]>([]);
@@ -19,7 +19,7 @@ export const useReviewTasksList = () => {
   const taskSummary = ref<ReviewTaskListSummary | null>(null);
   const totalTasks = ref(0);
   const repoFilter = ref("");
-  const statusFilter = ref<ReviewStatus | "">("");
+  const statusFilter = ref<ReviewStatus | "">(initialStatus);
   const riskFilter = ref<RiskLevel | "">("");
   const sourceFilter = ref<ReviewTaskTriggerSource | "">("");
   const keyword = ref("");
@@ -71,7 +71,9 @@ export const useReviewTasksList = () => {
     const requestSeq = ++taskRequestSeq;
     loading.value = true;
     errorMessage.value = "";
-    const cursor = pageCursors.get(currentPage.value);
+    // Human decisions remove tasks from this live queue. Request a fresh server count
+    // instead of reusing the total embedded in an earlier page's cursor.
+    const cursor = statusFilter.value === "pending_human_review" ? undefined : pageCursors.get(currentPage.value);
     try {
       const page = await fetchReviews({
         page: currentPage.value,
@@ -84,6 +86,11 @@ export const useReviewTasksList = () => {
         cursor
       });
       if (requestSeq !== taskRequestSeq) {
+        return;
+      }
+      const lastPage = Math.max(1, Math.ceil(page.total / pageSize.value));
+      if (statusFilter.value === "pending_human_review" && currentPage.value > lastPage) {
+        currentPage.value = lastPage;
         return;
       }
       reviewTasks.value = page.items;
@@ -147,6 +154,12 @@ export const useReviewTasksList = () => {
   };
 
   const scheduleFilterLoad = () => {
+    ++taskRequestSeq;
+    ++summaryRequestSeq;
+    reviewTasks.value = [];
+    totalTasks.value = 0;
+    taskSummary.value = null;
+    loading.value = true;
     clearPageCursors();
     if (filterDebounceTimer) {
       clearTimeout(filterDebounceTimer);
@@ -192,6 +205,8 @@ export const useReviewTasksList = () => {
   });
 
   onUnmounted(() => {
+    ++taskRequestSeq;
+    ++summaryRequestSeq;
     if (filterDebounceTimer) {
       clearTimeout(filterDebounceTimer);
     }

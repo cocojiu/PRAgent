@@ -6,6 +6,10 @@
     </el-select>
     <el-select v-model="statusModel" placeholder="全部状态" clearable>
       <el-option label="全部状态" value="" />
+      <el-option label="待人工复核" value="pending_human_review" />
+      <el-option label="复核已通过" value="approved" />
+      <el-option label="要求修改" value="changes_requested" />
+      <el-option label="复核已拒绝" value="rejected" />
       <el-option label="已完成" value="completed" />
       <el-option label="审查中" value="reviewing" />
       <el-option label="失败" value="failed" />

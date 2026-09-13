@@ -16,6 +16,21 @@
     <MetricGrid :metrics="taskSummaryMetrics" :resolve-icon="getMetricIcon" />
 
     <section class="task-panel">
+      <el-tabs
+        :model-value="statusFilter === 'pending_human_review' ? 'pending' : 'all'"
+        aria-label="审查任务视图"
+        @update:model-value="statusFilter = $event === 'pending' ? 'pending_human_review' : ''"
+      >
+        <el-tab-pane label="全部任务" name="all" />
+        <el-tab-pane label="待人工复核" name="pending" />
+      </el-tabs>
+      <el-alert
+        v-if="statusFilter === 'pending_human_review'"
+        title="仅显示当前仍需人工决定的任务；点击详情进行复核或 Finding 反馈。此列表不执行领取、分派或批量操作。"
+        type="info"
+        :closable="false"
+        show-icon
+      />
       <ReviewTaskFilterBar
         v-model:keyword="keyword"
         v-model:repository="repoFilter"
@@ -97,7 +112,18 @@ const {
   initializeReviewTasksList,
   loadTasks,
   refreshTasks
-} = useReviewTasksList();
+} = useReviewTasksList(route.query.review === "pending" ? "pending_human_review" : "");
+
+// Preserve the queue entry when returning from a task detail page or reloading.
+watch(statusFilter, value => {
+  const query = { ...route.query };
+  if (value === "pending_human_review") {
+    query.review = "pending";
+  } else {
+    delete query.review;
+  }
+  void router.replace({ query });
+});
 
 const {
   loadingPullRequests,

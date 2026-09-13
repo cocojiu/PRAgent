@@ -190,13 +190,17 @@ const installWorkflowSeedApi = async (page: Page) => {
     if (path === "/api/v1/reviews") {
       requireContract(route, "GET");
       const item = state.currentTenant === "alpha" ? alphaDetail : tenantTask("beta");
-      await fulfillJson(route, { items: [item], total: 1, hasMore: false, nextCursor: null });
+      const pendingOnly = url.searchParams.get("status")?.toLowerCase() === "pending_human_review";
+      const visible = !pendingOnly || (item.status === "pending_human_review" && item.humanReviewRequired && item.humanReviewStatus === "pending");
+      await fulfillJson(route, { items: visible ? [item] : [], total: visible ? 1 : 0, hasMore: false, nextCursor: null });
       return;
     }
 
     if (path === "/api/v1/reviews/summary") {
       requireContract(route, "GET");
-      await fulfillJson(route, { total: 1, highRisk: alphaDetail.status === "failed" ? 1 : 0, failed: alphaDetail.status === "failed" ? 1 : 0, averageDurationSeconds: 12 });
+      const pendingOnly = url.searchParams.get("status")?.toLowerCase() === "pending_human_review";
+      const visible = !pendingOnly || (alphaDetail.status === "pending_human_review" && alphaDetail.humanReviewRequired && alphaDetail.humanReviewStatus === "pending");
+      await fulfillJson(route, { total: visible ? 1 : 0, highRisk: alphaDetail.status === "failed" ? 1 : 0, failed: alphaDetail.status === "failed" ? 1 : 0, averageDurationSeconds: 12 });
       return;
     }
 
@@ -446,6 +450,39 @@ const logout = async (page: Page) => {
   await page.getByRole("menuitem", { name: "退出登录" }).click();
   await expect(page).toHaveURL(/\/login$/);
 };
+
+test("personal pending queue uses server filters and refreshes after returning from detail without writes", async ({ page }) => {
+  const seed = await installWorkflowSeedApi(page);
+  seed.setAlphaDetail({ status: "pending_human_review", humanReviewRequired: true, humanReviewStatus: "pending" });
+  const requests: URL[] = [];
+  page.on("request", request => {
+    const url = new URL(request.url());
+    if (url.pathname === "/api/v1/reviews" || url.pathname === "/api/v1/reviews/summary") requests.push(url);
+  });
+  await login(page);
+  await page.goto("/repoguard/tasks");
+  await page.getByRole("tab", { name: "待人工复核", exact: true }).click();
+  await expect(page).toHaveURL(/review=pending/);
+  await expect(page.getByText("Alpha tenant review", { exact: true })).toBeVisible();
+  for (const path of ["/api/v1/reviews", "/api/v1/reviews/summary"]) {
+    await expect.poll(() => requests.some(url => url.pathname === path && url.searchParams.get("status")?.toLowerCase() === "pending_human_review")).toBe(true);
+  }
+  await page.reload();
+  await expect(page.getByRole("tab", { name: "待人工复核", exact: true })).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("button", { name: "查看", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/tasks/${alphaTaskId}$`));
+  seed.setAlphaDetail({ status: "approved", humanReviewRequired: true, humanReviewStatus: "approved" });
+  await page.goBack();
+  await expect(page).toHaveURL(/review=pending/);
+  await expect(page.getByText("暂无符合条件的审查任务", { exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "全部任务", exact: true }).click();
+  await expect(page.getByText("Alpha tenant review", { exact: true })).toBeVisible();
+  expect(seed.state.humanReviewPosts).toBe(0);
+  expect(seed.state.manualReviewPosts).toBe(0);
+  expect(seed.state.publishPosts).toBe(0);
+  expect(seed.state.retryPosts).toBe(0);
+  expect(seed.state.contractViolations).toEqual([]);
+});
 
 test("tenant login switch keeps list data isolated and rejects a cross-tenant deep link", async ({ page }) => {
   const seed = await installWorkflowSeedApi(page);
