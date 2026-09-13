@@ -56,6 +56,24 @@ class ReviewTaskListQueryBuilderTest {
     }
 
     @Test
+    void pendingQueueUsesCurrentUndecidedStateForRowsCountAndKeyset() {
+        var query = new ReviewQuery(1, 20, "owner/repo", " pending_human_review ", "high", null, null, null);
+        for (var wrapper : java.util.List.of(builder.build(query), builder.buildCountQuery(query), builder.buildKeysetPage(query))) {
+            assertThat(wrapper.getSqlSegment()).contains("status", "human_review_required", "human_review_status", "organization", "repository", "risk_level");
+            assertThat(wrapper.getParamNameValuePairs().values()).contains("PENDING_HUMAN_REVIEW", true, "PENDING", "owner", "repo", "HIGH");
+        }
+        assertThat(builder.buildCountQuery(query).getSqlSegment()).doesNotContain("ORDER BY", "limit");
+    }
+
+    @Test
+    void otherViewsDoNotHideAlreadyDecidedOrNonRequiredTasks() {
+        for (String status : new String[] { "", "approved", "changes_requested", "rejected", "superseded" }) {
+            var query = new ReviewQuery(1, 20, null, status, null, null, null, null);
+            assertThat(builder.build(query).getSqlSegment()).doesNotContain("human_review_required", "human_review_status");
+        }
+    }
+
+    @Test
     void normalizesTextKeywordWhenItIsSelectiveEnough() {
         var criteria = builder.normalize(new ReviewQuery(
             1,

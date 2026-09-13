@@ -5,6 +5,7 @@ RepoGuard Agent 是面向 GitHub Pull Request 的代码审查辅助系统，包�
 ## 核心功能
 
 - PR 审查任务创建、重试、状态追踪和详情展示。
+- 个人版待人工复核队列：在审查任务页切换“待人工复核”，按仓库、风险等条件筛选当前仍需人工决定的任务；进入详情使用既有复核与 Finding 反馈功能，写操作仍受管理员权限约束。
 - GitHub open PR 选择、diff 拉取、行评论和 PR 总评回写。
 - 规则审查与 LLM 审查结合，支持 fallback、结果解析、Finding 去重和风险画像。
 - RabbitMQ 异步执行、发布确认、失败补偿和异常任务运维。
@@ -13,6 +14,8 @@ RepoGuard Agent 是面向 GitHub Pull Request 的代码审查辅助系统，包�
 - 企业版租户与仓库管理台：租户切换、GitHub App installation 绑定、成员/OIDC 绑定和配额管理。
 
 ## 界面预览
+
+“待人工复核”视图仅包含任务状态为 `PENDING_HUMAN_REVIEW`、需要人工复核且复核状态为 `PENDING` 的任务。列表和总数使用相同服务端条件，刷新或从详情返回时重新查询；已完成决定的任务不再进入队列。入口不依赖企业版，也不提供领取、分派、SLA 或批量写操作。
 
 ![总览页](assets/screenshots/overview.jpg)
 

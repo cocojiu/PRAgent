@@ -26,6 +26,60 @@ vi.mock("element-plus/es/components/message/index.mjs", () => ({
 describe("useReviewTasksList", () => {
   afterEach(() => {
     vi.clearAllMocks();
+    vi.useRealTimers();
+  });
+
+  it("loads the pending queue and summary with the same server filter, resetting page and cursors", async () => {
+    vi.useFakeTimers();
+    reviewApi.fetchReviews.mockResolvedValue({ items: [], total: 26, nextCursor: "old-cursor", hasMore: true });
+    reviewApi.fetchReviewListSummary.mockResolvedValue({ total: 26, highRisk: 0, failed: 0, averageDurationSeconds: 1 });
+    const list = useReviewTasksList();
+    await list.loadTasks();
+    list.currentPage.value = 2;
+    await vi.advanceTimersByTimeAsync(1);
+    list.repoFilter.value = "owner/repo";
+    list.riskFilter.value = "high";
+    list.statusFilter.value = "pending_human_review";
+    await vi.advanceTimersByTimeAsync(400);
+    expect(list.currentPage.value).toBe(1);
+    expect(reviewApi.fetchReviews).toHaveBeenLastCalledWith(expect.objectContaining({
+      page: 1, repository: "owner/repo", riskLevel: "high", status: "pending_human_review", cursor: undefined
+    }));
+    expect(reviewApi.fetchReviewListSummary).toHaveBeenLastCalledWith(expect.objectContaining({
+      repository: "owner/repo", riskLevel: "high", status: "pending_human_review"
+    }));
+    list.currentPage.value = 2;
+    await vi.advanceTimersByTimeAsync(1);
+    expect(reviewApi.fetchReviews).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2, cursor: undefined }));
+  });
+
+  it("returns to a valid page when reviewed tasks disappear from the queue", async () => {
+    vi.useFakeTimers();
+    reviewApi.fetchReviews.mockResolvedValue({ items: [], total: 0 });
+    reviewApi.fetchReviewListSummary.mockResolvedValue({ total: 0, highRisk: 0, failed: 0, averageDurationSeconds: 0 });
+    const list = useReviewTasksList();
+    list.statusFilter.value = "pending_human_review";
+    await vi.advanceTimersByTimeAsync(400);
+    list.currentPage.value = 3;
+    await vi.advanceTimersByTimeAsync(1);
+    expect(list.currentPage.value).toBe(1);
+    expect(list.totalTasks.value).toBe(0);
+    expect(list.reviewTasks.value).toEqual([]);
+  });
+
+  it("does not show an old response during a pending-queue filter debounce", async () => {
+    vi.useFakeTimers();
+    let finishOld!: (page: { items: ReviewTask[]; total: number }) => void;
+    reviewApi.fetchReviews.mockReturnValueOnce(new Promise(resolve => { finishOld = resolve; }));
+    const list = useReviewTasksList();
+    const oldRequest = list.loadTasks();
+    list.statusFilter.value = "pending_human_review";
+    await vi.advanceTimersByTimeAsync(1);
+    finishOld({ items: [reviewTask], total: 99 });
+    await oldRequest;
+    expect(list.reviewTasks.value).toEqual([]);
+    expect(list.totalTasks.value).toBe(0);
+    expect(list.taskSummaryMetrics.value[0].value).toBe("—");
   });
 
   it("loads the task page and repository filter options through separate lightweight requests", async () => {
