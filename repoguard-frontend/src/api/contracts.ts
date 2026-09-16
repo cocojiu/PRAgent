@@ -26,6 +26,7 @@ import {
   isAuthResponse,
   isCurrentUser,
   isGithubChecksSetupStatus,
+  isGithubFeedbackDiagnostics,
   isGithubIntegrationConfig,
   isReviewPolicyConfig,
   isReviewTaskSummary,
@@ -78,6 +79,7 @@ import type {
   GithubChecksPolicyRequest,
   GithubChecksPreviewRequest,
   GithubChecksSetupStatus,
+  GithubFeedbackDiagnostics,
   GithubIntegrationConfig,
   GithubIntegrationConfigRequest,
   GithubPullRequestOptions,
@@ -272,6 +274,8 @@ export type ApiContract = {
   triggerManualReview: ApiOperation<ManualReviewRequest, ManualReviewResponse>;
   fetchGithubIntegrationConfig: ApiOperation<undefined, GithubIntegrationConfig>;
   updateGithubIntegrationConfig: ApiOperation<GithubIntegrationConfigRequest, GithubIntegrationConfig>;
+  fetchGithubFeedback: ApiOperation<{ limit?: number }, GithubFeedbackDiagnostics>;
+  retryGithubFeedback: ApiOperation<{ id: number }, void>;
   fetchGithubChecksSetup: ApiOperation<
     { organization: string; repository: string },
     GithubChecksSetupStatus
@@ -617,6 +621,15 @@ const apiEndpoints: ApiEndpointMap = {
     }),
     validateResponse: isGithubIntegrationConfig
   },
+  fetchGithubFeedback: {
+    ...generatedEndpoint("githubFeedbackControllerDiagnostics", {
+      query: input => ({ limit: input.limit })
+    }),
+    validateResponse: isGithubFeedbackDiagnostics
+  },
+  retryGithubFeedback: generatedEndpoint("githubFeedbackControllerRetry", {
+    path: input => ({ id: input.id })
+  }),
   fetchGithubChecksSetup: {
     ...generatedEndpoint("systemConfigControllerGetGithubChecksSetup", {
       query: input => ({ organization: input.organization, repository: input.repository })

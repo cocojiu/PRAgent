@@ -30,6 +30,13 @@ import org.springframework.util.StringUtils;
 @ApiRuntimeEnabled
 public class GithubWebhookController {
 
+    private com.repoguard.agent.github.webhook.GithubFeedbackService feedbackService;
+
+    @Autowired
+    void configureFeedback(com.repoguard.agent.github.webhook.GithubFeedbackService service) {
+        this.feedbackService = service;
+    }
+
     private final ObjectMapper objectMapper;
     private final GithubWebhookProperties properties;
     private final GithubWebhookSignatureVerifier signatureVerifier;
@@ -109,7 +116,7 @@ public class GithubWebhookController {
         try {
             validatePayloadSize(payload);
             signatureVerifier.verify(signature, payload);
-            if (!"pull_request".equals(event) && !"check_run".equals(event)) {
+            if (!"pull_request".equals(event) && !"check_run".equals(event) && !"pull_request_review_comment".equals(event)) {
                 GithubWebhookResponse response = GithubWebhookResponse.skipped(
                     "GitHub event is ignored", deliveryId, null
                 );
@@ -122,7 +129,10 @@ public class GithubWebhookController {
                 rateLimiter.requireRepository(repository);
             }
             GithubWebhookResponse response;
-            if ("check_run".equals(event)) {
+            if ("pull_request_review_comment".equals(event)) {
+                response = feedbackService == null ? GithubWebhookResponse.skipped("Feedback handler unavailable", deliveryId, null)
+                    : feedbackService.receive(root, deliveryId);
+            } else if ("check_run".equals(event)) {
                 if (checkRunWebhookService == null) {
                     response = GithubWebhookResponse.skipped(
                         "GitHub Check Run handler is unavailable", deliveryId, null

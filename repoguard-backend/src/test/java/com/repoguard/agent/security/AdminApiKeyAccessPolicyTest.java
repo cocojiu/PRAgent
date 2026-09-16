@@ -18,6 +18,8 @@ class AdminApiKeyAccessPolicyTest {
         assertThat(AdminApiKeyAccessPolicy.protectedEndpoints())
             .extracting(endpoint -> endpoint.method() + " " + endpoint.pathPattern())
             .containsExactly(
+                "* /api/v1/github/feedback-events",
+                "* /api/v1/github/feedback-events/**",
                 "* /api/v1/config/**",
                 "* /api/v1/enterprise/**",
                 "* /api/v1/message-queue/**",

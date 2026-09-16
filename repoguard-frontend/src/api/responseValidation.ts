@@ -2,6 +2,7 @@ import type { AuthResponse, AuthUser, CurrentUser } from "@/api/auth";
 import type { ReviewTaskSummary } from "@/api/generated/reviewDetailTypes";
 import type {
   GithubIntegrationConfig,
+  GithubFeedbackDiagnostics,
   GithubChecksSetupStatus,
   PageResponse,
   ReviewPolicyConfig,
@@ -178,3 +179,11 @@ export const validateApiResponse = <T>(
     code: "INVALID_API_RESPONSE"
   });
 };
+
+export const isGithubFeedbackDiagnostics: ApiResponseValidator<GithubFeedbackDiagnostics> =
+  (value): value is GithubFeedbackDiagnostics => isRecord(value) && hasBoolean(value, "enabled")
+    && Array.isArray(value.events) && value.events.length <= 100 && value.events.every(event =>
+      isRecord(event) && hasNumber(event, "id") && hasNumber(event, "taskId")
+      && hasNumber(event, "findingId") && hasNumber(event, "attempts")
+      && ["PENDING", "APPLIED", "IGNORED", "FAILED"].includes(String(event.status))
+      && ["false_positive", "ignored"].includes(String(event.feedbackStatus)));

@@ -7,7 +7,7 @@
     "externalDatabaseSupported": true,
     "publishedMigrationPolicy": "IMMUTABLE",
     "newInstallationStrategy": "VALIDATED_SCHEMA_SNAPSHOT_THEN_BASELINE",
-    "candidateVersion": 97,
+    "candidateVersion": 98,
     "requiredEvidence": [
       "empty database migration to the candidate version",
       "schema structure diff against the supported production shape",
@@ -327,6 +327,18 @@
       "nMinusOneCompatible": true,
       "interruptedRecovery": "inspect Flyway and column state before retrying; no source data is migrated",
       "rollbackStrategy": "roll back application and retain the nullable column; never rewrite or delete a published migration"
+    },
+    {
+      "version": 98,
+      "file": "V98__github_feedback_events.sql",
+      "phase": "EXPAND",
+      "estimatedRows": "new feedback events only; publication index covers existing publication rows",
+      "lockType": "metadata locks for table creation and additive index",
+      "maxDurationSeconds": 300,
+      "maxDiskMegabytes": 256,
+      "nMinusOneCompatible": true,
+      "interruptedRecovery": "inspect Flyway and schema before resuming; keep feedback disabled until both changes are present",
+      "rollbackStrategy": "disable feedback and retain additive table and index; never rewrite or delete a published migration"
     }
   ]
 }

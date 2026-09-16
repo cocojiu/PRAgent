@@ -28,6 +28,8 @@ enterpriseTenantControllerUpdateStatus(input: { path: { tenantKey: string }; bod
 enterpriseTenantQuotaControllerGet(input: { path: { tenantKey: string } }): Promise<EnterpriseTenantQuota>; // GET /api/v1/enterprise/tenants/{tenantKey}/quota
 enterpriseTenantQuotaControllerUpdate(input: { path: { tenantKey: string }; body: EnterpriseTenantQuotaRequest }): Promise<EnterpriseTenantQuota>; // PUT /api/v1/enterprise/tenants/{tenantKey}/quota
 frontendPerformanceControllerRecordPerformance(input: { body: FrontendPerformanceReport }): Promise<void>; // POST /api/v1/observability/frontend/performance
+githubFeedbackControllerDiagnostics(input?: { query?: { limit?: number } }): Promise<GithubFeedbackDiagnostics>; // GET /api/v1/github/feedback-events
+githubFeedbackControllerRetry(input: { path: { id: number } }): Promise<void>; // POST /api/v1/github/feedback-events/{id}/retry
 githubWebhookControllerReceive(input: { body: Uint8Array }): Promise<GithubWebhookResponse>; // POST /api/v1/github/webhooks
 messageQueueHealthControllerGetHealth(): Promise<MessageQueueHealth>; // GET /api/v1/message-queue/health
 messageQueueHealthControllerRequeueTask(input: { path: { taskId: number } }): Promise<MessageQueueRequeueResponse>; // POST /api/v1/message-queue/tasks/{taskId}/requeue

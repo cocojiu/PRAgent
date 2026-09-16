@@ -12,6 +12,10 @@ public class GithubWebhookProperties {
     public static final int DEFAULT_MAX_PAYLOAD_BYTES = 1024 * 1024;
 
     private boolean enabled = true;
+    private boolean feedbackEnabled;
+
+    public boolean isFeedbackEnabled() { return feedbackEnabled; }
+    public void setFeedbackEnabled(boolean value) { feedbackEnabled = value; }
     private String secret;
     private boolean requireSignature = true;
     private boolean ignoreDraft = true;

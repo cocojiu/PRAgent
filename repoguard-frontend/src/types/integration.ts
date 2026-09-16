@@ -178,3 +178,9 @@ export interface ConnectionTestResult {
   runtimeConnectionStatus?: string | null;
   savedConfigStatus?: string | null;
 }
+
+export interface GithubFeedbackDiagnostics {
+  enabled: boolean;
+  events: { id: number; deliveryId: string; taskId: number; findingId: number; feedbackStatus: string;
+    status: string; attempts: number; failureCode: string | null; updatedAt: string }[];
+}

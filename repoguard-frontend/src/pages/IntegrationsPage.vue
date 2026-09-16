@@ -43,6 +43,8 @@
       />
     </section>
 
+    <GithubFeedbackPanel v-if="canManage" />
+
     <GithubChecksSetupWizard
       :can-manage="canManage"
       :initial-organization="githubConfig?.defaultOwner"
@@ -54,6 +56,7 @@
 
 <script setup lang="ts">
 import "@/features/integrations/integrations.css";
+import GithubFeedbackPanel from "@/features/integrations/components/GithubFeedbackPanel.vue";
 import { onMounted, reactive } from "vue";
 import { Hexagon } from "@lucide/vue";
 import { canManage } from "@/stores/authState";

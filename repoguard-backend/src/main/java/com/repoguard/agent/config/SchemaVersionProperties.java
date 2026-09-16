@@ -11,7 +11,7 @@ import org.springframework.validation.annotation.Validated;
 public class SchemaVersionProperties {
 
     @Min(1)
-    private int expectedVersion = 97;
+    private int expectedVersion = 98;
 
     public int getExpectedVersion() {
         return expectedVersion;

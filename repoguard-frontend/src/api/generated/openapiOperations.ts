@@ -27,6 +27,7 @@ import type {
   GithubCommentPreview,
   GithubCommentPublicationHistory,
   GithubCommentPublish,
+  GithubFeedbackDiagnostics,
   GithubIntegrationConfig,
   GithubIntegrationConfigRequest,
   GithubPullRequestOptions,
@@ -251,6 +252,20 @@ export type GeneratedOpenApiOperationMap = {
     pathParams: never;
     query: never;
     body: FrontendPerformanceReport;
+    response: void;
+  };
+  "githubFeedbackControllerDiagnostics": {
+    method: "GET";
+    pathParams: never;
+    query: { limit?: number };
+    body: never;
+    response: GithubFeedbackDiagnostics;
+  };
+  "githubFeedbackControllerRetry": {
+    method: "POST";
+    pathParams: { id: number };
+    query: never;
+    body: never;
     response: void;
   };
   "messageQueueHealthControllerGetHealth": {
@@ -1127,6 +1142,22 @@ export const generatedOpenApiOperations = {
     queryParamNames: [],
     hasRequestBody: true,
     requestBodyRequired: true
+  },
+  "githubFeedbackControllerDiagnostics": {
+    method: "GET",
+    path: "/api/v1/github/feedback-events",
+    pathParamNames: [],
+    queryParamNames: ["limit"],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "githubFeedbackControllerRetry": {
+    method: "POST",
+    path: "/api/v1/github/feedback-events/{id}/retry",
+    pathParamNames: ["id"],
+    queryParamNames: [],
+    hasRequestBody: false,
+    requestBodyRequired: false
   },
   "messageQueueHealthControllerGetHealth": {
     method: "GET",
