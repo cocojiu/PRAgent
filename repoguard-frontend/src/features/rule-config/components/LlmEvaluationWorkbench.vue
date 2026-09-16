@@ -36,6 +36,11 @@
         <strong>运行外部真实 PR 评估</strong>
         <span>数据目录必须由平台管理员预置在受控根目录下，系统不会上传或持久化源码。</span>
       </div>
+      <el-switch v-model="diagnosticMode" active-text="指定样本诊断（不生成质量报告）" />
+      <el-input
+        v-if="diagnosticMode" v-model="sampleIdsText" type="textarea"
+        placeholder="输入受控数据集中的样本 ID，以换行或逗号分隔" aria-label="诊断样本 ID"
+      />
       <div class="evaluation-run-form">
         <el-input v-model="runForm.runKey" placeholder="运行幂等键" aria-label="运行幂等键" />
         <el-input v-model="runForm.dataDirectory" placeholder="受控数据目录相对路径" aria-label="受控数据目录" />
@@ -43,18 +48,18 @@
         <el-input-number v-model="runForm.maxTokens" :min="1" :max="1000000" controls-position="right" aria-label="最大令牌数" />
         <el-input-number v-model="runForm.maxCost" :min="0" :precision="4" :step="1" controls-position="right" aria-label="最大估算费用（人民币）" />
         <el-input-number v-model="runForm.maxDurationSeconds" :min="1" :max="3600" controls-position="right" aria-label="最大时长秒数" />
-        <el-button type="primary" :loading="runLoading" @click="startRun">启动评估</el-button>
+        <el-button type="primary" :loading="runLoading" @click="startRun">{{ diagnosticMode ? "启动诊断" : "启动评估" }}</el-button>
       </div>
       <el-alert
         v-if="activeRun"
         class="evaluation-run-status"
-        :type="runAlertType(activeRun.status)"
-        :title="`运行 ${activeRun.runKey}：${activeRun.status}`"
+        :type="activeRun.diagnostics && activeRun.status === 'COMPLETE' && activeRun.completedSamples < activeRun.totalSamples ? 'warning' : runAlertType(activeRun.status)"
+        :title="`${activeRun.diagnostics ? '诊断' : '评估'} ${activeRun.runKey}：${activeRun.status}`"
         :closable="false"
       >
         <template #default>
           <span>
-            {{ activeRun.completedSamples }} / {{ activeRun.totalSamples || "待加载" }} 个样本，
+            {{ activeRun.completedSamples }} / {{ activeRun.totalSamples || "待加载" }} {{ activeRun.diagnostics ? "个成功样本" : "个样本" }}，
             {{ activeRun.totalTokens }} tokens，费用 {{ estimatedCostText(activeRun.totalCost) }}
             <span v-if="activeRun.failureCode"> · {{ activeRun.failureCode }}</span>
             <span v-if="activeRun.reportId"> · 报告 #{{ activeRun.reportId }}</span>
@@ -68,6 +73,18 @@
           >取消运行</el-button>
         </template>
       </el-alert>
+      <template v-if="activeRun?.diagnostics">
+        <p>诊断仅用于排查，不生成正式质量报告。逐样本用量为系统记录值；未知费用和中断请求不代表免费，运行合计可能包含保守预算预留。</p>
+        <el-table :data="activeRun.diagnostics.samples" row-key="sampleId" aria-label="逐样本诊断">
+          <el-table-column prop="sampleId" label="样本 ID" />
+          <el-table-column prop="status" label="执行状态" />
+          <el-table-column prop="failureCode" label="失败类型" />
+          <el-table-column prop="totalTokens" label="记录 tokens" />
+          <el-table-column label="用量来源"><template #default="{ row }">{{ row.usageSource === 'RECORDED_USAGE' ? '系统记录' : '未知' }}</template></el-table-column>
+          <el-table-column label="估算费用"><template #default="{ row }">{{ estimatedCostText(row.estimatedCost) }}</template></el-table-column>
+        </el-table>
+      </template>
+      <el-button v-if="activeRun" @click="beginPolling">刷新运行状态</el-button>
     </div>
 
     <el-alert
@@ -146,6 +163,7 @@
 </template>
 
 <script setup lang="ts">
+import { selectedEvaluationSampleIds } from "../composables/useLlmModelReleaseCenter";
 import { estimatedCostText } from "@/utils/estimatedCost";
 import { onMounted, onUnmounted, ref } from "vue";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
@@ -165,6 +183,8 @@ const selectedReport = ref<LlmEvaluationReport | null>(null);
 const loading = ref(false);
 const errorMessage = ref("");
 const runLoading = ref(false);
+const diagnosticMode = ref(false);
+const sampleIdsText = ref("");
 const activeRun = ref<LlmEvaluationRun | null>(null);
 const runForm = ref<LlmEvaluationRunRequest>({
   runKey: "",
@@ -175,6 +195,7 @@ const runForm = ref<LlmEvaluationRunRequest>({
   maxDurationSeconds: 1800
 });
 let pollTimer: number | undefined;
+let runStateVersion = 0;
 
 const loadReports = async () => {
   loading.value = true;
@@ -194,10 +215,13 @@ const selectReport = (report: LlmEvaluationReport | null) => {
 };
 
 const startRun = async () => {
+  runStateVersion++;
+  stopPolling();
   runLoading.value = true;
   errorMessage.value = "";
   try {
-    activeRun.value = await startLlmEvaluationRun(runForm.value);
+    const sampleIds = selectedEvaluationSampleIds(diagnosticMode.value, sampleIdsText.value);
+    activeRun.value = await startLlmEvaluationRun({ ...runForm.value, sampleIds });
     beginPolling();
   } catch (error) {
     errorMessage.value = getErrorMessage(error, "评估运行启动失败");
@@ -208,16 +232,22 @@ const startRun = async () => {
 
 const refreshRun = async () => {
   if (!activeRun.value) return;
+  const runId = activeRun.value.runId;
+  const version = runStateVersion;
   try {
-    activeRun.value = await fetchLlmEvaluationRun(activeRun.value.runId);
+    const result = await fetchLlmEvaluationRun(runId);
+    if (version !== runStateVersion || activeRun.value?.runId !== runId) return;
+    activeRun.value = result;
+    errorMessage.value = "";
     if (!["QUEUED", "RUNNING"].includes(activeRun.value.status)) {
       stopPolling();
       if (activeRun.value.status === "COMPLETE") {
-        ElMessage.success("评估运行完成，报告已生成");
-        await loadReports();
+        ElMessage.success(activeRun.value.diagnostics ? "诊断运行结束，请查看逐样本结果" : "评估运行完成，报告已生成");
+        if (activeRun.value.reportId) await loadReports();
       }
     }
   } catch (error) {
+    if (version !== runStateVersion) return;
     stopPolling();
     errorMessage.value = getErrorMessage(error, "评估运行状态加载失败");
   }
@@ -238,6 +268,8 @@ const stopPolling = () => {
 
 const cancelRun = async () => {
   if (!activeRun.value) return;
+  runStateVersion++;
+  stopPolling();
   try {
     activeRun.value = await cancelLlmEvaluationRun(activeRun.value.runId);
     stopPolling();

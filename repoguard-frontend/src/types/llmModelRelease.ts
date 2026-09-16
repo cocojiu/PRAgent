@@ -115,6 +115,7 @@ export interface LlmEvaluationRequest {
 }
 
 export interface LlmEvaluationRunRequest {
+  sampleIds?: string[];
   runKey: string;
   dataDirectory: string;
   maxConcurrency: number;
@@ -124,6 +125,18 @@ export interface LlmEvaluationRunRequest {
 }
 
 export interface LlmEvaluationRun {
+  diagnostics?: {
+    sampleIds: string[];
+    samples: {
+      sampleId: string;
+      status: string;
+      failureCode: string | null;
+      totalTokens: number;
+      estimatedCost: number | null;
+      usageSource: string;
+      costSource: string;
+    }[];
+  } | null;
   runId: string;
   runKey: string;
   status: "QUEUED" | "RUNNING" | "COMPLETE" | "FAILED" | "CANCELLED" | string;

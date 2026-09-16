@@ -26,6 +26,7 @@ final class LlmEvaluationRunState {
     final AtomicLong totalTokens = new AtomicLong();
     final AtomicReference<BigDecimal> totalCost = new AtomicReference<>(BigDecimal.ZERO);
     volatile Future<?> future;
+    private LlmEvaluationRunDto.Diagnostics diagnostics;
 
     private final AtomicReference<String> status = new AtomicReference<>("QUEUED");
     private final AtomicInteger completedSamples = new AtomicInteger();
@@ -90,6 +91,7 @@ final class LlmEvaluationRunState {
             stored.maxConcurrency(), stored.maxTokens(), stored.maxCost(), stored.maxDurationSeconds(),
             stored.operator(), stored.submittedAt()
         );
+        state.diagnostics = LlmEvaluationDiagnostics.terminal(stored.diagnostics(), stored.status(), stored.failureCode());
         state.status.set(stored.status());
         state.totalSamples.set(stored.totalSamples());
         state.completedSamples.set(stored.completedSamples());
@@ -103,6 +105,18 @@ final class LlmEvaluationRunState {
         return state;
     }
 
+    synchronized void initializeDiagnostics(java.util.List<String> ids) {
+        diagnostics = LlmEvaluationDiagnostics.initialize(ids);
+        if (diagnostics != null) totalSamples.set(ids.size());
+    }
+
+    synchronized LlmEvaluationRunDto.Diagnostics diagnostics() { return diagnostics; }
+
+    synchronized void recordSample(String id, String sampleStatus, String failure, LlmEvaluationObservation observation) {
+        if (cancelled.get() || !"RUNNING".equals(status.get())) return;
+        diagnostics = LlmEvaluationDiagnostics.update(diagnostics, id, sampleStatus, failure, observation);
+    }
+
     boolean markRunning() {
         boolean running = status.compareAndSet("QUEUED", "RUNNING");
         if (running) {
@@ -111,8 +125,10 @@ final class LlmEvaluationRunState {
         return running;
     }
 
-    void add(LlmEvaluationObservation observation) {
-        completedSamples.incrementAndGet();
+    synchronized void add(LlmEvaluationObservation observation) {
+        if (diagnostics == null || LlmEvaluationDiagnostics.successful(observation)) {
+            completedSamples.incrementAndGet();
+        }
         totalTokens.addAndGet(Math.max(0L, observation.totalTokens()));
         totalCost.accumulateAndGet(observation.estimatedCost().max(BigDecimal.ZERO), BigDecimal::add);
     }
@@ -158,20 +174,20 @@ final class LlmEvaluationRunState {
         }
     }
 
-    LlmEvaluationRunDto dto() {
+    synchronized LlmEvaluationRunDto dto() {
         return new LlmEvaluationRunDto(
             runId, runKey, status.get(), Math.max(0, totalSamples.get()), completedSamples.get(),
             totalTokens.get(), totalCost.get(), reportId.get(), failureCode.get(), submittedAt,
-            startedAt, finishedAt
+            startedAt, finishedAt, LlmEvaluationDiagnostics.terminal(diagnostics, status.get(), failureCode.get())
         );
     }
 
-    LlmEvaluationRunStore.StoredRun stored() {
+    synchronized LlmEvaluationRunStore.StoredRun stored() {
         return new LlmEvaluationRunStore.StoredRun(
             tenantId, runId, runKey, status.get(), dataDirectory, maxConcurrency, maxTokens,
             maxCost, maxDurationSeconds, operator, totalSamples.get(), completedSamples.get(),
             totalTokens.get(), totalCost.get(), reportId.get(), failureCode.get(), submittedAt,
-            startedAt, finishedAt
+            startedAt, finishedAt, LlmEvaluationDiagnostics.terminal(diagnostics, status.get(), failureCode.get())
         );
     }
 }

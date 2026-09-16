@@ -12,7 +12,7 @@ import {
   transitionLlmEvaluationReportLifecycle
 } from "@/api/config";
 import type { LlmEvaluationReport, LlmModelReleaseCenter } from "@/types";
-import { buildLlmModelReleaseRequest, useLlmModelReleaseCenter } from "./useLlmModelReleaseCenter";
+import { buildLlmModelReleaseRequest, selectedEvaluationSampleIds, useLlmModelReleaseCenter } from "./useLlmModelReleaseCenter";
 
 vi.mock("@/api/config", () => ({
   fetchLlmEvaluationReports: vi.fn(),
@@ -224,4 +224,19 @@ const center = (): LlmModelReleaseCenter => ({
     exhausted: false
   },
   recommendedAction: "RUN_SHADOW_EVALUATION_FOR_NEXT_VERSION"
+});
+
+describe("selectedEvaluationSampleIds", () => {
+  it("keeps formal evaluation separate from diagnostic selections", () => {
+    expect(selectedEvaluationSampleIds(false, "case-1")).toBeUndefined();
+  });
+  it("deduplicates selections without adding other samples", () => {
+    expect(selectedEvaluationSampleIds(true, "case-2,case-1\ncase-2，case-3"))
+      .toEqual(["case-2", "case-1", "case-3"]);
+  });
+  it.each(["", "../private", "case/1", "x".repeat(129), Array.from({ length: 101 }, (_, i) => `case-${i}`).join(",")])(
+    "rejects invalid sample selections: %s", text => {
+      expect(() => selectedEvaluationSampleIds(true, text)).toThrow("有效样本 ID");
+    }
+  );
 });

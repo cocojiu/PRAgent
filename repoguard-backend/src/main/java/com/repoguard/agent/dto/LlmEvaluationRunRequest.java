@@ -21,6 +21,11 @@ public record LlmEvaluationRunRequest(
     @NotNull @Min(1) @Max(1_000_000) Long maxTokens,
     @NotNull @DecimalMin("0.0") @DecimalMax("999999999999.99999999")
     @Digits(integer = 12, fraction = 8) BigDecimal maxCost,
-    @NotNull @Min(1) @Max(3_600) Integer maxDurationSeconds
+    @NotNull @Min(1) @Max(3_600) Integer maxDurationSeconds,
+    @Size(min = 1, max = 100) java.util.List<@NotBlank @Size(max = 128) String> sampleIds
 ) {
+    public LlmEvaluationRunRequest(String runKey, String dataDirectory, Integer maxConcurrency,
+        Long maxTokens, BigDecimal maxCost, Integer maxDurationSeconds) {
+        this(runKey, dataDirectory, maxConcurrency, maxTokens, maxCost, maxDurationSeconds, null);
+    }
 }

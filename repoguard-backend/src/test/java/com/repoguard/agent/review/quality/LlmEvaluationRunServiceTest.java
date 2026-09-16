@@ -170,6 +170,7 @@ class LlmEvaluationRunServiceTest {
             null,
             submittedAt,
             submittedAt.plusSeconds(1),
+            null,
             null
         ));
         store.createOrGet(new LlmEvaluationRunStore.StoredRun(
@@ -191,6 +192,7 @@ class LlmEvaluationRunServiceTest {
             null,
             LocalDateTime.now(),
             LocalDateTime.now(),
+            null,
             null
         ));
         ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -304,6 +306,156 @@ class LlmEvaluationRunServiceTest {
             .hasMessageContaining("队列已满");
     }
 
+    @Test
+    void selectsOnlyTwoSamplesAndNeverCreatesAReport() throws Exception {
+        tenantScope = TenantContext.withTenant(42L);
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            var original = dataset(sample());
+            var second = sample("case-2");
+            var third = sample("case-3");
+            when(datasetLoader.validateDirectory(anyString())).thenReturn(Path.of("dataset"));
+            when(datasetLoader.load(anyString())).thenReturn(new LlmEvaluationDatasetLoader.Dataset(
+                original.metadata(), original.version(), List.of(sample(), second, third), 1));
+            when(previewRunner.run(any(), anyString(), anyString(), any(), any())).thenAnswer(invocation -> {
+                assertThat(TenantContext.currentTenantIdOrDefault()).isEqualTo(42L);
+                var selected = invocation.<LlmEvaluationDatasetLoader.EvaluationCase>getArgument(0);
+                return new LlmEvaluationObservation(selected.caseId(), "jvm", false, "NONE", false,
+                    "NONE", true, "", true, 10, 3, BigDecimal.ZERO);
+            });
+            var service = new LlmEvaluationRunService(datasetLoader, previewRunner, modelReleaseService, store, executor);
+            var request = new LlmEvaluationRunRequest("selected", "dataset", 1, 100L, BigDecimal.ONE, 5,
+                List.of("case-2", "case-3", "case-2"));
+            var result = await(service, service.start(request, "operator").runId(), "COMPLETE");
+            assertThat(result.totalSamples()).isEqualTo(2);
+            assertThat(result.completedSamples()).isEqualTo(2);
+            assertThat(result.reportId()).isNull();
+            assertThat(result.diagnostics().sampleIds()).containsExactly("case-2", "case-3");
+            assertThat(result.diagnostics().samples()).allSatisfy(row -> {
+                assertThat(row.status()).isEqualTo("SUCCEEDED");
+                assertThat(row.totalTokens()).isEqualTo(3);
+                assertThat(row.estimatedCost()).isNull();
+            });
+            verify(previewRunner, never()).run(eq(sample()), anyString(), anyString(), any(), any());
+            verify(previewRunner, org.mockito.Mockito.times(2)).run(any(), anyString(), anyString(), any(), any());
+            verify(modelReleaseService, never()).createEvaluationReport(any(), any(), any(), anyInt(), anyString());
+            var restarted = new LlmEvaluationRunService(datasetLoader, previewRunner, modelReleaseService, store, executor);
+            assertThat(restarted.get(result.runId())).isEqualTo(result);
+            assertThatThrownBy(() -> restarted.start(new LlmEvaluationRunRequest("selected", "dataset", 1,
+                100L, BigDecimal.ONE, 5, List.of("case-1")), "operator")).isInstanceOf(BusinessException.class);
+        } finally { executor.shutdownNow(); }
+    }
+
+    @Test
+    void missingAndDuplicateDatasetIdsNeverCallProvider() throws Exception {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            when(datasetLoader.validateDirectory(anyString())).thenReturn(Path.of("dataset"));
+            when(datasetLoader.load(anyString())).thenReturn(dataset(sample()));
+            var service = new LlmEvaluationRunService(datasetLoader, previewRunner, modelReleaseService, store, executor);
+            var request = new LlmEvaluationRunRequest("missing", "dataset", 1, 100L, BigDecimal.ONE, 5,
+                List.of("case-2"));
+            var failed = await(service, service.start(request, "operator").runId(), "FAILED");
+            assertThat(failed.failureCode()).isEqualTo("DATASET_INVALID");
+            assertThat(failed.completedSamples()).isZero();
+            assertThat(failed.diagnostics().samples().getFirst().status()).isEqualTo("FAILED");
+            var original = dataset(sample());
+            when(datasetLoader.load(anyString())).thenReturn(new LlmEvaluationDatasetLoader.Dataset(
+                original.metadata(), original.version(), List.of(sample(), sample()), 1));
+            var duplicate = new LlmEvaluationRunRequest("duplicate", "dataset", 1, 100L, BigDecimal.ONE, 5,
+                List.of("case-1"));
+            assertThat(await(service, service.start(duplicate, "operator").runId(), "FAILED").failureCode())
+                .isEqualTo("DATASET_INVALID");
+            verify(previewRunner, never()).run(any(), anyString(), anyString(), any(), any());
+        } finally { executor.shutdownNow(); }
+    }
+
+    @Test
+    void failedDiagnosticIsNotSuccessfulAndHasNoReport() throws Exception {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            when(datasetLoader.validateDirectory(anyString())).thenReturn(Path.of("dataset"));
+            when(datasetLoader.load(anyString())).thenReturn(dataset(sample()));
+            when(previewRunner.run(any(), anyString(), anyString(), any(), any())).thenReturn(
+                new LlmEvaluationObservation("case-1", "jvm", false, "NONE", false, "NONE", true,
+                    "", false, 10, 0, BigDecimal.ZERO));
+            var service = new LlmEvaluationRunService(datasetLoader, previewRunner, modelReleaseService, store, executor);
+            var result = await(service, service.start(new LlmEvaluationRunRequest("failed-sample", "dataset", 1,
+                100L, BigDecimal.ONE, 5, List.of("case-1")), "operator").runId(), "COMPLETE");
+            assertThat(result.completedSamples()).isZero();
+            assertThat(result.diagnostics().samples().getFirst().failureCode()).isEqualTo("PARSE_FAILED");
+            assertThat(result.reportId()).isNull();
+        } finally { executor.shutdownNow(); }
+    }
+
+    @Test
+    void cancellationPreservesUnknownUsageAndDoesNotStartQueuedSamples() throws Exception {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        CountDownLatch returned = new CountDownLatch(1);
+        try {
+            var original = dataset(sample());
+            when(datasetLoader.validateDirectory(anyString())).thenReturn(Path.of("dataset"));
+            when(datasetLoader.load(anyString())).thenReturn(new LlmEvaluationDatasetLoader.Dataset(
+                original.metadata(), original.version(), List.of(sample(), sample("case-2")), 1));
+            when(previewRunner.run(any(), anyString(), anyString(), any(), any())).thenAnswer(invocation -> {
+                entered.countDown();
+                try { release.await(); } catch (InterruptedException ignored) { /* Simulate a late provider response. */ }
+                returned.countDown();
+                return observation(5, BigDecimal.ONE);
+            });
+            var service = new LlmEvaluationRunService(datasetLoader, previewRunner, modelReleaseService, store, executor);
+            var result = service.start(new LlmEvaluationRunRequest("cancel-diagnostic", "dataset", 1,
+                100L, BigDecimal.ONE, 5, List.of("case-1", "case-2")), "operator");
+            assertThat(entered.await(2, TimeUnit.SECONDS)).isTrue();
+            service.cancel(result.runId());
+            release.countDown();
+            assertThat(returned.await(2, TimeUnit.SECONDS)).isTrue();
+            executor.shutdown();
+            assertThat(executor.awaitTermination(2, TimeUnit.SECONDS)).isTrue();
+            var cancelled = service.get(result.runId());
+            assertThat(cancelled.completedSamples()).isZero();
+            assertThat(cancelled.diagnostics().samples()).allSatisfy(row -> {
+                assertThat(row.status()).isEqualTo("CANCELLED");
+                assertThat(row.usageSource()).isEqualTo("UNKNOWN");
+                assertThat(row.estimatedCost()).isNull();
+            });
+            verify(previewRunner, org.mockito.Mockito.times(1)).run(any(), anyString(), anyString(), any(), any());
+            verify(modelReleaseService, never()).createEvaluationReport(any(), any(), any(), anyInt(), anyString());
+        } finally { release.countDown(); executor.shutdownNow(); }
+    }
+
+    @Test
+    void diagnosticBudgetFailureCannotBecomeASuccessfulSample() throws Exception {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            when(datasetLoader.validateDirectory(anyString())).thenReturn(Path.of("dataset"));
+            when(datasetLoader.load(anyString())).thenReturn(dataset(sample()));
+            when(previewRunner.run(any(), anyString(), anyString(), any(), any())).thenAnswer(invocation -> {
+                var budget = invocation.<LlmEvaluationBudget>getArgument(4);
+                try { budget.reserve("system", "user", 2000, BigDecimal.ONE, BigDecimal.ONE); }
+                catch (LlmEvaluationBudget.BudgetExceededException ignored) { /* Production fallback. */ }
+                return observation(0, BigDecimal.ZERO);
+            });
+            var service = new LlmEvaluationRunService(datasetLoader, previewRunner, modelReleaseService, store, executor);
+            var failed = await(service, service.start(new LlmEvaluationRunRequest("budget-diagnostic", "dataset", 1,
+                100L, BigDecimal.ONE, 5, List.of("case-1")), "operator").runId(), "FAILED");
+            assertThat(failed.completedSamples()).isZero();
+            assertThat(failed.diagnostics().samples().getFirst().failureCode()).isEqualTo("BUDGET_EXHAUSTED");
+            assertThat(failed.reportId()).isNull();
+        } finally { executor.shutdownNow(); }
+    }
+
+    @Test
+    void rejectsEmptyOrPathSampleSelections() {
+        var service = new LlmEvaluationRunService(datasetLoader, previewRunner, modelReleaseService, store, null);
+        for (List<String> ids : List.of(List.<String>of(), List.of("../secret"), List.of("x".repeat(129)))) {
+            assertThatThrownBy(() -> service.start(new LlmEvaluationRunRequest("invalid", "dataset", 1,
+                100L, BigDecimal.ONE, 5, ids), "operator")).isInstanceOf(BusinessException.class);
+        }
+    }
+
     private LlmEvaluationRunDto await(LlmEvaluationRunService service, String runId, String status)
         throws InterruptedException {
         LlmEvaluationRunDto latest = service.get(runId);
@@ -330,9 +482,11 @@ class LlmEvaluationRunServiceTest {
         return new LlmEvaluationDatasetLoader.Dataset(metadata, version, List.of(sample), 1);
     }
 
-    private LlmEvaluationDatasetLoader.EvaluationCase sample() {
+    private LlmEvaluationDatasetLoader.EvaluationCase sample() { return sample("case-1"); }
+
+    private LlmEvaluationDatasetLoader.EvaluationCase sample(String id) {
         return new LlmEvaluationDatasetLoader.EvaluationCase(
-            "case-1", "repo-1", "FIXED_REGRESSION", "java", "jvm", null, false, "NONE", "org", "repo", 1,
+            id, "repo-1", "FIXED_REGRESSION", "java", "jvm", null, false, "NONE", "org", "repo", 1,
             "head", "title", "main", List.of(new LlmEvaluationDatasetLoader.EvaluationFile(
                 "src/App.java", "modified", 1, 1, "patch"
             )), Boolean.FALSE, Boolean.FALSE, Boolean.FALSE, Boolean.FALSE
@@ -398,7 +552,8 @@ class LlmEvaluationRunServiceTest {
                     "RUN_INTERRUPTED",
                     run.submittedAt(),
                     run.startedAt(),
-                    recoveredAt
+                    recoveredAt,
+                    run.diagnostics()
                 ));
                 recovered++;
             }

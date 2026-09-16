@@ -12,8 +12,10 @@ import org.springframework.stereotype.Repository;
 class JdbcLlmEvaluationRunStore implements LlmEvaluationRunStore {
 
     private final JdbcTemplate jdbcTemplate;
+    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
-    JdbcLlmEvaluationRunStore(JdbcTemplate jdbcTemplate) {
+    JdbcLlmEvaluationRunStore(JdbcTemplate jdbcTemplate, com.fasterxml.jackson.databind.ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
         this.jdbcTemplate = jdbcTemplate;
     }
 
@@ -25,8 +27,8 @@ class JdbcLlmEvaluationRunStore implements LlmEvaluationRunStore {
                     tenant_id, run_id, run_key, status, data_directory, max_concurrency,
                     max_tokens, max_cost, max_duration_seconds, operator, total_samples,
                     completed_samples, total_tokens, total_cost, report_id, failure_code,
-                    submitted_at, started_at, finished_at, created_at, updated_at
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, current_timestamp(6), current_timestamp(6))
+                    submitted_at, started_at, finished_at, diagnostics_json, created_at, updated_at
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, current_timestamp(6), current_timestamp(6))
                 """,
                 candidate.tenantId(),
                 candidate.runId(),
@@ -46,7 +48,8 @@ class JdbcLlmEvaluationRunStore implements LlmEvaluationRunStore {
                 candidate.failureCode(),
                 candidate.submittedAt(),
                 candidate.startedAt(),
-                candidate.finishedAt()
+                candidate.finishedAt(),
+                LlmEvaluationDiagnostics.encode(objectMapper, candidate.diagnostics())
             );
             return candidate;
         } catch (DuplicateKeyException ignored) {
@@ -64,7 +67,7 @@ class JdbcLlmEvaluationRunStore implements LlmEvaluationRunStore {
             select tenant_id, run_id, run_key, status, data_directory, max_concurrency,
                    max_tokens, max_cost, max_duration_seconds, operator, total_samples,
                    completed_samples, total_tokens, total_cost, report_id, failure_code,
-                   submitted_at, started_at, finished_at
+                   submitted_at, started_at, finished_at, diagnostics_json
               from llm_evaluation_run
              where tenant_id = ? and run_id = ?
             """, this::map, tenantId, runId);
@@ -77,7 +80,7 @@ class JdbcLlmEvaluationRunStore implements LlmEvaluationRunStore {
             update llm_evaluation_run
                set status = ?, total_samples = ?, completed_samples = ?, total_tokens = ?,
                    total_cost = ?, report_id = ?, failure_code = ?, started_at = ?,
-                   finished_at = ?, updated_at = current_timestamp(6)
+                   finished_at = ?, diagnostics_json = ?, updated_at = current_timestamp(6)
              where tenant_id = ? and run_id = ?
             """,
             run.status(),
@@ -89,6 +92,7 @@ class JdbcLlmEvaluationRunStore implements LlmEvaluationRunStore {
             run.failureCode(),
             run.startedAt(),
             run.finishedAt(),
+            LlmEvaluationDiagnostics.encode(objectMapper, run.diagnostics()),
             run.tenantId(),
             run.runId()
         );
@@ -117,7 +121,7 @@ class JdbcLlmEvaluationRunStore implements LlmEvaluationRunStore {
             select tenant_id, run_id, run_key, status, data_directory, max_concurrency,
                    max_tokens, max_cost, max_duration_seconds, operator, total_samples,
                    completed_samples, total_tokens, total_cost, report_id, failure_code,
-                   submitted_at, started_at, finished_at
+                   submitted_at, started_at, finished_at, diagnostics_json
               from llm_evaluation_run
              where tenant_id = ? and run_key = ?
             """, this::map, tenantId, runKey);
@@ -144,7 +148,9 @@ class JdbcLlmEvaluationRunStore implements LlmEvaluationRunStore {
             rs.getString("failure_code"),
             time(rs, "submitted_at"),
             time(rs, "started_at"),
-            time(rs, "finished_at")
+            time(rs, "finished_at"),
+            LlmEvaluationDiagnostics.terminal(LlmEvaluationDiagnostics.decode(objectMapper, rs.getString("diagnostics_json")),
+                rs.getString("status"), rs.getString("failure_code"))
         );
     }
 

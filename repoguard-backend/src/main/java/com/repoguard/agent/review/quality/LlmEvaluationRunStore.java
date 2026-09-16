@@ -34,7 +34,8 @@ interface LlmEvaluationRunStore {
         String failureCode,
         LocalDateTime submittedAt,
         LocalDateTime startedAt,
-        LocalDateTime finishedAt
+        LocalDateTime finishedAt,
+        LlmEvaluationRunDto.Diagnostics diagnostics
     ) {
         LlmEvaluationRunDto dto() {
             return new LlmEvaluationRunDto(
@@ -49,7 +50,8 @@ interface LlmEvaluationRunStore {
                 failureCode,
                 submittedAt,
                 startedAt,
-                finishedAt
+                finishedAt,
+                diagnostics
             );
         }
 
