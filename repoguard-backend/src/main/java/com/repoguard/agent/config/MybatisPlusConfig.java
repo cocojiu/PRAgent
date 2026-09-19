@@ -27,6 +27,7 @@ public class MybatisPlusConfig {
         "github_comment_publication",
         "github_comment_publication_batch",
         "github_comment_publication_batch_item",
+        "github_feedback_event",
         "github_check_run",
         "github_check_run_policy",
         "integration_config",
