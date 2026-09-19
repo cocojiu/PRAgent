@@ -126,7 +126,7 @@ class SupplyChainPolicyTest {
         String pom = read("repoguard-backend/pom.xml");
 
         assertThat(pom).contains(
-            "<rabbit-amqp-client.version>5.33.1</rabbit-amqp-client.version>"
+            "<rabbit-amqp-client.version>5.34.0</rabbit-amqp-client.version>"
         );
     }
 
