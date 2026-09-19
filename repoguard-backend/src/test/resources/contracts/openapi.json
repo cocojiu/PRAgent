@@ -628,6 +628,49 @@
         }
       }
     },
+    "/api/v1/config/feedback-summary" : {
+      "get" : {
+        "tags" : [ "FeedbackSummary" ],
+        "operationId" : "feedbackSummaryControllerSummary",
+        "x-controller-operation" : "FeedbackSummaryController#summary",
+        "parameters" : [ ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "FeedbackSummary",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "object",
+                      "x-java-type" : "FeedbackSummary"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/config/integrations/github" : {
       "get" : {
         "tags" : [ "SystemConfig" ],

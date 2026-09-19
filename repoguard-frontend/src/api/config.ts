@@ -283,3 +283,5 @@ export const fetchNotificationDeliveries = (params: { page?: number; pageSize?: 
 
 export const fetchGithubFeedback = (limit = 20) => apiRequest("fetchGithubFeedback", { limit });
 export const retryGithubFeedback = (id: number) => apiRequest("retryGithubFeedback", { id });
+
+export const fetchFeedbackSummary = () => apiRequest("fetchFeedbackSummary", undefined);

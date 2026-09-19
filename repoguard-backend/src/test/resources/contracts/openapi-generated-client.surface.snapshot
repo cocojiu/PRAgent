@@ -27,6 +27,7 @@ enterpriseTenantControllerPutRepository(input: { path: { tenantKey: string }; bo
 enterpriseTenantControllerUpdateStatus(input: { path: { tenantKey: string }; body: EnterpriseTenantStatusRequest }): Promise<EnterpriseTenant>; // PUT /api/v1/enterprise/tenants/{tenantKey}/status
 enterpriseTenantQuotaControllerGet(input: { path: { tenantKey: string } }): Promise<EnterpriseTenantQuota>; // GET /api/v1/enterprise/tenants/{tenantKey}/quota
 enterpriseTenantQuotaControllerUpdate(input: { path: { tenantKey: string }; body: EnterpriseTenantQuotaRequest }): Promise<EnterpriseTenantQuota>; // PUT /api/v1/enterprise/tenants/{tenantKey}/quota
+feedbackSummaryControllerSummary(): Promise<FeedbackSummary>; // GET /api/v1/config/feedback-summary
 frontendPerformanceControllerRecordPerformance(input: { body: FrontendPerformanceReport }): Promise<void>; // POST /api/v1/observability/frontend/performance
 githubFeedbackControllerDiagnostics(input?: { query?: { limit?: number } }): Promise<GithubFeedbackDiagnostics>; // GET /api/v1/github/feedback-events
 githubFeedbackControllerRetry(input: { path: { id: number } }): Promise<void>; // POST /api/v1/github/feedback-events/{id}/retry

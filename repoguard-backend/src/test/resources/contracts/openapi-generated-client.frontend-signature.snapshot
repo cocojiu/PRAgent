@@ -27,6 +27,7 @@ fetchDataRetentionCleanupAudits -> dataRetentionControllerListCleanupAudits(inpu
 fetchEnterpriseTenant -> enterpriseTenantControllerGet(input: { path: { tenantKey: string } }): Promise<EnterpriseTenant>; // GET /api/v1/enterprise/tenants/{tenantKey}
 fetchEnterpriseTenantQuota -> enterpriseTenantQuotaControllerGet(input: { path: { tenantKey: string } }): Promise<EnterpriseTenantQuota>; // GET /api/v1/enterprise/tenants/{tenantKey}/quota
 fetchEnterpriseTenants -> enterpriseTenantControllerList(input?: { query?: { page?: number; pageSize?: number; status?: string } }): Promise<PageResponse<EnterpriseTenant>>; // GET /api/v1/enterprise/tenants
+fetchFeedbackSummary -> feedbackSummaryControllerSummary(): Promise<FeedbackSummary>; // GET /api/v1/config/feedback-summary
 fetchGithubChecksSetup -> systemConfigControllerGetGithubChecksSetup(input?: { query?: { organization: string; repository: string } }): Promise<GithubChecksSetupStatus>; // GET /api/v1/config/integrations/github/checks
 fetchGithubCommentPreview -> reviewControllerGetGithubCommentPreview(input: { path: { id: number }; query?: { commentableOnly?: boolean; page?: number; pageSize?: number } }): Promise<GithubCommentPreview>; // GET /api/v1/reviews/{id}/github-comments/preview
 fetchGithubCommentPublicationHistory -> reviewControllerGetGithubCommentPublicationHistory(input: { path: { id: number }; query?: { page?: number; pageSize?: number; status?: string } }): Promise<GithubCommentPublicationHistory>; // GET /api/v1/reviews/{id}/github-comments/publications

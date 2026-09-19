@@ -20,6 +20,7 @@ import type {
   EnterpriseTenantQuotaRequest,
   EnterpriseTenantRepositoryRequest,
   EnterpriseTenantStatusRequest,
+  FeedbackSummary,
   FrontendPerformanceReport,
   GithubChecksPolicyRequest,
   GithubChecksPreviewRequest,
@@ -246,6 +247,13 @@ export type GeneratedOpenApiOperationMap = {
     query: never;
     body: EnterpriseTenantQuotaRequest;
     response: EnterpriseTenantQuota;
+  };
+  "feedbackSummaryControllerSummary": {
+    method: "GET";
+    pathParams: never;
+    query: never;
+    body: never;
+    response: FeedbackSummary;
   };
   "frontendPerformanceControllerRecordPerformance": {
     method: "POST";
@@ -1134,6 +1142,14 @@ export const generatedOpenApiOperations = {
     queryParamNames: [],
     hasRequestBody: true,
     requestBodyRequired: true
+  },
+  "feedbackSummaryControllerSummary": {
+    method: "GET",
+    path: "/api/v1/config/feedback-summary",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: false,
+    requestBodyRequired: false
   },
   "frontendPerformanceControllerRecordPerformance": {
     method: "POST",

@@ -3,6 +3,7 @@ import type { ReviewTaskSummary } from "@/api/generated/reviewDetailTypes";
 import type {
   GithubIntegrationConfig,
   GithubFeedbackDiagnostics,
+  FeedbackSummary,
   GithubChecksSetupStatus,
   PageResponse,
   ReviewPolicyConfig,
@@ -187,3 +188,15 @@ export const isGithubFeedbackDiagnostics: ApiResponseValidator<GithubFeedbackDia
       && hasNumber(event, "findingId") && hasNumber(event, "attempts")
       && ["PENDING", "APPLIED", "IGNORED", "FAILED"].includes(String(event.status))
       && ["false_positive", "ignored"].includes(String(event.feedbackStatus)));
+
+export const isFeedbackSummary: ApiResponseValidator<FeedbackSummary> = (value): value is FeedbackSummary =>
+  isRecord(value) && hasString(value, "windowStart") && hasString(value, "windowEnd")
+  && hasNumber(value, "examinedCount") && hasNumber(value, "excludedOrDuplicateCount")
+  && hasNumber(value, "sampleSize") && hasBoolean(value, "truncated")
+  && Array.isArray(value.sources) && value.sources.length === 2 && value.sources.every(source =>
+    isRecord(source) && ["RULE", "LLM"].includes(String(source.source))
+    && ["reviewed", "valid", "falsePositive", "fixed", "ignored"].every(key => hasNumber(source, key))
+    && ["INSUFFICIENT_DATA", "COUNTS_ONLY"].includes(String(source.evidenceStatus)))
+  && Array.isArray(value.details) && value.details.length <= 20 && value.details.every(row =>
+    isRecord(row) && hasNumber(row, "findingId") && hasNumber(row, "taskId") && hasNumber(row, "prNumber")
+    && ["source", "status", "actor", "feedbackAt", "repository", "headSha"].every(key => hasString(row, key)));

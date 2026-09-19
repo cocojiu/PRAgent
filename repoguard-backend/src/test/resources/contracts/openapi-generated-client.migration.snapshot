@@ -27,6 +27,7 @@ fetchDataRetentionCleanupAudits -> dataRetentionControllerListCleanupAudits // G
 fetchEnterpriseTenant -> enterpriseTenantControllerGet // GET /api/v1/enterprise/tenants/{tenantKey}
 fetchEnterpriseTenantQuota -> enterpriseTenantQuotaControllerGet // GET /api/v1/enterprise/tenants/{tenantKey}/quota
 fetchEnterpriseTenants -> enterpriseTenantControllerList // GET /api/v1/enterprise/tenants
+fetchFeedbackSummary -> feedbackSummaryControllerSummary // GET /api/v1/config/feedback-summary
 fetchGithubChecksSetup -> systemConfigControllerGetGithubChecksSetup // GET /api/v1/config/integrations/github/checks
 fetchGithubCommentPreview -> reviewControllerGetGithubCommentPreview // GET /api/v1/reviews/{id}/github-comments/preview
 fetchGithubCommentPublicationHistory -> reviewControllerGetGithubCommentPublicationHistory // GET /api/v1/reviews/{id}/github-comments/publications

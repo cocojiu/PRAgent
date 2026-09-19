@@ -19,7 +19,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
  * Exercises the supported rolling-upgrade path against a real MySQL instance.
  *
  * <p>The test is opt-in because local unit-test runs do not provision a database. CI enables it
- * with an isolated database and verifies the V76 expand state through the V98 feedback event state.
+ * with an isolated database and verifies the V76 expand state through the V99 feedback observation index.
  */
 @EnabledIfEnvironmentVariable(named = "REPOGUARD_RUN_INTEGRATION_TESTS", matches = "true")
 class FlywayMigrationUpgradePathIntegrationTest {
@@ -284,6 +284,15 @@ class FlywayMigrationUpgradePathIntegrationTest {
                 assertThat(latestSuccessfulMigration(connection)).isEqualTo("98");
                 assertThat(columnExists(connection, "github_feedback_event", "body_hash")).isTrue();
                 assertThat(compositeUniqueIndexExists(connection, "github_feedback_event", "uk_feedback_comment", 4)).isTrue();
+            }
+            migrateTo(url, username, password, "99");
+            try (Connection connection = open(url, username, password);
+                 PreparedStatement index = connection.prepareStatement("select count(*) from information_schema.statistics where table_schema = database() and table_name = 'review_finding' and index_name = 'idx_finding_tenant_feedback_window'")) {
+                assertThat(latestSuccessfulMigration(connection)).isEqualTo("99");
+                try (ResultSet rows = index.executeQuery()) {
+                    assertThat(rows.next()).isTrue();
+                    assertThat(rows.getInt(1)).isEqualTo(3);
+                }
             }
         } finally {
             cleanup(url, username, password, tenantId, taskId, attemptId);

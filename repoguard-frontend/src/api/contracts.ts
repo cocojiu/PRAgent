@@ -27,6 +27,7 @@ import {
   isCurrentUser,
   isGithubChecksSetupStatus,
   isGithubFeedbackDiagnostics,
+  isFeedbackSummary,
   isGithubIntegrationConfig,
   isReviewPolicyConfig,
   isReviewTaskSummary,
@@ -80,6 +81,7 @@ import type {
   GithubChecksPreviewRequest,
   GithubChecksSetupStatus,
   GithubFeedbackDiagnostics,
+  FeedbackSummary,
   GithubIntegrationConfig,
   GithubIntegrationConfigRequest,
   GithubPullRequestOptions,
@@ -220,6 +222,7 @@ type DataRetentionCleanupAuditInput = {
 };
 
 export type ApiContract = {
+  fetchFeedbackSummary: ApiOperation<undefined, FeedbackSummary>;
   login: ApiOperation<LoginRequest, AuthResponse>;
   register: ApiOperation<RegisterRequest, AuthResponse>;
   getCurrentUser: ApiOperation<undefined, CurrentUser>;
@@ -443,6 +446,10 @@ type ApiEndpointMap = {
 };
 
 const apiEndpoints: ApiEndpointMap = {
+  fetchFeedbackSummary: {
+    ...generatedEndpoint("feedbackSummaryControllerSummary", {}),
+    validateResponse: isFeedbackSummary
+  },
   login: {
     method: "POST",
     path: () => "/api/v1/auth/login",

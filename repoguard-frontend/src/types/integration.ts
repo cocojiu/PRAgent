@@ -184,3 +184,10 @@ export interface GithubFeedbackDiagnostics {
   events: { id: number; deliveryId: string; taskId: number; findingId: number; feedbackStatus: string;
     status: string; attempts: number; failureCode: string | null; updatedAt: string }[];
 }
+
+export interface FeedbackSummary {
+  windowStart: string; windowEnd: string; examinedCount: number; excludedOrDuplicateCount: number;
+  truncated: boolean; sampleSize: number;
+  sources: Array<{ source: string; reviewed: number; valid: number; falsePositive: number; fixed: number; ignored: number; evidenceStatus: string }>;
+  details: Array<{ findingId: number; taskId: number; source: string; status: string; actor: string; feedbackAt: string; repository: string; prNumber: number; headSha: string }>;
+}
