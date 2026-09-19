@@ -60,7 +60,9 @@ class ControllerAuthorizationContractTest {
         "NotificationController#report",
         "ReviewWorkflowController#queue",
         "RepositoryPolicyController#preview",
-        "RepositoryPolicyController#listSuppressions"
+        "RepositoryPolicyController#listSuppressions",
+        "GithubFeedbackController#diagnostics",
+        "FeedbackSummaryController#summary"
     );
 
     @Test

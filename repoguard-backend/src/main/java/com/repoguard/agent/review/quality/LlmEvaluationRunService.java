@@ -106,11 +106,13 @@ public class LlmEvaluationRunService {
             || request.maxDurationSeconds() > 3_600) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "评估运行预算参数无效");
         }
+        List<String> sampleIds = LlmEvaluationDiagnostics.validate(request.sampleIds());
         Path validatedDirectory = datasetLoader.validateDirectory(directory);
         long tenantId = TenantContext.currentTenantIdOrDefault();
         RunKey key = new RunKey(tenantId, runKey);
         LlmEvaluationRunState existing = byKey.get(key);
         if (existing != null) {
+            requireSameSelection(existing.diagnostics(), sampleIds);
             return existing.dto();
         }
         LlmEvaluationRunState state = new LlmEvaluationRunState(
@@ -124,12 +126,15 @@ public class LlmEvaluationRunService {
             request.maxDurationSeconds(),
             normalizeOperator(operator)
         );
+        state.initializeDiagnostics(sampleIds);
         LlmEvaluationRunStore.StoredRun stored = store.createOrGet(state.stored());
         if (!state.runId.equals(stored.runId())) {
+            requireSameSelection(stored.diagnostics(), sampleIds);
             return stored.dto();
         }
         LlmEvaluationRunState raced = byKey.putIfAbsent(key, state);
         if (raced != null) {
+            requireSameSelection(raced.diagnostics(), sampleIds);
             return raced.dto();
         }
         byId.put(state.runId, state);
@@ -204,7 +209,9 @@ public class LlmEvaluationRunService {
         ExecutorService casesExecutor = null;
         try {
             LlmEvaluationDatasetLoader.Dataset dataset = datasetLoader.load(state.dataDirectory);
-            state.totalSamples.set(dataset.cases().size());
+            List<LlmEvaluationDatasetLoader.EvaluationCase> selected =
+                LlmEvaluationDiagnostics.select(dataset, state.diagnostics());
+            state.totalSamples.set(selected.size());
             persist(state);
             ReviewDeadline deadline = ReviewDeadline.startingNow(
                 Duration.ofSeconds(state.maxDurationSeconds)
@@ -218,17 +225,11 @@ public class LlmEvaluationRunService {
                 }
             );
             List<Future<LlmEvaluationObservation>> futures = new ArrayList<>();
-            for (LlmEvaluationDatasetLoader.EvaluationCase sample : dataset.cases()) {
+            for (LlmEvaluationDatasetLoader.EvaluationCase sample : selected) {
                 if (state.cancelled.get()) {
                     throw new CancellationException();
                 }
-                futures.add(casesExecutor.submit(() -> previewRunner.run(
-                    sample,
-                    dataset.version().provider(),
-                    dataset.version().model(),
-                    deadline,
-                    budget
-                )));
+                futures.add(casesExecutor.submit(() -> runSample(state, sample, dataset, deadline, budget)));
             }
 
             List<LlmEvaluationObservation> observations = new ArrayList<>(futures.size());
@@ -243,7 +244,7 @@ public class LlmEvaluationRunService {
                 LlmEvaluationObservation observation = future.get(remaining, TimeUnit.NANOSECONDS);
                 budget.requireAvailable();
                 observations.add(observation);
-                state.add(observation);
+                if (state.diagnostics() == null) state.add(observation);
                 persist(state);
                 LOGGER.info(
                     "Evaluation sample completed runId={} caseId={} expectedFinding={} predictedFinding={} "
@@ -272,6 +273,12 @@ public class LlmEvaluationRunService {
             synchronized (state) {
                 if (state.cancelled.get()) {
                     throw new CancellationException();
+                }
+                if (state.diagnostics() != null) {
+                    state.accountBudget(budget);
+                    state.complete(null);
+                    persist(state);
+                    return;
                 }
                 LlmModelReleaseDto.EvaluationReportDto report = modelReleaseService.createEvaluationReport(
                     runtimeVersion(dataset.version()),
@@ -313,6 +320,40 @@ public class LlmEvaluationRunService {
         }
     }
 
+    private void requireSameSelection(LlmEvaluationRunDto.Diagnostics existing, List<String> requested) {
+        if (!java.util.Objects.equals(existing == null ? null : existing.sampleIds(), requested)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "运行幂等键已用于其他样本选择，请使用新键");
+        }
+    }
+
+    @SuppressWarnings("try")
+    private LlmEvaluationObservation runSample(LlmEvaluationRunState state,
+        LlmEvaluationDatasetLoader.EvaluationCase sample, LlmEvaluationDatasetLoader.Dataset dataset,
+        ReviewDeadline deadline, LlmEvaluationBudget budget) {
+        try (TenantContext.Scope ignored = TenantContext.withTenant(state.tenantId)) {
+            if (state.cancelled.get() || Thread.currentThread().isInterrupted()) throw new CancellationException();
+            state.recordSample(sample.caseId(), "RUNNING", null, null);
+            persist(state);
+            try {
+                LlmEvaluationObservation result = previewRunner.run(sample, dataset.version().provider(),
+                    dataset.version().model(), deadline, budget);
+                budget.requireAvailable();
+                boolean success = LlmEvaluationDiagnostics.successful(result);
+                synchronized (state) {
+                    if (!state.cancelled.get() && state.diagnostics() != null) state.add(result);
+                    state.recordSample(sample.caseId(), success ? "SUCCEEDED" : "FAILED",
+                        success ? null : result.failureCategories().isBlank() ? "PARSE_FAILED" : result.failureCategories(), result);
+                }
+                persist(state);
+                return result;
+            } catch (RuntimeException ex) {
+                state.recordSample(sample.caseId(), "FAILED", classifyFailure(ex), null);
+                persist(state);
+                throw ex;
+            }
+        }
+    }
+
     private String classifyFailure(Throwable failure) {
         if (failure instanceof LlmEvaluationBudget.BudgetExceededException || failure instanceof TimeoutException) {
             return "BUDGET_EXHAUSTED";
@@ -327,7 +368,9 @@ public class LlmEvaluationRunService {
     }
 
     private void persist(LlmEvaluationRunState state) {
-        store.save(state.stored());
+        synchronized (state) {
+            store.save(state.stored());
+        }
     }
 
     private String text(String value, String field, int maxLength) {

@@ -54,6 +54,8 @@
       />
     </section>
 
+    <FeedbackSummaryPanel v-if="canManage" />
+
     <ReviewTaskPullRequestDialog
       v-model:visible="createDialogVisible"
       v-model:selected-pull-request-number="selectedPullRequestNumber"
@@ -78,6 +80,7 @@ import { useRouter } from "vue-router";
 import { useRoute } from "vue-router";
 import { canManage } from "@/stores/authState";
 import { CheckCircle, Clock, GitPullRequestArrow, ListTodo, ShieldAlert, XCircle } from "@lucide/vue";
+import FeedbackSummaryPanel from "@/features/review-tasks/components/FeedbackSummaryPanel.vue";
 import MetricGrid from "@/components/MetricGrid.vue";
 import { useMetricIcon } from "@/composables/useMetricIcon";
 import {

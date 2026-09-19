@@ -12,6 +12,8 @@ final class AdminApiKeyAccessPolicy {
     private static final PathPatternParser PATTERN_PARSER = caseInsensitiveParser();
 
     private static final List<ProtectedEndpoint> PROTECTED_ENDPOINTS = List.of(
+        new ProtectedEndpoint(ANY_METHOD, "/api/v1/github/feedback-events", "GitHub feedback operations"),
+        new ProtectedEndpoint(ANY_METHOD, "/api/v1/github/feedback-events/**", "GitHub feedback operations"),
         new ProtectedEndpoint(ANY_METHOD, "/api/v1/config/**", "Configuration read and write APIs"),
         new ProtectedEndpoint(ANY_METHOD, "/api/v1/enterprise/**", "Enterprise tenant control plane"),
         new ProtectedEndpoint(ANY_METHOD, "/api/v1/message-queue/**", "Message queue operations"),

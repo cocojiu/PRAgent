@@ -1,0 +1,36 @@
+create table github_feedback_event (
+    id bigint not null auto_increment primary key,
+    tenant_id bigint not null,
+    delivery_id varchar(128) not null,
+    owner varchar(100) not null,
+    repository varchar(100) not null,
+    pr_number int not null,
+    head_sha char(40) not null,
+    comment_id bigint not null,
+    parent_comment_id bigint not null,
+    actor_id bigint not null,
+    actor varchar(100) not null,
+    feedback_status varchar(32) not null,
+    note varchar(1024) not null,
+    body_hash char(64) not null,
+    event_created_at datetime(6) not null,
+    task_id bigint not null,
+    finding_id bigint not null,
+    attempt_id bigint not null,
+    status varchar(16) not null default 'PENDING',
+    attempts int not null default 0,
+    failure_code varchar(64) null,
+    next_attempt_at datetime(6) not null default current_timestamp(6),
+    created_at datetime(6) not null default current_timestamp(6),
+    updated_at datetime(6) not null default current_timestamp(6),
+    unique key uk_feedback_delivery (tenant_id, delivery_id),
+    unique key uk_feedback_comment (tenant_id, owner, repository, comment_id),
+    key idx_feedback_due (tenant_id, status, next_attempt_at, id),
+    key idx_feedback_finding (tenant_id, finding_id, id),
+    constraint fk_feedback_tenant foreign key (tenant_id) references tenant(id),
+    constraint chk_feedback_status check (status in ('PENDING', 'APPLIED', 'IGNORED', 'FAILED')),
+    constraint chk_feedback_command check (feedback_status in ('false_positive', 'ignored'))
+) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
+
+alter table github_comment_publication
+    add key idx_publication_remote_comment (tenant_id, github_comment_id, task_id);

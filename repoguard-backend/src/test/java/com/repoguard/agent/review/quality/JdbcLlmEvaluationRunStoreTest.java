@@ -19,11 +19,13 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 
 class JdbcLlmEvaluationRunStoreTest {
+    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper =
+        new com.repoguard.agent.config.JacksonConfig().objectMapper();
 
     @Test
     void findByRunIdMapsThePersistedAggregate() throws Exception {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
-        JdbcLlmEvaluationRunStore store = new JdbcLlmEvaluationRunStore(jdbcTemplate);
+        JdbcLlmEvaluationRunStore store = new JdbcLlmEvaluationRunStore(jdbcTemplate, objectMapper);
         ResultSet resultSet = persistedRow();
         when(jdbcTemplate.query(
             contains("where tenant_id = ? and run_id = ?"),
@@ -46,7 +48,7 @@ class JdbcLlmEvaluationRunStoreTest {
     @Test
     void createOrGetReturnsTheExistingRunAfterAnIdempotencyConflict() throws Exception {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
-        JdbcLlmEvaluationRunStore store = new JdbcLlmEvaluationRunStore(jdbcTemplate);
+        JdbcLlmEvaluationRunStore store = new JdbcLlmEvaluationRunStore(jdbcTemplate, objectMapper);
         LlmEvaluationRunStore.StoredRun candidate = candidate();
         when(jdbcTemplate.update(contains("insert into llm_evaluation_run"), any(Object[].class)))
             .thenThrow(new DuplicateKeyException("duplicate"));
@@ -65,7 +67,7 @@ class JdbcLlmEvaluationRunStoreTest {
     @Test
     void saveAndRecoveryRequireDurableUpdates() {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
-        JdbcLlmEvaluationRunStore store = new JdbcLlmEvaluationRunStore(jdbcTemplate);
+        JdbcLlmEvaluationRunStore store = new JdbcLlmEvaluationRunStore(jdbcTemplate, objectMapper);
         when(jdbcTemplate.update(
             contains("where tenant_id = ? and run_id = ?"),
             any(Object[].class)
@@ -79,6 +81,23 @@ class JdbcLlmEvaluationRunStoreTest {
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("持久化失败");
         assertThat(store.recoverInterrupted(recoveredAt)).isEqualTo(2);
+    }
+
+    @Test
+    void diagnosticMetadataRoundTripsAndRecoveryTerminatesPendingSamples() {
+        var initial = LlmEvaluationDiagnostics.initialize(List.of("case-1", "case-2"));
+        var updated = LlmEvaluationDiagnostics.update(initial, "case-1", "SUCCEEDED", null,
+            new LlmEvaluationObservation("case-1", "java", false, "NONE", false, "NONE", true,
+                "", true, 1, 3, new BigDecimal("0.01")));
+        String json = LlmEvaluationDiagnostics.encode(objectMapper, updated);
+        assertThat(json).doesNotContain("patch", "prompt", "response", "dataDirectory");
+        assertThat(LlmEvaluationDiagnostics.decode(objectMapper, json)).isEqualTo(updated);
+        var recovered = LlmEvaluationDiagnostics.terminal(updated, "FAILED", "RUN_INTERRUPTED");
+        assertThat(recovered.samples().getFirst().status()).isEqualTo("SUCCEEDED");
+        assertThat(recovered.samples().get(1).status()).isEqualTo("FAILED");
+        assertThat(recovered.samples().get(1).failureCode()).isEqualTo("RUN_INTERRUPTED");
+        assertThatThrownBy(() -> LlmEvaluationDiagnostics.decode(objectMapper, "invalid"))
+            .isInstanceOf(IllegalStateException.class);
     }
 
     private LlmEvaluationRunStore.StoredRun candidate() {
@@ -101,6 +120,7 @@ class JdbcLlmEvaluationRunStoreTest {
             null,
             LocalDateTime.of(2026, 9, 9, 12, 0),
             LocalDateTime.of(2026, 9, 9, 12, 1),
+            null,
             null
         );
     }

@@ -20,6 +20,7 @@ import type {
   EnterpriseTenantQuotaRequest,
   EnterpriseTenantRepositoryRequest,
   EnterpriseTenantStatusRequest,
+  FeedbackSummary,
   FrontendPerformanceReport,
   GithubChecksPolicyRequest,
   GithubChecksPreviewRequest,
@@ -27,6 +28,7 @@ import type {
   GithubCommentPreview,
   GithubCommentPublicationHistory,
   GithubCommentPublish,
+  GithubFeedbackDiagnostics,
   GithubIntegrationConfig,
   GithubIntegrationConfigRequest,
   GithubPullRequestOptions,
@@ -246,11 +248,32 @@ export type GeneratedOpenApiOperationMap = {
     body: EnterpriseTenantQuotaRequest;
     response: EnterpriseTenantQuota;
   };
+  "feedbackSummaryControllerSummary": {
+    method: "GET";
+    pathParams: never;
+    query: never;
+    body: never;
+    response: FeedbackSummary;
+  };
   "frontendPerformanceControllerRecordPerformance": {
     method: "POST";
     pathParams: never;
     query: never;
     body: FrontendPerformanceReport;
+    response: void;
+  };
+  "githubFeedbackControllerDiagnostics": {
+    method: "GET";
+    pathParams: never;
+    query: { limit?: number };
+    body: never;
+    response: GithubFeedbackDiagnostics;
+  };
+  "githubFeedbackControllerRetry": {
+    method: "POST";
+    pathParams: { id: number };
+    query: never;
+    body: never;
     response: void;
   };
   "messageQueueHealthControllerGetHealth": {
@@ -1120,6 +1143,14 @@ export const generatedOpenApiOperations = {
     hasRequestBody: true,
     requestBodyRequired: true
   },
+  "feedbackSummaryControllerSummary": {
+    method: "GET",
+    path: "/api/v1/config/feedback-summary",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
   "frontendPerformanceControllerRecordPerformance": {
     method: "POST",
     path: "/api/v1/observability/frontend/performance",
@@ -1127,6 +1158,22 @@ export const generatedOpenApiOperations = {
     queryParamNames: [],
     hasRequestBody: true,
     requestBodyRequired: true
+  },
+  "githubFeedbackControllerDiagnostics": {
+    method: "GET",
+    path: "/api/v1/github/feedback-events",
+    pathParamNames: [],
+    queryParamNames: ["limit"],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "githubFeedbackControllerRetry": {
+    method: "POST",
+    path: "/api/v1/github/feedback-events/{id}/retry",
+    pathParamNames: ["id"],
+    queryParamNames: [],
+    hasRequestBody: false,
+    requestBodyRequired: false
   },
   "messageQueueHealthControllerGetHealth": {
     method: "GET",

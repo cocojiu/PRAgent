@@ -172,10 +172,11 @@ class TenantBackgroundJobSchedulerTest {
             .extracting(path -> path.getFileName().toString())
             .containsExactlyInAnyOrder(
                 "ClusterCacheInvalidationPoller.java",
+                "GithubFeedbackScheduler.java",
                 "LlmModelReleaseMetricsScheduler.java",
                 "TenantBackgroundJobScheduler.java"
             );
-        assertThat(annotationCount).isEqualTo(15L);
+        assertThat(annotationCount).isEqualTo(16L);
     }
 
     private boolean containsScheduledAnnotation(Path path) {

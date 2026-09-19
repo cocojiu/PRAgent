@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isAuthResponse,
+  isFeedbackSummary,
   isGithubIntegrationConfig,
   isReviewPolicyConfig,
   isReviewTaskSummary,
@@ -65,4 +66,14 @@ const reviewPolicy = () => ({
   chunkMaxLines: 1200,
   inputTokenPricePerMillion: 2,
   outputTokenPricePerMillion: 8
+});
+
+it("rejects incomplete feedback observations and accepts explicit empty evidence", () => {
+  const value = { windowStart: "2026-08-18", windowEnd: "2026-09-17", examinedCount: 0, excludedOrDuplicateCount: 0,
+    sampleSize: 0, truncated: false, sources: ["RULE", "LLM"].map(source => ({ source, reviewed: 0, valid: 0,
+      falsePositive: 0, fixed: 0, ignored: 0, evidenceStatus: "INSUFFICIENT_DATA" })), details: [] };
+  expect(isFeedbackSummary(value)).toBe(true);
+  expect(isFeedbackSummary({ ...value, sources: [] })).toBe(false);
+  expect(isFeedbackSummary({ ...value, details: [{ taskId: 1 }] })).toBe(false);
+  expect(isFeedbackSummary({ ...value, sampleSize: "unknown" })).toBe(false);
 });

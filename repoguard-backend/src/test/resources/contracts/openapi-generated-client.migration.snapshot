@@ -27,9 +27,11 @@ fetchDataRetentionCleanupAudits -> dataRetentionControllerListCleanupAudits // G
 fetchEnterpriseTenant -> enterpriseTenantControllerGet // GET /api/v1/enterprise/tenants/{tenantKey}
 fetchEnterpriseTenantQuota -> enterpriseTenantQuotaControllerGet // GET /api/v1/enterprise/tenants/{tenantKey}/quota
 fetchEnterpriseTenants -> enterpriseTenantControllerList // GET /api/v1/enterprise/tenants
+fetchFeedbackSummary -> feedbackSummaryControllerSummary // GET /api/v1/config/feedback-summary
 fetchGithubChecksSetup -> systemConfigControllerGetGithubChecksSetup // GET /api/v1/config/integrations/github/checks
 fetchGithubCommentPreview -> reviewControllerGetGithubCommentPreview // GET /api/v1/reviews/{id}/github-comments/preview
 fetchGithubCommentPublicationHistory -> reviewControllerGetGithubCommentPublicationHistory // GET /api/v1/reviews/{id}/github-comments/publications
+fetchGithubFeedback -> githubFeedbackControllerDiagnostics // GET /api/v1/github/feedback-events
 fetchGithubIntegrationConfig -> systemConfigControllerGetGithubIntegration // GET /api/v1/config/integrations/github
 fetchGithubPullRequestOptions -> reviewControllerListConfiguredGithubPullRequests // GET /api/v1/reviews/github/pull-requests
 fetchLlmEvaluationReport -> reviewCalibrationControllerGetEvaluationReport // GET /api/v1/config/review-calibration/evaluation-reports/{reportId}
@@ -91,6 +93,7 @@ reportFrontendPerformance -> frontendPerformanceControllerRecordPerformance // P
 requeueMessageQueueTask -> messageQueueHealthControllerRequeueTask // POST /api/v1/message-queue/tasks/{taskId}/requeue
 resetRefreshToken -> authControllerResetRefreshToken // POST /api/v1/auth/refresh-token/reset
 resumeSecretReEncryptionJob -> systemConfigControllerResumeSecretReEncryptionJob // POST /api/v1/config/secrets/re-encryption/jobs/{jobId}/resume
+retryGithubFeedback -> githubFeedbackControllerRetry // POST /api/v1/github/feedback-events/{id}/retry
 retryNotificationEvent -> notificationIntegrationControllerRetryEvent // POST /api/v1/notification-events/{id}/retry
 retryReview -> reviewControllerRetryReview // POST /api/v1/reviews/{id}/retry
 revokeRepositorySuppression -> repositoryPolicyControllerRevoke // POST /api/v1/config/repository-policy/suppressions/{id}/revoke

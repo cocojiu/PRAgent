@@ -261,3 +261,12 @@ export const useLlmModelReleaseCenter = () => {
     transitionReportLifecycle
   };
 };
+
+export const selectedEvaluationSampleIds = (diagnostic: boolean, text: string): string[] | undefined => {
+  if (!diagnostic) return undefined;
+  const ids = [...new Set(text.split(/[,，\s]+/).filter(Boolean))];
+  if (!ids.length || ids.length > 100 || ids.some(id => !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(id))) {
+    throw new Error("请输入 1 至 100 个有效样本 ID");
+  }
+  return ids;
+};
