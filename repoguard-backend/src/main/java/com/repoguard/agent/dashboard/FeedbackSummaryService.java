@@ -34,7 +34,7 @@ public class FeedbackSummaryService {
                 rs.getLong("attempt_id"), rs.getLong("current_attempt_id"), rs.getBoolean("current_attempt"),
                 rs.getString("category"), rs.getString("source"), rs.getString("finding_fingerprint"),
                 rs.getString("feedback_status"), rs.getString("feedback_by"),
-                rs.getTimestamp("feedback_at").toLocalDateTime(), rs.getString("organization"),
+                rs.getObject("feedback_at", LocalDateTime.class), rs.getString("organization"),
                 rs.getString("repository"), rs.getInt("pr_number"), rs.getString("commit_sha"),
                 rs.getString("task_source")), TenantContext.currentTenantIdOrDefault(), start, end);
         return summarize(rows, start, end);

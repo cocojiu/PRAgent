@@ -188,7 +188,7 @@ class SupplyChainPolicyTest {
     private static Path repositoryRoot() throws IOException {
         Path current = Path.of("").toAbsolutePath();
         while (current != null) {
-            if (Files.isDirectory(current.resolve(".git")) && Files.isDirectory(current.resolve("repoguard-backend"))) {
+            if (Files.exists(current.resolve(".git")) && Files.isDirectory(current.resolve("repoguard-backend"))) {
                 return current;
             }
             current = current.getParent();
