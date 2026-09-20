@@ -72,6 +72,29 @@ class FeedbackSummaryServiceTest {
         assertThat(((LocalDateTime) values.getValue()[1]).plusDays(30)).isEqualTo(values.getValue()[2]);
     }
 
+    @Test
+    void preservesDatetimeWhenJdbcTimestampConversionWouldShiftTheClock() throws Exception {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        java.sql.ResultSet rs = mock(java.sql.ResultSet.class);
+        when(rs.getLong(anyString())).thenReturn(1L);
+        when(rs.getBoolean("current_attempt")).thenReturn(true);
+        when(rs.getInt("pr_number")).thenReturn(208);
+        when(rs.getString(anyString())).thenAnswer(call -> switch ((String) call.getArgument(0)) {
+            case "category" -> "FINDING";
+            case "source" -> "RULE";
+            case "feedback_status" -> "IGNORED";
+            case "task_source" -> "MANUAL_INPUT";
+            case "commit_sha" -> "a".repeat(40);
+            default -> "acceptance";
+        });
+        when(rs.getObject("feedback_at", LocalDateTime.class)).thenReturn(NOW);
+        when(rs.getTimestamp("feedback_at")).thenReturn(java.sql.Timestamp.valueOf(NOW.minusHours(8)));
+        when(jdbc.query(anyString(), org.mockito.ArgumentMatchers.<RowMapper<Observation>>any(), any(Object[].class)))
+            .thenAnswer(call -> List.of(call.<RowMapper<Observation>>getArgument(1).mapRow(rs, 0)));
+
+        assertThat(new FeedbackSummaryService(jdbc).summary().details().getFirst().feedbackAt()).isEqualTo(NOW);
+    }
+
     private FeedbackSummaryService.FeedbackSummary summarize(List<Observation> rows) {
         return FeedbackSummaryService.summarize(rows, NOW.minusDays(30), NOW);
     }
