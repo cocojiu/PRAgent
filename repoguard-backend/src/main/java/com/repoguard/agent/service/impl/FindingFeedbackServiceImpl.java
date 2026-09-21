@@ -1,5 +1,6 @@
 package com.repoguard.agent.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.cache.CacheEvictionService;
@@ -124,12 +125,18 @@ public class FindingFeedbackServiceImpl implements FindingFeedbackService {
         }
 
         FindingFeedbackStatus status = normalizeFindingFeedbackStatus(request.status());
-        LocalDateTime feedbackAt = LocalDateTime.now();
+        LocalDateTime feedbackAt = LocalDateTime.now().withNano(0);
         finding.setFeedbackStatus(status.code());
         finding.setFeedbackNote(cleanNote(request.note()));
         finding.setFeedbackBy(cleanOperator(operator));
         finding.setFeedbackAt(feedbackAt);
-        reviewFindingMapper.updateById(finding);
+        reviewFindingMapper.update(null, new LambdaUpdateWrapper<ReviewFinding>()
+            .eq(ReviewFinding::getId, findingId)
+            .eq(ReviewFinding::getTaskId, taskId)
+            .set(ReviewFinding::getFeedbackStatus, finding.getFeedbackStatus())
+            .set(ReviewFinding::getFeedbackNote, finding.getFeedbackNote())
+            .set(ReviewFinding::getFeedbackBy, finding.getFeedbackBy())
+            .set(ReviewFinding::getFeedbackAt, feedbackAt));
         if (status == FindingFeedbackStatus.FALSE_POSITIVE && suppressionService != null) {
             suppressionService.createFromFinding(task, finding, operator, finding.getFeedbackNote());
         }

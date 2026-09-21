@@ -611,7 +611,8 @@ class ReviewServiceImplTest {
         assertThat(finding.getFeedbackStatus()).isEqualTo("FALSE_POSITIVE");
         assertThat(finding.getFeedbackBy()).isEqualTo("review-lead");
         assertThat(finding.getFeedbackAt()).isNotNull();
-        verify(reviewFindingMapper).updateById(finding);
+        verify(reviewFindingMapper).update(org.mockito.ArgumentMatchers.isNull(),
+            org.mockito.ArgumentMatchers.<com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<ReviewFinding>>any());
         verify(reviewTimelineMapper).insert(any(ReviewTimeline.class));
         verify(cacheEvictionService).evictDashboardReviewActivity(task.getCreatedAt().toLocalDate());
         verify(cacheEvictionService).evictReviewRules();
