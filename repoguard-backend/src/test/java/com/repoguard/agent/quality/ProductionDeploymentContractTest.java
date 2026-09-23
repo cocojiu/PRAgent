@@ -214,9 +214,20 @@ class ProductionDeploymentContractTest {
             .contains("FRONTEND_DIGEST: ${{ needs.build.outputs.frontend_digest }}")
             .contains("BACKEND_SOURCE=\"${REGISTRY}/${owner}/${repo}-backend@${BACKEND_DIGEST}\"")
             .contains("FRONTEND_SOURCE=\"${REGISTRY}/${owner}/${repo}-frontend@${FRONTEND_DIGEST}\"")
+            .contains("timeout 600s docker pull \"$BACKEND_SOURCE\"")
+            .contains("timeout 600s docker pull \"$FRONTEND_SOURCE\"")
+            .contains("docker save \"$backend_transfer\" \"$frontend_transfer\" | gzip -1 |")
+            .contains("bash -o pipefail -c 'gzip -dc | docker load'")
+            .contains("= '${backend_image_id}'")
+            .contains("= '${frontend_image_id}'")
             .contains("docker manifest inspect '${BACKEND_TARGET}'")
             .contains("docker manifest inspect '${FRONTEND_TARGET}'")
-            .doesNotContain("needs.build.outputs.backend_image", "needs.build.outputs.frontend_image");
+            .doesNotContain(
+                "needs.build.outputs.backend_image",
+                "needs.build.outputs.frontend_image",
+                "timeout 600s docker pull '${BACKEND_SOURCE}'",
+                "timeout 600s docker pull '${FRONTEND_SOURCE}'"
+            );
 
         int backendScan = workflow.indexOf("- name: Scan backend image for high and critical CVEs");
         int frontendScan = workflow.indexOf("- name: Scan frontend image for high and critical CVEs");
