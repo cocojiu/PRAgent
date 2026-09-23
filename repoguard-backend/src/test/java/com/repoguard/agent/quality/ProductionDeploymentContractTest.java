@@ -201,6 +201,30 @@ class ProductionDeploymentContractTest {
     }
 
     @Test
+    void releaseMirrorsOnlyScannedDigestsInsideProtectedProductionDeployment() throws IOException {
+        String workflow = read(repositoryRoot().resolve(".github/workflows/release-images.yml"));
+
+        assertThat(workflow)
+            .contains("image-ref: ${{ env.BACKEND_IMAGE }}@${{ steps.backend_image.outputs.digest }}")
+            .contains("image-ref: ${{ env.FRONTEND_IMAGE }}@${{ steps.frontend_image.outputs.digest }}")
+            .contains("environment: production")
+            .contains("name: Mirror checked images to Aliyun ACR over VPC")
+            .contains("if: ${{ inputs.deploy_existing_tag == '' }}")
+            .contains("BACKEND_SOURCE: ${{ needs.build.outputs.backend_image }}@${{ needs.build.outputs.backend_digest }}")
+            .contains("FRONTEND_SOURCE: ${{ needs.build.outputs.frontend_image }}@${{ needs.build.outputs.frontend_digest }}")
+            .contains("docker manifest inspect '${BACKEND_TARGET}'")
+            .contains("docker manifest inspect '${FRONTEND_TARGET}'");
+
+        int backendScan = workflow.indexOf("- name: Scan backend image for high and critical CVEs");
+        int frontendScan = workflow.indexOf("- name: Scan frontend image for high and critical CVEs");
+        int mirror = workflow.indexOf("- name: Mirror checked images to Aliyun ACR over VPC");
+        int restart = workflow.indexOf("- name: Pull and restart");
+        assertThat(backendScan).isPositive().isLessThan(mirror);
+        assertThat(frontendScan).isPositive().isLessThan(mirror);
+        assertThat(mirror).isLessThan(restart);
+    }
+
+    @Test
     void deployPreflightsBeforeMutationAndRollbackRestoresAssetsFirst() throws IOException {
         String script = read(repositoryRoot().resolve("scripts/deploy-prod.sh"));
 
