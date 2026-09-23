@@ -210,10 +210,13 @@ class ProductionDeploymentContractTest {
             .contains("environment: production")
             .contains("name: Mirror checked images to Aliyun ACR over VPC")
             .contains("if: ${{ inputs.deploy_existing_tag == '' }}")
-            .contains("BACKEND_SOURCE: ${{ needs.build.outputs.backend_image }}@${{ needs.build.outputs.backend_digest }}")
-            .contains("FRONTEND_SOURCE: ${{ needs.build.outputs.frontend_image }}@${{ needs.build.outputs.frontend_digest }}")
+            .contains("BACKEND_DIGEST: ${{ needs.build.outputs.backend_digest }}")
+            .contains("FRONTEND_DIGEST: ${{ needs.build.outputs.frontend_digest }}")
+            .contains("BACKEND_SOURCE=\"${REGISTRY}/${owner}/${repo}-backend@${BACKEND_DIGEST}\"")
+            .contains("FRONTEND_SOURCE=\"${REGISTRY}/${owner}/${repo}-frontend@${FRONTEND_DIGEST}\"")
             .contains("docker manifest inspect '${BACKEND_TARGET}'")
-            .contains("docker manifest inspect '${FRONTEND_TARGET}'");
+            .contains("docker manifest inspect '${FRONTEND_TARGET}'")
+            .doesNotContain("needs.build.outputs.backend_image", "needs.build.outputs.frontend_image");
 
         int backendScan = workflow.indexOf("- name: Scan backend image for high and critical CVEs");
         int frontendScan = workflow.indexOf("- name: Scan frontend image for high and critical CVEs");
