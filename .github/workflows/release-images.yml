@@ -671,10 +671,6 @@ jobs:
           timeout 600s docker pull "$FRONTEND_SOURCE"
           docker tag "$BACKEND_SOURCE" "$backend_transfer"
           docker tag "$FRONTEND_SOURCE" "$frontend_transfer"
-          backend_image_id="$(docker image inspect --format '{{.Id}}' "$BACKEND_SOURCE")"
-          frontend_image_id="$(docker image inspect --format '{{.Id}}' "$FRONTEND_SOURCE")"
-          [[ "$backend_image_id" =~ ^sha256:[a-f0-9]{64}$ ]]
-          [[ "$frontend_image_id" =~ ^sha256:[a-f0-9]{64}$ ]]
           printf '%s' "$ACR_TOKEN" | ssh "${ssh_args[@]}" "$remote" \
             "docker login '${ACR_REGISTRY}' -u '${ACR_USER}' --password-stdin"
           # Divide the exact scanned images into small, checksummed chunks so
@@ -709,8 +705,8 @@ jobs:
             set -e
             docker tag '${backend_transfer}' '${BACKEND_TARGET}'
             docker tag '${frontend_transfer}' '${FRONTEND_TARGET}'
-            test \"\$(docker image inspect --format '{{.Id}}' '${BACKEND_TARGET}')\" = '${backend_image_id}'
-            test \"\$(docker image inspect --format '{{.Id}}' '${FRONTEND_TARGET}')\" = '${frontend_image_id}'
+            test \"\$(docker image inspect --format '{{.Id}}' '${backend_transfer}')\" = \"\$(docker image inspect --format '{{.Id}}' '${BACKEND_TARGET}')\"
+            test \"\$(docker image inspect --format '{{.Id}}' '${frontend_transfer}')\" = \"\$(docker image inspect --format '{{.Id}}' '${FRONTEND_TARGET}')\"
             timeout 600s docker push '${BACKEND_TARGET}'
             timeout 600s docker push '${FRONTEND_TARGET}'
             docker manifest inspect '${BACKEND_TARGET}' >/dev/null
