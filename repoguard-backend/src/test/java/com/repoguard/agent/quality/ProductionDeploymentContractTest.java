@@ -221,8 +221,9 @@ class ProductionDeploymentContractTest {
             .contains("xargs -0 -r -n1 -P8 bash -c 'upload_chunk \"$1\"' _")
             .contains("test \"$remote_sha\" = \"$archive_sha\"")
             .contains("gzip -dc | docker load")
-            .contains("= '${backend_image_id}'")
-            .contains("= '${frontend_image_id}'")
+            .contains("test \\\"\\$(docker image inspect --format '{{.Id}}' '${backend_transfer}')\\\" = \\\"\\$(docker image inspect --format '{{.Id}}' '${BACKEND_TARGET}')\\\"")
+            .contains("test \\\"\\$(docker image inspect --format '{{.Id}}' '${frontend_transfer}')\\\" = \\\"\\$(docker image inspect --format '{{.Id}}' '${FRONTEND_TARGET}')\\\"")
+            .doesNotContain("= '${backend_image_id}'", "= '${frontend_image_id}'")
             .contains("docker manifest inspect '${BACKEND_TARGET}'")
             .contains("docker manifest inspect '${FRONTEND_TARGET}'")
             .doesNotContain(
