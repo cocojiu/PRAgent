@@ -191,7 +191,7 @@ class ProductionDeploymentContractTest {
                 "provenance: false",
                 "name: Generate backend SBOM",
                 "name: Generate frontend SBOM",
-                "anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610",
+                "anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26",
                 "actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8",
                 "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6",
                 "subject-digest: ${{ steps.backend_image.outputs.digest }}",
@@ -395,7 +395,7 @@ class ProductionDeploymentContractTest {
                 "cron: '30 */6 * * *'",
                 "permissions:",
                 "id-token: write",
-                "aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c",
+                "aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd",
                 "Copy verified encrypted backup off host",
                 "Persist to immutable primary and replica storage",
                 "steps.object_storage.outputs.verified == 'true'"
