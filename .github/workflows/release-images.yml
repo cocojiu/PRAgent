@@ -656,7 +656,15 @@ jobs:
           frontend_transfer="pragent-frontend-transfer:${FRONTEND_DIGEST#sha256:}"
           remote="${DEPLOY_USER}@${DEPLOY_HOST}"
           ssh_args=(-o ServerAliveInterval=15 -o ServerAliveCountMax=80 -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}")
-          cleanup() { docker logout ghcr.io >/dev/null 2>&1 || true; }
+          [[ "$GITHUB_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$GITHUB_RUN_ATTEMPT" =~ ^[0-9]+$ ]]
+          transfer_dir="${RUNNER_TEMP}/repoguard-images-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          remote_dir="/tmp/repoguard-images-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          cleanup() {
+            docker logout ghcr.io >/dev/null 2>&1 || true
+            timeout 30s ssh "${ssh_args[@]}" "$remote" \
+              "rm -f -- '${remote_dir}'/part-*; rmdir -- '${remote_dir}'" >/dev/null 2>&1 || true
+          }
           trap cleanup EXIT
           printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           timeout 600s docker pull "$BACKEND_SOURCE"
@@ -669,11 +677,34 @@ jobs:
           [[ "$frontend_image_id" =~ ^sha256:[a-f0-9]{64}$ ]]
           printf '%s' "$ACR_TOKEN" | ssh "${ssh_args[@]}" "$remote" \
             "docker login '${ACR_REGISTRY}' -u '${ACR_USER}' --password-stdin"
-          # The production host cannot reliably download large GHCR layers. Stream
-          # only the exact scanned images from the runner, then push over ACR VPC.
-          docker save "$backend_transfer" "$frontend_transfer" | gzip -1 | \
-            timeout 1800s ssh "${ssh_args[@]}" "$remote" \
-              "bash -o pipefail -c 'gzip -dc | docker load'"
+          # Divide the exact scanned images into small, checksummed chunks so
+          # parallel SSH connections can overcome slow cross-region transfers.
+          install -d -m 700 "$transfer_dir"
+          archive="${transfer_dir}/images.tar.gz"
+          timeout 600s docker save "$backend_transfer" "$frontend_transfer" | gzip -1 > "$archive"
+          archive_sha="$(sha256sum "$archive" | cut -d' ' -f1)"
+          split -b 8m -d -a 5 "$archive" "${transfer_dir}/part-"
+          ssh "${ssh_args[@]}" "$remote" "install -d -m 700 '${remote_dir}'"
+          upload_chunk() {
+            local part="$1"
+            for attempt in 1 2 3; do
+              timeout 600s scp -q -o ConnectTimeout=15 -o ConnectionAttempts=1 \
+                -o ServerAliveInterval=15 -o ServerAliveCountMax=80 \
+                -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" \
+                "$part" "${DEPLOY_USER}@${DEPLOY_HOST}:${remote_dir}/$(basename "$part")" && return 0
+              sleep "$attempt"
+            done
+            return 1
+          }
+          export -f upload_chunk
+          export DEPLOY_PORT DEPLOY_USER DEPLOY_HOST remote_dir
+          find "$transfer_dir" -maxdepth 1 -type f -name 'part-*' -print0 | \
+            xargs -0 -r -n1 -P8 bash -c 'upload_chunk "$1"' _
+          remote_sha="$(ssh "${ssh_args[@]}" "$remote" \
+            "cat '${remote_dir}'/part-* | sha256sum | cut -d' ' -f1")"
+          test "$remote_sha" = "$archive_sha"
+          timeout 600s ssh "${ssh_args[@]}" "$remote" \
+            "bash -o pipefail -c \"cat '${remote_dir}'/part-* | gzip -dc | docker load\""
           ssh "${ssh_args[@]}" "$remote" "
             set -e
             docker tag '${backend_transfer}' '${BACKEND_TARGET}'
