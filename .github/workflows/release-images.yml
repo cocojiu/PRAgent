@@ -370,13 +370,12 @@ jobs:
           username: ${{ env.ALIYUN_REGISTRY_USERNAME }}
           password: ${{ secrets.ALIYUN_REGISTRY_PASSWORD }}
 
-      - name: Build and push backend image
-        id: backend_image
+      - name: Build backend image
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: repoguard-backend
           file: repoguard-backend/Dockerfile
-          push: true
+          load: true
           # Aliyun ACR rejects attached BuildKit attestation manifests with an empty config.
           # Publish a compatible image, then store provenance and SBOM attestations in GitHub below.
           sbom: false
@@ -387,6 +386,31 @@ jobs:
           cache-from: type=gha,scope=backend
           cache-to: type=gha,scope=backend,mode=max
           tags: ${{ env.BACKEND_IMAGE_TAGS }}
+
+      - name: Push backend image with bounded retries
+        id: backend_image
+        shell: bash
+        run: |
+          set -euo pipefail
+          push_image() {
+            local image="$1"
+            for attempt in 1 2; do
+              if timeout --signal=TERM --kill-after=10s 300s docker push "$image"; then
+                return 0
+              fi
+              echo "::warning::Image push attempt ${attempt} failed or timed out."
+              if [ "$attempt" -lt 2 ]; then sleep 10; fi
+            done
+            return 1
+          }
+          push_image "$ALIYUN_BACKEND_IMAGE"
+          if [ "$PUBLISH_GHCR" = "true" ]; then push_image "$BACKEND_IMAGE"; fi
+          repository="${ALIYUN_BACKEND_IMAGE%:*}"
+          digest="$(docker image inspect --format '{{json .RepoDigests}}' "$ALIYUN_BACKEND_IMAGE" \
+            | jq -r --arg repository "$repository" \
+              '.[] | select(startswith($repository + "@")) | split("@")[1]' | head -n 1)"
+          [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo "Missing pushed backend digest" >&2; exit 1; }
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - name: Generate backend SBOM
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
@@ -433,13 +457,12 @@ jobs:
               done
             '
 
-      - name: Build and push frontend image
-        id: frontend_image
+      - name: Build frontend image
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: repoguard-frontend
           file: repoguard-frontend/Dockerfile
-          push: true
+          load: true
           # Aliyun ACR rejects attached BuildKit attestation manifests with an empty config.
           # Publish a compatible image, then store provenance and SBOM attestations in GitHub below.
           sbom: false
@@ -450,6 +473,31 @@ jobs:
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,scope=frontend,mode=max
           tags: ${{ env.FRONTEND_IMAGE_TAGS }}
+
+      - name: Push frontend image with bounded retries
+        id: frontend_image
+        shell: bash
+        run: |
+          set -euo pipefail
+          push_image() {
+            local image="$1"
+            for attempt in 1 2; do
+              if timeout --signal=TERM --kill-after=10s 300s docker push "$image"; then
+                return 0
+              fi
+              echo "::warning::Image push attempt ${attempt} failed or timed out."
+              if [ "$attempt" -lt 2 ]; then sleep 10; fi
+            done
+            return 1
+          }
+          push_image "$ALIYUN_FRONTEND_IMAGE"
+          if [ "$PUBLISH_GHCR" = "true" ]; then push_image "$FRONTEND_IMAGE"; fi
+          repository="${ALIYUN_FRONTEND_IMAGE%:*}"
+          digest="$(docker image inspect --format '{{json .RepoDigests}}' "$ALIYUN_FRONTEND_IMAGE" \
+            | jq -r --arg repository "$repository" \
+              '.[] | select(startswith($repository + "@")) | split("@")[1]' | head -n 1)"
+          [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo "Missing pushed frontend digest" >&2; exit 1; }
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - name: Generate frontend SBOM
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
