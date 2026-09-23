@@ -652,26 +652,39 @@ jobs:
           repo="${repo,,}"
           BACKEND_SOURCE="${REGISTRY}/${owner}/${repo}-backend@${BACKEND_DIGEST}"
           FRONTEND_SOURCE="${REGISTRY}/${owner}/${repo}-frontend@${FRONTEND_DIGEST}"
+          backend_transfer="pragent-backend-transfer:${BACKEND_DIGEST#sha256:}"
+          frontend_transfer="pragent-frontend-transfer:${FRONTEND_DIGEST#sha256:}"
           remote="${DEPLOY_USER}@${DEPLOY_HOST}"
           ssh_args=(-o ServerAliveInterval=15 -o ServerAliveCountMax=80 -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}")
-          cleanup() { ssh "${ssh_args[@]}" "$remote" "docker logout ghcr.io >/dev/null 2>&1 || true" || true; }
+          cleanup() { docker logout ghcr.io >/dev/null 2>&1 || true; }
           trap cleanup EXIT
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          timeout 600s docker pull "$BACKEND_SOURCE"
+          timeout 600s docker pull "$FRONTEND_SOURCE"
+          docker tag "$BACKEND_SOURCE" "$backend_transfer"
+          docker tag "$FRONTEND_SOURCE" "$frontend_transfer"
+          backend_image_id="$(docker image inspect --format '{{.Id}}' "$BACKEND_SOURCE")"
+          frontend_image_id="$(docker image inspect --format '{{.Id}}' "$FRONTEND_SOURCE")"
+          [[ "$backend_image_id" =~ ^sha256:[a-f0-9]{64}$ ]]
+          [[ "$frontend_image_id" =~ ^sha256:[a-f0-9]{64}$ ]]
           printf '%s' "$ACR_TOKEN" | ssh "${ssh_args[@]}" "$remote" \
             "docker login '${ACR_REGISTRY}' -u '${ACR_USER}' --password-stdin"
-          printf '%s' "$GHCR_TOKEN" | ssh "${ssh_args[@]}" "$remote" \
-            "docker login ghcr.io -u '${GITHUB_ACTOR}' --password-stdin"
+          # The production host cannot reliably download large GHCR layers. Stream
+          # only the exact scanned images from the runner, then push over ACR VPC.
+          docker save "$backend_transfer" "$frontend_transfer" | gzip -1 | \
+            timeout 1800s ssh "${ssh_args[@]}" "$remote" \
+              "bash -o pipefail -c 'gzip -dc | docker load'"
           ssh "${ssh_args[@]}" "$remote" "
             set -e
-            timeout 600s docker pull '${BACKEND_SOURCE}'
-            timeout 600s docker pull '${FRONTEND_SOURCE}'
-            docker tag '${BACKEND_SOURCE}' '${BACKEND_TARGET}'
-            docker tag '${FRONTEND_SOURCE}' '${FRONTEND_TARGET}'
-            test \"\$(docker image inspect --format '{{.Id}}' '${BACKEND_SOURCE}')\" = \"\$(docker image inspect --format '{{.Id}}' '${BACKEND_TARGET}')\"
-            test \"\$(docker image inspect --format '{{.Id}}' '${FRONTEND_SOURCE}')\" = \"\$(docker image inspect --format '{{.Id}}' '${FRONTEND_TARGET}')\"
+            docker tag '${backend_transfer}' '${BACKEND_TARGET}'
+            docker tag '${frontend_transfer}' '${FRONTEND_TARGET}'
+            test \"\$(docker image inspect --format '{{.Id}}' '${BACKEND_TARGET}')\" = '${backend_image_id}'
+            test \"\$(docker image inspect --format '{{.Id}}' '${FRONTEND_TARGET}')\" = '${frontend_image_id}'
             timeout 600s docker push '${BACKEND_TARGET}'
             timeout 600s docker push '${FRONTEND_TARGET}'
             docker manifest inspect '${BACKEND_TARGET}' >/dev/null
             docker manifest inspect '${FRONTEND_TARGET}' >/dev/null
+            docker image rm '${backend_transfer}' '${frontend_transfer}' >/dev/null
           "
 
       - name: Pull and restart
