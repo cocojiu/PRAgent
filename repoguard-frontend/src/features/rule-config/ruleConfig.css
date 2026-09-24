@@ -340,7 +340,7 @@
 
 .policy-version-grid {
   display: grid;
-  grid-template-columns: repeat(7, minmax(120px, 1fr));
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
   gap: 12px;
   margin-bottom: 16px;
 }
@@ -360,6 +360,11 @@
 .policy-version-grid span {
   color: #64748b;
   font-size: 12px;
+}
+
+.policy-version-grid small {
+  color: #64748b;
+  line-height: 1.4;
 }
 
 .policy-version-grid strong {
