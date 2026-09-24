@@ -49,14 +49,21 @@
           </el-tag>
         </div>
         <div>
-          <span>质量门禁</span>
+          <span>评论标注门槛</span>
+          <el-tag :type="strategyPolicy.qualityGate.commentEligible ? 'success' : 'warning'">
+            {{ strategyPolicy.qualityGate.commentEligible ? '已满足' : '待明确标注' }}
+          </el-tag>
+          <small>当前策略版本的 LLM 明确标注 {{ strategyPolicy.qualityGate.labeledSamples }} 条，需至少 1 条</small>
+        </div>
+        <div>
+          <span>阻断质量门禁</span>
           <el-tag :type="qualityStatusType(strategyPolicy.qualityGate.status)">{{ strategyPolicy.qualityGate.status }}</el-tag>
         </div>
       </div>
       <el-alert
         v-if="strategyPolicy.qualityGate.blockers.length"
         type="warning"
-        :title="strategyPolicy.qualityGate.blockers.join('；')"
+        :title="`阻断门槛：${strategyPolicy.qualityGate.blockers.join('；')}`"
         show-icon
         :closable="false"
       />
