@@ -49,7 +49,8 @@ public record ReviewTaskSummary(
     Boolean archived,
     Long archiveCleanupBatchId,
     String archiveBackupReference,
-    String archivedAt
+    String archivedAt,
+    String assessmentStatus
 ) {
     public static ReviewTaskSummary fromDetail(ReviewTaskDetail detail) {
         return fromDetail(detail, false, null, null, null);
@@ -103,7 +104,8 @@ public record ReviewTaskSummary(
             archived,
             archiveCleanupBatchId,
             archiveBackupReference,
-            archivedAt
+            archivedAt,
+            detail.assessmentStatus()
         );
     }
 }

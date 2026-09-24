@@ -180,7 +180,8 @@ class ReviewControllerTest {
                 false,
                 null,
                 null,
-                null
+                null,
+                "complete"
             );
         }
 
@@ -587,6 +588,7 @@ class ReviewControllerTest {
             .andExpect(jsonPath("$.data.commit").value("a1b2c3d"))
             .andExpect(jsonPath("$.data.branch").value("main"))
             .andExpect(jsonPath("$.data.status").value("completed"))
+            .andExpect(jsonPath("$.data.assessmentStatus").value("complete"))
             .andExpect(jsonPath("$.data.riskLevel").value("high"))
             .andExpect(jsonPath("$.data.mqRetries").value(0))
             .andExpect(jsonPath("$.data.llmStatus").value("completed"))
