@@ -96,6 +96,7 @@ class ReviewTaskQueryServiceImplTest {
 
         org.assertj.core.api.Assertions.assertThat(response.id()).isEqualTo(521L);
         org.assertj.core.api.Assertions.assertThat(response.archived()).isTrue();
+        org.assertj.core.api.Assertions.assertThat(response.assessmentStatus()).isEqualTo("complete");
         org.assertj.core.api.Assertions.assertThat(response.archiveCleanupBatchId()).isEqualTo(3001L);
         org.assertj.core.api.Assertions.assertThat(response.archiveBackupReference()).isEqualTo("backup://mysql/prod/2026-07-08");
         org.assertj.core.api.Assertions.assertThat(response.archivedAt()).isEqualTo("2026-07-09 01:10:00");
@@ -161,6 +162,7 @@ class ReviewTaskQueryServiceImplTest {
         var response = service().getReviewDetail(521L);
 
         org.assertj.core.api.Assertions.assertThat(response.id()).isEqualTo(521L);
+        org.assertj.core.api.Assertions.assertThat(response.assessmentStatus()).isEqualTo("complete");
         org.assertj.core.api.Assertions.assertThat(response.findings()).isEmpty();
         org.assertj.core.api.Assertions.assertThat(response.missingTests()).isEmpty();
         org.assertj.core.api.Assertions.assertThat(response.changedFiles()).isEmpty();
@@ -536,7 +538,8 @@ class ReviewTaskQueryServiceImplTest {
             "not_required",
             null,
             null,
-            null
+            null,
+            "complete"
         );
     }
 }

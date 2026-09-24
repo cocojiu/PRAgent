@@ -15406,6 +15406,9 @@
           },
           "archivedAt" : {
             "type" : "string"
+          },
+          "assessmentStatus" : {
+            "type" : "string"
           }
         }
       },
