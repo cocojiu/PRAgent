@@ -285,10 +285,14 @@ jobs:
             echo "Missing production secret REPOGUARD_ADMIN_PASSWORD_RESET" >&2
             exit 2
           }
-          test "${#RESET_PASSWORD}" -ge 8 || {
-            echo "Reset password must contain at least 8 characters" >&2
+          test "${#RESET_PASSWORD}" -ge 8 && test "${#RESET_PASSWORD}" -le 128 || {
+            echo "Reset password must contain 8-128 characters" >&2
             exit 2
           }
+          if [[ "${RESET_PASSWORD}" == *$'\n'* || "${RESET_PASSWORD}" == *$'\r'* ]]; then
+            echo "Reset password must not contain line breaks" >&2
+            exit 2
+          fi
           [[ "${RESET_PASSWORD}" =~ [A-Za-z] ]] && [[ "${RESET_PASSWORD}" =~ [0-9] ]] || {
             echo "Reset password must contain both letters and digits" >&2
             exit 2
