@@ -26,7 +26,7 @@ public class CiSarifUploadCredentialService {
 
     private static final String TOKEN_PREFIX = "rgci";
     private static final String PAYLOAD_VERSION = "v1";
-    private static final long TTL_SECONDS = 600;
+    public static final long TTL_SECONDS = 600;
     private static final long CLOCK_SKEW_SECONDS = 60;
 
     private final AuthProperties authProperties;
