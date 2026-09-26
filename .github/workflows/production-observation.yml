@@ -47,7 +47,7 @@ jobs:
             local expected_code="$3"
             local body_rule="$4"
             local cache_rule="$5"
-            local body_file header_file metrics curl_exit
+            local body_file header_file metrics curl_exit attempt
             local status_code remote_ip dns_time connect_time ttfb total_time
             local x_cache age health_status result detail
 
@@ -57,21 +57,38 @@ jobs:
             result="PASS"
             detail="ok"
 
-            if metrics="$(curl --silent --show-error \
-              --retry 2 --retry-delay 3 --retry-all-errors \
-              --connect-timeout 8 --max-time 20 \
-              --output "${body_file}" --dump-header "${header_file}" \
-              --write-out '%{http_code}|%{remote_ip}|%{time_namelookup}|%{time_connect}|%{time_starttransfer}|%{time_total}' \
-              "${PRODUCTION_BASE_URL}${path}")"; then
+            # Bound transport and transient HTTP failures to three total attempts.
+            # curl's default retry list does not include edge errors such as 525.
+            for attempt in 1 2 3; do
+              : > "${body_file}"
+              : > "${header_file}"
+              curl_exit=0
+              metrics="$(curl --silent --show-error \
+                --connect-timeout 8 --max-time 20 \
+                --output "${body_file}" --dump-header "${header_file}" \
+                --write-out '%{http_code}|%{remote_ip}|%{time_namelookup}|%{time_connect}|%{time_starttransfer}|%{time_total}' \
+                "${PRODUCTION_BASE_URL}${path}")" || curl_exit=$?
               IFS='|' read -r status_code remote_ip dns_time connect_time ttfb total_time <<<"${metrics}"
-            else
-              curl_exit=$?
-              status_code="000"
-              remote_ip="-"
-              dns_time="-"
-              connect_time="-"
-              ttfb="-"
-              total_time="-"
+              status_code="${status_code:-000}"
+              remote_ip="${remote_ip:--}"
+              dns_time="${dns_time:--}"
+              connect_time="${connect_time:--}"
+              ttfb="${ttfb:--}"
+              total_time="${total_time:--}"
+
+              if (( curl_exit == 0 )) && [[ ! "${status_code}" =~ ^(408|429|5[0-9][0-9])$ ]]; then
+                break
+              fi
+              if (( attempt == 3 )); then
+                break
+              fi
+              printf 'RETRY label=%q path=%q attempt=%s http=%s curl_exit=%s ip=%s total=%s\n' \
+                "${label}" "${path}" "${attempt}" "${status_code}" "${curl_exit}" "${remote_ip}" "${total_time}" \
+                >> "${report_path}"
+              sleep 3
+            done
+
+            if (( curl_exit != 0 )); then
               result="FAIL"
               detail="curl_exit=${curl_exit}"
             fi
