@@ -22,6 +22,8 @@ const reviewDetailTypesPath = resolve(
 );
 const checkOnly = process.argv.includes("--check");
 const migratedOperationPrefixes = [
+  "ciSarifSetupController",
+  "ciSarifControllerIssueCredential",
   "githubFeedbackController",
   "feedbackSummaryController",
   "cacheStatsController",
