@@ -126,7 +126,7 @@ class FrontendDeploymentContractTest {
 
         assertThat(runtimeProbe)
             .contains(
-                "${ALIYUN_FRONTEND_IMAGE}@${{ steps.frontend_image.outputs.digest }}",
+                "${FRONTEND_IMAGE}@${{ steps.frontend_image.outputs.digest }}",
                 "--read-only",
                 "--cap-drop ALL",
                 "--security-opt no-new-privileges:true",

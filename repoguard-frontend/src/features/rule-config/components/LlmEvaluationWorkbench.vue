@@ -30,6 +30,13 @@
       </div>
     </div>
 
+    <div class="evaluation-run-panel" aria-label="查看已有评估或诊断">
+      <p>输入运行 ID，查看已保存的评估或诊断结果；不会启动新运行或调用模型。</p>
+      <div class="evaluation-run-form">
+        <el-input v-model="lookupRunId" :maxlength="64" placeholder="已有运行 ID" aria-label="已有运行 ID" />
+        <el-button :loading="lookupLoading" :disabled="runLoading" @click="loadExistingRun">查看已有运行</el-button>
+      </div>
+    </div>
     <div class="evaluation-run-panel" aria-label="启动真实 PR 评估">
       <p>新运行按人民币单价估算，非实际账单；失败或取消可能包含保守预算预留。历史报告不换算币种，0 不代表免费。未配置单价时费用上限无法约束真实账单，请同时设置 token 和时长上限。</p>
       <div class="evaluation-run-heading">
@@ -48,7 +55,7 @@
         <el-input-number v-model="runForm.maxTokens" :min="1" :max="1000000" controls-position="right" aria-label="最大令牌数" />
         <el-input-number v-model="runForm.maxCost" :min="0" :precision="4" :step="1" controls-position="right" aria-label="最大估算费用（人民币）" />
         <el-input-number v-model="runForm.maxDurationSeconds" :min="1" :max="3600" controls-position="right" aria-label="最大时长秒数" />
-        <el-button type="primary" :loading="runLoading" @click="startRun">{{ diagnosticMode ? "启动诊断" : "启动评估" }}</el-button>
+        <el-button type="primary" :loading="runLoading" :disabled="lookupLoading" @click="startRun">{{ diagnosticMode ? "启动诊断" : "启动评估" }}</el-button>
       </div>
       <el-alert
         v-if="activeRun"
@@ -59,6 +66,7 @@
       >
         <template #default>
           <span>
+            <span>运行 ID：{{ activeRun.runId }} · </span>
             {{ activeRun.completedSamples }} / {{ activeRun.totalSamples || "待加载" }} {{ activeRun.diagnostics ? "个成功样本" : "个样本" }}，
             {{ activeRun.totalTokens }} tokens，费用 {{ estimatedCostText(activeRun.totalCost) }}
             <span v-if="activeRun.failureCode"> · {{ activeRun.failureCode }}</span>
@@ -183,6 +191,8 @@ const selectedReport = ref<LlmEvaluationReport | null>(null);
 const loading = ref(false);
 const errorMessage = ref("");
 const runLoading = ref(false);
+const lookupRunId = ref("");
+const lookupLoading = ref(false);
 const diagnosticMode = ref(false);
 const sampleIdsText = ref("");
 const activeRun = ref<LlmEvaluationRun | null>(null);
@@ -212,6 +222,30 @@ const loadReports = async () => {
 
 const selectReport = (report: LlmEvaluationReport | null) => {
   selectedReport.value = report;
+};
+
+const loadExistingRun = async () => {
+  const runId = lookupRunId.value.trim();
+  if (!runId || runId.length > 64) {
+    errorMessage.value = "请输入有效的已有运行 ID";
+    return;
+  }
+  const version = ++runStateVersion;
+  stopPolling();
+  activeRun.value = null;
+  lookupLoading.value = true;
+  errorMessage.value = "";
+  try {
+    const result = await fetchLlmEvaluationRun(runId);
+    if (version !== runStateVersion) return;
+    activeRun.value = result;
+    lookupRunId.value = result.runId;
+    if (["QUEUED", "RUNNING"].includes(result.status)) beginPolling();
+  } catch (error) {
+    if (version === runStateVersion) errorMessage.value = getErrorMessage(error, "已有运行加载失败");
+  } finally {
+    if (version === runStateVersion) lookupLoading.value = false;
+  }
 };
 
 const startRun = async () => {
@@ -347,5 +381,5 @@ const lifecycleTag = (status: string) => {
 };
 
 onMounted(loadReports);
-onUnmounted(stopPolling);
+onUnmounted(() => { runStateVersion++; stopPolling(); });
 </script>

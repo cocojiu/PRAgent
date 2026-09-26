@@ -217,10 +217,7 @@ export const normalizeReviewTaskDetail = (task: GeneratedReviewTaskSummary): Rev
     branch: task.branch ?? "",
     status,
     riskLevel,
-    assessmentStatus: (task as GeneratedReviewTaskSummary & { assessmentStatus?: string }).assessmentStatus as
-      | AssessmentStatus
-      | string
-      | undefined,
+    assessmentStatus: task.assessmentStatus as AssessmentStatus | string | undefined,
     mqRetries: task.mqRetries ?? 0,
     llmStatus: normalizeReviewStatus(task.llmStatus, status),
     source: task.source ?? "manual_input",

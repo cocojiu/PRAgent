@@ -57,16 +57,19 @@ env:
   ALIYUN_NAMESPACE: ${{ secrets.ALIYUN_NAMESPACE || vars.ALIYUN_NAMESPACE }}
   ALIYUN_REPOSITORY: ${{ secrets.ALIYUN_REPOSITORY || vars.ALIYUN_REPOSITORY }}
   ALIYUN_REGISTRY_USERNAME: ${{ secrets.ALIYUN_REGISTRY_USERNAME || vars.ALIYUN_REGISTRY_USERNAME }}
-  PUBLISH_GHCR: ${{ vars.PUBLISH_GHCR || 'false' }}
 
 jobs:
   build:
     name: Build and Push Images
     runs-on: ubuntu-latest
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.deploy_existing_tag != '') }}
+    outputs:
+      image_version: ${{ steps.images.outputs.image_version }}
+      backend_digest: ${{ steps.backend_image.outputs.digest }}
+      frontend_digest: ${{ steps.frontend_image.outputs.digest }}
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -264,7 +267,7 @@ jobs:
           sh scripts/deploy-prod.sh
 
       - name: Set up Java
-        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5.5.0
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: "25"
@@ -307,7 +310,7 @@ jobs:
           npm run build
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Resolve image names
         id: images
@@ -340,45 +343,24 @@ jobs:
           echo "ALIYUN_BACKEND_IMAGE=${aliyun_backend_image}" >> "$GITHUB_ENV"
           echo "ALIYUN_FRONTEND_IMAGE=${aliyun_frontend_image}" >> "$GITHUB_ENV"
           echo "IMAGE_VERSION=${image_tag}" >> "$GITHUB_ENV"
-          {
-            echo "BACKEND_IMAGE_TAGS<<EOF"
-            if [ "${PUBLISH_GHCR}" = "true" ]; then
-              echo "${backend_image}"
-            fi
-            echo "${aliyun_backend_image}"
-            echo "EOF"
-            echo "FRONTEND_IMAGE_TAGS<<EOF"
-            if [ "${PUBLISH_GHCR}" = "true" ]; then
-              echo "${frontend_image}"
-            fi
-            echo "${aliyun_frontend_image}"
-            echo "EOF"
-          } >> "$GITHUB_ENV"
+          echo "image_version=${image_tag}" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GHCR
-        if: ${{ env.PUBLISH_GHCR == 'true' }}
-        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Log in to Aliyun ACR
-        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
-        with:
-          registry: ${{ env.ALIYUN_REGISTRY }}
-          username: ${{ env.ALIYUN_REGISTRY_USERNAME }}
-          password: ${{ secrets.ALIYUN_REGISTRY_PASSWORD }}
-
-      - name: Build and push backend image
+      - name: Build and push backend image to GHCR
         id: backend_image
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: repoguard-backend
           file: repoguard-backend/Dockerfile
           push: true
-          # Aliyun ACR rejects attached BuildKit attestation manifests with an empty config.
-          # Publish a compatible image, then store provenance and SBOM attestations in GitHub below.
+          # Images are mirrored to Aliyun ACR only after the GHCR image passes release checks.
+          # Keep the mirrored manifest compatible with Aliyun ACR; attestations are stored in GitHub.
           sbom: false
           provenance: false
           build-args: |
@@ -386,14 +368,14 @@ jobs:
             OCI_REVISION=${{ github.sha }}
           cache-from: type=gha,scope=backend
           cache-to: type=gha,scope=backend,mode=max
-          tags: ${{ env.BACKEND_IMAGE_TAGS }}
+          tags: ${{ env.BACKEND_IMAGE }}
 
       - name: Generate backend SBOM
-        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
-          image: ${{ env.ALIYUN_BACKEND_IMAGE }}@${{ steps.backend_image.outputs.digest }}
-          registry-username: ${{ env.ALIYUN_REGISTRY_USERNAME }}
-          registry-password: ${{ secrets.ALIYUN_REGISTRY_PASSWORD }}
+          image: ${{ env.BACKEND_IMAGE }}@${{ steps.backend_image.outputs.digest }}
+          registry-username: ${{ github.actor }}
+          registry-password: ${{ secrets.GITHUB_TOKEN }}
           format: spdx-json
           output-file: ${{ runner.temp }}/backend-sbom.spdx.json
           artifact-name: backend-sbom-${{ github.run_id }}-${{ github.run_attempt }}
@@ -403,13 +385,13 @@ jobs:
       - name: Attest backend build provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-name: ${{ env.ALIYUN_BACKEND_IMAGE }}
+          subject-name: ${{ env.BACKEND_IMAGE }}
           subject-digest: ${{ steps.backend_image.outputs.digest }}
 
       - name: Attest backend SBOM
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
-          subject-name: ${{ env.ALIYUN_BACKEND_IMAGE }}
+          subject-name: ${{ env.BACKEND_IMAGE }}
           subject-digest: ${{ steps.backend_image.outputs.digest }}
           sbom-path: ${{ runner.temp }}/backend-sbom.spdx.json
 
@@ -424,7 +406,7 @@ jobs:
             --mount "type=bind,src=${REPOGUARD_AUTH_TOKEN_SECRET_FILE},dst=/run/secrets/repoguard.auth.token-secret,readonly" \
             --mount "type=bind,src=${REPOGUARD_ADMIN_API_KEY_FILE},dst=/run/secrets/app.security.admin-api-key.key,readonly" \
             --mount "type=bind,src=${REPOGUARD_GITHUB_WEBHOOK_SECRET_FILE},dst=/run/secrets/app.github.webhook.secret,readonly" \
-            "${ALIYUN_BACKEND_IMAGE}@${{ steps.backend_image.outputs.digest }}" \
+            "${BACKEND_IMAGE}@${{ steps.backend_image.outputs.digest }}" \
             -ec '
               test "$(id -u)" != "0"
               for secret_path in /run/secrets/*; do
@@ -433,15 +415,15 @@ jobs:
               done
             '
 
-      - name: Build and push frontend image
+      - name: Build and push frontend image to GHCR
         id: frontend_image
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: repoguard-frontend
           file: repoguard-frontend/Dockerfile
           push: true
-          # Aliyun ACR rejects attached BuildKit attestation manifests with an empty config.
-          # Publish a compatible image, then store provenance and SBOM attestations in GitHub below.
+          # Images are mirrored to Aliyun ACR only after the GHCR image passes release checks.
+          # Keep the mirrored manifest compatible with Aliyun ACR; attestations are stored in GitHub.
           sbom: false
           provenance: false
           build-args: |
@@ -449,14 +431,14 @@ jobs:
             OCI_REVISION=${{ github.sha }}
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,scope=frontend,mode=max
-          tags: ${{ env.FRONTEND_IMAGE_TAGS }}
+          tags: ${{ env.FRONTEND_IMAGE }}
 
       - name: Generate frontend SBOM
-        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
-          image: ${{ env.ALIYUN_FRONTEND_IMAGE }}@${{ steps.frontend_image.outputs.digest }}
-          registry-username: ${{ env.ALIYUN_REGISTRY_USERNAME }}
-          registry-password: ${{ secrets.ALIYUN_REGISTRY_PASSWORD }}
+          image: ${{ env.FRONTEND_IMAGE }}@${{ steps.frontend_image.outputs.digest }}
+          registry-username: ${{ github.actor }}
+          registry-password: ${{ secrets.GITHUB_TOKEN }}
           format: spdx-json
           output-file: ${{ runner.temp }}/frontend-sbom.spdx.json
           artifact-name: frontend-sbom-${{ github.run_id }}-${{ github.run_attempt }}
@@ -466,13 +448,13 @@ jobs:
       - name: Attest frontend build provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-name: ${{ env.ALIYUN_FRONTEND_IMAGE }}
+          subject-name: ${{ env.FRONTEND_IMAGE }}
           subject-digest: ${{ steps.frontend_image.outputs.digest }}
 
       - name: Attest frontend SBOM
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
-          subject-name: ${{ env.ALIYUN_FRONTEND_IMAGE }}
+          subject-name: ${{ env.FRONTEND_IMAGE }}
           subject-digest: ${{ steps.frontend_image.outputs.digest }}
           sbom-path: ${{ runner.temp }}/frontend-sbom.spdx.json
 
@@ -481,7 +463,7 @@ jobs:
         run: |
           set -euo pipefail
           container="repoguard-frontend-runtime-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          image="${ALIYUN_FRONTEND_IMAGE}@${{ steps.frontend_image.outputs.digest }}"
+          image="${FRONTEND_IMAGE}@${{ steps.frontend_image.outputs.digest }}"
           cleanup() {
             status=$?
             trap - EXIT
@@ -523,7 +505,7 @@ jobs:
           TRIVY_DB_REPOSITORY: ghcr.io/aquasecurity/trivy-db:2
         with:
           scan-type: image
-          image-ref: ${{ env.ALIYUN_BACKEND_IMAGE }}@${{ steps.backend_image.outputs.digest }}
+          image-ref: ${{ env.BACKEND_IMAGE }}@${{ steps.backend_image.outputs.digest }}
           format: table
           exit-code: '1'
           ignore-unfixed: false
@@ -537,7 +519,7 @@ jobs:
           TRIVY_DB_REPOSITORY: ghcr.io/aquasecurity/trivy-db:2
         with:
           scan-type: image
-          image-ref: ${{ env.ALIYUN_FRONTEND_IMAGE }}@${{ steps.frontend_image.outputs.digest }}
+          image-ref: ${{ env.FRONTEND_IMAGE }}@${{ steps.frontend_image.outputs.digest }}
           format: table
           exit-code: '1'
           ignore-unfixed: false
@@ -559,7 +541,7 @@ jobs:
     environment: production
     steps:
       - name: Checkout compose file
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Prepare SSH key
         uses: ./.github/actions/bootstrap-production-ssh
@@ -644,6 +626,93 @@ jobs:
             "chmod 0700 '${DEPLOY_PATH}/scripts/migrate-prod-secret-files.sh' \
                         '${DEPLOY_PATH}/performance/remote/run-isolated-real-chain-smoke.sh' \
                         '${DEPLOY_PATH}/performance/remote/run-real-chain-smoke.sh'"
+
+      - name: Mirror checked images to Aliyun ACR over VPC
+        if: ${{ inputs.deploy_existing_tag == '' }}
+        shell: bash
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACR_TOKEN: ${{ secrets.ALIYUN_REGISTRY_PASSWORD }}
+          ACR_REGISTRY: ${{ env.ALIYUN_DEPLOY_REGISTRY }}
+          ACR_USER: ${{ env.ALIYUN_REGISTRY_USERNAME }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
+          BACKEND_DIGEST: ${{ needs.build.outputs.backend_digest }}
+          FRONTEND_DIGEST: ${{ needs.build.outputs.frontend_digest }}
+          BACKEND_TARGET: ${{ env.ALIYUN_DEPLOY_REGISTRY }}/${{ env.ALIYUN_NAMESPACE }}/${{ env.ALIYUN_REPOSITORY }}:backend-${{ needs.build.outputs.image_version }}
+          FRONTEND_TARGET: ${{ env.ALIYUN_DEPLOY_REGISTRY }}/${{ env.ALIYUN_NAMESPACE }}/${{ env.ALIYUN_REPOSITORY }}:frontend-${{ needs.build.outputs.image_version }}
+        run: |
+          set -euo pipefail
+          test -n "$GHCR_TOKEN" && test -n "$ACR_TOKEN"
+          [[ "$BACKEND_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]
+          [[ "$FRONTEND_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          repo="${GITHUB_REPOSITORY#*/}"
+          repo="${repo,,}"
+          BACKEND_SOURCE="${REGISTRY}/${owner}/${repo}-backend@${BACKEND_DIGEST}"
+          FRONTEND_SOURCE="${REGISTRY}/${owner}/${repo}-frontend@${FRONTEND_DIGEST}"
+          backend_transfer="pragent-backend-transfer:${BACKEND_DIGEST#sha256:}"
+          frontend_transfer="pragent-frontend-transfer:${FRONTEND_DIGEST#sha256:}"
+          remote="${DEPLOY_USER}@${DEPLOY_HOST}"
+          ssh_args=(-o ServerAliveInterval=15 -o ServerAliveCountMax=80 -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}")
+          [[ "$GITHUB_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$GITHUB_RUN_ATTEMPT" =~ ^[0-9]+$ ]]
+          transfer_dir="${RUNNER_TEMP}/repoguard-images-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          remote_dir="/tmp/repoguard-images-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          cleanup() {
+            docker logout ghcr.io >/dev/null 2>&1 || true
+            timeout 30s ssh "${ssh_args[@]}" "$remote" \
+              "rm -f -- '${remote_dir}'/part-*; rmdir -- '${remote_dir}'" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          timeout 600s docker pull "$BACKEND_SOURCE"
+          timeout 600s docker pull "$FRONTEND_SOURCE"
+          docker tag "$BACKEND_SOURCE" "$backend_transfer"
+          docker tag "$FRONTEND_SOURCE" "$frontend_transfer"
+          printf '%s' "$ACR_TOKEN" | ssh "${ssh_args[@]}" "$remote" \
+            "docker login '${ACR_REGISTRY}' -u '${ACR_USER}' --password-stdin"
+          # Divide the exact scanned images into small, checksummed chunks so
+          # parallel SSH connections can overcome slow cross-region transfers.
+          install -d -m 700 "$transfer_dir"
+          archive="${transfer_dir}/images.tar.gz"
+          timeout 600s docker save "$backend_transfer" "$frontend_transfer" | gzip -1 > "$archive"
+          archive_sha="$(sha256sum "$archive" | cut -d' ' -f1)"
+          split -b 8m -d -a 5 "$archive" "${transfer_dir}/part-"
+          ssh "${ssh_args[@]}" "$remote" "install -d -m 700 '${remote_dir}'"
+          upload_chunk() {
+            local part="$1"
+            for attempt in 1 2 3; do
+              timeout 600s scp -q -o ConnectTimeout=15 -o ConnectionAttempts=1 \
+                -o ServerAliveInterval=15 -o ServerAliveCountMax=80 \
+                -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" \
+                "$part" "${DEPLOY_USER}@${DEPLOY_HOST}:${remote_dir}/$(basename "$part")" && return 0
+              sleep "$attempt"
+            done
+            return 1
+          }
+          export -f upload_chunk
+          export DEPLOY_PORT DEPLOY_USER DEPLOY_HOST remote_dir
+          find "$transfer_dir" -maxdepth 1 -type f -name 'part-*' -print0 | \
+            xargs -0 -r -n1 -P8 bash -c 'upload_chunk "$1"' _
+          remote_sha="$(ssh "${ssh_args[@]}" "$remote" \
+            "cat '${remote_dir}'/part-* | sha256sum | cut -d' ' -f1")"
+          test "$remote_sha" = "$archive_sha"
+          timeout 600s ssh "${ssh_args[@]}" "$remote" \
+            "bash -o pipefail -c \"cat '${remote_dir}'/part-* | gzip -dc | docker load\""
+          ssh "${ssh_args[@]}" "$remote" "
+            set -e
+            docker tag '${backend_transfer}' '${BACKEND_TARGET}'
+            docker tag '${frontend_transfer}' '${FRONTEND_TARGET}'
+            test \"\$(docker image inspect --format '{{.Id}}' '${backend_transfer}')\" = \"\$(docker image inspect --format '{{.Id}}' '${BACKEND_TARGET}')\"
+            test \"\$(docker image inspect --format '{{.Id}}' '${frontend_transfer}')\" = \"\$(docker image inspect --format '{{.Id}}' '${FRONTEND_TARGET}')\"
+            timeout 600s docker push '${BACKEND_TARGET}'
+            timeout 600s docker push '${FRONTEND_TARGET}'
+            docker manifest inspect '${BACKEND_TARGET}' >/dev/null
+            docker manifest inspect '${FRONTEND_TARGET}' >/dev/null
+            docker image rm '${backend_transfer}' '${frontend_transfer}' >/dev/null
+          "
 
       - name: Pull and restart
         shell: bash

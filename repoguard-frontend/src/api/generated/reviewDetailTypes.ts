@@ -197,6 +197,7 @@ export type ReviewTaskSummary = {
   archiveCleanupBatchId?: number;
   archived?: boolean;
   archivedAt?: string;
+  assessmentStatus?: string;
   branch?: string;
   changedFiles?: ChangedFile[];
   changedFileTotal?: number;
