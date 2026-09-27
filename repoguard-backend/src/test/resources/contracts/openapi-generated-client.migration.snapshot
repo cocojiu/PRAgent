@@ -16,6 +16,7 @@ deleteNotificationBinding -> notificationIntegrationControllerDeleteBinding // D
 exportLlmEvaluationReport -> reviewCalibrationControllerExportEvaluationReport // GET /api/v1/config/review-calibration/evaluation-reports/{reportId}/export
 exportLlmModelReleaseAudits -> reviewCalibrationControllerExportModelReleaseAudits // GET /api/v1/config/review-calibration/release-center/audits/export
 fetchCacheStats -> cacheStatsControllerGetStats // GET /api/v1/cache/stats
+fetchCiSarifSetup -> ciSarifSetupControllerGetSetup // GET /api/v1/scanners/sarif/ci/tasks/{taskId}/setup
 fetchDashboardHighRiskReviews -> dashboardControllerGetHighRiskReviews // GET /api/v1/dashboard/high-risk-reviews
 fetchDashboardLlmQuality -> dashboardControllerGetLlmQuality // GET /api/v1/dashboard/llm-quality
 fetchDashboardOverview -> dashboardControllerGetOverview // GET /api/v1/dashboard/overview
@@ -78,6 +79,7 @@ fetchSystemSettings -> systemConfigControllerGetSystemSettings // GET /api/v1/co
 fetchUserOperationAudits -> userManagementControllerListOperationAudits // GET /api/v1/users/audits
 fetchUsers -> userManagementControllerListUsers // GET /api/v1/users
 getCurrentUser -> authControllerMe // GET /api/v1/auth/me
+issueCiSarifCredential -> ciSarifControllerIssueCredential // POST /api/v1/scanners/sarif/ci/tasks/{taskId}/credentials
 login -> authControllerLogin // POST /api/v1/auth/login
 logout -> authControllerLogout // POST /api/v1/auth/logout
 markNotificationRead -> notificationControllerMarkRead // POST /api/v1/notifications/read

@@ -4,6 +4,8 @@
 import type {
   CacheStats,
   ChartSlice,
+  CiSarifCredential,
+  CiSarifSetup,
   ConnectionTestResult,
   DashboardLlmQuality,
   DashboardMetric,
@@ -121,6 +123,20 @@ export type GeneratedOpenApiOperationMap = {
     query: never;
     body: never;
     response: CacheStats;
+  };
+  "ciSarifControllerIssueCredential": {
+    method: "POST";
+    pathParams: { taskId: number };
+    query: { attemptId: number };
+    body: never;
+    response: CiSarifCredential;
+  };
+  "ciSarifSetupControllerGetSetup": {
+    method: "GET";
+    pathParams: { taskId: number };
+    query: never;
+    body: never;
+    response: CiSarifSetup;
   };
   "dashboardControllerGetHighRiskReviews": {
     method: "GET";
@@ -995,6 +1011,22 @@ export const generatedOpenApiOperations = {
     method: "GET",
     path: "/api/v1/cache/stats",
     pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "ciSarifControllerIssueCredential": {
+    method: "POST",
+    path: "/api/v1/scanners/sarif/ci/tasks/{taskId}/credentials",
+    pathParamNames: ["taskId"],
+    queryParamNames: ["attemptId"],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "ciSarifSetupControllerGetSetup": {
+    method: "GET",
+    path: "/api/v1/scanners/sarif/ci/tasks/{taskId}/setup",
+    pathParamNames: ["taskId"],
     queryParamNames: [],
     hasRequestBody: false,
     requestBodyRequired: false

@@ -7,6 +7,8 @@ const frontendPerformance = vi.hoisted(() => ({
 vi.mock("@/observability/frontendPerformanceBuffer", () => frontendPerformance);
 
 import { apiRequest } from "./contracts";
+import { fetchCiSarifSetup, issueCiSarifCredential } from "./ciSarif";
+import { clearAuthToken, saveAuthToken } from "./authSession";
 import {
   compareLlmEvaluationReports,
   createLlmEvaluationReport,
@@ -36,8 +38,40 @@ const okResponse = (data: unknown) =>
   });
 
 describe("apiRequest", () => {
+  it("binds SARIF setup and credential requests to task, attempt and selected tenant without storing credentials", async () => {
+    const binding = { taskId: 9, attemptId: 17, commitSha: "a".repeat(40), recentUploads: [] };
+    const credential = { ...binding, credential: "contract-only-credential", expiresAt: 1800000000 };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(okResponse(binding))
+      .mockResolvedValueOnce(okResponse(credential));
+    vi.stubGlobal("fetch", fetchMock);
+    setActiveTenant("Acme-Prod");
+    saveAuthToken("contract-access-token", false);
+    const localWrite = vi.spyOn(Storage.prototype, "setItem");
+
+    expect(await fetchCiSarifSetup(9)).toEqual(binding);
+    expect(await issueCiSarifCredential(9, 17)).toEqual(credential);
+
+    const [setupUrl, setupInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [credentialUrl, credentialInit] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(new URL(setupUrl).pathname).toBe("/api/v1/scanners/sarif/ci/tasks/9/setup");
+    expect(new URL(setupUrl).search).toBe("");
+    expect(setupInit.method).toBeUndefined();
+    expect(new URL(credentialUrl).pathname).toBe("/api/v1/scanners/sarif/ci/tasks/9/credentials");
+    expect(new URL(credentialUrl).search).toBe("?attemptId=17");
+    expect(credentialInit.method).toBe("POST");
+    expect(credentialInit.body).toBeUndefined();
+    for (const init of [setupInit, credentialInit]) {
+      expect(new Headers(init.headers).get("X-RepoGuard-Tenant")).toBe("acme-prod");
+      expect(new Headers(init.headers).get("Authorization")).toBe("Bearer contract-access-token");
+    }
+    expect(localWrite).not.toHaveBeenCalled();
+    expect(JSON.stringify(frontendPerformance.observeFrontendApiRequest.mock.calls)).not.toContain(credential.credential);
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
+    clearAuthToken();
     frontendPerformance.observeFrontendApiRequest.mockClear();
     clearCsrfCookie();
     window.sessionStorage.clear();

@@ -134,6 +134,8 @@
             @submit="submitHumanReviewDecision"
           />
 
+          <ReviewDetailCiSarifGuide v-if="canManageHotTask" :key="selectedTask.id" :task-id="selectedTask.id" />
+
           <ReviewDetailFindingsCard
             :can-manage="canManageHotTask"
             :archived="isArchivedTask"
@@ -247,6 +249,7 @@
 
 <script setup lang="ts">
 import "@/features/review-detail/reviewDetail.css";
+import ReviewDetailCiSarifGuide from "@/features/review-detail/components/ReviewDetailCiSarifGuide.vue";
 import { computed, onBeforeUnmount, onMounted, watch } from "vue";
 import { ArrowLeft, ExternalLink, RefreshCw, ShieldAlert } from "@lucide/vue";
 import Github from "@/components/icons/GithubIcon.vue";

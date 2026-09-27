@@ -1,4 +1,6 @@
 {
+  "CiSarifSetupDto": "CiSarifSetup",
+  "CiSarifCredentialResponse": "CiSarifCredential",
   "AuthCurrentUserDto": "CurrentUser",
   "CacheStatsResponse": "CacheStats",
   "ChartSliceDto": "Required<ChartSlice>",

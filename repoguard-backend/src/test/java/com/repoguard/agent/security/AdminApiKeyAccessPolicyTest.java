@@ -18,6 +18,7 @@ class AdminApiKeyAccessPolicyTest {
         assertThat(AdminApiKeyAccessPolicy.protectedEndpoints())
             .extracting(endpoint -> endpoint.method() + " " + endpoint.pathPattern())
             .containsExactly(
+                "GET /api/v1/scanners/sarif/ci/tasks/{taskId}/setup",
                 "* /api/v1/github/feedback-events",
                 "* /api/v1/github/feedback-events/**",
                 "* /api/v1/config/**",

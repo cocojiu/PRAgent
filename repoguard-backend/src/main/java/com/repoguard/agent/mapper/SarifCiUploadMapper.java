@@ -1,6 +1,7 @@
 package com.repoguard.agent.mapper;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Options;
@@ -11,6 +12,20 @@ import org.apache.ibatis.annotations.Update;
 /** Durable identity and completion metadata for the CI-native SARIF channel. */
 @Mapper
 public interface SarifCiUploadMapper {
+
+    @Select("""
+        select u.batch_id as batchId, u.tool_name as toolName, u.tool_version as toolVersion,
+               u.scan_run_id as scanRunId, b.status, u.imported_count as importedCount,
+               u.skipped_count as skippedCount, u.completion_time as completionTime
+          from sarif_ci_upload u
+          join sarif_import_batch b on b.id = u.batch_id and b.tenant_id = u.tenant_id
+         where u.tenant_id = #{tenantId} and u.task_id = #{taskId}
+           and u.attempt_id = #{attemptId} and u.commit_sha = #{commitSha}
+         order by u.created_at desc, u.id desc
+         limit 20
+        """)
+    List<SarifCiUploadRow> selectRecent(@Param("tenantId") Long tenantId, @Param("taskId") Long taskId,
+        @Param("attemptId") Long attemptId, @Param("commitSha") String commitSha);
 
     @Select("""
         select id, tenant_id as tenantId, task_id as taskId, attempt_id as attemptId,

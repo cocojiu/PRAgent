@@ -6,8 +6,9 @@ authControllerRefresh(input?: { body?: AuthRefreshRequest }): Promise<AuthRespon
 authControllerRegister(input: { body: AuthRegisterRequest }): Promise<AuthResponse>; // POST /api/v1/auth/register
 authControllerResetRefreshToken(input: { body: AuthRefreshTokenResetRequest }): Promise<AuthResponse>; // POST /api/v1/auth/refresh-token/reset
 cacheStatsControllerGetStats(): Promise<CacheStats>; // GET /api/v1/cache/stats
-ciSarifControllerIssueCredential(input: { path: { taskId: number }; query?: { attemptId: number } }): Promise<CiSarifCredentialResponse>; // POST /api/v1/scanners/sarif/ci/tasks/{taskId}/credentials
+ciSarifControllerIssueCredential(input: { path: { taskId: number }; query?: { attemptId: number } }): Promise<CiSarifCredential>; // POST /api/v1/scanners/sarif/ci/tasks/{taskId}/credentials
 ciSarifControllerUpload(input: { path: { taskId: number }; body: Uint8Array }): Promise<CiSarifUploadResponse>; // POST /api/v1/scanners/sarif/ci/tasks/{taskId}/upload
+ciSarifSetupControllerGetSetup(input: { path: { taskId: number } }): Promise<CiSarifSetup>; // GET /api/v1/scanners/sarif/ci/tasks/{taskId}/setup
 dashboardControllerGetHighRiskReviews(): Promise<HighRiskReview[]>; // GET /api/v1/dashboard/high-risk-reviews
 dashboardControllerGetLlmQuality(input?: { query?: { llmTrendDays?: number } }): Promise<DashboardLlmQuality>; // GET /api/v1/dashboard/llm-quality
 dashboardControllerGetOverview(input?: { query?: { llmTrendDays?: number } }): Promise<DashboardOverview>; // GET /api/v1/dashboard/overview

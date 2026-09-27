@@ -1,4 +1,5 @@
 export * from "./dashboard";
+export type { CiSarifCredential, CiSarifSetup } from "../api/ciSarif";
 export * from "./enterpriseTenant";
 export * from "./integration";
 export * from "./llmModelRelease";

@@ -1,4 +1,5 @@
 import { requestWithMeta } from "@/api/client";
+import type { CiSarifCredential, CiSarifSetup } from "@/api/ciSarif";
 import type { ClientRequestInit } from "@/api/client";
 import type {
   ApiEndpoint,
@@ -222,6 +223,8 @@ type DataRetentionCleanupAuditInput = {
 };
 
 export type ApiContract = {
+  fetchCiSarifSetup: ApiOperation<{ taskId: number }, CiSarifSetup>;
+  issueCiSarifCredential: ApiOperation<{ taskId: number; attemptId: number }, CiSarifCredential>;
   fetchFeedbackSummary: ApiOperation<undefined, FeedbackSummary>;
   login: ApiOperation<LoginRequest, AuthResponse>;
   register: ApiOperation<RegisterRequest, AuthResponse>;
@@ -446,6 +449,13 @@ type ApiEndpointMap = {
 };
 
 const apiEndpoints: ApiEndpointMap = {
+  fetchCiSarifSetup: generatedEndpoint("ciSarifSetupControllerGetSetup", {
+    path: input => ({ taskId: input.taskId })
+  }),
+  issueCiSarifCredential: generatedEndpoint("ciSarifControllerIssueCredential", {
+    path: input => ({ taskId: input.taskId }),
+    query: input => ({ attemptId: input.attemptId })
+  }),
   fetchFeedbackSummary: {
     ...generatedEndpoint("feedbackSummaryControllerSummary", {}),
     validateResponse: isFeedbackSummary

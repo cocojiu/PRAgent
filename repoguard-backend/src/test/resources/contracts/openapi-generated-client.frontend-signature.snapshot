@@ -16,6 +16,7 @@ deleteNotificationBinding -> notificationIntegrationControllerDeleteBinding(inpu
 exportLlmEvaluationReport -> reviewCalibrationControllerExportEvaluationReport(input: { path: { reportId: number }; query?: { format?: string } }): Promise<LlmEvaluationExport>; // GET /api/v1/config/review-calibration/evaluation-reports/{reportId}/export
 exportLlmModelReleaseAudits -> reviewCalibrationControllerExportModelReleaseAudits(input?: { query?: { action?: string; format?: string; from?: string; operator?: string; releaseId?: number; releaseKey?: string; to?: string } }): Promise<LlmModelReleaseAuditExport>; // GET /api/v1/config/review-calibration/release-center/audits/export
 fetchCacheStats -> cacheStatsControllerGetStats(): Promise<CacheStats>; // GET /api/v1/cache/stats
+fetchCiSarifSetup -> ciSarifSetupControllerGetSetup(input: { path: { taskId: number } }): Promise<CiSarifSetup>; // GET /api/v1/scanners/sarif/ci/tasks/{taskId}/setup
 fetchDashboardHighRiskReviews -> dashboardControllerGetHighRiskReviews(): Promise<HighRiskReview[]>; // GET /api/v1/dashboard/high-risk-reviews
 fetchDashboardLlmQuality -> dashboardControllerGetLlmQuality(input?: { query?: { llmTrendDays?: number } }): Promise<DashboardLlmQuality>; // GET /api/v1/dashboard/llm-quality
 fetchDashboardOverview -> dashboardControllerGetOverview(input?: { query?: { llmTrendDays?: number } }): Promise<DashboardOverview>; // GET /api/v1/dashboard/overview
@@ -78,6 +79,7 @@ fetchSystemSettings -> systemConfigControllerGetSystemSettings(): Promise<System
 fetchUserOperationAudits -> userManagementControllerListOperationAudits(input?: { query?: { page?: number; pageSize?: number } }): Promise<PageResponse<UserOperationAudit>>; // GET /api/v1/users/audits
 fetchUsers -> userManagementControllerListUsers(input?: { query?: { keyword?: string; page?: number; pageSize?: number; role?: string; status?: string } }): Promise<PageResponse<ManagedUser>>; // GET /api/v1/users
 getCurrentUser -> authControllerMe(): Promise<CurrentUser>; // GET /api/v1/auth/me
+issueCiSarifCredential -> ciSarifControllerIssueCredential(input: { path: { taskId: number }; query?: { attemptId: number } }): Promise<CiSarifCredential>; // POST /api/v1/scanners/sarif/ci/tasks/{taskId}/credentials
 login -> authControllerLogin(input: { body: AuthLoginRequest }): Promise<AuthResponse>; // POST /api/v1/auth/login
 logout -> authControllerLogout(input?: { body?: AuthLogoutRequest }): Promise<void>; // POST /api/v1/auth/logout
 markNotificationRead -> notificationControllerMarkRead(input: { body: NotificationReadRequest }): Promise<void>; // POST /api/v1/notifications/read

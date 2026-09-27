@@ -17,6 +17,7 @@ class ControllerAuthorizationContractTest {
     private static final String CONTROLLER_BASE_PACKAGE = "com.repoguard.agent.controller";
 
     private static final Set<String> SENSITIVE_READ_ENDPOINTS = Set.of(
+        "CiSarifSetupController#getSetup",
         "EnterpriseTenantController#get",
         "EnterpriseTenantController#list",
         "EnterpriseTenantQuotaController#get",

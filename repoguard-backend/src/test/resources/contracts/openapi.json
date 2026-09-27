@@ -8040,6 +8040,57 @@
         }
       }
     },
+    "/api/v1/scanners/sarif/ci/tasks/{taskId}/setup" : {
+      "get" : {
+        "tags" : [ "CiSarifSetup" ],
+        "operationId" : "ciSarifSetupControllerGetSetup",
+        "x-controller-operation" : "CiSarifSetupController#getSetup",
+        "parameters" : [ {
+          "name" : "taskId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "CiSarifSetupDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/CiSarifSetupDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/scanners/sarif/ci/tasks/{taskId}/upload" : {
       "post" : {
         "tags" : [ "CiSarif" ],
@@ -9494,6 +9545,55 @@
           }
         },
         "required" : [ "expiresAt" ]
+      },
+      "CiSarifSetupDto" : {
+        "type" : "object",
+        "x-java-type" : "CiSarifSetupDto",
+        "properties" : {
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "attemptId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "organization" : {
+            "type" : "string"
+          },
+          "repository" : {
+            "type" : "string"
+          },
+          "prNumber" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "commitSha" : {
+            "type" : "string"
+          },
+          "credentialTtlSeconds" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "maxUploadBytes" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "maxSarifBytes" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "sarifVersion" : {
+            "type" : "string"
+          },
+          "recentUploads" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/Upload"
+            }
+          }
+        },
+        "required" : [ "credentialTtlSeconds", "maxUploadBytes", "maxSarifBytes" ]
       },
       "CiSarifUploadResponse" : {
         "type" : "object",
@@ -15914,6 +16014,40 @@
           }
         },
         "required" : [ "base", "policy", "notification", "security" ]
+      },
+      "Upload" : {
+        "type" : "object",
+        "x-java-type" : "Upload",
+        "properties" : {
+          "batchId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "toolName" : {
+            "type" : "string"
+          },
+          "toolVersion" : {
+            "type" : "string"
+          },
+          "scanRunId" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "imported" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "skipped" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "completedAt" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "imported", "skipped" ]
       },
       "UserCreateRequest" : {
         "type" : "object",
