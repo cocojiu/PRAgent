@@ -527,6 +527,47 @@ running_service_image_id() {
   fi
 }
 
+read_review_topology() {
+  # Select only non-secret routing values; never print the full environment.
+  topology_environment="$(docker inspect "$1" --format '{{range .Config.Env}}{{println .}}{{end}}')" || return 1
+  printf '%s\n' "$topology_environment" \
+    | sed -n '/^REPOGUARD_REVIEW_EXCHANGE=/p; /^REPOGUARD_REVIEW_QUEUE=/p; /^REPOGUARD_REVIEW_ROUTING_KEY=/p'
+}
+
+capture_previous_review_topology() {
+  previous_review_topology=""
+  if [ -z "$previous_backend_image" ]; then
+    return 0
+  fi
+  topology_backend_id="$(compose ps -q backend)" || return 1
+  previous_review_topology="$(read_review_topology "$topology_backend_id")" || return 1
+  for topology_key in REPOGUARD_REVIEW_EXCHANGE REPOGUARD_REVIEW_QUEUE REPOGUARD_REVIEW_ROUTING_KEY; do
+    topology_value="$(printf '%s\n' "$previous_review_topology" | sed -n "s/^${topology_key}=//p")"
+    if [ -z "$topology_value" ] || [ "$(printf '%s\n' "$previous_review_topology" | grep -c "^${topology_key}=")" -ne 1 ]; then
+      echo "Cannot safely capture previous review topology: missing or duplicate $topology_key. No service has been changed." >&2
+      return 1
+    fi
+  done
+  if has_compose_service backend-worker; then
+    topology_worker_id="$(compose ps -q backend-worker)" || return 1
+    if [ -n "$topology_worker_id" ]; then
+      topology_worker="$(read_review_topology "$topology_worker_id")" || return 1
+      if [ "$(printf '%s\n' "$previous_review_topology" | LC_ALL=C sort)" != "$(printf '%s\n' "$topology_worker" | LC_ALL=C sort)" ]; then
+        echo "API and Worker review topology differ; refusing deployment before service changes." >&2
+        return 1
+      fi
+    fi
+  fi
+}
+
+restore_previous_review_topology() {
+  # Do not infer routing from the candidate .env, Compose defaults or image age.
+  REPOGUARD_REVIEW_EXCHANGE="$(printf '%s\n' "$previous_review_topology" | sed -n 's/^REPOGUARD_REVIEW_EXCHANGE=//p')"
+  REPOGUARD_REVIEW_QUEUE="$(printf '%s\n' "$previous_review_topology" | sed -n 's/^REPOGUARD_REVIEW_QUEUE=//p')"
+  REPOGUARD_REVIEW_ROUTING_KEY="$(printf '%s\n' "$previous_review_topology" | sed -n 's/^REPOGUARD_REVIEW_ROUTING_KEY=//p')"
+  export REPOGUARD_REVIEW_EXCHANGE REPOGUARD_REVIEW_QUEUE REPOGUARD_REVIEW_ROUTING_KEY
+}
+
 validate_split_runtime_mode() {
   split_runtime="false"
   if has_compose_service backend-worker; then
@@ -757,14 +798,7 @@ rollback_deployment() {
 
   BACKEND_IMAGE="$previous_backend_image"
   export BACKEND_IMAGE
-  # Candidate releases use the priority-capable v3 review topology. A previous
-  # backend declares the original v2 queue without x-max-priority, so force its
-  # matching topology during image rollback instead of letting it redeclare v3
-  # with incompatible arguments.
-  REPOGUARD_REVIEW_EXCHANGE="repoguard.review.exchange.v2"
-  REPOGUARD_REVIEW_QUEUE="repoguard.review.queue.v2"
-  REPOGUARD_REVIEW_ROUTING_KEY="repoguard.review.created.v2"
-  export REPOGUARD_REVIEW_EXCHANGE REPOGUARD_REVIEW_QUEUE REPOGUARD_REVIEW_ROUTING_KEY
+  restore_previous_review_topology
   if has_compose_service backend-worker; then
     compose stop backend-worker >/dev/null 2>&1 || true
   fi
@@ -890,6 +924,7 @@ validate_backend_secret_mounts
 
 previous_backend_image="$(running_service_image_id backend)"
 previous_frontend_image="$(running_service_image_id frontend)"
+capture_previous_review_topology
 rabbitmq_config_changed=false
 if rabbitmq_config_requires_restart; then
   rabbitmq_config_changed=true
