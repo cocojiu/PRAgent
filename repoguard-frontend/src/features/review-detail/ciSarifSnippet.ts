@@ -31,7 +31,7 @@ export function buildCiSarifSnippet(setup: CiSarifSetup, baseUrl: string, platfo
     "driver = document['runs'][0]['tool']['driver']",
     "def metadata(value, limit): return ''.join(c for c in str(value).strip() if ord(c) >= 32 and not 127 <= ord(c) <= 159)[:limit]",
     "tool = metadata(driver.get('name', ''), 128)",
-    "version = metadata(driver.get('version', ''), 64)",
+    "version = metadata(driver.get('version', '') or '', 64) or metadata(driver.get('semanticVersion', '') or '', 64)",
     "if not tool: sys.exit('SARIF tool.driver.name is required.')",
     "run_id = os.environ.get('SARIF_SCAN_RUN', '')",
     "if not re.fullmatch(r'[A-Za-z0-9._:-]{1,128}', run_id): sys.exit('Set a stable SARIF_SCAN_RUN for this scan; retain it when retrying.')",
