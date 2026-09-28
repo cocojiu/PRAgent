@@ -340,6 +340,9 @@ public class SarifFindingService {
             JsonNode driver = run.path("tool").path("driver");
             String name = metadataValue(driver.path("name").asText(""), 128);
             String version = metadataValue(driver.path("version").asText(""), 64);
+            if (version.isEmpty()) {
+                version = metadataValue(driver.path("semanticVersion").asText(""), 64);
+            }
             if (StringUtils.hasText(name)) {
                 names.add(name);
             }
