@@ -1,28 +1,26 @@
-import type { ApiResponse } from "@/api/apiEnvelope";
+import { refreshFailure, resolveRefreshOutcome } from "@/api/authRefreshResult";
+import type { AuthRefreshOutcome, AuthRefreshResult } from "@/api/authRefreshResult";
+import type { RequestErrorOptions } from "@/utils/errors";
 import {
   hasSessionMarker,
   isSessionRemembered,
-  saveAuthTokens
+  resolveAuthSessionRevision,
+  saveRefreshedAuthToken
 } from "@/api/authSession";
+
+export type { AuthRefreshOutcome, AuthRefreshResult, TokenPairResponse } from "@/api/authRefreshResult";
 
 const AUTH_REFRESH_LOCK_NAME = "repoguard.auth.refresh";
 const AUTH_REFRESH_CHANNEL_NAME = "repoguard.auth.refresh.v1";
 const DEFAULT_CROSS_TAB_RESULT_WAIT_MS = 300;
-
-export interface TokenPairResponse {
-  accessToken: string;
-}
-
-export type AuthRefreshResult = {
-  ok: boolean;
-  body?: ApiResponse<TokenPairResponse>;
-};
 
 export type AuthRefreshBroadcastMessage = {
   type: "auth-refresh-completed";
   completedAt: number;
   success: boolean;
   accessToken?: string;
+  outcome?: AuthRefreshOutcome["kind"];
+  failure?: RequestErrorOptions;
 };
 
 export interface AuthRefreshMessageChannel {
@@ -45,7 +43,8 @@ type SuccessWaiter = {
 };
 
 export class AuthSessionRefreshCoordinator {
-  private refreshPromise: Promise<boolean> | undefined;
+  private refreshPromise: Promise<AuthRefreshOutcome> | undefined;
+  private sessionRevision = resolveAuthSessionRevision();
   private readonly runWithCrossTabLock: CrossTabRefreshLock | undefined;
   private readonly channel: AuthRefreshMessageChannel | undefined;
   private readonly now: () => number;
@@ -70,59 +69,103 @@ export class AuthSessionRefreshCoordinator {
     });
   }
 
-  refreshSession() {
+  /** Existing callers retain a boolean result; temporary failures reject instead of invalidating a session. */
+  async refreshSession() {
+    const result = await this.refreshSessionResult();
+    if (result.kind === "transient-failure" || result.kind === "rejected") {
+      throw result.error;
+    }
+    return result.kind === "success";
+  }
+
+  refreshSessionResult() {
+    const revision = resolveAuthSessionRevision();
+    if (this.sessionRevision !== revision) {
+      this.sessionRevision = revision;
+      this.latestCrossTabResult = undefined;
+      this.refreshPromise = undefined;
+    }
     if (!this.refreshPromise) {
       const requestedAt = this.now();
-      this.refreshPromise = this.coordinateRefresh(requestedAt).finally(() => {
-        this.refreshPromise = undefined;
+      const promise = this.coordinateRefresh(requestedAt, revision).finally(() => {
+        if (this.refreshPromise === promise) {
+          this.refreshPromise = undefined;
+        }
       });
+      this.refreshPromise = promise;
     }
     return this.refreshPromise;
   }
 
-  private async coordinateRefresh(requestedAt: number) {
+  private async coordinateRefresh(requestedAt: number, revision: number): Promise<AuthRefreshOutcome> {
     if (!hasSessionMarker()) {
-      return false;
+      return { kind: "invalid-session" };
     }
     if (!this.runWithCrossTabLock) {
       const sharedResult = this.crossTabResultSince(requestedAt);
-      return sharedResult ?? this.doRefreshSession(requestedAt, true);
+      return sharedResult ?? this.doRefreshSession(requestedAt, true, revision);
     }
-    return this.runWithCrossTabLock(async () => {
+    let result: AuthRefreshOutcome | undefined;
+    await this.runWithCrossTabLock(async () => {
       await yieldToBroadcastChannel(this.channel);
       const sharedResult = this.crossTabResultSince(requestedAt);
-      return sharedResult ?? this.doRefreshSession(requestedAt, false);
+      result = this.isCurrentSession(revision)
+        ? sharedResult ?? await this.doRefreshSession(requestedAt, false, revision)
+        : this.sessionChanged();
+      return result.kind === "success";
     });
+    return result ?? refreshFailure("transient-failure");
   }
 
-  private async doRefreshSession(requestedAt: number, waitForConcurrentSuccess: boolean) {
-    if (!hasSessionMarker()) {
-      return false;
+  private async doRefreshSession(requestedAt: number, waitForConcurrentSuccess: boolean, revision: number): Promise<AuthRefreshOutcome> {
+    if (!this.isCurrentSession(revision)) {
+      return this.sessionChanged();
     }
     const remember = isSessionRemembered();
     const response = await this.refreshTokens();
-    const accessToken = response.ok && response.body?.success
-      ? response.body.data?.accessToken
-      : undefined;
-    if (!accessToken) {
+    if (!this.isCurrentSession(revision)) {
+      return this.sessionChanged();
+    }
+    const outcome = resolveRefreshOutcome(response);
+    if (outcome.kind !== "success") {
       if (waitForConcurrentSuccess && await this.waitForSuccessfulCrossTabResult(requestedAt)) {
-        return true;
+        return this.isCurrentSession(revision) ? { kind: "success" } : this.sessionChanged();
+      }
+      if (!this.isCurrentSession(revision)) {
+        return this.sessionChanged();
       }
       this.publishCrossTabResult({
         type: "auth-refresh-completed",
         completedAt: this.now(),
-        success: false
+        success: false,
+        outcome: outcome.kind,
+        failure: "error" in outcome ? {
+          status: outcome.error.status,
+          code: outcome.error.code,
+          timestamp: outcome.error.timestamp,
+          errorId: outcome.error.errorId
+        } : undefined
       });
-      return false;
+      return outcome;
     }
-    saveAuthTokens(accessToken, "", remember);
+    const accessToken = response.body!.data.accessToken;
+    saveRefreshedAuthToken(accessToken, remember);
     this.publishCrossTabResult({
       type: "auth-refresh-completed",
       completedAt: this.now(),
       success: true,
+      outcome: "success",
       accessToken
     });
-    return true;
+    return outcome;
+  }
+
+  private isCurrentSession(revision: number) {
+    return hasSessionMarker() && resolveAuthSessionRevision() === revision;
+  }
+
+  private sessionChanged() {
+    return refreshFailure("rejected", { status: 0, code: "REQUEST_ABORTED" });
   }
 
   private publishCrossTabResult(message: AuthRefreshBroadcastMessage) {
@@ -144,7 +187,7 @@ export class AuthSessionRefreshCoordinator {
     this.latestCrossTabResult = message;
     if (applyAccessToken && message.success && message.accessToken) {
       const remember = isSessionRemembered();
-      saveAuthTokens(message.accessToken, "", remember);
+      saveRefreshedAuthToken(message.accessToken, remember);
     }
     if (message.success) {
       this.successWaiters.forEach(waiter => {
@@ -159,11 +202,18 @@ export class AuthSessionRefreshCoordinator {
     if (!this.latestCrossTabResult || this.latestCrossTabResult.completedAt < requestedAt) {
       return undefined;
     }
-    return this.latestCrossTabResult.success;
+    const message = this.latestCrossTabResult;
+    if (message.success) {
+      return { kind: "success" } as const;
+    }
+    if (message.outcome === "invalid-session") {
+      return { kind: "invalid-session" } as const;
+    }
+    return refreshFailure(message.outcome === "rejected" ? "rejected" : "transient-failure", message.failure);
   }
 
   private async waitForSuccessfulCrossTabResult(requestedAt: number) {
-    if (this.crossTabResultSince(requestedAt) === true) {
+    if (this.crossTabResultSince(requestedAt)?.kind === "success") {
       return true;
     }
     if (!this.channel || this.crossTabResultWaitMs === 0) {
@@ -186,7 +236,7 @@ export class AuthSessionRefreshCoordinator {
       };
       const timeout = setTimeout(() => finish(false), this.crossTabResultWaitMs);
       this.successWaiters.add(waiter);
-      if (this.crossTabResultSince(requestedAt) === true) {
+      if (this.crossTabResultSince(requestedAt)?.kind === "success") {
         finish(true);
       }
     });
@@ -235,5 +285,17 @@ const isAuthRefreshBroadcastMessage = (value: unknown): value is AuthRefreshBroa
     && typeof message.completedAt === "number"
     && Number.isFinite(message.completedAt)
     && typeof message.success === "boolean"
-    && (!message.success || typeof message.accessToken === "string" && message.accessToken.length > 0);
+    && (!message.success || typeof message.accessToken === "string" && message.accessToken.trim().length > 0)
+    && (message.outcome === undefined || ["success", "invalid-session", "transient-failure", "rejected"].includes(message.outcome))
+    && (message.outcome === undefined || message.success === (message.outcome === "success"))
+    && (message.failure === undefined || isRefreshFailureMetadata(message.failure));
+};
+
+const isRefreshFailureMetadata = (value: unknown): value is RequestErrorOptions => {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const metadata = value as RequestErrorOptions;
+  return (metadata.status === undefined || Number.isInteger(metadata.status) && metadata.status >= 0 && metadata.status <= 599)
+    && [metadata.code, metadata.timestamp, metadata.errorId].every(item => item === undefined || typeof item === "string" && item.length <= 256);
 };

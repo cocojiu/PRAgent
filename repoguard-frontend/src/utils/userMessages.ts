@@ -1,6 +1,8 @@
 export const commonUserMessages = {
   actionFailed: "操作失败",
   authFailed: "认证失败",
+  authRefreshUnavailable: "会话刷新暂时失败，请稍后重试",
+  authRefreshRejected: "会话校验被拒绝，请刷新页面或重新登录",
   badRequest: "请求参数不正确，请检查后重试",
   conflict: "状态已变化，请刷新",
   forbidden: "当前账号权限不足，无法执行该操作",

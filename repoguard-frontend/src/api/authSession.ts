@@ -6,6 +6,7 @@ const SESSION_MARKER_VALUE = "active";
 const CSRF_TOKEN_COOKIE_KEY = "repoguard_csrf_token";
 
 let activeAccessToken = "";
+let sessionRevision = 0;
 
 export const saveAuthTokens = (accessToken: string, _refreshToken: string, remember: boolean) => {
   clearAuthToken();
@@ -18,7 +19,20 @@ export const saveAuthToken = (token: string, remember: boolean) => {
 };
 
 export const clearAuthToken = () => {
+  sessionRevision++;
   activeAccessToken = "";
+  clearStoredAuthState();
+};
+
+export const resolveAuthSessionRevision = () => sessionRevision;
+
+export const saveRefreshedAuthToken = (accessToken: string, remember: boolean) => {
+  clearStoredAuthState();
+  activeAccessToken = accessToken;
+  saveSessionMarker(remember);
+};
+
+const clearStoredAuthState = () => {
   window.sessionStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
   window.sessionStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
   window.sessionStorage.removeItem(LEGACY_AUTH_TOKEN_STORAGE_KEY);

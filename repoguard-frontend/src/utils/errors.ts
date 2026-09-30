@@ -24,6 +24,8 @@ export class RequestError extends Error {
 }
 
 const requestErrorMessages: Readonly<Record<string, string>> = {
+  AUTH_REFRESH_UNAVAILABLE: commonUserMessages.authRefreshUnavailable,
+  AUTH_REFRESH_REJECTED: commonUserMessages.authRefreshRejected,
   BAD_REQUEST: commonUserMessages.badRequest,
   CONFLICT: commonUserMessages.conflict,
   FORBIDDEN: commonUserMessages.forbidden,
@@ -40,6 +42,9 @@ const requestErrorMessages: Readonly<Record<string, string>> = {
 
 export const getErrorMessage = (error: unknown, fallback: string = commonUserMessages.actionFailed) => {
   if (error instanceof RequestError) {
+    if (error.code === "AUTH_REFRESH_REJECTED") {
+      return commonUserMessages.authRefreshRejected;
+    }
     if (error.code === "REQUEST_TIMEOUT") {
       return commonUserMessages.requestTimeout;
     }
