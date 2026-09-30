@@ -8,6 +8,7 @@ vi.mock("@/observability/frontendPerformanceBuffer", () => frontendPerformance);
 
 import { apiRequest } from "./contracts";
 import { fetchCiSarifSetup, issueCiSarifCredential } from "./ciSarif";
+import { fetchReviews, fetchReviewListSummary, fetchReviewRepositories } from "./reviews";
 import { clearAuthToken, saveAuthToken } from "./authSession";
 import {
   compareLlmEvaluationReports,
@@ -223,6 +224,23 @@ describe("apiRequest", () => {
 
     await expect(pending).rejects.toMatchObject({ code: "REQUEST_ABORTED" });
     expect(fetchSignal?.aborted).toBe(true);
+  });
+
+  it.each([
+    { name: "review list", load: (signal: AbortSignal) => fetchReviews({ page: 1, pageSize: 8 }, { signal }) },
+    { name: "review summary", load: (signal: AbortSignal) => fetchReviewListSummary({}, { signal }) },
+    { name: "repository options", load: (signal: AbortSignal) => fetchReviewRepositories({ signal }) }
+  ])("forwards cancellation to fetch through the $name wrapper", async ({ load }) => {
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal("fetch", vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      signal = init?.signal ?? undefined;
+      return new Promise<Response>(() => {});
+    }));
+    const controller = new AbortController();
+    const pending = load(controller.signal);
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ code: "REQUEST_ABORTED" });
+    expect(signal?.aborted).toBe(true);
   });
 
   it("serializes request bodies from the typed operation contract", async () => {

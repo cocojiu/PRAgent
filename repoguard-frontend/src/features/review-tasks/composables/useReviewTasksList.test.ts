@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createApp, defineComponent, nextTick, type App } from "vue";
+import { RequestError } from "@/utils/errors";
 import { useReviewTasksList } from "./useReviewTasksList";
 import type { ReviewTask } from "@/types";
 import { statusClass, statusText } from "@/utils/status";
@@ -23,8 +25,13 @@ vi.mock("element-plus/es/components/message/index.mjs", () => ({
   ElMessage: messages
 }));
 
+const requestOptions = { signal: expect.any(AbortSignal) };
+const mountedApps = new Set<App>();
+
 describe("useReviewTasksList", () => {
   afterEach(() => {
+    for (const app of mountedApps) app.unmount();
+    mountedApps.clear();
     vi.clearAllMocks();
     vi.useRealTimers();
   });
@@ -44,13 +51,13 @@ describe("useReviewTasksList", () => {
     expect(list.currentPage.value).toBe(1);
     expect(reviewApi.fetchReviews).toHaveBeenLastCalledWith(expect.objectContaining({
       page: 1, repository: "owner/repo", riskLevel: "high", status: "pending_human_review", cursor: undefined
-    }));
+    }), requestOptions);
     expect(reviewApi.fetchReviewListSummary).toHaveBeenLastCalledWith(expect.objectContaining({
       repository: "owner/repo", riskLevel: "high", status: "pending_human_review"
-    }));
+    }), requestOptions);
     list.currentPage.value = 2;
     await vi.advanceTimersByTimeAsync(1);
-    expect(reviewApi.fetchReviews).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2, cursor: undefined }));
+    expect(reviewApi.fetchReviews).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2, cursor: undefined }), requestOptions);
   });
 
   it("returns to a valid page when reviewed tasks disappear from the queue", async () => {
@@ -103,8 +110,8 @@ describe("useReviewTasksList", () => {
       triggerSource: "",
       keyword: "",
       cursor: undefined
-    });
-    expect(reviewApi.fetchReviews).not.toHaveBeenCalledWith(expect.objectContaining({ pageSize: 100 }));
+    }, requestOptions);
+    expect(reviewApi.fetchReviews).not.toHaveBeenCalledWith(expect.objectContaining({ pageSize: 100 }), requestOptions);
     expect(reviewApi.fetchReviewRepositories).toHaveBeenCalledTimes(1);
     expect(list.reviewTasks.value).toEqual([reviewTask]);
     expect(list.totalTasks.value).toBe(26);
@@ -136,7 +143,7 @@ describe("useReviewTasksList", () => {
       riskLevel: "",
       triggerSource: "",
       keyword: ""
-    });
+    }, requestOptions);
     const [totalMetric, highRiskMetric, failedMetric, durationMetric] = list.taskSummaryMetrics.value;
     expect(totalMetric.value).toBe("260");
     expect(highRiskMetric.value).toBe("13");
@@ -236,7 +243,7 @@ describe("useReviewTasksList", () => {
     expect(reviewApi.fetchReviews).toHaveBeenLastCalledWith(expect.objectContaining({
       page: 2,
       cursor: "server-cursor-2"
-    }));
+    }), requestOptions);
   });
 
   it("clears remembered cursors before refreshing the task list", async () => {
@@ -269,7 +276,137 @@ describe("useReviewTasksList", () => {
     expect(reviewApi.fetchReviews).toHaveBeenLastCalledWith(expect.objectContaining({
       page: 2,
       cursor: undefined
-    }));
+    }), requestOptions);
+  });
+
+  it("aborts list and summary immediately during debounce and only applies the final filter", async () => {
+    resetReviewApi();
+    vi.useFakeTimers();
+    const oldPage = deferred<{ items: ReviewTask[]; total: number }>();
+    const oldSummary = deferred<typeof summaryFixture>();
+    reviewApi.fetchReviews.mockReturnValueOnce(oldPage.promise).mockResolvedValue({ items: [reviewTask], total: 1 });
+    reviewApi.fetchReviewListSummary.mockReturnValueOnce(oldSummary.promise).mockResolvedValue({ ...summaryFixture, total: 1 });
+    reviewApi.fetchReviewRepositories.mockResolvedValue([]);
+    const { list } = mountList();
+    list.initializeReviewTasksList();
+    const oldTaskSignal = reviewApi.fetchReviews.mock.calls[0][1].signal as AbortSignal;
+    const oldSummarySignal = reviewApi.fetchReviewListSummary.mock.calls[0][1].signal as AbortSignal;
+
+    list.keyword.value = "first";
+    await nextTick();
+    expect(oldTaskSignal.aborted).toBe(true);
+    expect(oldSummarySignal.aborted).toBe(true);
+    expect(reviewApi.fetchReviews).toHaveBeenCalledTimes(1);
+    list.keyword.value = "final";
+    await nextTick();
+    await vi.advanceTimersByTimeAsync(351);
+    expect(reviewApi.fetchReviews).toHaveBeenCalledTimes(2);
+    expect(reviewApi.fetchReviewListSummary).toHaveBeenCalledTimes(2);
+    expect(reviewApi.fetchReviews).toHaveBeenLastCalledWith(expect.objectContaining({ keyword: "final" }), requestOptions);
+    oldPage.resolve({ items: [], total: 99 });
+    oldSummary.resolve({ ...summaryFixture, total: 99 });
+    await vi.advanceTimersByTimeAsync(1);
+    expect(list.reviewTasks.value).toEqual([reviewTask]);
+    expect(list.totalTasks.value).toBe(1);
+    expect(list.taskSummaryMetrics.value[0].value).toBe("1");
+    expect(list.errorMessage.value).toBe("");
+    expect(messages.error).not.toHaveBeenCalled();
+  });
+
+  it("cancels only the list request when the page changes", async () => {
+    resetReviewApi();
+    reviewApi.fetchReviews.mockReturnValueOnce(new Promise(() => {})).mockResolvedValue({ items: [], total: 26 });
+    reviewApi.fetchReviewListSummary.mockReturnValue(new Promise(() => {}));
+    reviewApi.fetchReviewRepositories.mockResolvedValue([]);
+    const { list } = mountList();
+    list.initializeReviewTasksList();
+    const listSignal = reviewApi.fetchReviews.mock.calls[0][1].signal as AbortSignal;
+    const summarySignal = reviewApi.fetchReviewListSummary.mock.calls[0][1].signal as AbortSignal;
+    list.currentPage.value = 2;
+    await nextTick();
+    expect(listSignal.aborted).toBe(true);
+    expect(summarySignal.aborted).toBe(false);
+    expect(reviewApi.fetchReviewListSummary).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the newer request loading when the cancelled request finishes", async () => {
+    resetReviewApi();
+    const oldPage = deferred<{ items: ReviewTask[]; total: number }>();
+    const newPage = deferred<{ items: ReviewTask[]; total: number }>();
+    reviewApi.fetchReviews.mockReturnValueOnce(oldPage.promise).mockReturnValueOnce(newPage.promise);
+    const { list } = mountList();
+    const first = list.loadTasks();
+    const second = list.loadTasks();
+    expect(reviewApi.fetchReviews.mock.calls[0][1].signal.aborted).toBe(true);
+    oldPage.reject(new RequestError("cancelled", { code: "REQUEST_ABORTED" }));
+    await first;
+    expect(list.loading.value).toBe(true);
+    expect(list.errorMessage.value).toBe("");
+    newPage.resolve({ items: [reviewTask], total: 1 });
+    await second;
+    expect(list.loading.value).toBe(false);
+    expect(list.reviewTasks.value).toEqual([reviewTask]);
+  });
+
+  it.each([
+    () => new RequestError("cancelled", { code: "REQUEST_ABORTED" }),
+    () => new DOMException("cancelled", "AbortError")
+  ])("suppresses cancellation errors and keeps the last successful page", async error => {
+    resetReviewApi();
+    reviewApi.fetchReviews.mockResolvedValueOnce({ items: [reviewTask], total: 1 }).mockRejectedValueOnce(error());
+    reviewApi.fetchReviewRepositories.mockRejectedValueOnce(error());
+    const { list } = mountList();
+    await list.loadTasks();
+    await list.loadTasks();
+    await list.loadRepositories();
+    expect(list.reviewTasks.value).toEqual([reviewTask]);
+    expect(list.totalTasks.value).toBe(1);
+    expect(list.errorMessage.value).toBe("");
+    expect(list.loading.value).toBe(false);
+    expect(messages.error).not.toHaveBeenCalled();
+  });
+
+  it("aborts every in-flight request and ignores all state writes after unmount", async () => {
+    resetReviewApi();
+    const page = deferred<{ items: ReviewTask[]; total: number }>();
+    const summary = deferred<typeof summaryFixture>();
+    const repositories = deferred<string[]>();
+    reviewApi.fetchReviews.mockReturnValue(page.promise);
+    reviewApi.fetchReviewListSummary.mockReturnValue(summary.promise);
+    reviewApi.fetchReviewRepositories.mockReturnValue(repositories.promise);
+    const { list, app } = mountList();
+    list.initializeReviewTasksList();
+    const signals = [reviewApi.fetchReviews.mock.calls[0][1].signal,
+      reviewApi.fetchReviewListSummary.mock.calls[0][1].signal, reviewApi.fetchReviewRepositories.mock.calls[0][0].signal];
+    app.unmount();
+    mountedApps.delete(app);
+    expect(signals.every(signal => signal.aborted)).toBe(true);
+    page.resolve({ items: [reviewTask], total: 1 });
+    summary.resolve(summaryFixture);
+    repositories.resolve(["late/repository"]);
+    await flushAsync();
+    expect(list.reviewTasks.value).toEqual([]);
+    expect(list.totalTasks.value).toBe(0);
+    expect(list.repositories.value).toEqual([]);
+    expect(list.taskSummaryMetrics.value[0].value).toBe("—");
+    expect(list.loading.value).toBe(true);
+    expect(messages.error).not.toHaveBeenCalled();
+    list.refreshTasks();
+    list.initializeReviewTasksList();
+    expect(reviewApi.fetchReviews).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels replaced repository requests and rejects late option results", async () => {
+    resetReviewApi();
+    const oldRepositories = deferred<string[]>();
+    reviewApi.fetchReviewRepositories.mockReturnValueOnce(oldRepositories.promise).mockResolvedValue(["current/repo"]);
+    const { list } = mountList();
+    const first = list.loadRepositories();
+    await list.loadRepositories();
+    expect(reviewApi.fetchReviewRepositories.mock.calls[0][0].signal.aborted).toBe(true);
+    oldRepositories.resolve(["stale/repo"]);
+    await first;
+    expect(list.repositories.value).toEqual(["current/repo"]);
   });
 
   it("exposes superseded tasks as retryable against the latest pull request head", () => {
@@ -286,6 +423,30 @@ describe("useReviewTasksList", () => {
     expect(statusClass("superseded")).toBe("warning");
   });
 });
+
+const summaryFixture = { total: 26, highRisk: 2, failed: 1, averageDurationSeconds: 65 };
+
+const resetReviewApi = () => {
+  for (const request of Object.values(reviewApi)) request.mockReset();
+};
+
+const mountList = () => {
+  let list!: ReturnType<typeof useReviewTasksList>;
+  const app = createApp(defineComponent({ setup() {
+    list = useReviewTasksList();
+    return () => null;
+  } }));
+  app.mount(document.createElement("div"));
+  mountedApps.add(app);
+  return { list, app };
+};
+
+const deferred = <T>() => {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((accept, fail) => { resolve = accept; reject = fail; });
+  return { promise, resolve, reject };
+};
 
 const reviewTask: ReviewTask = {
   id: 7,
