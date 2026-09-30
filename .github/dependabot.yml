@@ -35,9 +35,28 @@ updates:
       time: "03:30"
       timezone: Asia/Shanghai
     groups:
+      # Match the TypeScript/lint toolchain before the catch-all dependency group.
+      frontend-toolchain:
+        applies-to: version-updates
+        patterns:
+          - "typescript"
+          - "vue-tsc"
+          - "typescript-eslint"
+          - "@typescript-eslint/*"
+          - "eslint"
+          - "@eslint/*"
+          - "eslint-plugin-vue"
+          - "vue-eslint-parser"
+        update-types:
+          - "minor"
+          - "patch"
       frontend-dependencies:
+        applies-to: version-updates
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
     open-pull-requests-limit: 5
 
   - package-ecosystem: docker
