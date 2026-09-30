@@ -311,6 +311,8 @@ API 响应通常使用统一 `ApiResponse` 包装。业务错误优先使用稳�
 
 沿用已有 CodeQL 或 Semgrep 扫描，将单个 run 的 SARIF 2.1.0 JSON 保存为 `codeql.sarif` 或 `semgrep.sarif`，再复制 GitHub Actions、GitLab CI 或通用 Shell 上传片段。运行环境需要 Python 3、Git、对应 PR head commit 和访问 RepoGuard 的网络权限。JSON 上限为 2,000,000 字节；片段从报告读取扫描器名称/版本，并拒绝 HTTP 重定向。
 
+SARIF 导出包含当前审查的 findings，按扫描器名称与版本分组。默认最多 10,000 条 finding、8 MiB UTF-8 SARIF 文档，超过任一上限会返回明确错误，结果不会被截断。查询前也会检查待加载的消息、路径和规则标识文本总字节数，使用同一字节上限。可通过 `REPOGUARD_SARIF_EXPORT_MAX_FINDINGS`（1 至 100,000）和 `REPOGUARD_SARIF_EXPORT_MAX_DOCUMENT_BYTES`（1,024 至 33,554,432）调整；API 响应封装不计入文档字节预算。小规格实例建议保持默认或降低上限。
+
 第一版用于手动接入验收：报告生成后获取 10 分钟短期凭证，再启动读取已有报告的上传作业，或下载报告后运行通用片段。凭证通过 `REPOGUARD_CI_CREDENTIAL` secret 注入，上传后删除临时 secret；不可作为长期定时任务凭证。真实凭证不会进入片段、页面正文或浏览器存储，复制、关闭向导、刷新绑定或过期后清除页面持有的值。重试相同报告时保持 `SARIF_SCAN_RUN` 不变；任务重试或 commit 更新后需要重新获取绑定与凭证。
 
 ## 开发规范

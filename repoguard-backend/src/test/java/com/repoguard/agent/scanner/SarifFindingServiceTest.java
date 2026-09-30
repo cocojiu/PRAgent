@@ -10,6 +10,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.repoguard.agent.common.BusinessException;
+import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.dto.SarifImportRequest;
 import com.repoguard.agent.entity.ReviewExecutionAttempt;
 import com.repoguard.agent.entity.ReviewFinding;
@@ -21,6 +23,7 @@ import com.repoguard.agent.mapper.ReviewFindingMapper.SarifImportBatchRow;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 class SarifFindingServiceTest {
 
@@ -313,13 +316,14 @@ class SarifFindingServiceTest {
         SarifImportBatchRow batch = new SarifImportBatchRow();
         batch.setToolName("CodeQL");
         batch.setToolVersion("2.15");
-        when(findingMapper.selectList(any())).thenReturn(List.of(imported));
+        when(findingMapper.selectList(any())).thenReturn(List.of(imported, imported));
         when(findingMapper.selectSarifImportBatchById(101L)).thenReturn(batch);
 
         var document = service.exportFindings(9L);
 
         assertThat(document.runs()).singleElement().satisfies(run ->
             assertThat(run.get("tool").toString()).contains("CodeQL", "2.15"));
+        verify(findingMapper, times(1)).selectSarifImportBatchById(101L);
 
         when(findingMapper.selectList(any())).thenReturn(null);
         assertThat(service.exportFindings(9L).runs()).isEmpty();
@@ -354,6 +358,45 @@ class SarifFindingServiceTest {
             .hasSize(64);
         assertThat(service.contentFingerprint("sarif-content"))
             .isNotEqualTo(service.contentFingerprint("other-content"));
+    }
+
+    @Test
+    void rejectsExportCountOverflowWithoutTruncatingOrReadingBatchMetadata() {
+        when(taskMapper.selectById(9L)).thenReturn(currentTask());
+        ReflectionTestUtils.setField(service, "exportMaxFindings", 1);
+        when(findingMapper.selectList(any())).thenReturn(List.of(new ReviewFinding(), new ReviewFinding()));
+
+        assertThatThrownBy(() -> service.exportFindings(9L)).isInstanceOfSatisfying(BusinessException.class,
+            error -> assertThat(error.getErrorCode()).isEqualTo(ErrorCode.PAYLOAD_TOO_LARGE));
+        verify(findingMapper, never()).selectSarifImportBatchById(any());
+    }
+
+    @Test
+    void rejectsOversizedExportTextBeforeLoadingEntities() {
+        when(taskMapper.selectById(9L)).thenReturn(currentTask());
+        when(findingMapper.selectSarifExportTextBytes(9L, 10001)).thenReturn(8_388_609L);
+
+        assertThatThrownBy(() -> service.exportFindings(9L)).isInstanceOfSatisfying(BusinessException.class,
+            error -> assertThat(error.getErrorCode()).isEqualTo(ErrorCode.PAYLOAD_TOO_LARGE));
+        verify(findingMapper, never()).selectList(any());
+    }
+
+    @Test
+    void enforcesExactUtf8DocumentBudgetIncludingJsonEscapes() throws Exception {
+        when(taskMapper.selectById(9L)).thenReturn(currentTask());
+        ReviewFinding finding = new ReviewFinding();
+        finding.setId(1L);
+        finding.setFilePath("src/App.java");
+        finding.setMessage("中文\n\"\\".repeat(150));
+        when(findingMapper.selectList(any())).thenReturn(List.of(finding));
+        var document = service.exportFindings(9L);
+        int bytes = new ObjectMapper().writeValueAsBytes(document).length;
+        ReflectionTestUtils.setField(service, "exportMaxDocumentBytes", bytes);
+        assertThat(service.exportFindings(9L)).isEqualTo(document);
+
+        ReflectionTestUtils.setField(service, "exportMaxDocumentBytes", bytes - 1);
+        assertThatThrownBy(() -> service.exportFindings(9L)).isInstanceOfSatisfying(BusinessException.class,
+            error -> assertThat(error.getErrorCode()).isEqualTo(ErrorCode.PAYLOAD_TOO_LARGE));
     }
 
     private ReviewTask currentTask() {

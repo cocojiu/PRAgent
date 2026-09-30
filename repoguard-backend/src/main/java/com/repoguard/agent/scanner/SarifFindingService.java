@@ -29,16 +29,23 @@ import java.util.Set;
 import java.util.TreeSet;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.util.StringUtils;
 import org.springframework.dao.DuplicateKeyException;
 import com.repoguard.agent.mapper.ReviewFindingMapper.SarifImportBatchRow;
 import com.repoguard.agent.tenancy.TenantContext;
+import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Value;
 @Service
 public class SarifFindingService {
     private static final String SARIF_VERSION = "2.1.0";
     private static final int MAX_RUNS = 20;
     private static final int MAX_RESULTS = 5_000;
     private static final int MAX_RULE_ID_LENGTH = 64;
+    @Value("${repoguard.sarif-export.max-findings:10000}")
+    private int exportMaxFindings = 10_000;
+    @Value("${repoguard.sarif-export.max-document-bytes:8388608}")
+    private int exportMaxDocumentBytes = 8 * 1024 * 1024;
     private final ObjectMapper objectMapper;
     private final ReviewTaskMapper reviewTaskMapper;
     private final ReviewFindingMapper reviewFindingMapper;
@@ -138,9 +145,15 @@ public class SarifFindingService {
         }
         return new SarifImportResponse(taskId, imported.size(), skipped, List.copyOf(imported));
     }
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public SarifExportDto exportFindings(Long taskId) {
         requireTask(taskId);
-        return SarifExportBuilder.export(taskId, reviewFindingMapper);
+        return SarifExportBuilder.export(taskId, reviewFindingMapper, objectMapper, exportMaxFindings, exportMaxDocumentBytes);
+    }
+
+    @PostConstruct
+    void validateExportLimits() {
+        SarifExportBuilder.validateLimits(exportMaxFindings, exportMaxDocumentBytes);
     }
 
     /** Returns the canonical fingerprint used by the durable SARIF batch identity. */

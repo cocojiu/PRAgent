@@ -14,7 +14,7 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
-public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
+public interface ReviewFindingMapper extends BaseMapper<ReviewFinding>, SarifExportQueries {
 
     @Select("""
         select *
