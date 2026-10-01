@@ -19,9 +19,10 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -51,33 +52,58 @@ public class NotificationServiceImpl implements NotificationService {
 
     @Override
     public NotificationCenterDto getNotifications() {
-        List<ReviewTask> tasks = safeTasks();
+        LocalDateTime now = LocalDateTime.now();
+        Set<Long> notifiedTasks = new HashSet<>();
         List<NotificationItemDto> items = new ArrayList<>();
-        addFailedTaskNotifications(items, tasks);
-        addHighRiskNotifications(items, tasks);
-        addOverdueHumanReviewNotifications(items, tasks);
-        addFallbackNotifications(items, tasks);
+        addOverdueHumanReviewNotifications(items, safeTasks(new LambdaQueryWrapper<ReviewTask>()
+            .eq(ReviewTask::getStatus, ReviewTaskStatus.PENDING_HUMAN_REVIEW.code())
+            .eq(ReviewTask::getHumanReviewStatus, "PENDING")
+            .isNotNull(ReviewTask::getReviewSlaDeadline).le(ReviewTask::getReviewSlaDeadline, now)
+            .orderByAsc(ReviewTask::getReviewSlaDeadline, ReviewTask::getId), 4, notifiedTasks), notifiedTasks);
         addIntegrationNotifications(items);
-
-        List<NotificationItemDto> sortedItems = items.stream()
-            .sorted(Comparator.comparing(NotificationItemDto::createdAt, Comparator.nullsLast(Comparator.reverseOrder())))
-            .limit(MAX_NOTIFICATIONS)
-            .toList();
-        return new NotificationCenterDto(sortedItems.size(), format(LocalDateTime.now()), sortedItems);
+        List<NotificationItemDto> failed = new ArrayList<>();
+        addFailedTaskNotifications(failed, safeTasks(new LambdaQueryWrapper<ReviewTask>()
+            .eq(ReviewTask::getStatus, ReviewTaskStatus.FAILED.code())
+            .orderByDesc(ReviewTask::getCreatedAt, ReviewTask::getId), 4, notifiedTasks), notifiedTasks);
+        List<NotificationItemDto> highRisk = new ArrayList<>();
+        addHighRiskNotifications(highRisk, safeTasks(unresolvedAssessmentQuery()
+            .eq(ReviewTask::getAssessmentStatus, AssessmentStatus.COMPLETE.name())
+            .in(ReviewTask::getRiskLevel, "HIGH", "CRITICAL")
+            .orderByDesc(ReviewTask::getCreatedAt, ReviewTask::getId), 4, notifiedTasks), notifiedTasks);
+        List<NotificationItemDto> fallback = new ArrayList<>();
+        addFallbackNotifications(fallback, safeTasks(unresolvedAssessmentQuery()
+            .eq(ReviewTask::getLlmStatus, LlmStatus.FALLBACK.name())
+            .orderByDesc(ReviewTask::getCreatedAt, ReviewTask::getId), 3, notifiedTasks), notifiedTasks);
+        // Reserve overdue/system slots, then give each remaining category a turn.
+        List<List<NotificationItemDto>> groups = List.of(failed, highRisk, fallback);
+        for (int offset = 0; offset < 4 && items.size() < MAX_NOTIFICATIONS; offset++) {
+            for (List<NotificationItemDto> group : groups) {
+                if (offset < group.size() && items.size() < MAX_NOTIFICATIONS) items.add(group.get(offset));
+            }
+        }
+        return new NotificationCenterDto(items.size(), format(now), List.copyOf(items));
     }
 
-    private List<ReviewTask> safeTasks() {
-        List<ReviewTask> tasks = reviewTaskMapper.selectList(
-            new LambdaQueryWrapper<ReviewTask>()
-                .orderByDesc(ReviewTask::getCreatedAt)
-                .last("limit 50")
-        );
+    private LambdaQueryWrapper<ReviewTask> unresolvedAssessmentQuery() {
+        return new LambdaQueryWrapper<ReviewTask>()
+            .in(ReviewTask::getStatus, ReviewTaskStatus.COMPLETED.code(), ReviewTaskStatus.PENDING_HUMAN_REVIEW.code())
+            .in(ReviewTask::getHumanReviewStatus, "PENDING", "NOT_REQUIRED")
+            .isNull(ReviewTask::getHumanReviewedAt);
+    }
+
+    private List<ReviewTask> safeTasks(LambdaQueryWrapper<ReviewTask> query, int limit, Set<Long> notifiedTasks) {
+        List<ReviewTask> tasks = reviewTaskMapper.selectList(query
+            .select(ReviewTask::getId, ReviewTask::getPrNumber, ReviewTask::getTitle, ReviewTask::getRepository,
+                ReviewTask::getStatus, ReviewTask::getAssessmentStatus, ReviewTask::getRiskLevel, ReviewTask::getLlmStatus,
+                ReviewTask::getHumanReviewStatus, ReviewTask::getReviewSlaDeadline, ReviewTask::getReviewAssignee, ReviewTask::getCreatedAt)
+            .notIn(!notifiedTasks.isEmpty(), ReviewTask::getId, List.copyOf(notifiedTasks))
+            .last("limit " + limit));
         return tasks == null ? List.of() : tasks;
     }
 
-    private void addFailedTaskNotifications(List<NotificationItemDto> items, List<ReviewTask> tasks) {
+    private void addFailedTaskNotifications(List<NotificationItemDto> items, List<ReviewTask> tasks, Set<Long> notifiedTasks) {
         tasks.stream()
-            .filter(task -> ReviewTaskStatus.FAILED == ReviewTaskStatus.from(task.getStatus()))
+            .filter(task -> notifiedTasks.add(task.getId()))
             .limit(4)
             .map(task -> taskNotification(
                 "review-failed-" + task.getId(),
@@ -89,10 +115,9 @@ public class NotificationServiceImpl implements NotificationService {
             .forEach(items::add);
     }
 
-    private void addHighRiskNotifications(List<NotificationItemDto> items, List<ReviewTask> tasks) {
+    private void addHighRiskNotifications(List<NotificationItemDto> items, List<ReviewTask> tasks, Set<Long> notifiedTasks) {
         tasks.stream()
-            .filter(task -> AssessmentStatus.COMPLETE.name().equalsIgnoreCase(task.getAssessmentStatus()))
-            .filter(task -> isHighRisk(task.getRiskLevel()))
+            .filter(task -> notifiedTasks.add(task.getId()))
             .limit(4)
             .map(task -> taskNotification(
                 "review-high-risk-" + task.getId(),
@@ -104,9 +129,9 @@ public class NotificationServiceImpl implements NotificationService {
             .forEach(items::add);
     }
 
-    private void addFallbackNotifications(List<NotificationItemDto> items, List<ReviewTask> tasks) {
+    private void addFallbackNotifications(List<NotificationItemDto> items, List<ReviewTask> tasks, Set<Long> notifiedTasks) {
         tasks.stream()
-            .filter(task -> LlmStatus.FALLBACK == LlmStatus.from(task.getLlmStatus()))
+            .filter(task -> notifiedTasks.add(task.getId()))
             .limit(3)
             .map(task -> taskNotification(
                 "review-llm-fallback-" + task.getId(),
@@ -118,11 +143,9 @@ public class NotificationServiceImpl implements NotificationService {
             .forEach(items::add);
     }
 
-    private void addOverdueHumanReviewNotifications(List<NotificationItemDto> items, List<ReviewTask> tasks) {
-        LocalDateTime now = LocalDateTime.now();
+    private void addOverdueHumanReviewNotifications(List<NotificationItemDto> items, List<ReviewTask> tasks, Set<Long> notifiedTasks) {
         tasks.stream()
-            .filter(task -> ReviewTaskStatus.PENDING_HUMAN_REVIEW == ReviewTaskStatus.from(task.getStatus()))
-            .filter(task -> task.getReviewSlaDeadline() != null && !task.getReviewSlaDeadline().isAfter(now))
+            .filter(task -> notifiedTasks.add(task.getId()))
             .limit(4)
             .map(task -> taskNotification(
                 "review-sla-overdue-" + task.getId(),
@@ -248,10 +271,6 @@ public class NotificationServiceImpl implements NotificationService {
 
     private String taskTitle(ReviewTask task) {
         return task.getRepository() + " PR #" + task.getPrNumber() + "：" + task.getTitle();
-    }
-
-    private boolean isHighRisk(String riskLevel) {
-        return "HIGH".equalsIgnoreCase(riskLevel) || "CRITICAL".equalsIgnoreCase(riskLevel);
     }
 
     private String riskText(String riskLevel) {

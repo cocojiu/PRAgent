@@ -93,7 +93,10 @@
                 </button>
               </div>
               <RouterLink class="notification-more" to="/repoguard/tasks" @click="notificationPanelOpen = false">
-                查看全部消息 →
+                查看全部审查任务 →
+              </RouterLink>
+              <RouterLink v-if="enterpriseEditionEnabled" class="notification-more" to="/repoguard/tasks?review=pending" @click="notificationPanelOpen = false">
+                查看全部待复核任务 →
               </RouterLink>
             </div>
           </div>
