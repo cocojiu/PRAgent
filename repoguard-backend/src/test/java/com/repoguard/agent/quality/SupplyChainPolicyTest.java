@@ -16,6 +16,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.yaml.snakeyaml.Yaml;
 
 class SupplyChainPolicyTest {
 
@@ -104,7 +105,37 @@ class SupplyChainPolicyTest {
         );
         assertThat(count(dependabot, "package-ecosystem: docker")).isEqualTo(2);
         assertThat(count(dependabot, "interval: weekly")).isEqualTo(5);
-        assertThat(count(dependabot, "patterns:")).isEqualTo(5);
+        assertThat(count(dependabot, "patterns:")).isEqualTo(6);
+    }
+
+    @Test
+    void frontendGroupsKeepTheToolchainTogetherAndMajorUpdatesSeparate() throws IOException {
+        Map<?, ?> configuration = new Yaml().load(read(".github/dependabot.yml"));
+        List<?> updates = (List<?>) configuration.get("updates");
+        Map<?, ?> frontend = updates.stream()
+            .map(update -> (Map<?, ?>) update)
+            .filter(update -> "npm".equals(update.get("package-ecosystem")))
+            .findFirst()
+            .orElseThrow();
+        Map<?, ?> groups = (Map<?, ?>) frontend.get("groups");
+
+        assertThat(groups.keySet().stream().map(String::valueOf).toList())
+            .as("Dependabot assigns overlapping matches to the first group")
+            .containsExactly("frontend-toolchain", "frontend-dependencies");
+        Map<?, ?> toolchain = (Map<?, ?>) groups.get("frontend-toolchain");
+        assertThat(toolchain.get("patterns")).isEqualTo(List.of(
+            "typescript", "vue-tsc", "typescript-eslint", "@typescript-eslint/*",
+            "eslint", "@eslint/*", "eslint-plugin-vue", "vue-eslint-parser"
+        ));
+        Map<?, ?> dependencies = (Map<?, ?>) groups.get("frontend-dependencies");
+        assertThat(dependencies.get("patterns")).isEqualTo(List.of("*"));
+        for (Map<?, ?> group : List.of(toolchain, dependencies)) {
+            assertThat(group.get("applies-to")).isEqualTo("version-updates");
+            assertThat(group.get("update-types")).isEqualTo(List.of("minor", "patch"));
+        }
+        assertThat(frontend.get("ignore"))
+            .as("Major and security updates must remain eligible for independent pull requests")
+            .isNull();
     }
 
     @Test
