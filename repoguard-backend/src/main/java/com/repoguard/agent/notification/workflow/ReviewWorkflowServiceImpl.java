@@ -205,13 +205,10 @@ public class ReviewWorkflowServiceImpl implements ReviewWorkflowService {
         }
         LocalDateTime to = LocalDateTime.now();
         LocalDateTime from = to.minusDays(days);
-        List<ReviewTask> tasks = reviewTaskMapper.selectList(new QueryWrapper<ReviewTask>().ge("created_at", from));
-        long completed = tasks.stream().filter(task -> "COMPLETED".equalsIgnoreCase(task.getStatus()) || "APPROVED".equalsIgnoreCase(task.getStatus())).count();
-        long failed = tasks.stream().filter(task -> "FAILED".equalsIgnoreCase(task.getStatus())).count();
-        long pending = tasks.stream().filter(task -> PENDING_HUMAN_REVIEW.equalsIgnoreCase(task.getStatus())).count();
-        long highRisk = tasks.stream().filter(task -> "HIGH".equalsIgnoreCase(task.getRiskLevel()) || "CRITICAL".equalsIgnoreCase(task.getRiskLevel())).count();
-        long overdue = tasks.stream().filter(task -> PENDING_HUMAN_REVIEW.equalsIgnoreCase(task.getStatus()) && task.getReviewSlaDeadline() != null && !task.getReviewSlaDeadline().isAfter(to)).count();
-        return new NotificationReportDto(normalized, format(from), format(to), tasks.size(), completed, failed, pending, highRisk, overdue);
+        var summary = reviewTaskMapper.selectNotificationReportSummary(from, to);
+        return new NotificationReportDto(normalized, format(from), format(to), summary.totalReviews(),
+            summary.completedReviews(), summary.failedReviews(), summary.pendingHumanReviews(),
+            summary.highRiskReviews(), summary.overdueHumanReviews());
     }
 
     private ReviewBotCommandResponse executeParsed(String provider, ParsedCommand parsed, String actor) {

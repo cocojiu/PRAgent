@@ -193,6 +193,29 @@ public interface ReviewTaskMapper extends BaseMapper<ReviewTask> {
     MessageQueueHealthSummary selectMessageQueueHealthSummary(@Param("createdAfter") LocalDateTime createdAfter);
 
     @Select("""
+        select count(*) as totalReviews,
+            coalesce(sum(case when cast(upper(status) as binary) in ('COMPLETED', 'APPROVED')
+                then 1 else 0 end), 0) as completedReviews,
+            coalesce(sum(case when cast(upper(status) as binary) = 'FAILED'
+                then 1 else 0 end), 0) as failedReviews,
+            coalesce(sum(case when cast(upper(status) as binary) = 'PENDING_HUMAN_REVIEW'
+                then 1 else 0 end), 0) as pendingHumanReviews,
+            coalesce(sum(case when cast(upper(risk_level) as binary) in ('HIGH', 'CRITICAL')
+                then 1 else 0 end), 0) as highRiskReviews,
+            coalesce(sum(case when cast(upper(status) as binary) = 'PENDING_HUMAN_REVIEW'
+                and review_sla_deadline <= #{to}
+                then 1 else 0 end), 0) as overdueHumanReviews
+        from review_task
+        where created_at >= #{from} and created_at < #{to}
+        """)
+    NotificationReportSummary selectNotificationReportSummary(
+        @Param("from") LocalDateTime from, @Param("to") LocalDateTime to
+    );
+
+    record NotificationReportSummary(long totalReviews, long completedReviews, long failedReviews,
+        long pendingHumanReviews, long highRiskReviews, long overdueHumanReviews) { }
+
+    @Select("""
         select
             count(*) as total,
             sum(case
