@@ -10,6 +10,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.repoguard.agent.common.BusinessException;
+import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.dto.SarifImportRequest;
 import com.repoguard.agent.entity.ReviewExecutionAttempt;
 import com.repoguard.agent.entity.ReviewFinding;
@@ -21,21 +23,34 @@ import com.repoguard.agent.mapper.ReviewFindingMapper.SarifImportBatchRow;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 class SarifFindingServiceTest {
 
     private final ReviewTaskMapper taskMapper = org.mockito.Mockito.mock(ReviewTaskMapper.class);
     private final ReviewFindingMapper findingMapper = org.mockito.Mockito.mock(ReviewFindingMapper.class);
     private final ReviewExecutionAttemptMapper attemptMapper = org.mockito.Mockito.mock(ReviewExecutionAttemptMapper.class);
+    private final SarifImportTransactions transactions = org.mockito.Mockito.mock(SarifImportTransactions.class);
     private final SarifFindingService service = new SarifFindingService(
         new ObjectMapper(),
         taskMapper,
         findingMapper,
-        attemptMapper
+        attemptMapper,
+        transactions
     );
 
     @BeforeEach
     void defaults() {
+        when(transactions.execute(any())).thenAnswer(invocation -> {
+            java.util.function.Supplier<?> work = invocation.getArgument(0);
+            return work.get();
+        });
+        when(taskMapper.selectSarifImportTaskForUpdate(any())).thenAnswer(invocation -> taskMapper.selectById((Long) invocation.getArgument(0)));
+        when(findingMapper.selectSarifWritePacketBytes()).thenReturn(67_108_864L);
+        when(findingMapper.insertSarifFindings(org.mockito.ArgumentMatchers.anyLong(), any())).thenAnswer(invocation -> {
+            List<ReviewFinding> findings = invocation.getArgument(1);
+            return findings.size();
+        });
         when(attemptMapper.selectById(17L)).thenReturn(currentAttempt());
         when(findingMapper.selectSarifImportBatch(any(), any(), any(), any(), any(), any())).thenReturn(null);
         when(findingMapper.selectActiveSarifImportBatches(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
@@ -71,10 +86,10 @@ class SarifFindingServiceTest {
             assertThat(finding.severity()).isEqualTo("HIGH");
         });
         verify(findingMapper, never()).markCurrentAttemptHistorical(9L);
-        var findingCaptor = org.mockito.ArgumentCaptor.forClass(ReviewFinding.class);
-        verify(findingMapper).insert(findingCaptor.capture());
-        assertThat(findingCaptor.getValue().getAttemptId()).isEqualTo(17L);
-        assertThat(findingCaptor.getValue().getSourceBatchId()).isEqualTo(101L);
+        var findingCaptor = org.mockito.ArgumentCaptor.<List<ReviewFinding>>captor();
+        verify(findingMapper).insertSarifFindings(eq(1L), findingCaptor.capture());
+        assertThat(findingCaptor.getValue().getFirst().getAttemptId()).isEqualTo(17L);
+        assertThat(findingCaptor.getValue().getFirst().getSourceBatchId()).isEqualTo(101L);
     }
 
     @Test
@@ -313,13 +328,14 @@ class SarifFindingServiceTest {
         SarifImportBatchRow batch = new SarifImportBatchRow();
         batch.setToolName("CodeQL");
         batch.setToolVersion("2.15");
-        when(findingMapper.selectList(any())).thenReturn(List.of(imported));
+        when(findingMapper.selectList(any())).thenReturn(List.of(imported, imported));
         when(findingMapper.selectSarifImportBatchById(101L)).thenReturn(batch);
 
         var document = service.exportFindings(9L);
 
         assertThat(document.runs()).singleElement().satisfies(run ->
             assertThat(run.get("tool").toString()).contains("CodeQL", "2.15"));
+        verify(findingMapper, times(1)).selectSarifImportBatchById(101L);
 
         when(findingMapper.selectList(any())).thenReturn(null);
         assertThat(service.exportFindings(9L).runs()).isEmpty();
@@ -354,6 +370,172 @@ class SarifFindingServiceTest {
             .hasSize(64);
         assertThat(service.contentFingerprint("sarif-content"))
             .isNotEqualTo(service.contentFingerprint("other-content"));
+    }
+
+    @Test
+    void rejectsExportCountOverflowWithoutTruncatingOrReadingBatchMetadata() {
+        when(taskMapper.selectById(9L)).thenReturn(currentTask());
+        ReflectionTestUtils.setField(service, "exportMaxFindings", 1);
+        when(findingMapper.selectList(any())).thenReturn(List.of(new ReviewFinding(), new ReviewFinding()));
+
+        assertThatThrownBy(() -> service.exportFindings(9L)).isInstanceOfSatisfying(BusinessException.class,
+            error -> assertThat(error.getErrorCode()).isEqualTo(ErrorCode.PAYLOAD_TOO_LARGE));
+        verify(findingMapper, never()).selectSarifImportBatchById(any());
+    }
+
+    @Test
+    void rejectsOversizedExportTextBeforeLoadingEntities() {
+        when(taskMapper.selectById(9L)).thenReturn(currentTask());
+        when(findingMapper.selectSarifExportTextBytes(9L, 10001)).thenReturn(8_388_609L);
+
+        assertThatThrownBy(() -> service.exportFindings(9L)).isInstanceOfSatisfying(BusinessException.class,
+            error -> assertThat(error.getErrorCode()).isEqualTo(ErrorCode.PAYLOAD_TOO_LARGE));
+        verify(findingMapper, never()).selectList(any());
+    }
+
+    @Test
+    void enforcesExactUtf8DocumentBudgetIncludingJsonEscapes() throws Exception {
+        when(taskMapper.selectById(9L)).thenReturn(currentTask());
+        ReviewFinding finding = new ReviewFinding();
+        finding.setId(1L);
+        finding.setFilePath("src/App.java");
+        finding.setMessage("中文\n\"\\".repeat(150));
+        when(findingMapper.selectList(any())).thenReturn(List.of(finding));
+        var document = service.exportFindings(9L);
+        int bytes = new ObjectMapper().writeValueAsBytes(document).length;
+        ReflectionTestUtils.setField(service, "exportMaxDocumentBytes", bytes);
+        assertThat(service.exportFindings(9L)).isEqualTo(document);
+
+        ReflectionTestUtils.setField(service, "exportMaxDocumentBytes", bytes - 1);
+        assertThatThrownBy(() -> service.exportFindings(9L)).isInstanceOfSatisfying(BusinessException.class,
+            error -> assertThat(error.getErrorCode()).isEqualTo(ErrorCode.PAYLOAD_TOO_LARGE));
+    }
+
+    @Test
+    void preparesJsonBeforeStartingTheWriteTransaction() throws Exception {
+        when(taskMapper.selectById(9L)).thenReturn(currentTask());
+        ObjectMapper observedMapper = org.mockito.Mockito.spy(new ObjectMapper());
+        var writeStarted = new java.util.concurrent.atomic.AtomicBoolean();
+        org.mockito.Mockito.doAnswer(invocation -> {
+            assertThat(writeStarted).isFalse();
+            return invocation.callRealMethod();
+        }).when(observedMapper).readTree(any(String.class));
+        org.mockito.Mockito.doAnswer(invocation -> {
+            writeStarted.set(true);
+            java.util.function.Supplier<?> work = invocation.getArgument(0);
+            return work.get();
+        }).when(transactions).execute(any());
+        SarifFindingService observedService = new SarifFindingService(
+            observedMapper, taskMapper, findingMapper, attemptMapper, transactions);
+
+        assertThat(observedService.importFindings(9L, reportWithResults(1, "Finding")).imported()).isEqualTo(1);
+        assertThat(writeStarted).isTrue();
+        verify(observedMapper).readTree(any(String.class));
+    }
+
+    @Test
+    void malformedAndOversizedReportsNeverStartTheWriteTransaction() {
+        when(taskMapper.selectById(9L)).thenReturn(currentTask());
+        assertThatThrownBy(() -> service.importFindings(9L, new SarifImportRequest("{")))
+            .hasMessageContaining("Invalid SARIF JSON");
+        assertThatThrownBy(() -> service.importFindings(9L, new SarifImportRequest("x".repeat(2_000_001))))
+            .isInstanceOfSatisfying(BusinessException.class,
+                error -> assertThat(error.getErrorCode()).isEqualTo(ErrorCode.PAYLOAD_TOO_LARGE));
+        verify(transactions, never()).execute(any());
+        verify(taskMapper, never()).selectSarifImportTaskForUpdate(any());
+    }
+
+    @Test
+    void rejectsRetryBeforeTheAttemptPointerChanges() throws Exception {
+        when(taskMapper.selectById(9L)).thenReturn(currentTask());
+        ReviewTask retried = currentTask();
+        retried.setMqRetries(1);
+        org.mockito.Mockito.doReturn(retried).when(taskMapper).selectSarifImportTaskForUpdate(9L);
+
+        assertThatThrownBy(() -> service.importFindings(9L, reportWithResults(1, "Finding")))
+            .isInstanceOfSatisfying(BusinessException.class,
+                error -> assertThat(error.getErrorCode()).isEqualTo(ErrorCode.CONFLICT));
+        verify(findingMapper, never()).insertSarifImportBatch(any());
+        verify(findingMapper, never()).insertSarifFindings(any(Long.class), any());
+    }
+
+    @Test
+    void rejectsAttemptAndCommitChangesAfterPreparation() throws Exception {
+        when(taskMapper.selectById(9L)).thenReturn(currentTask());
+        ReviewTask changed = currentTask();
+        changed.setCurrentAttemptId(18L);
+        ReviewExecutionAttempt newAttempt = currentAttempt();
+        newAttempt.setId(18L);
+        when(attemptMapper.selectById(18L)).thenReturn(newAttempt);
+        org.mockito.Mockito.doReturn(changed).when(taskMapper).selectSarifImportTaskForUpdate(9L);
+        assertThatThrownBy(() -> service.importFindings(9L, reportWithResults(1, "Finding")))
+            .isInstanceOfSatisfying(BusinessException.class,
+                error -> assertThat(error.getErrorCode()).isEqualTo(ErrorCode.CONFLICT));
+
+        org.mockito.Mockito.doReturn(currentTask()).when(taskMapper).selectSarifImportTaskForUpdate(9L);
+        ReviewExecutionAttempt changedCommit = currentAttempt();
+        changedCommit.setCommitSha("new-commit");
+        when(attemptMapper.selectById(17L)).thenReturn(currentAttempt(), changedCommit);
+        assertThatThrownBy(() -> service.importFindings(9L, reportWithResults(1, "Finding")))
+            .isInstanceOfSatisfying(BusinessException.class,
+                error -> assertThat(error.getErrorCode()).isEqualTo(ErrorCode.CONFLICT));
+        verify(findingMapper, never()).insertSarifImportBatch(any());
+    }
+
+    @Test
+    void writesLargeReportsInBoundedMultiRowStatements() throws Exception {
+        when(taskMapper.selectById(9L)).thenReturn(currentTask());
+        assertThat(service.importFindings(9L, reportWithResults(401, "Finding")).imported()).isEqualTo(401);
+        var batches = org.mockito.ArgumentCaptor.<List<ReviewFinding>>captor();
+        verify(findingMapper, times(3)).insertSarifFindings(eq(1L), batches.capture());
+        assertThat(batches.getAllValues()).extracting(List::size).containsExactly(200, 200, 1);
+        assertThat(batches.getAllValues().stream().flatMap(List::stream)).allSatisfy(finding -> {
+            assertThat(finding.getAttemptId()).isEqualTo(17L);
+            assertThat(finding.getSourceBatchId()).isEqualTo(101L);
+            assertThat(finding.getFindingFingerprint()).hasSize(64);
+        });
+    }
+
+    @Test
+    void boundsBatchesByUtf8PacketBytesAndRejectsAnOversizedRow() throws Exception {
+        when(taskMapper.selectById(9L)).thenReturn(currentTask());
+        when(findingMapper.selectSarifWritePacketBytes()).thenReturn(32_768L);
+        String message = "中".repeat(300);
+        assertThat(service.importFindings(9L, reportWithResults(12, message)).imported()).isEqualTo(12);
+        var batches = org.mockito.ArgumentCaptor.<List<ReviewFinding>>captor();
+        verify(findingMapper, times(12)).insertSarifFindings(eq(1L), batches.capture());
+        assertThat(batches.getAllValues()).allSatisfy(batch -> assertThat(batch).hasSize(1));
+
+        org.mockito.Mockito.clearInvocations(findingMapper);
+        assertThatThrownBy(() -> service.importFindings(9L, reportWithResults(1, "中".repeat(2_000))))
+            .isInstanceOfSatisfying(BusinessException.class,
+                error -> assertThat(error.getErrorCode()).isEqualTo(ErrorCode.PAYLOAD_TOO_LARGE));
+        verify(findingMapper, never()).insertSarifFindings(any(Long.class), any());
+    }
+
+    @Test
+    void rejectsIncompleteBatchWrites() throws Exception {
+        when(taskMapper.selectById(9L)).thenReturn(currentTask());
+        org.mockito.Mockito.doReturn(0).when(findingMapper).insertSarifFindings(eq(1L), any());
+        assertThatThrownBy(() -> service.importFindings(9L, reportWithResults(1, "Finding")))
+            .isInstanceOf(IllegalStateException.class).hasMessageContaining("not completely inserted");
+    }
+
+    private SarifImportRequest reportWithResults(int count, String message) throws Exception {
+        ObjectMapper json = new ObjectMapper();
+        var results = json.createArrayNode();
+        for (int index = 0; index < count; index++) {
+            var result = results.addObject().put("ruleId", "SAST-1");
+            result.putObject("message").put("text", message);
+            var location = result.putArray("locations").addObject().putObject("physicalLocation");
+            location.putObject("artifactLocation").put("uri", "src/App.java");
+            location.putObject("region").put("startLine", index + 1);
+        }
+        var document = json.createObjectNode().put("version", "2.1.0");
+        var run = document.putArray("runs").addObject();
+        run.putObject("tool").putObject("driver").put("name", "scanner");
+        run.set("results", results);
+        return new SarifImportRequest(json.writeValueAsString(document));
     }
 
     private ReviewTask currentTask() {

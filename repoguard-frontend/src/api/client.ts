@@ -70,11 +70,14 @@ export const requestWithMeta = async <T>(
       return await waitForSignal(unwrapResponseWithMeta<T>(response), deadline.signal);
     }
 
-    const refreshed = await waitForSignal(refreshCoordinator.refreshSession(), deadline.signal);
-    if (!refreshed) {
+    const refreshed = await waitForSignal(refreshCoordinator.refreshSessionResult(), deadline.signal);
+    if (refreshed.kind === "invalid-session") {
       clearAuthToken();
       redirectToLogin();
       return await waitForSignal(unwrapResponseWithMeta<T>(response), deadline.signal);
+    }
+    if (refreshed.kind !== "success") {
+      throw refreshed.error;
     }
     const retryResponse = await waitForSignal(doRequest(path, params, requestOptions), deadline.signal);
     return await waitForSignal(unwrapResponseWithMeta<T>(retryResponse), deadline.signal);
@@ -140,24 +143,33 @@ const responseSizeBytes = (response: Response): number | undefined => {
 
 async function requestAuthRefreshSession(): Promise<AuthRefreshResult> {
   const deadline = createRequestDeadline({ timeoutMs: DEFAULT_REQUEST_TIMEOUT_MS });
+  let status: number | undefined;
   try {
     const response = await waitForSignal(doRequest("/api/v1/auth/refresh", undefined, {
       method: "POST",
       skipAuthorization: true,
       signal: deadline.signal
     }), deadline.signal);
+    status = response.status;
+    if (status === 401) {
+      return { ok: false, status };
+    }
     if (!response.ok) {
-      return { ok: false };
+      await waitForSignal(unwrapResponse<TokenPairResponse>(response), deadline.signal);
     }
     return {
       ok: true,
+      status,
       body: await waitForSignal(
         response.json() as Promise<ApiResponse<TokenPairResponse>>,
         deadline.signal
       )
     };
-  } catch {
-    return { ok: false };
+  } catch (error) {
+    const normalized = error instanceof SyntaxError
+      ? new RequestError("Invalid refresh response", { status, code: "INVALID_API_RESPONSE" })
+      : normalizeDeadlineError(error, deadline);
+    return { ok: false, status, error: normalized };
   } finally {
     deadline.dispose();
   }

@@ -121,13 +121,32 @@ public class ReviewTaskTransitionStore {
         return true;
     }
 
-    public boolean escalateHumanReview(ReviewTask task, int observedLevel, LocalDateTime escalatedAt) {
-        return reviewTaskMapper.update(new UpdateWrapper<ReviewTask>()
+    public boolean escalateHumanReview(ReviewTask task, int observedLevel, LocalDateTime escalatedAt,
+                                      LocalDateTime cooldownBefore, int limit) {
+        LocalDateTime deadline = task.getReviewSlaDeadline();
+        LocalDateTime previous = task.getReviewLastEscalatedAt();
+        if (observedLevel >= limit || deadline == null || deadline.isAfter(escalatedAt)
+            || previous != null && previous.isAfter(cooldownBefore)) {
+            return false;
+        }
+        UpdateWrapper<ReviewTask> update = new UpdateWrapper<ReviewTask>()
             .eq("id", task.getId())
             .eq("status", ReviewTaskStatus.PENDING_HUMAN_REVIEW.code())
+            .eq("human_review_status", HumanReviewStatus.PENDING.code())
             .eq("review_escalation_level", observedLevel)
+            .lt("review_escalation_level", limit)
+            .eq("review_sla_deadline", deadline)
+            .le("review_sla_deadline", escalatedAt)
+            .eq(task.getReviewAssignee() != null, "review_assignee", task.getReviewAssignee())
+            .isNull(task.getReviewAssignee() == null, "review_assignee")
+            .eq(task.getReviewAssignedAt() != null, "review_assigned_at", task.getReviewAssignedAt())
+            .isNull(task.getReviewAssignedAt() == null, "review_assigned_at")
+            .eq(previous != null, "review_last_escalated_at", previous)
+            .isNull(previous == null, "review_last_escalated_at")
+            .and(query -> query.isNull("review_last_escalated_at").or().le("review_last_escalated_at", cooldownBefore))
             .set("review_escalation_level", observedLevel + 1)
-            .set("review_last_escalated_at", escalatedAt)) > 0;
+            .set("review_last_escalated_at", escalatedAt);
+        return reviewTaskMapper.update(update) > 0;
     }
 
     public void requeueForPublish(ReviewTask task) {

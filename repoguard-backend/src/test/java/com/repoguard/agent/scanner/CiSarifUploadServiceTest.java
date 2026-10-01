@@ -37,9 +37,10 @@ class CiSarifUploadServiceTest {
     private final ReviewTaskMapper taskMapper = org.mockito.Mockito.mock(ReviewTaskMapper.class);
     private final ReviewExecutionAttemptMapper attemptMapper = org.mockito.Mockito.mock(ReviewExecutionAttemptMapper.class);
     private final ReviewFindingMapper findingMapper = org.mockito.Mockito.mock(ReviewFindingMapper.class);
+    private final SarifImportTransactions transactions = org.mockito.Mockito.mock(SarifImportTransactions.class);
     private final CiSarifUploadService service = new CiSarifUploadService(
         credentialService, payloadDecoder, sarifFindingService, uploadMapper,
-        taskMapper, attemptMapper, findingMapper
+        taskMapper, attemptMapper, findingMapper, transactions
     );
     private final CiSarifUploadCredentialService.Claims claims = new CiSarifUploadCredentialService.Claims(
         7L, 9L, 17L, 42, "org", "repo", "abc123", 1_725_000_000L, 1_725_000_600L
@@ -47,12 +48,20 @@ class CiSarifUploadServiceTest {
 
     @BeforeEach
     void defaults() {
+        when(transactions.execute(any())).thenAnswer(invocation -> {
+            java.util.function.Supplier<?> work = invocation.getArgument(0);
+            return work.get();
+        });
+        when(taskMapper.selectSarifImportTaskForUpdate(any())).thenAnswer(invocation -> taskMapper.selectById((Long) invocation.getArgument(0)));
+        when(sarifFindingService.prepare(any())).thenReturn(new SarifReportParser.ParsedReport(
+            "codeql", "2.1", "f".repeat(64), List.of(), 1, List.of()));
+        when(uploadMapper.insert(any(SarifCiUploadRow.class))).thenReturn(1);
+        when(uploadMapper.replace(any(SarifCiUploadRow.class))).thenReturn(1);
         when(credentialService.verify("credential")).thenReturn(claims);
         when(taskMapper.selectById(9L)).thenReturn(task());
         when(attemptMapper.selectById(17L)).thenReturn(attempt());
         when(payloadDecoder.decode(any(InputStream.class), anyLong(), eq("application/json"))).thenReturn("sarif-content");
-        when(sarifFindingService.contentFingerprint("sarif-content")).thenReturn("f".repeat(64));
-        when(sarifFindingService.importFindings(any(), any())).thenReturn(new SarifImportResponse(9L, 2, 1, List.of()));
+        when(sarifFindingService.importPrepared(any(), any(), any())).thenReturn(new SarifImportResponse(9L, 2, 1, List.of()));
         SarifImportBatchRow batch = new SarifImportBatchRow();
         batch.setId(101L);
         batch.setToolName("codeql");
@@ -89,7 +98,7 @@ class CiSarifUploadServiceTest {
                 "application/json", "payload".getBytes()
             );
             assertThat(result.status()).isEqualTo("ACTIVE");
-            verify(sarifFindingService, never()).importFindings(any(), any());
+            verify(sarifFindingService, never()).importPrepared(any(), any(), any());
             verify(uploadMapper, never()).replace(any());
         }
     }
@@ -216,6 +225,8 @@ class CiSarifUploadServiceTest {
 
     @Test
     void handlesOptionalMetadataMissingBatchesAndInsertRaces() {
+        when(sarifFindingService.prepare(any())).thenReturn(new SarifReportParser.ParsedReport(
+            "codeql", "", "f".repeat(64), List.of(), 1, List.of()));
         SarifImportBatchRow blankVersion = batchRow(101L, "codeql", "");
         when(findingMapper.selectSarifImportBatchByFingerprint(any(), any(), any(), any(), any(), any()))
             .thenReturn(blankVersion);
@@ -224,6 +235,9 @@ class CiSarifUploadServiceTest {
             "application/json", "payload".getBytes()
         );
         assertThat(blankVersionResult.toolVersion()).isEmpty();
+
+        when(sarifFindingService.prepare(any())).thenReturn(new SarifReportParser.ParsedReport(
+            "codeql", "2.1", "f".repeat(64), List.of(), 1, List.of()));
 
         when(findingMapper.selectSarifImportBatchByFingerprint(any(), any(), any(), any(), any(), any()))
             .thenReturn(null);
@@ -272,6 +286,64 @@ class CiSarifUploadServiceTest {
         assertThat(result.completedAt()).isNull();
         assertThat(result.imported()).isZero();
         assertThat(result.skipped()).isZero();
+    }
+
+    @Test
+    void decodesAndPreparesTheReportBeforeEnteringTheWriteTransaction() {
+        var writeStarted = new java.util.concurrent.atomic.AtomicBoolean();
+        when(payloadDecoder.decode(any(InputStream.class), anyLong(), eq("application/json"))).thenAnswer(invocation -> {
+            assertThat(writeStarted).isFalse();
+            assertThat(TenantContext.currentTenantIdOrDefault()).isEqualTo(7L);
+            return "sarif-content";
+        });
+        when(sarifFindingService.prepare(any())).thenAnswer(invocation -> {
+            assertThat(writeStarted).isFalse();
+            return new SarifReportParser.ParsedReport("codeql", "2.1", "f".repeat(64), List.of(), 1, List.of());
+        });
+        org.mockito.Mockito.doAnswer(invocation -> {
+            writeStarted.set(true);
+            java.util.function.Supplier<?> work = invocation.getArgument(0);
+            return work.get();
+        }).when(transactions).execute(any());
+        service.upload(9L, "credential", "codeql", "2.1", "run-prepared", "abc123", past(),
+            "application/json", "payload".getBytes());
+        assertThat(writeStarted).isTrue();
+    }
+
+    @Test
+    void rejectsReportToolMismatchBeforeStartingAnyWriteTransaction() {
+        when(sarifFindingService.prepare(any())).thenReturn(new SarifReportParser.ParsedReport(
+            "semgrep", "2.1", "f".repeat(64), List.of(), 0, List.of()));
+        assertThatThrownBy(() -> service.upload(9L, "credential", "codeql", "2.1", "run-tool", "abc123", past(),
+            "application/json", "payload".getBytes())).hasMessageContaining("tool metadata");
+        verify(transactions, never()).execute(any());
+        verify(sarifFindingService, never()).importPrepared(any(), any(), any());
+    }
+
+    @Test
+    void rejectsRetryDuringPreparationEvenForAnIdempotentCiUpload() {
+        ReviewTask retried = task();
+        retried.setMqRetries(1);
+        org.mockito.Mockito.doReturn(retried).when(taskMapper).selectSarifImportTaskForUpdate(9L);
+        when(uploadMapper.selectByIdentity(any(), any(), any(), any(), any(), any()))
+            .thenReturn(existing("f".repeat(64)));
+        assertThatThrownBy(() -> service.upload(9L, "credential", "codeql", "2.1", "run-retry", "abc123", past(),
+            "application/json", "payload".getBytes())).hasMessageContaining("attempt changed");
+        verify(uploadMapper, never()).selectByIdentity(any(), any(), any(), any(), any(), any());
+        verify(sarifFindingService, never()).importPrepared(any(), any(), any());
+    }
+
+    @Test
+    void failsTheTransactionWhenTheCiRowIsNotPersisted() {
+        when(uploadMapper.insert(any(SarifCiUploadRow.class))).thenReturn(0);
+        assertThatThrownBy(() -> service.upload(9L, "credential", "codeql", "2.1", "run-missing", "abc123", past(),
+            "application/json", "payload".getBytes()))
+            .isInstanceOf(IllegalStateException.class).hasMessageContaining("not inserted");
+        when(uploadMapper.selectByIdentity(any(), any(), any(), any(), any(), any())).thenReturn(existing("old"));
+        when(uploadMapper.replace(any(SarifCiUploadRow.class))).thenReturn(0);
+        assertThatThrownBy(() -> service.upload(9L, "credential", "codeql", "2.1", "run-missing", "abc123", past(),
+            "application/json", "payload".getBytes()))
+            .isInstanceOf(IllegalStateException.class).hasMessageContaining("not replaced");
     }
 
     private String past() {

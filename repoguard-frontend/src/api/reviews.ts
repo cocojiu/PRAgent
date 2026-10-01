@@ -12,14 +12,14 @@ import type {
 /**
  * 查询评审任务列表，参数与后端只读 API 保持一致。
  */
-export const fetchReviews = (query: ReviewQuery) =>
-  apiRequest("fetchReviews", query);
+export const fetchReviews = (query: ReviewQuery, options?: ApiRequestOptions) =>
+  apiRequest("fetchReviews", query, options);
 
 /**
  * 查询当前筛选条件下的任务聚合指标，筛选口径与列表接口同源。
  */
-export const fetchReviewListSummary = (query: ReviewTaskListSummaryQuery) =>
-  apiRequest("fetchReviewListSummary", query);
+export const fetchReviewListSummary = (query: ReviewTaskListSummaryQuery, options?: ApiRequestOptions) =>
+  apiRequest("fetchReviewListSummary", query, options);
 
 /**
  * 查询单个评审任务首屏 summary；findings/files/missing-tests/timeline 通过分页接口加载。
@@ -69,8 +69,8 @@ export const fetchReviewAttemptComparison = (
   params?: { baselineAttemptId?: number; page?: number; pageSize?: number }
 ) => apiRequest("fetchReviewAttemptComparison", { taskId, candidateAttemptId, ...params });
 
-export const fetchReviewRepositories = () =>
-  apiRequest("fetchReviewRepositories", undefined);
+export const fetchReviewRepositories = (options?: ApiRequestOptions) =>
+  apiRequest("fetchReviewRepositories", undefined, options);
 
 export const fetchReviewStatus = (id: number, options?: ApiRequestOptions) =>
   apiRequest("fetchReviewStatus", { id }, options);

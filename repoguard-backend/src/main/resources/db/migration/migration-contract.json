@@ -7,7 +7,7 @@
     "externalDatabaseSupported": true,
     "publishedMigrationPolicy": "IMMUTABLE",
     "newInstallationStrategy": "VALIDATED_SCHEMA_SNAPSHOT_THEN_BASELINE",
-    "candidateVersion": 99,
+    "candidateVersion": 100,
     "requiredEvidence": [
       "empty database migration to the candidate version",
       "schema structure diff against the supported production shape",
@@ -16,9 +16,9 @@
     ],
     "decisionEvidence": [
       "application-prod.yml requires an externally supplied datasource",
-      "FlywayMigrationUpgradePathIntegrationTest verifies the supported incremental upgrade path through V96"
+      "FlywayMigrationUpgradePathIntegrationTest verifies the supported incremental upgrade path through V100"
     ],
-    "reconsiderWhen": "A V96 schema snapshot and all required rehearsal evidence are versioned together.",
+    "reconsiderWhen": "A V100 schema snapshot and all required rehearsal evidence are versioned together.",
     "rollbackStrategy": "restore a validated backup and apply a forward fix; never rewrite or delete a published migration"
   },
   "defaults": {
@@ -351,6 +351,18 @@
       "nMinusOneCompatible": true,
       "interruptedRecovery": "inspect Flyway and index state before retrying",
       "rollbackStrategy": "roll back application and retain additive index"
+    },
+    {
+      "version": 100,
+      "file": "V100__tenant_notification_risk_index.sql",
+      "phase": "EXPAND",
+      "estimatedRows": "existing review tasks; additive tenant, assessment and risk index only",
+      "lockType": "brief metadata locks for in-place online secondary index creation",
+      "maxDurationSeconds": 300,
+      "maxDiskMegabytes": 256,
+      "nMinusOneCompatible": true,
+      "interruptedRecovery": "inspect Flyway and index state before retrying; repair only after verifying the additive index",
+      "rollbackStrategy": "roll back application and retain additive index; use a reviewed forward fix"
     }
   ]
 }

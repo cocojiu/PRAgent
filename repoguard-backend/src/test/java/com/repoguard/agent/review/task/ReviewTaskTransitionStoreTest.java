@@ -219,10 +219,11 @@ class ReviewTaskTransitionStoreTest {
         task.setStatus("PENDING_HUMAN_REVIEW");
         task.setReviewAssignee("existing");
         task.setReviewEscalationLevel(1);
+        task.setReviewSlaDeadline(LocalDateTime.now().minusHours(2));
         when(reviewTaskMapper.update(any())).thenReturn(0);
 
         assertThat(store.assignHumanReview(task, null, null, null)).isFalse();
-        assertThat(store.escalateHumanReview(task, 1, LocalDateTime.now())).isFalse();
+        assertThat(store.escalateHumanReview(task, 1, LocalDateTime.now(), LocalDateTime.now().minusMinutes(30), 3)).isFalse();
         assertThat(task.getReviewAssignee()).isEqualTo("existing");
         assertThat(task.getReviewEscalationLevel()).isEqualTo(1);
     }
@@ -234,16 +235,53 @@ class ReviewTaskTransitionStoreTest {
         task.setStatus("PENDING_HUMAN_REVIEW");
         task.setReviewEscalationLevel(2);
         LocalDateTime escalatedAt = LocalDateTime.parse("2026-08-01T12:00:00");
+        LocalDateTime assignedAt = escalatedAt.minusHours(3);
+        LocalDateTime deadline = escalatedAt.minusHours(1);
+        LocalDateTime previous = escalatedAt.minusMinutes(31);
+        task.setReviewAssignee("reviewer");
+        task.setReviewAssignedAt(assignedAt);
+        task.setReviewSlaDeadline(deadline);
+        task.setReviewLastEscalatedAt(previous);
         when(reviewTaskMapper.update(any())).thenReturn(1);
 
-        assertThat(store.escalateHumanReview(task, 2, escalatedAt)).isTrue();
+        assertThat(store.escalateHumanReview(task, 2, escalatedAt, escalatedAt.minusMinutes(30), 3)).isTrue();
 
         ArgumentCaptor<UpdateWrapper<ReviewTask>> captor = ArgumentCaptor.captor();
         verify(reviewTaskMapper).update(captor.capture());
-        assertThat(captor.getValue().getSqlSegment()).contains("id", "status", "review_escalation_level");
+        assertThat(captor.getValue().getSqlSegment()).contains("id", "status", "human_review_status", "review_escalation_level",
+            "review_sla_deadline", "review_assignee", "review_assigned_at", "review_last_escalated_at");
         assertThat(captor.getValue().getSqlSet()).contains("review_escalation_level", "review_last_escalated_at");
         assertThat(captor.getValue().getParamNameValuePairs().values())
-            .contains("PENDING_HUMAN_REVIEW", 2, 3, escalatedAt);
+            .contains("PENDING_HUMAN_REVIEW", "PENDING", 2, 3, escalatedAt, "reviewer", assignedAt, deadline, previous);
+    }
+
+    @Test
+    void escalationRejectsCooldownLimitAndFutureDeadlinesWithoutWriting() {
+        ReviewTask task = new ReviewTask();
+        task.setId(76L);
+        LocalDateTime now = LocalDateTime.parse("2026-08-01T12:00:00");
+        task.setReviewSlaDeadline(now.minusHours(1));
+        task.setReviewLastEscalatedAt(now.minusMinutes(29));
+        assertThat(store.escalateHumanReview(task, 1, now, now.minusMinutes(30), 3)).isFalse();
+        task.setReviewLastEscalatedAt(null);
+        assertThat(store.escalateHumanReview(task, 3, now, now.minusMinutes(30), 3)).isFalse();
+        task.setReviewSlaDeadline(now.plusMinutes(1));
+        assertThat(store.escalateHumanReview(task, 1, now, now.minusMinutes(30), 3)).isFalse();
+        verify(reviewTaskMapper, never()).update(any());
+    }
+
+    @Test
+    void escalationFencesAnInitiallyUnassignedSnapshotWithNullChecks() {
+        ReviewTask task = new ReviewTask();
+        task.setId(77L);
+        LocalDateTime now = LocalDateTime.parse("2026-08-01T12:00:00");
+        task.setReviewSlaDeadline(now.minusMinutes(1));
+        when(reviewTaskMapper.update(any())).thenReturn(1);
+        assertThat(store.escalateHumanReview(task, 0, now, now.minusMinutes(30), 3)).isTrue();
+        var captor = ArgumentCaptor.<UpdateWrapper<ReviewTask>>captor();
+        verify(reviewTaskMapper).update(captor.capture());
+        assertThat(captor.getValue().getSqlSegment()).contains("review_assignee IS NULL", "review_assigned_at IS NULL",
+            "review_last_escalated_at IS NULL");
     }
 
     private ReviewTask staleFailedTask() {

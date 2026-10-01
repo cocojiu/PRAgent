@@ -94,9 +94,9 @@ class ReviewWorkflowServiceImplTest {
         ReviewTask conflict = task(41L, LocalDateTime.now().minusHours(3));
         conflict.setReviewEscalationLevel(1);
         when(reviewTaskMapper.selectList(any())).thenReturn(List.of(task, atLimit, conflict));
-        when(transitionStore.escalateHumanReview(any(), any(Integer.class), any())).thenReturn(true);
+        when(transitionStore.escalateHumanReview(any(), any(Integer.class), any(), any(), any(Integer.class))).thenReturn(true);
         when(transitionStore.escalateHumanReview(
-            org.mockito.ArgumentMatchers.eq(conflict), org.mockito.ArgumentMatchers.eq(1), any()
+            org.mockito.ArgumentMatchers.eq(conflict), org.mockito.ArgumentMatchers.eq(1), any(), any(), any(Integer.class)
         )).thenReturn(false);
 
         var result = service.escalateOverdue();
@@ -104,7 +104,35 @@ class ReviewWorkflowServiceImplTest {
         assertThat(result.escalated()).isEqualTo(1);
         assertThat(result.skipped()).isEqualTo(2);
         verify(transitionStore, org.mockito.Mockito.times(2))
-            .escalateHumanReview(any(), any(Integer.class), any());
+            .escalateHumanReview(any(), any(Integer.class), any(), any(), any(Integer.class));
+    }
+
+    @Test
+    void filtersIneligibleRowsBeforeTheBoundedStableEscalationQuery() {
+        properties.setEscalationIntervalMinutes(45);
+        when(reviewTaskMapper.selectList(any())).thenReturn(List.of());
+        service.escalateOverdue();
+        var captor = org.mockito.ArgumentCaptor.<com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<ReviewTask>>captor();
+        verify(reviewTaskMapper).selectList(captor.capture());
+        var query = captor.getValue();
+        assertThat(query.getSqlSegment()).contains("status", "human_review_status", "review_sla_deadline",
+            "review_escalation_level <", "review_last_escalated_at IS NULL", "review_last_escalated_at <=",
+            "ORDER BY review_sla_deadline ASC,id ASC", "limit 100");
+        assertThat(query.getParamNameValuePairs().values()).contains("PENDING_HUMAN_REVIEW", "PENDING", 3);
+        var times = query.getParamNameValuePairs().values().stream()
+            .filter(LocalDateTime.class::isInstance).map(LocalDateTime.class::cast).sorted().toList();
+        assertThat(java.time.Duration.between(times.getFirst(), times.getLast())).isEqualTo(java.time.Duration.ofMinutes(45));
+    }
+
+    @Test
+    void validatesAnIndependentBusinessEscalationInterval() {
+        assertThat(properties.getEscalationIntervalMinutes()).isEqualTo(30);
+        assertThatThrownBy(() -> properties.setEscalationIntervalMinutes(0)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> properties.setEscalationIntervalMinutes(10081)).isInstanceOf(IllegalArgumentException.class);
+        properties.setEscalationIntervalMinutes(1);
+        assertThat(properties.getEscalationIntervalMinutes()).isEqualTo(1);
+        properties.setEscalationIntervalMinutes(10080);
+        assertThat(properties.getEscalationIntervalMinutes()).isEqualTo(10080);
     }
 
     @Test
