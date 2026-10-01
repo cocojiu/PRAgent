@@ -276,6 +276,8 @@ class ReviewServiceImplTest {
             return 1;
         }).when(githubCommentPublicationBatchMapper).insert(any(GithubCommentPublicationBatch.class));
         when(githubCommentPublicationBatchMapper.update(any())).thenReturn(1);
+        when(githubCommentPublicationBatchItemMapper.insertBatch(any()))
+            .thenAnswer(invocation -> ((List<?>) invocation.getArgument(0)).size());
     }
 
     private HumanReviewCommandService humanReviewCommandService() {

@@ -88,6 +88,7 @@ class GithubCommentPublishServiceImplTest {
             return 1;
         }).when(batchMapper).insert(any(GithubCommentPublicationBatch.class));
         when(batchMapper.update(any())).thenReturn(1);
+        when(batchItemMapper.insertBatch(any())).thenAnswer(invocation -> ((List<?>) invocation.getArgument(0)).size());
     }
 
     @Test

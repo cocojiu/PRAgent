@@ -1,6 +1,7 @@
 package com.repoguard.agent.github.comment;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -35,6 +36,7 @@ class GithubCommentPublicationRecorderTest {
     @BeforeEach
     void allowBatchConditionalUpdates() {
         when(batchMapper.update(any())).thenReturn(1);
+        when(batchItemMapper.insertBatch(any())).thenAnswer(invocation -> ((List<?>) invocation.getArgument(0)).size());
     }
 
     @Test
@@ -181,6 +183,23 @@ class GithubCommentPublicationRecorderTest {
         ));
 
         verify(batchMapper).update(any());
+    }
+
+    @Test
+    void refusesToCompleteWhenHistoryInsertIsIncomplete() {
+        Mockito.doReturn(0).when(batchItemMapper).insertBatch(any());
+        assertThatThrownBy(() -> recorder.completeBatch(99L, new GithubCommentPublishResponse(
+            521L, 1, 1, 1, 0, 0, List.of(item(1L, true, "published", null))
+        ))).isInstanceOf(IllegalStateException.class).hasMessageContaining("not completely inserted");
+    }
+
+    @Test
+    void repeatedCompletionDoesNotInsertHistoryAgain() {
+        when(batchMapper.update(any())).thenReturn(0);
+        recorder.completeBatch(99L, new GithubCommentPublishResponse(
+            521L, 1, 1, 1, 0, 0, List.of(item(1L, true, "published", null))
+        ));
+        Mockito.verifyNoInteractions(batchItemMapper);
     }
 
     private GithubCommentPublishItem item(Long findingId, boolean success, String status, String publishedAt) {
