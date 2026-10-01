@@ -14,6 +14,8 @@ import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
 public interface ReviewTaskMapper extends BaseMapper<ReviewTask> {
+    @Select("select * from review_task where id = #{taskId} for update")
+    ReviewTask selectSarifImportTaskForUpdate(@Param("taskId") Long taskId);
 
     @Insert("""
         insert into review_task (

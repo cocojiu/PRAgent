@@ -24,6 +24,7 @@ import java.util.regex.Pattern;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.util.StringUtils;
 
 /** Validates CI identity and atomically imports one scanner run into the current attempt. */
@@ -34,6 +35,7 @@ public class CiSarifUploadService {
     private static final int MAX_TOOL_NAME = 128;
     private static final int MAX_TOOL_VERSION = 64;
 
+    private final SarifImportTransactions transactions;
     private final CiSarifUploadCredentialService credentialService;
     private final CiSarifPayloadDecoder payloadDecoder;
     private final SarifFindingService sarifFindingService;
@@ -49,8 +51,10 @@ public class CiSarifUploadService {
         SarifCiUploadMapper uploadMapper,
         ReviewTaskMapper taskMapper,
         ReviewExecutionAttemptMapper attemptMapper,
-        ReviewFindingMapper findingMapper
+        ReviewFindingMapper findingMapper,
+        SarifImportTransactions transactions
     ) {
+        this.transactions = Objects.requireNonNull(transactions, "transactions");
         this.credentialService = Objects.requireNonNull(credentialService, "credentialService");
         this.payloadDecoder = Objects.requireNonNull(payloadDecoder, "payloadDecoder");
         this.sarifFindingService = Objects.requireNonNull(sarifFindingService, "sarifFindingService");
@@ -60,7 +64,7 @@ public class CiSarifUploadService {
         this.findingMapper = Objects.requireNonNull(findingMapper, "findingMapper");
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.NEVER)
     public CiSarifUploadResponse upload(
         Long taskId,
         String credential,
@@ -90,7 +94,7 @@ public class CiSarifUploadService {
      * Streams the bounded CI payload into the decoder. The byte-array overload remains for
      * internal callers and compatibility tests; HTTP requests use this overload directly.
      */
-    @Transactional
+    @Transactional(propagation = Propagation.NEVER)
     public CiSarifUploadResponse upload(
         Long taskId,
         String credential,
@@ -116,9 +120,6 @@ public class CiSarifUploadService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "CI commit SHA does not match the credential");
         }
         OffsetDateTime completion = parseCompletion(completedAt);
-        String content = payloadDecoder.decode(payload, contentLength, contentType);
-        String fingerprint = sarifFindingService.contentFingerprint(content);
-
         try (TenantContext.Scope _ = TenantContext.withTenant(claims.tenantId())) {
             ReviewTask task = requireTask(taskId);
             ReviewExecutionAttempt attempt = requireAttempt(taskId, claims.attemptId(), task);
@@ -129,72 +130,100 @@ public class CiSarifUploadService {
                 || !Objects.equals(task.getPrNumber(), claims.prNumber())) {
                 throw new BusinessException(ErrorCode.CONFLICT, "CI credential no longer matches the review attempt");
             }
-            SarifCiUploadRow existing = uploadMapper.selectByIdentity(
-                taskId, claims.attemptId(), normalizedTool, normalizedVersion, normalizedCommit, normalizedRun
-            );
-            if (existing != null && fingerprint.equals(existing.getSarifFingerprint())) {
-                return response(existing);
-            }
-
-            SarifImportResponse imported = sarifFindingService.importFindings(
-                taskId,
-                new SarifImportRequest(content)
-            );
-            SarifImportBatchRow batch = findingMapper.selectSarifImportBatchByFingerprint(
-                taskId, claims.attemptId(), normalizedTool, normalizedVersion, normalizedCommit, fingerprint
-            );
-            if (batch == null || batch.getId() == null) {
-                throw new IllegalStateException("SARIF import batch was not created");
-            }
-            if (!normalizedTool.equals(batch.getToolName()) || !normalizedVersion.equals(batch.getToolVersion())) {
+            SarifFindingService.ImportBinding observed = SarifFindingService.observe(task, attempt, taskCommit);
+            String content = payloadDecoder.decode(payload, contentLength, contentType);
+            SarifReportParser.ParsedReport report = sarifFindingService.prepare(new SarifImportRequest(content));
+            if (!normalizedTool.equals(report.toolName()) || !normalizedVersion.equals(report.toolVersion())) {
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "CI tool metadata does not match the SARIF document");
             }
-            LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
-            SarifCiUploadRow row = existing == null ? new SarifCiUploadRow() : existing;
-            row.setTenantId(claims.tenantId());
-            row.setTaskId(taskId);
-            row.setAttemptId(claims.attemptId());
-            row.setBatchId(batch.getId());
-            row.setToolName(normalizedTool);
-            row.setToolVersion(normalizedVersion);
-            row.setScanRunId(normalizedRun);
-            row.setCommitSha(normalizedCommit);
-            row.setSarifFingerprint(fingerprint);
-            row.setCompletionTime(completion.toLocalDateTime());
-            row.setStatus("ACTIVE");
-            row.setImportedCount(imported.imported());
-            row.setSkippedCount(imported.skipped());
-            row.setUpdatedAt(now);
-            if (existing == null) {
-                row.setCreatedAt(now);
-                try {
-                    uploadMapper.insert(row);
-                } catch (DuplicateKeyException race) {
-                    SarifCiUploadRow raced = uploadMapper.selectByIdentity(
-                        taskId, claims.attemptId(), normalizedTool, normalizedVersion, normalizedCommit, normalizedRun
-                    );
-                    if (raced != null && fingerprint.equals(raced.getSarifFingerprint())) {
-                        return response(raced);
-                    }
-                    throw race;
-                }
-            } else {
-                uploadMapper.replace(row);
-            }
-            return new CiSarifUploadResponse(
-                taskId,
-                claims.attemptId(),
-                normalizedTool,
-                normalizedVersion,
-                normalizedRun,
-                normalizedCommit,
-                fingerprint,
-                completion,
-                "ACTIVE",
-                imported.imported(),
-                imported.skipped()
-            );
+            return transactions.execute(() -> persistUpload(taskId, claims, normalizedTool, normalizedVersion,
+                normalizedRun, normalizedCommit, completion, observed, report));
         }
+    }
+
+    private CiSarifUploadResponse persistUpload(Long taskId, CiSarifUploadCredentialService.Claims claims,
+        String normalizedTool, String normalizedVersion, String normalizedRun, String normalizedCommit,
+        OffsetDateTime completion, SarifFindingService.ImportBinding observed, SarifReportParser.ParsedReport report) {
+        ReviewTask task = taskMapper.selectSarifImportTaskForUpdate(taskId);
+        if (task == null) throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + taskId);
+        ReviewExecutionAttempt attempt = requireAttempt(taskId, claims.attemptId(), task);
+        String taskCommit = text(attempt.getCommitSha(), task.getCommitSha());
+        if (!Objects.equals(taskCommit, claims.commitSha()) || !Objects.equals(taskCommit, normalizedCommit)
+            || !sameIgnoreCase(task.getOrganization(), claims.organization())
+            || !sameIgnoreCase(task.getRepository(), claims.repository())
+            || !Objects.equals(task.getPrNumber(), claims.prNumber())) {
+            throw new BusinessException(ErrorCode.CONFLICT, "CI credential no longer matches the review attempt");
+        }
+        if (!observed.equals(SarifFindingService.observe(task, attempt, taskCommit))) {
+            throw new BusinessException(ErrorCode.CONFLICT, "Review attempt changed while preparing the SARIF import");
+        }
+        String fingerprint = report.fingerprint();
+        SarifCiUploadRow existing = uploadMapper.selectByIdentity(
+            taskId, claims.attemptId(), normalizedTool, normalizedVersion, normalizedCommit, normalizedRun
+        );
+        if (existing != null && fingerprint.equals(existing.getSarifFingerprint())) {
+            return response(existing);
+        }
+
+        SarifImportResponse imported = sarifFindingService.importPrepared(taskId, observed, report);
+        SarifImportBatchRow batch = findingMapper.selectSarifImportBatchByFingerprint(
+            taskId, claims.attemptId(), normalizedTool, normalizedVersion, normalizedCommit, fingerprint
+        );
+        if (batch == null || batch.getId() == null) {
+            throw new IllegalStateException("SARIF import batch was not created");
+        }
+        if (!normalizedTool.equals(batch.getToolName()) || !normalizedVersion.equals(batch.getToolVersion())) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "CI tool metadata does not match the SARIF document");
+        }
+        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+        SarifCiUploadRow row = existing == null ? new SarifCiUploadRow() : existing;
+        row.setTenantId(claims.tenantId());
+        row.setTaskId(taskId);
+        row.setAttemptId(claims.attemptId());
+        row.setBatchId(batch.getId());
+        row.setToolName(normalizedTool);
+        row.setToolVersion(normalizedVersion);
+        row.setScanRunId(normalizedRun);
+        row.setCommitSha(normalizedCommit);
+        row.setSarifFingerprint(fingerprint);
+        row.setCompletionTime(completion.toLocalDateTime());
+        row.setStatus("ACTIVE");
+        row.setImportedCount(imported.imported());
+        row.setSkippedCount(imported.skipped());
+        row.setUpdatedAt(now);
+        if (existing == null) {
+            row.setCreatedAt(now);
+            try {
+                if (uploadMapper.insert(row) != 1) {
+                    throw new IllegalStateException("CI SARIF upload record was not inserted");
+                }
+            } catch (DuplicateKeyException race) {
+                SarifCiUploadRow raced = uploadMapper.selectByIdentity(
+                    taskId, claims.attemptId(), normalizedTool, normalizedVersion, normalizedCommit, normalizedRun
+                );
+                if (raced != null && fingerprint.equals(raced.getSarifFingerprint())) {
+                    return response(raced);
+                }
+                throw race;
+            }
+        } else {
+            if (uploadMapper.replace(row) != 1) {
+                throw new IllegalStateException("CI SARIF upload record was not replaced");
+            }
+        }
+        return new CiSarifUploadResponse(
+            taskId,
+            claims.attemptId(),
+            normalizedTool,
+            normalizedVersion,
+            normalizedRun,
+            normalizedCommit,
+            fingerprint,
+            completion,
+            "ACTIVE",
+            imported.imported(),
+            imported.skipped()
+        );
     }
 
     private ReviewTask requireTask(Long taskId) {
