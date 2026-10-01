@@ -162,6 +162,19 @@ class SupplyChainPolicyTest {
     }
 
     @Test
+    void resolvedJacksonFamiliesUsePatchedMaintenanceVersions() {
+        var jackson2 = com.fasterxml.jackson.databind.cfg.PackageVersion.VERSION;
+        assertThat(jackson2.getMajorVersion()).isEqualTo(2);
+        assertThat(jackson2.getMinorVersion()).isEqualTo(21);
+        assertThat(jackson2.getPatchLevel()).isGreaterThanOrEqualTo(7);
+
+        var jackson3 = tools.jackson.databind.cfg.PackageVersion.VERSION;
+        assertThat(jackson3.getMajorVersion()).isEqualTo(3);
+        assertThat(jackson3.getMinorVersion()).isEqualTo(1);
+        assertThat(jackson3.getPatchLevel()).isGreaterThanOrEqualTo(7);
+    }
+
+    @Test
     void vulnerabilityExceptionsRequireReasonAndUnexpiredDate() throws IOException {
         List<VulnerabilityException> exceptions = parseExceptions(read(".trivyignore.yaml"));
         LocalDate today = LocalDate.now(ZoneOffset.UTC);
