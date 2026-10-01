@@ -7,7 +7,7 @@
     "externalDatabaseSupported": true,
     "publishedMigrationPolicy": "IMMUTABLE",
     "newInstallationStrategy": "VALIDATED_SCHEMA_SNAPSHOT_THEN_BASELINE",
-    "candidateVersion": 102,
+    "candidateVersion": 103,
     "requiredEvidence": [
       "empty database migration to the candidate version",
       "schema structure diff against the supported production shape",
@@ -16,9 +16,9 @@
     ],
     "decisionEvidence": [
       "application-prod.yml requires an externally supplied datasource",
-      "FlywayMigrationUpgradePathIntegrationTest verifies the supported incremental upgrade path through V102"
+      "FlywayMigrationUpgradePathIntegrationTest verifies the supported incremental upgrade path through V103"
     ],
-    "reconsiderWhen": "A V102 schema snapshot and all required rehearsal evidence are versioned together.",
+    "reconsiderWhen": "A V103 schema snapshot and all required rehearsal evidence are versioned together.",
     "rollbackStrategy": "restore a validated backup and apply a forward fix; never rewrite or delete a published migration"
   },
   "defaults": {
@@ -387,6 +387,18 @@
       "nMinusOneCompatible": true,
       "interruptedRecovery": "inspect Flyway and all three table column states before retrying; never recalculate historical costs",
       "rollbackStrategy": "roll back application and retain nullable accounting columns; use a reviewed forward fix"
+    },
+    {
+      "version": 103,
+      "file": "V103__operational_payload_retention.sql",
+      "phase": "EXPAND",
+      "estimatedRows": "additive protection and purge-marker columns plus retention candidate indexes; payload purge remains disabled",
+      "lockType": "metadata and online secondary-index creation on feedback and evaluation-run tables",
+      "maxDurationSeconds": 900,
+      "maxDiskMegabytes": 1024,
+      "nMinusOneCompatible": true,
+      "interruptedRecovery": "keep both payload-purge flags disabled; inspect Flyway, columns and indexes before a reviewed retry",
+      "rollbackStrategy": "disable payload purge and roll back application while retaining additive fields; restore validated backup to recover purged payloads"
     }
   ]
 }

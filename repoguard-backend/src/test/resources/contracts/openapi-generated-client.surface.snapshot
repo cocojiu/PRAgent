@@ -50,6 +50,7 @@ notificationIntegrationControllerRetryEvent(input: { path: { id: number } }): Pr
 notificationIntegrationControllerTestBinding(input: { path: { id: number } }): Promise<ConnectionTestResult>; // POST /api/v1/config/notification-bindings/{id}/test
 notificationIntegrationControllerUpdateBinding(input: { path: { id: number }; body: NotificationBindingRequest }): Promise<NotificationBinding>; // PUT /api/v1/config/notification-bindings/{id}
 notificationIntegrationControllerUpdateBindingStatus(input: { path: { id: number }; body: NotificationBindingStatusRequest }): Promise<NotificationBinding>; // PUT /api/v1/config/notification-bindings/{id}/status
+operationalPayloadRetentionControllerPreview(): Promise<OperationalPayloadRetentionPreview[]>; // GET /api/v1/config/data-retention/payload-preview
 repositoryPolicyControllerActivate(input: { path: { id: number }; query?: { reason?: string } }): Promise<RepositorySuppressionResponse>; // POST /api/v1/config/repository-policy/suppressions/{id}/activate
 repositoryPolicyControllerCreateSuppression(input: { body: RepositorySuppressionRequest }): Promise<RepositorySuppressionResponse>; // POST /api/v1/config/repository-policy/suppressions
 repositoryPolicyControllerListSuppressions(input?: { query?: { limit?: number; organization: string; repository: string } }): Promise<RepositorySuppressionResponse[]>; // GET /api/v1/config/repository-policy/suppressions

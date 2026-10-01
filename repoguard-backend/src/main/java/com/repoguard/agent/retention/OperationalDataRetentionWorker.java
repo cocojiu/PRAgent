@@ -74,6 +74,15 @@ public class OperationalDataRetentionWorker {
             properties.getTenantQuotaUsageDays(),
             cutoff -> mapper.deleteTenantQuotaUsage(TenantContext.currentTenantIdOrDefault(), cutoff, limit)
         );
+        long tenantId = TenantContext.currentTenantIdOrDefault();
+        if (properties.isFeedbackPayloadPurgeEnabled()) {
+            clean("github_feedback_event_payload", properties.normalizedFeedbackPayloadDays(),
+                cutoff -> mapper.purgeFeedbackPayload(tenantId, cutoff, limit));
+        }
+        if (properties.isEvaluationRunPayloadPurgeEnabled()) {
+            clean("llm_evaluation_run_payload", properties.normalizedEvaluationRunPayloadDays(),
+                cutoff -> mapper.purgeEvaluationRunPayload(tenantId, cutoff, limit));
+        }
     }
 
     private void clean(String table, int retentionDays, Function<LocalDateTime, Integer> delete) {

@@ -84,6 +84,7 @@
           >取消运行</el-button>
         </template>
       </el-alert>
+      <p v-if="activeRun?.payloadPurgedAt">该运行的过期诊断载荷已于 {{ formatDate(activeRun.payloadPurgedAt) }} 清理；汇总和幂等键仍保留，重复提交不会再次调用模型。</p>
       <template v-if="activeRun?.diagnostics">
         <p>诊断仅用于排查，不生成正式质量报告。逐样本用量为系统记录值；未知费用和中断请求不代表免费，运行合计可能包含保守预算预留。</p>
         <el-table :data="activeRun.diagnostics.samples" row-key="sampleId" aria-label="逐样本诊断">

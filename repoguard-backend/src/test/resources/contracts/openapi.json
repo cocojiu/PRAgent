@@ -567,6 +567,51 @@
         }
       }
     },
+    "/api/v1/config/data-retention/payload-preview" : {
+      "get" : {
+        "tags" : [ "OperationalPayloadRetention" ],
+        "operationId" : "operationalPayloadRetentionControllerPreview",
+        "x-controller-operation" : "OperationalPayloadRetentionController#preview",
+        "parameters" : [ ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "List<OperationalPayloadRetentionPreview>",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "array",
+                      "items" : {
+                        "$ref" : "#/components/schemas/OperationalPayloadRetentionPreview"
+                      }
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/config/declarative-rules/{id}/dry-run" : {
       "post" : {
         "tags" : [ "DeclarativeRule" ],
@@ -12191,6 +12236,10 @@
           },
           "diagnostics" : {
             "$ref" : "#/components/schemas/Diagnostics"
+          },
+          "payloadPurgedAt" : {
+            "type" : "string",
+            "format" : "date-time"
           }
         },
         "required" : [ "totalSamples", "completedSamples", "totalTokens" ]
@@ -13556,6 +13605,39 @@
           }
         },
         "required" : [ "githubComment", "highRiskPr", "failedTask" ]
+      },
+      "OperationalPayloadRetentionPreview" : {
+        "type" : "object",
+        "x-java-type" : "OperationalPayloadRetentionPreview",
+        "properties" : {
+          "table" : {
+            "type" : "string"
+          },
+          "enabled" : {
+            "type" : "boolean"
+          },
+          "retentionDays" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "cutoff" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "candidateCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "oldestAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "payloadBytes" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        },
+        "required" : [ "enabled", "retentionDays", "candidateCount", "payloadBytes" ]
       },
       "PageResponse" : {
         "type" : "object",

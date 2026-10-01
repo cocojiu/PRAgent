@@ -67,7 +67,7 @@ class JdbcLlmEvaluationRunStore implements LlmEvaluationRunStore {
             select tenant_id, run_id, run_key, status, data_directory, max_concurrency,
                    max_tokens, max_cost, max_duration_seconds, operator, total_samples,
                    completed_samples, total_tokens, total_cost, report_id, failure_code,
-                   submitted_at, started_at, finished_at, diagnostics_json
+                   submitted_at, started_at, finished_at, diagnostics_json, payload_purged_at
               from llm_evaluation_run
              where tenant_id = ? and run_id = ?
             """, this::map, tenantId, runId);
@@ -81,7 +81,7 @@ class JdbcLlmEvaluationRunStore implements LlmEvaluationRunStore {
                set status = ?, total_samples = ?, completed_samples = ?, total_tokens = ?,
                    total_cost = ?, report_id = ?, failure_code = ?, started_at = ?,
                    finished_at = ?, diagnostics_json = ?, updated_at = current_timestamp(6)
-             where tenant_id = ? and run_id = ?
+             where tenant_id = ? and run_id = ? and payload_purged_at is null
             """,
             run.status(),
             run.totalSamples(),
@@ -121,7 +121,7 @@ class JdbcLlmEvaluationRunStore implements LlmEvaluationRunStore {
             select tenant_id, run_id, run_key, status, data_directory, max_concurrency,
                    max_tokens, max_cost, max_duration_seconds, operator, total_samples,
                    completed_samples, total_tokens, total_cost, report_id, failure_code,
-                   submitted_at, started_at, finished_at, diagnostics_json
+                   submitted_at, started_at, finished_at, diagnostics_json, payload_purged_at
               from llm_evaluation_run
              where tenant_id = ? and run_key = ?
             """, this::map, tenantId, runKey);
@@ -150,7 +150,8 @@ class JdbcLlmEvaluationRunStore implements LlmEvaluationRunStore {
             time(rs, "started_at"),
             time(rs, "finished_at"),
             LlmEvaluationDiagnostics.terminal(LlmEvaluationDiagnostics.decode(objectMapper, rs.getString("diagnostics_json")),
-                rs.getString("status"), rs.getString("failure_code"))
+                rs.getString("status"), rs.getString("failure_code")),
+            time(rs, "payload_purged_at")
         );
     }
 

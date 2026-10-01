@@ -141,6 +141,7 @@ export interface LlmEvaluationRun {
     }[];
   } | null;
   runId: string;
+  payloadPurgedAt?: string | null;
   runKey: string;
   status: "QUEUED" | "RUNNING" | "COMPLETE" | "FAILED" | "CANCELLED" | string;
   totalSamples: number;

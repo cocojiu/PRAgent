@@ -328,6 +328,7 @@ class ApiContractTest {
 
     private Set<String> serverOnlyApiEndpointKeys() {
         return Set.of(
+            "GET /api/v1/config/data-retention/payload-preview",
             "POST /api/v1/auth/refresh",
             "GET /api/v1/enterprise/tenants",
             "GET /api/v1/enterprise/tenants/{tenantKey}",

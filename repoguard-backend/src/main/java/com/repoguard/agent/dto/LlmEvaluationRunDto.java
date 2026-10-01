@@ -17,8 +17,15 @@ public record LlmEvaluationRunDto(
     LocalDateTime submittedAt,
     LocalDateTime startedAt,
     LocalDateTime finishedAt,
-    Diagnostics diagnostics
+    Diagnostics diagnostics,
+    LocalDateTime payloadPurgedAt
 ) {
+    public LlmEvaluationRunDto(String runId, String runKey, String status, int totalSamples,
+        int completedSamples, long totalTokens, BigDecimal totalCost, Long reportId, String failureCode,
+        LocalDateTime submittedAt, LocalDateTime startedAt, LocalDateTime finishedAt, Diagnostics diagnostics) {
+        this(runId, runKey, status, totalSamples, completedSamples, totalTokens, totalCost, reportId,
+            failureCode, submittedAt, startedAt, finishedAt, diagnostics, null);
+    }
     public LlmEvaluationRunDto(String runId, String runKey, String status, int totalSamples,
         int completedSamples, long totalTokens, BigDecimal totalCost, Long reportId, String failureCode,
         LocalDateTime submittedAt, LocalDateTime startedAt, LocalDateTime finishedAt) {

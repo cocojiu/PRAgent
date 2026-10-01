@@ -110,6 +110,30 @@ class LlmEvaluationRunServiceTest {
     }
 
     @Test
+    void purgedDiagnosticRunKeepsItsKeyAndSelectionWithoutAnotherModelCall() {
+        tenantScope = TenantContext.withTenant(42L);
+        var selected = List.of("sample-1");
+        var now = LocalDateTime.now();
+        store.createOrGet(new LlmEvaluationRunStore.StoredRun(42L, "purged-run", "purged-key", "COMPLETE", "",
+            1, 100L, BigDecimal.ONE, 60, "", 1, 1, 20L, new BigDecimal("0.01"), null, null,
+            now.minusDays(100), now.minusDays(100), now.minusDays(100),
+            new LlmEvaluationRunDto.Diagnostics(selected, List.of()), now));
+        when(datasetLoader.validateDirectory("dataset")).thenReturn(Path.of("C:/evaluation/dataset"));
+        var executor = org.mockito.Mockito.mock(ExecutorService.class);
+        var service = new LlmEvaluationRunService(datasetLoader, previewRunner, modelReleaseService, store, executor);
+        var request = new LlmEvaluationRunRequest("purged-key", "dataset", 1, 100L, BigDecimal.ONE, 60, selected);
+        var replay = service.start(request, "operator");
+        assertThat(replay.runId()).isEqualTo("purged-run");
+        assertThat(replay.payloadPurgedAt()).isEqualTo(now);
+        assertThat(replay.diagnostics().sampleIds()).containsExactly("sample-1");
+        assertThat(replay.diagnostics().samples()).isEmpty();
+        assertThatThrownBy(() -> service.start(new LlmEvaluationRunRequest("purged-key", "dataset", 1, 100L,
+            BigDecimal.ONE, 60, List.of("other-sample")), "operator"))
+            .isInstanceOf(BusinessException.class).hasMessageContaining("其他样本选择");
+        org.mockito.Mockito.verifyNoInteractions(previewRunner, executor, modelReleaseService);
+    }
+
+    @Test
     void invalidRuntimeRevisionCannotBeUsedAsReleaseEvidence() {
         LlmEvaluationRunService service = new LlmEvaluationRunService(
             datasetLoader, previewRunner, modelReleaseService, store, null, "main-latest"
