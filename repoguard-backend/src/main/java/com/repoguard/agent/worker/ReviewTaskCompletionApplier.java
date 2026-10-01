@@ -1,5 +1,6 @@
 package com.repoguard.agent.worker;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.github.GithubPullRequestHeadChangedException;
 import com.repoguard.agent.review.HumanReviewStatus;
@@ -9,6 +10,7 @@ import com.repoguard.agent.review.ReviewResult;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.LocalDateTime;
 import java.util.Objects;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -18,6 +20,7 @@ class ReviewTaskCompletionApplier {
     private final ReviewHumanReviewDecisionPolicy humanReviewDecisionPolicy;
     private final ReviewTaskFailureOutcomePolicy failureOutcomePolicy;
     private final ReviewTaskDurationPolicy durationPolicy;
+    private final ObjectMapper objectMapper;
 
     ReviewTaskCompletionApplier(
         ReviewTaskStateMachine reviewTaskStateMachine,
@@ -25,11 +28,24 @@ class ReviewTaskCompletionApplier {
         ReviewTaskFailureOutcomePolicy failureOutcomePolicy,
         ReviewTaskDurationPolicy durationPolicy
     ) {
+        this(reviewTaskStateMachine, humanReviewDecisionPolicy, failureOutcomePolicy, durationPolicy,
+            new com.repoguard.agent.config.JacksonConfig().objectMapper());
+    }
+
+    @Autowired
+    ReviewTaskCompletionApplier(
+        ReviewTaskStateMachine reviewTaskStateMachine,
+        ReviewHumanReviewDecisionPolicy humanReviewDecisionPolicy,
+        ReviewTaskFailureOutcomePolicy failureOutcomePolicy,
+        ReviewTaskDurationPolicy durationPolicy,
+        ObjectMapper objectMapper
+    ) {
         this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
         this.humanReviewDecisionPolicy =
             Objects.requireNonNull(humanReviewDecisionPolicy, "humanReviewDecisionPolicy");
         this.failureOutcomePolicy = Objects.requireNonNull(failureOutcomePolicy, "failureOutcomePolicy");
         this.durationPolicy = Objects.requireNonNull(durationPolicy, "durationPolicy");
+        this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
     }
 
     boolean applyCompleted(
@@ -53,6 +69,7 @@ class ReviewTaskCompletionApplier {
         task.setLlmCompletionTokens(reviewResult.llmCompletionTokens());
         task.setLlmTotalTokens(reviewResult.llmTotalTokens());
         task.setLlmEstimatedCost(reviewResult.llmEstimatedCost());
+        task.setLlmCostSnapshotJson(reviewResult.costSnapshot() == null ? null : reviewResult.costSnapshot().toJson(objectMapper));
         task.setHumanReviewRequired(humanReviewRequired);
         task.setHumanReviewStatus(HumanReviewStatus.defaultForRequired(humanReviewRequired).code());
         task.setHumanReviewNote(null);
@@ -92,6 +109,7 @@ class ReviewTaskCompletionApplier {
         task.setLlmCompletionTokens(null);
         task.setLlmTotalTokens(null);
         task.setLlmEstimatedCost(null);
+        task.setLlmCostSnapshotJson(null);
         task.setHumanReviewRequired(false);
         task.setHumanReviewStatus(HumanReviewStatus.NOT_REQUIRED.code());
         task.setHumanReviewNote(null);

@@ -7,7 +7,7 @@
     "externalDatabaseSupported": true,
     "publishedMigrationPolicy": "IMMUTABLE",
     "newInstallationStrategy": "VALIDATED_SCHEMA_SNAPSHOT_THEN_BASELINE",
-    "candidateVersion": 101,
+    "candidateVersion": 102,
     "requiredEvidence": [
       "empty database migration to the candidate version",
       "schema structure diff against the supported production shape",
@@ -16,9 +16,9 @@
     ],
     "decisionEvidence": [
       "application-prod.yml requires an externally supplied datasource",
-      "FlywayMigrationUpgradePathIntegrationTest verifies the supported incremental upgrade path through V101"
+      "FlywayMigrationUpgradePathIntegrationTest verifies the supported incremental upgrade path through V102"
     ],
-    "reconsiderWhen": "A V101 schema snapshot and all required rehearsal evidence are versioned together.",
+    "reconsiderWhen": "A V102 schema snapshot and all required rehearsal evidence are versioned together.",
     "rollbackStrategy": "restore a validated backup and apply a forward fix; never rewrite or delete a published migration"
   },
   "defaults": {
@@ -375,6 +375,18 @@
       "nMinusOneCompatible": true,
       "interruptedRecovery": "inspect Flyway and index state before retrying; repair only after checking the additive index",
       "rollbackStrategy": "roll back application and retain the cursor index; use a reviewed forward fix"
+    },
+    {
+      "version": 102,
+      "file": "V102__llm_usage_cost_snapshot.sql",
+      "phase": "EXPAND",
+      "estimatedRows": "nullable cache price and JSON snapshot columns only; no historical cost backfill",
+      "lockType": "metadata and additive-column DDL; inspect MySQL online-DDL behavior for existing table sizes",
+      "maxDurationSeconds": 900,
+      "maxDiskMegabytes": 1024,
+      "nMinusOneCompatible": true,
+      "interruptedRecovery": "inspect Flyway and all three table column states before retrying; never recalculate historical costs",
+      "rollbackStrategy": "roll back application and retain nullable accounting columns; use a reviewed forward fix"
     }
   ]
 }

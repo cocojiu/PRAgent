@@ -128,6 +128,7 @@ class ConnectionTestConfigFactory {
         config.setChunkMaxLines(request.chunkMaxLines());
         config.setInputTokenPricePerMillion(request.inputTokenPricePerMillion());
         config.setOutputTokenPricePerMillion(request.outputTokenPricePerMillion());
+        config.setCachedInputTokenPricePerMillion(request.cachedInputTokenPricePerMillion());
         return config;
     }
 

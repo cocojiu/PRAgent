@@ -147,7 +147,7 @@ public class LlmEvaluationPreviewRunner {
             sample.sourceRepositoryKey(),
             context,
             failureCategories(result)
-        );
+        ).withCostSnapshot(result.costSnapshot());
     }
 
     private String failureCategories(ReviewResult result) {

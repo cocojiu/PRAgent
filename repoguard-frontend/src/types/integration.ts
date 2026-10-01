@@ -161,6 +161,7 @@ export interface ReviewPolicyConfig {
   chunkMaxLines: number;
   inputTokenPricePerMillion: number;
   outputTokenPricePerMillion: number;
+  cachedInputTokenPricePerMillion?: number | null;
   updatedAt?: string;
 }
 

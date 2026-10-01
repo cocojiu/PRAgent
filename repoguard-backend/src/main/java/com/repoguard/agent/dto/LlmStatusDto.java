@@ -16,8 +16,15 @@ public record LlmStatusDto(
     Integer promptTokens,
     Integer completionTokens,
     Integer totalTokens,
-    String estimatedCost
+    String estimatedCost,
+    LlmUsageCostSnapshot costSnapshot
 ) {
+    public LlmStatusDto(String status, String duration, String riskLevel, String provider, String model,
+        Integer durationMs, String parseStatus, String fallbackReason, String promptSummary, Integer promptTokens,
+        Integer completionTokens, Integer totalTokens, String estimatedCost) {
+        this(status, duration, riskLevel, provider, model, durationMs, parseStatus, fallbackReason, promptSummary,
+            promptTokens, completionTokens, totalTokens, estimatedCost, null);
+    }
     public LlmStatusDto(String status, String duration, String riskLevel) {
         this(status, duration, riskLevel, null, null, null, null, null, null, null, null, null, null);
     }

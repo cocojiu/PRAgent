@@ -1,3 +1,5 @@
+import type { LlmUsageCostSnapshot } from "@/api/generated/reviewDetailTypes";
+
 export interface LlmModelReleaseRequest {
   releaseKey: string;
   provider: string;
@@ -135,6 +137,7 @@ export interface LlmEvaluationRun {
       estimatedCost: number | null;
       usageSource: string;
       costSource: string;
+      costSnapshot?: LlmUsageCostSnapshot | null;
     }[];
   } | null;
   runId: string;

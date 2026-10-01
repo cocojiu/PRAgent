@@ -91,8 +91,10 @@
           <el-table-column prop="status" label="执行状态" />
           <el-table-column prop="failureCode" label="失败类型" />
           <el-table-column prop="totalTokens" label="记录 tokens" />
-          <el-table-column label="用量来源"><template #default="{ row }">{{ row.usageSource === 'RECORDED_USAGE' ? '系统记录' : '未知' }}</template></el-table-column>
+          <el-table-column label="用量来源"><template #default="{ row }">{{ llmUsageSourceText(row.usageSource) }}</template></el-table-column>
+          <el-table-column label="缓存输入"><template #default="{ row }">{{ row.costSnapshot?.cachedInputTokens ?? '未知' }}</template></el-table-column>
           <el-table-column label="估算费用"><template #default="{ row }">{{ estimatedCostText(row.estimatedCost) }}</template></el-table-column>
+          <el-table-column label="计价来源" min-width="240"><template #default="{ row }"><span :title="row.costSnapshot?.pricingVersion">{{ llmCostSourceText(row.costSnapshot) }}</span></template></el-table-column>
         </el-table>
       </template>
       <el-button v-if="activeRun" :disabled="runLoading || lookupLoading || runCancelling" @click="beginPolling">刷新运行状态</el-button>
@@ -176,6 +178,7 @@
 <script setup lang="ts">
 import { selectedEvaluationSampleIds } from "../composables/useLlmModelReleaseCenter";
 import { estimatedCostText } from "@/utils/estimatedCost";
+import { llmCostSourceText, llmUsageSourceText } from "@/features/review-detail/reviewDetailDisplayMappers";
 import { onMounted, onUnmounted, ref } from "vue";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import {

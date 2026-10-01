@@ -78,7 +78,8 @@ public class ReviewPolicyProvider {
             config.getOutputTokenPricePerMillion(),
             strategyReleaseProvider == null
                 ? ReviewStrategyRelease.observeDefaults()
-                : strategyReleaseProvider.getActiveRelease()
+                : strategyReleaseProvider.getActiveRelease(),
+            config.getCachedInputTokenPricePerMillion()
         );
     }
 }

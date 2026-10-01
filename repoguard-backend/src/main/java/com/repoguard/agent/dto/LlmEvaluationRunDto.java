@@ -35,5 +35,11 @@ public record LlmEvaluationRunDto(
     }
 
     public record SampleDiagnostic(String sampleId, String status, String failureCode,
-        long totalTokens, BigDecimal estimatedCost, String usageSource, String costSource) { }
+        long totalTokens, BigDecimal estimatedCost, String usageSource, String costSource,
+        LlmUsageCostSnapshot costSnapshot) {
+        public SampleDiagnostic(String sampleId, String status, String failureCode,
+            long totalTokens, BigDecimal estimatedCost, String usageSource, String costSource) {
+            this(sampleId, status, failureCode, totalTokens, estimatedCost, usageSource, costSource, null);
+        }
+    }
 }

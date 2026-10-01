@@ -167,7 +167,7 @@ final class LlmModelReleaseRuntimeSupport {
             settings.baseUrl(), settings.apiKey(), settings.timeoutSeconds(), settings.temperature(), settings.maxTokens(),
             settings.fallbackToRules(), settings.workerConcurrency(), settings.chunkFileThreshold(), settings.chunkLineThreshold(),
             settings.chunkMaxFiles(), settings.chunkMaxLines(), settings.inputTokenPricePerMillion(),
-            settings.outputTokenPricePerMillion(), settings.strategyRelease());
+            settings.outputTokenPricePerMillion(), settings.strategyRelease(), settings.cachedInputTokenPricePerMillion());
     }
 
     private ReviewPolicySettings disableLlm(ReviewPolicySettings settings) {
@@ -175,7 +175,7 @@ final class LlmModelReleaseRuntimeSupport {
             settings.apiKey(), settings.timeoutSeconds(), settings.temperature(), settings.maxTokens(), true,
             settings.workerConcurrency(), settings.chunkFileThreshold(), settings.chunkLineThreshold(), settings.chunkMaxFiles(),
             settings.chunkMaxLines(), settings.inputTokenPricePerMillion(), settings.outputTokenPricePerMillion(),
-            settings.strategyRelease());
+            settings.strategyRelease(), settings.cachedInputTokenPricePerMillion());
     }
 
     private List<String> unsafeRuntimeBlockers(LlmModelReleaseDto release, LlmModelBudgetDto budget) {

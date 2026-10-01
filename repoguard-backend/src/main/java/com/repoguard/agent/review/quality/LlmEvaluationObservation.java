@@ -1,6 +1,7 @@
 package com.repoguard.agent.review.quality;
 
 import java.math.BigDecimal;
+import com.repoguard.agent.dto.LlmUsageCostSnapshot;
 
 /**
  * A single manually labelled live-evaluation observation. The case id is the stable identity used
@@ -30,8 +31,28 @@ public record LlmEvaluationObservation(
     EvaluationSplit split,
     String sourceRepositoryKey,
     LlmEvaluationSampleContext sampleContext,
-    String failureCategories
+    String failureCategories,
+    LlmUsageCostSnapshot costSnapshot
 ) {
+
+    public LlmEvaluationObservation(String caseId, String category, boolean expectedFinding, String expectedSeverity,
+        boolean predictedFinding, String predictedSeverity, boolean anchorValid, String predictionKey,
+        boolean parseSucceeded, long latencyMs, long totalTokens, BigDecimal estimatedCost, Boolean usefulComment,
+        boolean commentPublishAttempted, Boolean commentPublished, Boolean commentFixed, Boolean commentIgnored,
+        long ruleFindingCount, long llmFindingCount, long verifiedFindingCount, EvaluationSplit split,
+        String sourceRepositoryKey, LlmEvaluationSampleContext sampleContext, String failureCategories) {
+        this(caseId, category, expectedFinding, expectedSeverity, predictedFinding, predictedSeverity, anchorValid,
+            predictionKey, parseSucceeded, latencyMs, totalTokens, estimatedCost, usefulComment, commentPublishAttempted,
+            commentPublished, commentFixed, commentIgnored, ruleFindingCount, llmFindingCount, verifiedFindingCount,
+            split, sourceRepositoryKey, sampleContext, failureCategories, null);
+    }
+
+    public LlmEvaluationObservation withCostSnapshot(LlmUsageCostSnapshot snapshot) {
+        return new LlmEvaluationObservation(caseId, category, expectedFinding, expectedSeverity, predictedFinding,
+            predictedSeverity, anchorValid, predictionKey, parseSucceeded, latencyMs, totalTokens, estimatedCost,
+            usefulComment, commentPublishAttempted, commentPublished, commentFixed, commentIgnored, ruleFindingCount,
+            llmFindingCount, verifiedFindingCount, split, sourceRepositoryKey, sampleContext, failureCategories, snapshot);
+    }
 
     public enum EvaluationSplit {
         FIXED_REGRESSION,

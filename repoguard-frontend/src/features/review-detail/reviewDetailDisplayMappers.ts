@@ -365,15 +365,38 @@ export const llmDurationText = (llm: ReviewTaskDetail["llm"]) => {
 };
 
 export const llmTokenUsageText = (llm?: ReviewTaskDetail["llm"]) => {
-  if (!llm || !llm.totalTokens) {
+  if (!llm || llm.totalTokens == null) {
     return "未记录";
   }
-  return `${llm.totalTokens} total / ${llm.promptTokens ?? 0} prompt / ${llm.completionTokens ?? 0} completion`;
+  const recorded = `${llm.totalTokens} total / ${llm.promptTokens ?? "未知"} prompt / ${llm.completionTokens ?? "未知"} completion`;
+  const snapshot = llm.costSnapshot;
+  return snapshot ? `${recorded}；缓存输入 ${snapshot.cachedInputTokens ?? "未知"} / 普通输入 ${snapshot.normalInputTokens ?? "未知"}` : recorded;
 };
 
 export const llmCostText = (llm?: ReviewTaskDetail["llm"]) => {
   const cost = llm?.estimatedCost;
   return estimatedCostText(cost);
+};
+
+export const llmCostSourceText = (snapshot?: ReviewTaskDetail["llm"]["costSnapshot"] | null) => {
+  if (!snapshot) return "历史估算（原口径）";
+  const source = snapshot.costSource ?? "UNKNOWN_USAGE";
+  const label = source.startsWith("CACHE_SPLIT_ESTIMATE") ? "缓存与普通输入分项估算"
+    : source.startsWith("CONSERVATIVE_CACHE_PRICE_UNKNOWN") ? "缓存单价未知，按完整输入保守估算"
+    : source.startsWith("CONSERVATIVE_CACHE_USAGE_UNKNOWN") ? "缓存用量未知，按完整输入保守估算"
+    : source.startsWith("UNKNOWN_PRICING") ? "单价未配置，费用未知" : "用量未完整记录，费用未知";
+  return `${label}${source.endsWith("_PARTIAL") ? "；仅含已记录调用" : ""}（${snapshot.currency ?? "CNY"}，估算不等于账单）`;
+};
+
+export const llmUsageSourceText = (source?: string | null) => {
+  const labels: Record<string, string> = {
+    RECORDED_USAGE: "系统记录",
+    OPENAI_COMPATIBLE_CACHE_DETAILS: "供应商缓存明细",
+    CACHE_USAGE_UNKNOWN: "供应商用量（缓存未知）",
+    INVALID_CACHE_DETAILS: "供应商缓存明细无效",
+    MIXED_CACHE_USAGE: "混合调用记录"
+  };
+  return source ? labels[source] ?? "未知" : "未知";
 };
 
 export const llmParseStatusText = (llm?: ReviewTaskDetail["llm"]) => {

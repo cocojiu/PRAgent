@@ -42,6 +42,7 @@ public class ReviewTask {
     private Integer llmCompletionTokens;
     private Integer llmTotalTokens;
     private BigDecimal llmEstimatedCost;
+    private String llmCostSnapshotJson;
     private String prUrl;
     /** 任务首次创建来源，例如手动输入或 GitHub PR 选择器。 */
     private String source;
@@ -125,6 +126,8 @@ public class ReviewTask {
     public Integer getLlmTotalTokens() { return llmTotalTokens; }
     public void setLlmTotalTokens(Integer llmTotalTokens) { this.llmTotalTokens = llmTotalTokens; }
     public BigDecimal getLlmEstimatedCost() { return llmEstimatedCost; }
+    public String getLlmCostSnapshotJson() { return llmCostSnapshotJson; }
+    public void setLlmCostSnapshotJson(String value) { llmCostSnapshotJson = value; }
     public void setLlmEstimatedCost(BigDecimal llmEstimatedCost) { this.llmEstimatedCost = llmEstimatedCost; }
     public String getPrUrl() { return prUrl; }
     public void setPrUrl(String prUrl) { this.prUrl = prUrl; }

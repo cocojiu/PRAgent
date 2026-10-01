@@ -57,11 +57,16 @@ final class LlmEvaluationDiagnostics {
     static Diagnostics update(Diagnostics value, String id, String status, String failure,
         LlmEvaluationObservation observation) {
         if (value == null) return null;
+        var snapshot = observation == null ? null : observation.costSnapshot();
         SampleDiagnostic next = new SampleDiagnostic(id, status, failure,
             observation == null ? 0 : observation.totalTokens(),
-            observation == null || observation.estimatedCost().signum() <= 0 ? null : observation.estimatedCost(),
-            observation != null && observation.totalTokens() > 0 ? "RECORDED_USAGE" : "UNKNOWN",
-            observation != null && observation.estimatedCost().signum() > 0 ? "ESTIMATED" : "UNKNOWN");
+            snapshot != null ? snapshot.estimatedAmount()
+                : observation == null || observation.estimatedCost().signum() <= 0 ? null : observation.estimatedCost(),
+            snapshot != null ? snapshot.usageSource()
+                : observation != null && observation.totalTokens() > 0 ? "RECORDED_USAGE" : "UNKNOWN",
+            snapshot != null ? snapshot.costSource()
+                : observation != null && observation.estimatedCost().signum() > 0 ? "ESTIMATED" : "UNKNOWN",
+            snapshot);
         return new Diagnostics(value.sampleIds(), value.samples().stream()
             .map(sample -> sample.sampleId().equals(id) ? next : sample).toList());
     }
@@ -72,7 +77,7 @@ final class LlmEvaluationDiagnostics {
             if (!"QUEUED".equals(sample.status()) && !"RUNNING".equals(sample.status())) return sample;
             return new SampleDiagnostic(sample.sampleId(), "CANCELLED".equals(status) ? "CANCELLED" : "FAILED",
                 failure == null ? "RUN_INTERRUPTED" : failure, sample.totalTokens(), sample.estimatedCost(),
-                "UNKNOWN", "UNKNOWN");
+                "UNKNOWN", "UNKNOWN", sample.costSnapshot());
         }).toList());
     }
 

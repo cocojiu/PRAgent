@@ -25,6 +25,15 @@ public record ReviewPolicyConfigRequest(
     @NotNull @Min(1) @Max(50) Integer chunkMaxFiles,
     @NotNull @Min(1) @Max(50000) Integer chunkMaxLines,
     @NotNull @DecimalMin("0.0000") @DecimalMax("9999.0000") BigDecimal inputTokenPricePerMillion,
-    @NotNull @DecimalMin("0.0000") @DecimalMax("9999.0000") BigDecimal outputTokenPricePerMillion
+    @NotNull @DecimalMin("0.0000") @DecimalMax("9999.0000") BigDecimal outputTokenPricePerMillion,
+    @DecimalMin("0.0000") @DecimalMax("9999.0000") BigDecimal cachedInputTokenPricePerMillion
 ) {
+    public ReviewPolicyConfigRequest(Boolean llmEnabled, String llmProvider, String modelName, String baseUrl,
+        String apiKey, Integer timeoutSeconds, BigDecimal temperature, Integer maxTokens, Boolean fallbackToRules,
+        Integer workerConcurrency, Integer chunkFileThreshold, Integer chunkLineThreshold, Integer chunkMaxFiles,
+        Integer chunkMaxLines, BigDecimal inputTokenPricePerMillion, BigDecimal outputTokenPricePerMillion) {
+        this(llmEnabled, llmProvider, modelName, baseUrl, apiKey, timeoutSeconds, temperature, maxTokens,
+            fallbackToRules, workerConcurrency, chunkFileThreshold, chunkLineThreshold, chunkMaxFiles, chunkMaxLines,
+            inputTokenPricePerMillion, outputTokenPricePerMillion, null);
+    }
 }

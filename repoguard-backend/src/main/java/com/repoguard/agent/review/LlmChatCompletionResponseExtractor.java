@@ -26,21 +26,31 @@ public class LlmChatCompletionResponseExtractor {
                 "LLM", "llm_response_truncated", false, null, "finishReason=length", null
             );
         }
+        LlmCallResult usage = extractUsage(root);
         return new LlmChatCompletionResponse(
             extractContent(root),
-            intValue(root.at("/usage/prompt_tokens")),
-            intValue(root.at("/usage/completion_tokens")),
-            intValue(root.at("/usage/total_tokens"))
+            usage.promptTokens(), usage.completionTokens(), usage.totalTokens(),
+            usage.cachedInputTokens(), usage.usageSource()
         );
     }
 
     LlmCallResult extractUsage(JsonNode root) {
         JsonNode usage = root == null ? null : root.path("usage");
+        Integer prompt = usage == null ? null : intValue(usage.path("prompt_tokens"));
+        JsonNode cache = usage == null ? null : usage.at("/prompt_tokens_details/cached_tokens");
+        Integer cached = intValue(cache);
+        boolean invalid = cache != null && !cache.isMissingNode() && !cache.isNull()
+            && (cached == null || prompt == null || cached > prompt);
+        if (invalid) cached = null;
+        String source = invalid ? "INVALID_CACHE_DETAILS"
+            : cached != null ? "OPENAI_COMPATIBLE_CACHE_DETAILS"
+            : prompt != null ? "CACHE_USAGE_UNKNOWN" : "UNKNOWN";
         return new LlmCallResult(
             "",
-            usage == null ? null : intValue(usage.path("prompt_tokens")),
+            prompt,
             usage == null ? null : intValue(usage.path("completion_tokens")),
-            usage == null ? null : intValue(usage.path("total_tokens"))
+            usage == null ? null : intValue(usage.path("total_tokens")),
+            LlmStructuredOutputStatus.NOT_REQUESTED, cached, source
         );
     }
 
@@ -99,6 +109,7 @@ public class LlmChatCompletionResponseExtractor {
     }
 
     private Integer intValue(JsonNode node) {
-        return node == null || node.isMissingNode() || node.isNull() || !node.canConvertToInt() ? null : node.asInt();
+        return node == null || !node.isIntegralNumber() || !node.canConvertToInt() || node.asInt() < 0
+            ? null : node.asInt();
     }
 }

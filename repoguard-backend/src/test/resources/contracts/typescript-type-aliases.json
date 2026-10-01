@@ -1,4 +1,5 @@
 {
+  "LlmUsageCostSnapshot": "LlmUsageCostSnapshot",
   "GithubCommentPublicationItemsResponse": "GithubCommentPublicationItems",
   "CiSarifSetupDto": "CiSarifSetup",
   "CiSarifCredentialResponse": "CiSarifCredential",

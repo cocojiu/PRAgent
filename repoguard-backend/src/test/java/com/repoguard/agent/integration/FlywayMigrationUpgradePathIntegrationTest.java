@@ -19,7 +19,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
  * Exercises the supported rolling-upgrade path against a real MySQL instance.
  *
  * <p>The test is opt-in because local unit-test runs do not provision a database. CI enables it
- * with an isolated database and verifies the V76 expand state through the V101 history cursor index.
+ * with an isolated database and verifies the V76 expand state through the V102 usage metadata.
  */
 @EnabledIfEnvironmentVariable(named = "REPOGUARD_RUN_INTEGRATION_TESTS", matches = "true")
 class FlywayMigrationUpgradePathIntegrationTest {
@@ -308,6 +308,23 @@ class FlywayMigrationUpgradePathIntegrationTest {
                 assertThat(latestSuccessfulMigration(connection)).isEqualTo("101");
                 assertThat(indexColumnNames(connection, "github_comment_publication_batch_item",
                     "idx_github_comment_item_tenant_task_batch_id")).isEqualTo("tenant_id,task_id,batch_id,id");
+            }
+            migrateTo(url, username, password, "102");
+            try (Connection connection = open(url, username, password);
+                 PreparedStatement snapshot = connection.prepareStatement("""
+                     select t.llm_cost_snapshot_json, a.cost_snapshot_json, p.cached_input_token_price_per_million
+                     from review_task t join review_execution_attempt a on a.task_id = t.id and a.tenant_id = t.tenant_id
+                     join review_policy_config p on p.tenant_id = t.tenant_id
+                     where t.id = ? and a.id = ? and t.tenant_id = ?
+                     """)) {
+                assertThat(latestSuccessfulMigration(connection)).isEqualTo("102");
+                snapshot.setLong(1, taskId);
+                snapshot.setLong(2, attemptId);
+                snapshot.setLong(3, tenantId);
+                try (ResultSet rows = snapshot.executeQuery()) {
+                    assertThat(rows.next()).as("Existing task, attempt and policy survive the additive migration").isTrue();
+                    for (int column = 1; column <= 3; column++) assertThat(rows.getObject(column)).isNull();
+                }
             }
         } finally {
             cleanup(url, username, password, tenantId, taskId, attemptId);

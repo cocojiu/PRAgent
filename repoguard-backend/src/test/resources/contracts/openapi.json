@@ -12941,6 +12941,50 @@
           },
           "estimatedCost" : {
             "type" : "string"
+          },
+          "costSnapshot" : {
+            "$ref" : "#/components/schemas/LlmUsageCostSnapshot"
+          }
+        }
+      },
+      "LlmUsageCostSnapshot" : {
+        "type" : "object",
+        "x-java-type" : "LlmUsageCostSnapshot",
+        "properties" : {
+          "cachedInputTokens" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "normalInputTokens" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "usageSource" : {
+            "type" : "string"
+          },
+          "costSource" : {
+            "type" : "string"
+          },
+          "pricingVersion" : {
+            "type" : "string"
+          },
+          "currency" : {
+            "type" : "string"
+          },
+          "priceSource" : {
+            "type" : "string"
+          },
+          "inputTokenPricePerMillion" : {
+            "type" : "number"
+          },
+          "outputTokenPricePerMillion" : {
+            "type" : "number"
+          },
+          "cachedInputTokenPricePerMillion" : {
+            "type" : "number"
+          },
+          "estimatedAmount" : {
+            "type" : "number"
           }
         }
       },
@@ -14749,6 +14793,9 @@
           },
           "secretStatus" : {
             "type" : "string"
+          },
+          "cachedInputTokenPricePerMillion" : {
+            "type" : "number"
           }
         }
       },
@@ -14833,6 +14880,11 @@
             "maximum" : 9999.0000
           },
           "outputTokenPricePerMillion" : {
+            "type" : "number",
+            "minimum" : 0.0000,
+            "maximum" : 9999.0000
+          },
+          "cachedInputTokenPricePerMillion" : {
             "type" : "number",
             "minimum" : 0.0000,
             "maximum" : 9999.0000
@@ -15818,6 +15870,9 @@
           },
           "costSource" : {
             "type" : "string"
+          },
+          "costSnapshot" : {
+            "$ref" : "#/components/schemas/LlmUsageCostSnapshot"
           }
         },
         "required" : [ "totalTokens" ]

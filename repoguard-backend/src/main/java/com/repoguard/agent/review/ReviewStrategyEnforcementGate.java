@@ -35,7 +35,7 @@ final class ReviewStrategyEnforcementGate {
             result.llmCompletionTokens(),
             result.llmTotalTokens(),
             result.llmEstimatedCost(),
-            result.executionProvenance()
+            result.executionProvenance(), result.costSnapshot()
         );
     }
 

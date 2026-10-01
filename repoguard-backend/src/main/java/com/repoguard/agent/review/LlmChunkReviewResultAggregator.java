@@ -1,4 +1,5 @@
 package com.repoguard.agent.review;
+import com.repoguard.agent.dto.LlmUsageCostSnapshot;
 
 import com.repoguard.agent.review.ReviewPolicySettings;
 import java.util.ArrayList;
@@ -49,6 +50,7 @@ final class LlmChunkReviewResultAggregator {
             ReviewResult.completed("INFO", aggregation.findings()),
             null
         );
+        LlmUsageCostSnapshot snapshot = costEstimator.snapshot(settings, aggregation.usage(), aggregation.failedChunks() > 0);
         return ReviewResult.completed(
             finalized.riskLevel(),
             finalized.findings(),
@@ -65,15 +67,11 @@ final class LlmChunkReviewResultAggregator {
                 promptContext,
                 aggregation.verificationSummary()
             ),
-            zeroToNull(aggregation.promptTokens()),
-            zeroToNull(aggregation.completionTokens()),
-            zeroToNull(aggregation.totalTokens()),
-            costEstimator.estimate(
-                settings,
-                zeroToNull(aggregation.promptTokens()),
-                zeroToNull(aggregation.completionTokens())
-            )
-        ).withStatusDetail(aggregation.failureDetail());
+            aggregation.usage() == null ? null : aggregation.usage().promptTokens(),
+            aggregation.usage() == null ? null : aggregation.usage().completionTokens(),
+            aggregation.usage() == null ? null : aggregation.usage().totalTokens(),
+            snapshot.estimatedAmount()
+        ).withCostSnapshot(snapshot).withStatusDetail(aggregation.failureDetail());
     }
 
     private ChunkAggregation addOutcome(
@@ -90,16 +88,10 @@ final class LlmChunkReviewResultAggregator {
             );
     }
 
-    private Integer zeroToNull(int value) {
-        return value <= 0 ? null : value;
-    }
-
     private record ChunkAggregation(
         String riskLevel,
         List<ReviewFindingResult> findings,
-        int promptTokens,
-        int completionTokens,
-        int totalTokens,
+        LlmCallResult usage,
         int failedChunks,
         LlmVerificationSummary verificationSummary,
         List<String> failureCategories
@@ -108,9 +100,7 @@ final class LlmChunkReviewResultAggregator {
             return new ChunkAggregation(
                 "INFO",
                 new ArrayList<>(),
-                0,
-                0,
-                0,
+                null,
                 0,
                 LlmVerificationSummary.empty(),
                 List.of()
@@ -130,9 +120,7 @@ final class LlmChunkReviewResultAggregator {
             return new ChunkAggregation(
                 reviewMerger.maxRisk(riskLevel, parsed.riskLevel()),
                 nextFindings,
-                promptTokens + safeInt(callResult.promptTokens()),
-                completionTokens + safeInt(callResult.completionTokens()),
-                totalTokens + safeInt(callResult.totalTokens()),
+                LlmCallResult.combine(usage, callResult),
                 failedChunks,
                 verificationSummary.add(verification),
                 failureCategories
@@ -153,9 +141,7 @@ final class LlmChunkReviewResultAggregator {
             return new ChunkAggregation(
                 reviewMerger.maxRisk(riskLevel, ruleReview.riskLevel()),
                 nextFindings,
-                promptTokens,
-                completionTokens,
-                totalTokens,
+                usage,
                 failedChunks + 1,
                 verificationSummary,
                 List.copyOf(nextFailureCategories)
@@ -172,8 +158,5 @@ final class LlmChunkReviewResultAggregator {
             return categories.isEmpty() ? null : "llmFailureCategories=" + String.join(",", categories);
         }
 
-        private static int safeInt(Integer value) {
-            return value == null ? 0 : value;
-        }
     }
 }

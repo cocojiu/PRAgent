@@ -55,6 +55,7 @@ const reviewDetailSchemaAliases = new Map([
   ["HumanReviewRequest", "HumanReviewRequest"],
   ["HumanReviewResponse", "HumanReviewResponse"],
   ["LlmStatusDto", "LlmStatus"],
+  ["LlmUsageCostSnapshot", "LlmUsageCostSnapshot"],
   ["MissingTestDto", "MissingTest"],
   ["PrReviewSummaryDto", "PrReviewSummary"],
   ["PrRiskFileDto", "PrRiskFile"],

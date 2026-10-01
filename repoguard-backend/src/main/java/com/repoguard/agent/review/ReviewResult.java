@@ -1,4 +1,5 @@
 package com.repoguard.agent.review;
+import com.repoguard.agent.dto.LlmUsageCostSnapshot;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -17,8 +18,24 @@ public record ReviewResult(
     Integer llmCompletionTokens,
     Integer llmTotalTokens,
     BigDecimal llmEstimatedCost,
-    ReviewExecutionProvenance executionProvenance
+    ReviewExecutionProvenance executionProvenance,
+    LlmUsageCostSnapshot costSnapshot
 ) {
+
+    public ReviewResult(String riskLevel, String llmStatus, String statusDetail, List<ReviewFindingResult> findings,
+        String llmProvider, String llmModel, Integer llmDurationMs, String llmParseStatus, String llmPromptSummary,
+        Integer llmPromptTokens, Integer llmCompletionTokens, Integer llmTotalTokens, BigDecimal llmEstimatedCost,
+        ReviewExecutionProvenance executionProvenance) {
+        this(riskLevel, llmStatus, statusDetail, findings, llmProvider, llmModel, llmDurationMs, llmParseStatus,
+            llmPromptSummary, llmPromptTokens, llmCompletionTokens, llmTotalTokens, llmEstimatedCost,
+            executionProvenance, null);
+    }
+
+    public ReviewResult withCostSnapshot(LlmUsageCostSnapshot snapshot) {
+        return new ReviewResult(riskLevel, llmStatus, statusDetail, findings, llmProvider, llmModel, llmDurationMs,
+            llmParseStatus, llmPromptSummary, llmPromptTokens, llmCompletionTokens, llmTotalTokens, llmEstimatedCost,
+            executionProvenance, snapshot);
+    }
 
     public ReviewResult {
         executionProvenance = executionProvenance == null
@@ -215,7 +232,8 @@ public record ReviewResult(
             llmCompletionTokens,
             llmTotalTokens,
             llmEstimatedCost,
-            executionProvenance
+            executionProvenance,
+            costSnapshot
         );
     }
 
@@ -234,7 +252,8 @@ public record ReviewResult(
             llmCompletionTokens,
             llmTotalTokens,
             llmEstimatedCost,
-            executionProvenance
+            executionProvenance,
+            costSnapshot
         );
     }
 
