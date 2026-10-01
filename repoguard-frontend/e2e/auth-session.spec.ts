@@ -147,16 +147,16 @@ test("real browser refreshes an HttpOnly-cookie session once after a full page r
   const seed = await installSeedApi(page);
   await loginFromDeepLink(page);
   await expect(page.locator("button.user")).toContainText("browser-admin");
-  await page.goto("/repoguard/users");
-  await expect(page).toHaveURL(/\/repoguard\/users$/);
+  await page.goto("/repoguard/integrations");
+  await expect(page).toHaveURL(/\/repoguard\/integrations$/);
 
   seed.expireCurrentUserOnce();
   await page.reload();
 
   await expect.poll(seed.refreshCount).toBe(1);
   expect(seed.refreshCsrfHeader()).toBe(csrfToken);
-  await expect(page).toHaveURL(/\/repoguard\/users$/);
-  await expect(page.getByText("用户管理", { exact: true }).first()).toBeVisible();
+  await expect(page).toHaveURL(/\/repoguard\/integrations$/);
+  await expect(page.getByText("集成配置", { exact: true }).first()).toBeVisible();
 });
 
 test("real browser denies a non-management user the management deep link", async ({ page }) => {
