@@ -13,6 +13,31 @@ class RuntimeRoleConditionTest {
         .withUserConfiguration(RuntimeRoleTestConfig.class, RuntimeRoleConfiguration.class);
 
     @Test
+    void sharedRateLimitCleanupRequiresDatabaseModeAndSchedulerRuntime() {
+        var cleanupContext = new ApplicationContextRunner()
+            .withUserConfiguration(
+                com.repoguard.agent.security.DatabaseRateLimitCleanupWorker.class,
+                com.repoguard.agent.security.DatabaseRateLimitCleanupBatchExecutor.class,
+                com.repoguard.agent.security.DatabaseRateLimitCleanupProperties.class)
+            .withBean(org.springframework.jdbc.core.JdbcTemplate.class,
+                () -> org.mockito.Mockito.mock(org.springframework.jdbc.core.JdbcTemplate.class))
+            .withBean(com.repoguard.agent.tenancy.TenantScheduledTaskRunner.class,
+                () -> org.mockito.Mockito.mock(com.repoguard.agent.tenancy.TenantScheduledTaskRunner.class))
+            .withBean(io.micrometer.core.instrument.MeterRegistry.class,
+                io.micrometer.core.instrument.simple.SimpleMeterRegistry::new);
+        cleanupContext.run(context -> assertThat(context)
+            .doesNotHaveBean(com.repoguard.agent.security.DatabaseRateLimitCleanupWorker.class)
+            .doesNotHaveBean(com.repoguard.agent.security.DatabaseRateLimitCleanupBatchExecutor.class));
+        cleanupContext.withPropertyValues("app.security.rate-limit-store=database", "app.runtime.role=api")
+            .run(context -> assertThat(context)
+                .doesNotHaveBean(com.repoguard.agent.security.DatabaseRateLimitCleanupWorker.class));
+        cleanupContext.withPropertyValues("app.security.rate-limit-store=database", "app.runtime.role=worker")
+            .run(context -> assertThat(context)
+                .hasSingleBean(com.repoguard.agent.security.DatabaseRateLimitCleanupWorker.class)
+                .hasSingleBean(com.repoguard.agent.security.DatabaseRateLimitCleanupBatchExecutor.class));
+    }
+
+    @Test
     void combinedRoleIsEnabledByDefault() {
         contextRunner.run(context -> {
             assertThat(context.containsBean("apiBean")).isTrue();

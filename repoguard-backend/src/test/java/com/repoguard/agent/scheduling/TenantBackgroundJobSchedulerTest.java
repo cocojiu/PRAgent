@@ -174,9 +174,10 @@ class TenantBackgroundJobSchedulerTest {
                 "ClusterCacheInvalidationPoller.java",
                 "GithubFeedbackScheduler.java",
                 "LlmModelReleaseMetricsScheduler.java",
+                "DatabaseRateLimitCleanupWorker.java",
                 "TenantBackgroundJobScheduler.java"
             );
-        assertThat(annotationCount).isEqualTo(16L);
+        assertThat(annotationCount).isEqualTo(17L);
     }
 
     private boolean containsScheduledAnnotation(Path path) {

@@ -223,6 +223,12 @@ LLM 评测与模型发布中心：
 - `monolith` 必须搭配 `combined`；`split` 必须使用 `api` + `worker`。
 - 横向扩展 API 前必须确认共享限流、数据库连接和缓存失效策略已经启用。
 
+共享限流默认使用 `local`。选择 `REPOGUARD_RATE_LIMIT_STORE=database` 时，认证请求仅在同一事务中递增和读取当前窗口计数；数据库或提交失败仍拒绝请求。过期窗口由 `worker`/`combined` 的全局租约任务清理，API 角色不执行清理。
+
+后台清理默认每60秒运行，每批500行、每轮最多10批；只删除早于当前分钟减2的窗口。`REPOGUARD_RATE_LIMIT_CLEANUP_ENABLED=false` 可停止清理。`REPOGUARD_RATE_LIMIT_CLEANUP_INTERVAL_MS`、`REPOGUARD_RATE_LIMIT_CLEANUP_BATCH_SIZE`、`REPOGUARD_RATE_LIMIT_CLEANUP_MAX_BATCHES_PER_RUN` 和 `REPOGUARD_RATE_LIMIT_CLEANUP_MAX_RUN_MS` 可调整间隔和预算。默认3秒预算用于停止启动新批次，每条删除语句及事务另有2秒超时；它不是整轮执行的硬截止时间。
+
+观测 `repoguard.security.shared_rate_limit.cleanup.deleted_rows`、`cleanup.backlog`、`cleanup.failed` 及 `cleanup.duration`。`backlog` 记录触及批数/时间上限的轮次，不表示剩余行数。清理失败不改变有效计数，认证计数失败仍记录 `repoguard.security.shared_rate_limit.fail_closed`。
+
 ## 本地日志观测
 
 本地可以使用 Loki、Alloy 和 Grafana 查看 RepoGuard 日志。管理员密码只在当前 Shell 中临时设置，不要写入 README 或仓库文件：

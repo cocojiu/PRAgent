@@ -30,21 +30,17 @@ public class DatabaseRateLimitWindowStore {
     private static final String HMAC_ALGORITHM = "HmacSHA256";
     private static final byte[] KEY_DOMAIN = "repoguard:shared-rate-limit:v1\0"
         .getBytes(StandardCharsets.UTF_8);
-    private static final long RETAINED_WINDOWS = 2L;
     private static final String ACQUIRE_DURATION = "repoguard.security.shared_rate_limit.acquire.duration";
     private static final String DATABASE_DURATION =
         "repoguard.security.shared_rate_limit.database.operation.duration";
     private static final String DATABASE_FAILURES =
         "repoguard.security.shared_rate_limit.database.failures";
     private static final String FAIL_CLOSED = "repoguard.security.shared_rate_limit.fail_closed";
-    private static final String CLEANUP_DELETED_ROWS =
-        "repoguard.security.shared_rate_limit.cleanup.deleted_rows";
 
     private final JdbcTemplate jdbcTemplate;
     private final MeterRegistry meterRegistry;
     private final TransactionOperations transactionOperations;
     private final SecretKeySpec keySecret;
-    private final AtomicLong lastCleanupMinute = new AtomicLong(Long.MIN_VALUE);
     private final AtomicLong lastFailureLogMinute = new AtomicLong(Long.MIN_VALUE);
 
     @Autowired
@@ -100,15 +96,12 @@ public class DatabaseRateLimitWindowStore {
         Timer.Sample sample = Timer.start(meterRegistry);
         String outcome = "fail_closed";
         try {
-            Long count = transactionOperations.execute(status -> {
-                Long acquiredCount = observeDatabaseOperation("acquire", () -> incrementAndRead(
+            Long count = transactionOperations.execute(status ->
+                observeDatabaseOperation("acquire", () -> incrementAndRead(
                     normalizedScope,
                     bucketKey,
                     windowEpochMinute
-                ));
-                cleanupExpiredWindows(windowEpochMinute);
-                return acquiredCount;
-            });
+                )));
             if (count == null) {
                 throw new IllegalStateException("Shared rate-limit transaction returned no count");
             }
@@ -153,26 +146,6 @@ public class DatabaseRateLimitWindowStore {
             throw new IllegalStateException("Shared rate-limit count query returned no value");
         }
         return count;
-    }
-
-    private void cleanupExpiredWindows(long currentMinute) {
-        long previousCleanup = lastCleanupMinute.get();
-        if (previousCleanup >= currentMinute || !lastCleanupMinute.compareAndSet(previousCleanup, currentMinute)) {
-            return;
-        }
-        try {
-            int deletedRows = observeDatabaseOperation(
-                "cleanup",
-                () -> jdbcTemplate.update(
-                    "DELETE FROM api_rate_limit_window WHERE window_epoch_minute < ?",
-                    currentMinute - RETAINED_WINDOWS
-                )
-            );
-            meterRegistry.counter(CLEANUP_DELETED_ROWS).increment(deletedRows);
-        } catch (RuntimeException ex) {
-            lastCleanupMinute.compareAndSet(currentMinute, previousCleanup);
-            throw ex;
-        }
     }
 
     private <T> T observeDatabaseOperation(String operation, Supplier<T> supplier) {

@@ -320,6 +320,12 @@ app:
       instance-count: ${REPOGUARD_API_INSTANCE_COUNT:}
   security:
     rate-limit-store: ${REPOGUARD_RATE_LIMIT_STORE:local}
+    rate-limit-cleanup:
+      enabled: ${REPOGUARD_RATE_LIMIT_CLEANUP_ENABLED:true}
+      interval-ms: ${REPOGUARD_RATE_LIMIT_CLEANUP_INTERVAL_MS:60000}
+      batch-size: ${REPOGUARD_RATE_LIMIT_CLEANUP_BATCH_SIZE:500}
+      max-batches-per-run: ${REPOGUARD_RATE_LIMIT_CLEANUP_MAX_BATCHES_PER_RUN:10}
+      max-run-ms: ${REPOGUARD_RATE_LIMIT_CLEANUP_MAX_RUN_MS:3000}
     admin-api-key:
       enabled: ${REPOGUARD_ADMIN_API_KEY_ENABLED:true}
       key: ${REPOGUARD_ADMIN_API_KEY:}
