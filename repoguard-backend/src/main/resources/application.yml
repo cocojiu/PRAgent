@@ -302,6 +302,7 @@ repoguard:
   workflow:
     human-review-sla-minutes: ${REPOGUARD_HUMAN_REVIEW_SLA_MINUTES:120}
     escalation-limit: ${REPOGUARD_HUMAN_REVIEW_ESCALATION_LIMIT:3}
+    escalation-interval-minutes: ${REPOGUARD_HUMAN_REVIEW_ESCALATION_INTERVAL_MINUTES:30}
   sarif-export:
     max-findings: ${REPOGUARD_SARIF_EXPORT_MAX_FINDINGS:10000}
     max-document-bytes: ${REPOGUARD_SARIF_EXPORT_MAX_DOCUMENT_BYTES:8388608}

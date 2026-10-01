@@ -9,6 +9,7 @@ public class ReviewWorkflowProperties {
 
     private int humanReviewSlaMinutes = 120;
     private int escalationLimit = 3;
+    private int escalationIntervalMinutes = 30;
 
     public int getHumanReviewSlaMinutes() {
         return humanReviewSlaMinutes;
@@ -30,5 +31,16 @@ public class ReviewWorkflowProperties {
             throw new IllegalArgumentException("escalationLimit must be between 1 and 10");
         }
         escalationLimit = value;
+    }
+
+    public int getEscalationIntervalMinutes() {
+        return escalationIntervalMinutes;
+    }
+
+    public void setEscalationIntervalMinutes(int value) {
+        if (value < 1 || value > 10080) {
+            throw new IllegalArgumentException("escalationIntervalMinutes must be between 1 and 10080");
+        }
+        escalationIntervalMinutes = value;
     }
 }

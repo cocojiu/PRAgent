@@ -106,21 +106,26 @@ public class ReviewWorkflowServiceImpl implements ReviewWorkflowService {
     @Transactional
     public ReviewEscalationResponse escalateOverdue() {
         LocalDateTime now = LocalDateTime.now();
+        LocalDateTime cooldownBefore = now.minusMinutes(properties.getEscalationIntervalMinutes());
+        int limit = properties.getEscalationLimit();
         List<ReviewTask> tasks = reviewTaskMapper.selectList(new QueryWrapper<ReviewTask>()
             .eq("status", PENDING_HUMAN_REVIEW)
+            .eq("human_review_status", "PENDING")
             .isNotNull("review_sla_deadline")
             .le("review_sla_deadline", now)
-            .orderByAsc("review_sla_deadline")
+            .lt("review_escalation_level", limit)
+            .and(query -> query.isNull("review_last_escalated_at").or().le("review_last_escalated_at", cooldownBefore))
+            .orderByAsc("review_sla_deadline", "id")
             .last("limit 100"));
         int escalated = 0;
         int skipped = 0;
         for (ReviewTask task : tasks) {
             int level = task.getReviewEscalationLevel() == null ? 0 : task.getReviewEscalationLevel();
-            if (level >= properties.getEscalationLimit()) {
+            if (level >= limit) {
                 skipped++;
                 continue;
             }
-            if (transitionStore.escalateHumanReview(task, level, now)) {
+            if (transitionStore.escalateHumanReview(task, level, now, cooldownBefore, limit)) {
                 task.setReviewEscalationLevel(level + 1);
                 task.setReviewLastEscalatedAt(now);
                 escalated++;
