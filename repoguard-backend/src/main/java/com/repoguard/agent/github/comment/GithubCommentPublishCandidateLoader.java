@@ -17,7 +17,6 @@ import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.review.PrReviewSummaryBuilder;
 import com.repoguard.agent.review.ReviewFindingProjectionAssembler;
 import com.repoguard.agent.review.ReviewRiskProfileBuilder;
-import com.repoguard.agent.review.FindingFeedbackStatus;
 import com.repoguard.agent.github.comment.GithubCommentPreviewPublicationLoader.GithubCommentPreviewPublicationData;
 import com.repoguard.agent.review.task.ReviewFailureSummaryResolver.ReviewFailureSummary;
 import com.repoguard.agent.review.task.ReviewTaskListItemAssembler;
@@ -28,6 +27,8 @@ import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 @Component
@@ -62,6 +63,7 @@ public class GithubCommentPublishCandidateLoader {
         this.reviewSummaryBuilder = Objects.requireNonNull(reviewSummaryBuilder, "reviewSummaryBuilder");
     }
 
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public GithubCommentPublishCandidateOverview loadOverview(ReviewTask task) {
         Long taskId = task.getId();
         GithubCommentPreviewFindingStat findingStat = ReviewFindingProjectionAssembler.toDto(
@@ -69,11 +71,13 @@ public class GithubCommentPublishCandidateLoader {
         );
         long totalFindings = findingStat == null ? 0L : findingStat.totalFindingsOrZero();
         GithubCommentPublication prSummaryPublication = previewPublicationLoader.loadPrSummaryPublication(taskId);
-        List<ReviewFinding> persistingFindings = loadPersistingFindings(taskId);
+        long persistingTotal = reviewFindingMapper.countCommentablePersistingFindings(taskId);
+        List<ReviewFinding> persistingFindings = persistingTotal == 0 ? List.of()
+            : reviewFindingMapper.selectCommentablePersistingSummary(taskId);
         GithubCommentPreviewItem prSummaryCandidate = published(prSummaryPublication)
             ? null
             : previewItemBuilder.buildPrSummaryItem(
-                buildPrSummary(task, totalFindings, persistingFindings),
+                buildPrSummary(task, totalFindings, persistingTotal, persistingFindings),
                 prSummaryPublication
             );
         return new GithubCommentPublishCandidateOverview(safeInt(totalFindings), prSummaryCandidate);
@@ -109,6 +113,7 @@ public class GithubCommentPublishCandidateLoader {
     private PrReviewSummaryDto buildPrSummary(
         ReviewTask task,
         long totalFindings,
+        long persistingTotal,
         List<ReviewFinding> persistingFindings
     ) {
         Long taskId = task.getId();
@@ -136,29 +141,12 @@ public class GithubCommentPublishCandidateLoader {
             missingTestTotal,
             changedFileTotal
         );
-        return appendPersistingSummary(summary, persistingFindings);
-    }
-
-    private List<ReviewFinding> loadPersistingFindings(Long taskId) {
-        List<ReviewFinding> findings = reviewFindingMapper.selectList(
-            new LambdaQueryWrapper<ReviewFinding>()
-                .eq(ReviewFinding::getTaskId, taskId)
-                .eq(ReviewFinding::getCurrentAttempt, true)
-                .eq(ReviewFinding::getCategory, "FINDING")
-                .eq(ReviewFinding::getComparisonStatus, "PERSISTING")
-                .orderByAsc(ReviewFinding::getId)
-        );
-        if (findings == null || findings.isEmpty()) {
-            return List.of();
-        }
-        return findings.stream()
-            .filter(finding -> FindingFeedbackStatus.fromFinding(finding).commentable())
-            .filter(finding -> !"OBSERVE".equalsIgnoreCase(finding.getEnforcementMode()))
-            .toList();
+        return appendPersistingSummary(summary, persistingTotal, persistingFindings);
     }
 
     private PrReviewSummaryDto appendPersistingSummary(
         PrReviewSummaryDto summary,
+        long persistingTotal,
         List<ReviewFinding> persistingFindings
     ) {
         if (summary == null || persistingFindings == null || persistingFindings.isEmpty()) {
@@ -166,15 +154,15 @@ public class GithubCommentPublishCandidateLoader {
         }
         StringBuilder body = new StringBuilder(summary.githubCommentBody());
         body.append("\n\n**持续问题汇总**\n仍有 ")
-            .append(persistingFindings.size())
+            .append(persistingTotal)
             .append(" 条问题与上一轮相同，本次不逐条重复评论：");
         persistingFindings.stream().limit(20).forEach(finding -> body
             .append("\n- `")
             .append(location(finding))
             .append("` ")
             .append(summaryText(finding.getMessage())));
-        if (persistingFindings.size() > 20) {
-            body.append("\n- 其余 ").append(persistingFindings.size() - 20).append(" 条持续问题已折叠");
+        if (persistingTotal > persistingFindings.size()) {
+            body.append("\n- 其余 ").append(persistingTotal - persistingFindings.size()).append(" 条持续问题已折叠");
         }
         return new PrReviewSummaryDto(
             summary.overallRisk(),
