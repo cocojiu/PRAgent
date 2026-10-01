@@ -168,17 +168,17 @@ export const promoteLlmModelRelease = (payload: LlmModelReleaseRequest) =>
 export const createLlmEvaluationReport = (payload: LlmEvaluationRequest) =>
   apiRequest("createLlmEvaluationReport", payload);
 
-export const startLlmEvaluationRun = (payload: LlmEvaluationRunRequest) =>
-  apiRequest("startLlmEvaluationRun", payload);
+export const startLlmEvaluationRun = (payload: LlmEvaluationRunRequest, options?: ApiRequestOptions) =>
+  apiRequest("startLlmEvaluationRun", payload, options);
 
-export const fetchLlmEvaluationRun = (runId: string) =>
-  apiRequest("fetchLlmEvaluationRun", { runId });
+export const fetchLlmEvaluationRun = (runId: string, options?: ApiRequestOptions) =>
+  apiRequest("fetchLlmEvaluationRun", { runId }, options);
 
-export const cancelLlmEvaluationRun = (runId: string) =>
-  apiRequest("cancelLlmEvaluationRun", { runId });
+export const cancelLlmEvaluationRun = (runId: string, options?: ApiRequestOptions) =>
+  apiRequest("cancelLlmEvaluationRun", { runId }, options);
 
-export const fetchLlmEvaluationReports = (limit = 30) =>
-  apiRequest("fetchLlmEvaluationReports", { limit });
+export const fetchLlmEvaluationReports = (limit = 30, options?: ApiRequestOptions) =>
+  apiRequest("fetchLlmEvaluationReports", { limit }, options);
 
 export const fetchLlmEvaluationReport = (reportId: number) =>
   apiRequest("fetchLlmEvaluationReport", { reportId });
