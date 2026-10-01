@@ -19,7 +19,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
  * Exercises the supported rolling-upgrade path against a real MySQL instance.
  *
  * <p>The test is opt-in because local unit-test runs do not provision a database. CI enables it
- * with an isolated database and verifies the V76 expand state through the V100 notification risk index.
+ * with an isolated database and verifies the V76 expand state through the V101 history cursor index.
  */
 @EnabledIfEnvironmentVariable(named = "REPOGUARD_RUN_INTEGRATION_TESTS", matches = "true")
 class FlywayMigrationUpgradePathIntegrationTest {
@@ -303,6 +303,12 @@ class FlywayMigrationUpgradePathIntegrationTest {
                     assertThat(rows.getString(1)).isEqualTo("tenant_id,assessment_status,risk_level,created_at,id");
                 }
             }
+            migrateTo(url, username, password, "101");
+            try (Connection connection = open(url, username, password)) {
+                assertThat(latestSuccessfulMigration(connection)).isEqualTo("101");
+                assertThat(indexColumnNames(connection, "github_comment_publication_batch_item",
+                    "idx_github_comment_item_tenant_task_batch_id")).isEqualTo("tenant_id,task_id,batch_id,id");
+            }
         } finally {
             cleanup(url, username, password, tenantId, taskId, attemptId);
         }
@@ -564,6 +570,20 @@ class FlywayMigrationUpgradePathIntegrationTest {
                 return result.getInt("non_unique") == 0
                     ? result.getInt("column_count")
                     : 0;
+            }
+        }
+    }
+
+    private String indexColumnNames(Connection connection, String table, String index) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+            select group_concat(column_name order by seq_in_index) from information_schema.statistics
+            where table_schema = database() and table_name = ? and index_name = ?
+            """)) {
+            statement.setString(1, table);
+            statement.setString(2, index);
+            try (ResultSet result = statement.executeQuery()) {
+                assertThat(result.next()).isTrue();
+                return result.getString(1);
             }
         }
     }

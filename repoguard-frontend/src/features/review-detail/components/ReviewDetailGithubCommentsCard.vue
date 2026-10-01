@@ -198,10 +198,21 @@
             <span v-if="batch.nextRetryAt">下次重试：{{ formatDateTime(batch.nextRetryAt) }}</span>
             <span v-if="batch.lastError">{{ batch.lastError }}</span>
           </div>
-          <div class="comment-history-items">
+          <el-button text @click="$emit('historyBatchToggle', batch.batchId)">
+            {{ historyItems?.[batch.batchId]?.expanded ? "收起明细" : "查看明细" }}
+            （{{ batch.itemsTotal ?? batch.items.length }} 条）
+          </el-button>
+          <div v-if="historyItems?.[batch.batchId]?.expanded" v-loading="historyItems[batch.batchId]?.loading" class="comment-history-items">
+            <el-alert
+              v-if="historyItems[batch.batchId]?.error"
+              type="warning"
+              :title="historyItems[batch.batchId]?.error"
+              :closable="false"
+              show-icon
+            />
             <div
-              v-for="item in batch.items"
-              :key="`${batch.batchId}-${item.findingId}-${item.status}`"
+              v-for="(item, index) in historyItems[batch.batchId]?.items ?? []"
+              :key="`${batch.batchId}-${historyItems[batch.batchId]?.page}-${index}`"
               :class="['comment-history-item', publicationItemStatusClass(item.status)]"
             >
               <div>
@@ -215,6 +226,18 @@
               </div>
               <a v-if="item.url" :href="item.url" target="_blank" rel="noopener noreferrer">查看 GitHub 评论</a>
             </div>
+            <el-empty v-if="!historyItems[batch.batchId]?.loading && !historyItems[batch.batchId]?.error && !historyItems[batch.batchId]?.items.length" description="暂无批次明细" />
+            <div class="comment-history-counts">
+              <span>第 {{ historyItems[batch.batchId]?.page }} 页，共 {{ historyItems[batch.batchId]?.total }} 条</span>
+              <el-button
+                :disabled="historyItems[batch.batchId]?.loading || (historyItems[batch.batchId]?.page ?? 1) <= 1"
+                @click="$emit('historyItemsPageChange', batch.batchId, 'previous')"
+              >上一页</el-button>
+              <el-button
+                :disabled="historyItems[batch.batchId]?.loading || !historyItems[batch.batchId]?.hasMore"
+                @click="$emit('historyItemsPageChange', batch.batchId, 'next')"
+              >下一页</el-button>
+            </div>
           </div>
         </section>
       </div>
@@ -227,7 +250,7 @@
         :total="historyTotal"
         @current-change="$emit('historyPageChange', $event)"
       />
-      <el-empty v-else-if="!historyError" description="暂无回写历史" />
+      <el-empty v-else-if="!historyError && !publicationHistoryBatches.length" description="暂无回写历史" />
     </template>
     <el-empty v-else-if="!previewError" description="评论预览尚未加载">
       <el-button
@@ -248,6 +271,7 @@ import { computed, watch } from "vue";
 import Github from "@/components/icons/GithubIcon.vue";
 import { RouterLink } from "vue-router";
 import { formatDateTime } from "@/utils/dateTime";
+import type { GithubCommentHistoryItemsState } from "../composables/useGithubCommentHistoryItems";
 import {
   COMMENT_BODY_PREVIEW_CHARS,
   boundedDetailItems,
@@ -279,6 +303,7 @@ const props = defineProps<{
   historyPage: number;
   historyPageSize: number;
   historyTotal: number;
+  historyItems?: Record<number, GithubCommentHistoryItemsState>;
   previewCommentableOnly: boolean;
   githubCommentPreview: GithubCommentPreview | null;
   githubCommentPublishResult: GithubCommentPublish | null;
@@ -304,6 +329,8 @@ const props = defineProps<{
 defineEmits<{
   loadPreview: [];
   historyPageChange: [page: number];
+  historyBatchToggle: [batchId: number];
+  historyItemsPageChange: [batchId: number, direction: "next" | "previous"];
   previewCommentableOnlyChange: [value: boolean];
   previewPageChange: [page: number];
   publish: [];

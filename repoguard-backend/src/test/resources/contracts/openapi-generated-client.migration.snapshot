@@ -31,7 +31,9 @@ fetchEnterpriseTenants -> enterpriseTenantControllerList // GET /api/v1/enterpri
 fetchFeedbackSummary -> feedbackSummaryControllerSummary // GET /api/v1/config/feedback-summary
 fetchGithubChecksSetup -> systemConfigControllerGetGithubChecksSetup // GET /api/v1/config/integrations/github/checks
 fetchGithubCommentPreview -> reviewControllerGetGithubCommentPreview // GET /api/v1/reviews/{id}/github-comments/preview
+fetchGithubCommentPublicationBatches -> githubCommentHistoryControllerGetBatches // GET /api/v1/reviews/{taskId}/github-comments/publications/batches
 fetchGithubCommentPublicationHistory -> reviewControllerGetGithubCommentPublicationHistory // GET /api/v1/reviews/{id}/github-comments/publications
+fetchGithubCommentPublicationItems -> githubCommentHistoryControllerGetItems // GET /api/v1/reviews/{taskId}/github-comments/publications/{batchId}/items
 fetchGithubFeedback -> githubFeedbackControllerDiagnostics // GET /api/v1/github/feedback-events
 fetchGithubIntegrationConfig -> systemConfigControllerGetGithubIntegration // GET /api/v1/config/integrations/github
 fetchGithubPullRequestOptions -> reviewControllerListConfiguredGithubPullRequests // GET /api/v1/reviews/github/pull-requests

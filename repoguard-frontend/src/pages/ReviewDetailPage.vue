@@ -170,6 +170,7 @@
             :history-page="historyPage"
             :history-page-size="historyPageSize"
             :history-total="publicationHistoryTotal"
+            :history-items="historyItems"
             :preview-commentable-only="previewCommentableOnly"
             :github-comment-preview="githubCommentPreview"
             :github-comment-publish-result="githubCommentPublishResult"
@@ -192,6 +193,8 @@
             :publication-batch-status-text="publicationBatchStatusText"
             @load-preview="loadGithubCommentData"
             @history-page-change="loadGithubCommentPublicationHistoryPage"
+            @history-batch-toggle="toggleGithubCommentHistoryBatch"
+            @history-items-page-change="changeGithubCommentHistoryItemsPage"
             @preview-commentable-only-change="loadGithubCommentPreviewCommentableOnly"
             @preview-page-change="loadGithubCommentPreviewPage"
             @publish="confirmPublishGithubComments"
@@ -332,6 +335,9 @@ const {
   historyPage,
   historyPageSize,
   historyLoading,
+  historyItems,
+  toggleHistoryBatch,
+  changeHistoryItemsPage,
   loadGithubCommentPreview,
   loadGithubCommentPublicationHistory,
   previewError,
@@ -597,6 +603,16 @@ const loadGithubCommentPublicationHistoryPage = async (page: number) => {
     return;
   }
   await loadGithubCommentPublicationHistory(id, { page });
+};
+
+const toggleGithubCommentHistoryBatch = async (batchId: number) => {
+  const id = Number(route.params.id);
+  if (Number.isFinite(id) && canLoadGithubComments.value) await toggleHistoryBatch(id, batchId);
+};
+
+const changeGithubCommentHistoryItemsPage = async (batchId: number, direction: "next" | "previous") => {
+  const id = Number(route.params.id);
+  if (Number.isFinite(id) && canLoadGithubComments.value) await changeHistoryItemsPage(id, batchId, direction);
 };
 
 const { feedbackSavingId, submitFindingFeedback } = useReviewDetailFindingFeedback({

@@ -85,6 +85,19 @@ export const fetchGithubCommentPublicationHistory = (
   params?: { page?: number; pageSize?: number; status?: string }
 ) => apiRequest("fetchGithubCommentPublicationHistory", { id, ...params });
 
+export const fetchGithubCommentPublicationBatches = (
+  id: number,
+  params?: { page?: number; pageSize?: number; status?: string },
+  options?: ApiRequestOptions
+) => apiRequest("fetchGithubCommentPublicationBatches", { id, ...params }, options);
+
+export const fetchGithubCommentPublicationItems = (
+  id: number,
+  batchId: number,
+  params?: { afterId?: number; pageSize?: number },
+  options?: ApiRequestOptions
+) => apiRequest("fetchGithubCommentPublicationItems", { id, batchId, ...params }, options);
+
 export const publishGithubComments = (id: number) =>
   apiRequest("publishGithubComments", { id });
 

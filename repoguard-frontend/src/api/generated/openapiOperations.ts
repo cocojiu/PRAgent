@@ -29,6 +29,7 @@ import type {
   GithubChecksSetupStatus,
   GithubCommentPreview,
   GithubCommentPublicationHistory,
+  GithubCommentPublicationItems,
   GithubCommentPublish,
   GithubFeedbackDiagnostics,
   GithubIntegrationConfig,
@@ -277,6 +278,20 @@ export type GeneratedOpenApiOperationMap = {
     query: never;
     body: FrontendPerformanceReport;
     response: void;
+  };
+  "githubCommentHistoryControllerGetBatches": {
+    method: "GET";
+    pathParams: { taskId: number };
+    query: { page?: number; pageSize?: number; status?: string };
+    body: never;
+    response: GithubCommentPublicationHistory;
+  };
+  "githubCommentHistoryControllerGetItems": {
+    method: "GET";
+    pathParams: { batchId: number; taskId: number };
+    query: { afterId?: number; pageSize?: number };
+    body: never;
+    response: GithubCommentPublicationItems;
   };
   "githubFeedbackControllerDiagnostics": {
     method: "GET";
@@ -1190,6 +1205,22 @@ export const generatedOpenApiOperations = {
     queryParamNames: [],
     hasRequestBody: true,
     requestBodyRequired: true
+  },
+  "githubCommentHistoryControllerGetBatches": {
+    method: "GET",
+    path: "/api/v1/reviews/{taskId}/github-comments/publications/batches",
+    pathParamNames: ["taskId"],
+    queryParamNames: ["page", "pageSize", "status"],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "githubCommentHistoryControllerGetItems": {
+    method: "GET",
+    path: "/api/v1/reviews/{taskId}/github-comments/publications/{batchId}/items",
+    pathParamNames: ["batchId", "taskId"],
+    queryParamNames: ["afterId", "pageSize"],
+    hasRequestBody: false,
+    requestBodyRequired: false
   },
   "githubFeedbackControllerDiagnostics": {
     method: "GET",

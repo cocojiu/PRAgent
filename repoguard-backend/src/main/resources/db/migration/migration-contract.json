@@ -7,7 +7,7 @@
     "externalDatabaseSupported": true,
     "publishedMigrationPolicy": "IMMUTABLE",
     "newInstallationStrategy": "VALIDATED_SCHEMA_SNAPSHOT_THEN_BASELINE",
-    "candidateVersion": 100,
+    "candidateVersion": 101,
     "requiredEvidence": [
       "empty database migration to the candidate version",
       "schema structure diff against the supported production shape",
@@ -16,9 +16,9 @@
     ],
     "decisionEvidence": [
       "application-prod.yml requires an externally supplied datasource",
-      "FlywayMigrationUpgradePathIntegrationTest verifies the supported incremental upgrade path through V100"
+      "FlywayMigrationUpgradePathIntegrationTest verifies the supported incremental upgrade path through V101"
     ],
-    "reconsiderWhen": "A V100 schema snapshot and all required rehearsal evidence are versioned together.",
+    "reconsiderWhen": "A V101 schema snapshot and all required rehearsal evidence are versioned together.",
     "rollbackStrategy": "restore a validated backup and apply a forward fix; never rewrite or delete a published migration"
   },
   "defaults": {
@@ -363,6 +363,18 @@
       "nMinusOneCompatible": true,
       "interruptedRecovery": "inspect Flyway and index state before retrying; repair only after verifying the additive index",
       "rollbackStrategy": "roll back application and retain additive index; use a reviewed forward fix"
+    },
+    {
+      "version": 101,
+      "file": "V101__github_comment_history_cursor_index.sql",
+      "phase": "EXPAND",
+      "estimatedRows": "existing comment history items; additive tenant/task/batch cursor index only",
+      "lockType": "metadata and online secondary-index creation; inspect existing table size before production migration",
+      "maxDurationSeconds": 900,
+      "maxDiskMegabytes": 1024,
+      "nMinusOneCompatible": true,
+      "interruptedRecovery": "inspect Flyway and index state before retrying; repair only after checking the additive index",
+      "rollbackStrategy": "roll back application and retain the cursor index; use a reviewed forward fix"
     }
   ]
 }

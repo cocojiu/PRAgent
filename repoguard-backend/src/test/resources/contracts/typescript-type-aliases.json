@@ -1,4 +1,5 @@
 {
+  "GithubCommentPublicationItemsResponse": "GithubCommentPublicationItems",
   "CiSarifSetupDto": "CiSarifSetup",
   "CiSarifCredentialResponse": "CiSarifCredential",
   "AuthCurrentUserDto": "CurrentUser",

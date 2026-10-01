@@ -365,7 +365,7 @@ const installWorkflowSeedApi = async (page: Page) => {
       return;
     }
 
-    if (path === `/api/v1/reviews/${alphaTaskId}/github-comments/publications`) {
+    if (path === `/api/v1/reviews/${alphaTaskId}/github-comments/publications/batches`) {
       requireContract(route, "GET");
       await fulfillJson(route, {
         taskId: alphaTaskId,
@@ -382,16 +382,26 @@ const installWorkflowSeedApi = async (page: Page) => {
           skippedCount: 0,
           createdAt: "2026-08-31 08:06:00",
           completedAt: "2026-08-31 08:06:01",
-          items: [{
-            findingId: 9001,
-            file: "src/TenantBoundary.java",
-            line: 41,
-            targetType: "line",
-            success: true,
-            status: "published",
-            message: "评论已发布"
-          }]
+          itemsTotal: 1,
+          hasMore: false,
+          items: []
         }] : []
+      });
+      return;
+    }
+
+    if (path === `/api/v1/reviews/${alphaTaskId}/github-comments/publications/7001/items`) {
+      requireContract(route, "GET");
+      await fulfillJson(route, {
+        taskId: alphaTaskId,
+        batchId: 7001,
+        total: 1,
+        pageSize: 20,
+        afterId: 0,
+        hasMore: false,
+        nextAfterId: null,
+        items: [{ id: 8001, findingId: 9001, file: "src/TenantBoundary.java", line: 41,
+          targetType: "line", success: true, status: "published", message: "评论已发布" }]
       });
       return;
     }
@@ -568,5 +578,10 @@ test("human approval is single-submit and unlocks GitHub preview and publication
   await expect.poll(() => seed.state.publishPosts).toBe(1);
   await expect(page.getByText("回写历史", { exact: true })).toBeVisible();
   await expect(page.getByText("评论已发布", { exact: true }).first()).toBeVisible();
+  await page.getByRole("button", { name: /查看明细/ }).click();
+  await expect(page.getByText("第 1 页，共 1 条", { exact: true })).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath("github-history-expanded.png"), fullPage: true });
+  await page.getByRole("button", { name: /收起明细/ }).click();
+  await expect(page.getByText("第 1 页，共 1 条", { exact: true })).toHaveCount(0);
   expect(seed.state.contractViolations).toEqual([]);
 });

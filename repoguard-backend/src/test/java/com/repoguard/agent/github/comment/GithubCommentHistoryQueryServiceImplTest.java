@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -17,6 +19,8 @@ import com.repoguard.agent.mapper.GithubCommentPublicationBatchMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 
 class GithubCommentHistoryQueryServiceImplTest {
@@ -94,6 +98,82 @@ class GithubCommentHistoryQueryServiceImplTest {
         assertThatThrownBy(() -> service.getPublicationHistory(999L, 1, 20, null))
             .isInstanceOf(BusinessException.class)
             .hasMessageContaining("Review task not found: 999");
+        verifyNoInteractions(batchMapper, batchItemMapper);
+    }
+
+    @Test
+    void summariesCountItemsWithoutLoadingTheirEntities() {
+        when(reviewTaskMapper.selectById(521L)).thenReturn(task());
+        Page<GithubCommentPublicationBatch> page = Page.of(1, 20);
+        page.setRecords(List.of(batch(10L, "completed", 5000, 0), batch(11L, "empty", 0, 0)));
+        page.setTotal(2);
+        when(batchMapper.selectPage(any(), any())).thenReturn(page);
+        when(batchItemMapper.selectHistoryItemCounts(521L, List.of(10L, 11L))).thenReturn(List.of(Map.of("batchId", 10L, "itemsTotal", 5000L)));
+
+        var result = service.getPublicationBatches(521L, 1, 20, null);
+
+        assertThat(result.batches().getFirst().items()).isEmpty();
+        assertThat(result.batches().getFirst().itemsTotal()).isEqualTo(5000);
+        assertThat(result.batches().getFirst().hasMore()).isTrue();
+        assertThat(result.batches().getLast().itemsTotal()).isZero();
+        assertThat(result.batches().getLast().hasMore()).isFalse();
+        verify(batchItemMapper, never()).selectList(any());
+    }
+
+    @Test
+    void detailPageUsesOneExtraRowAndReturnsAnAdvancingCursor() {
+        when(reviewTaskMapper.selectById(521L)).thenReturn(task());
+        when(batchMapper.selectOne(any())).thenReturn(batch(10L, "completed", 45, 0));
+        when(batchItemMapper.countHistoryItems(521L, 10L)).thenReturn(45L);
+        when(batchItemMapper.selectHistoryItemsAfterId(521L, 10L, 20, 21)).thenReturn(IntStream.rangeClosed(21, 41).mapToObj(id -> {
+            var item = item(10L, true, "published", "published");
+            item.setId((long) id);
+            item.setFindingId((long) id);
+            return item;
+        }).toList());
+
+        var result = service.getPublicationItems(521L, 10L, 20, 20);
+
+        assertThat(result.total()).isEqualTo(45);
+        assertThat(result.items()).hasSize(20);
+        assertThat(result.items().getFirst().findingId()).isEqualTo(21L);
+        assertThat(result.items().getLast().findingId()).isEqualTo(40L);
+        assertThat(result.nextAfterId()).isEqualTo(40L);
+        assertThat(result.hasMore()).isTrue();
+    }
+
+    @Test
+    void returnsEmptyDetailPageAtTheEndWithoutInventingACursor() {
+        when(reviewTaskMapper.selectById(521L)).thenReturn(task());
+        when(batchMapper.selectOne(any())).thenReturn(batch(10L, "completed", 0, 0));
+        when(batchItemMapper.countHistoryItems(521L, 10L)).thenReturn(0L);
+        when(batchItemMapper.selectHistoryItemsAfterId(521L, 10L, 0, 21)).thenReturn(List.of());
+
+        var result = service.getPublicationItems(521L, 10L, 0, 20);
+
+        assertThat(result.total()).isZero();
+        assertThat(result.items()).isEmpty();
+        assertThat(result.nextAfterId()).isNull();
+        assertThat(result.hasMore()).isFalse();
+    }
+
+    @Test
+    void rejectsABatchOutsideTheTaskBeforeReadingDetails() {
+        when(reviewTaskMapper.selectById(521L)).thenReturn(task());
+        when(batchMapper.selectOne(any())).thenReturn(null);
+
+        assertThatThrownBy(() -> service.getPublicationItems(521L, 999L, 0, 20))
+            .isInstanceOf(BusinessException.class).hasMessageContaining("batch not found");
+        verifyNoInteractions(batchItemMapper);
+    }
+
+    @Test
+    void rejectsUnboundedPagesAndNegativeCursors() {
+        when(reviewTaskMapper.selectById(521L)).thenReturn(task());
+        assertThatThrownBy(() -> service.getPublicationBatches(521L, 1, 101, null)).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> service.getPublicationBatches(521L, 0, 20, null)).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> service.getPublicationItems(521L, 10L, -1, 20)).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> service.getPublicationItems(521L, 10L, 0, 0)).isInstanceOf(BusinessException.class);
         verifyNoInteractions(batchMapper, batchItemMapper);
     }
 

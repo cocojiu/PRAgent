@@ -60,6 +60,7 @@ class OpenApiGeneratedClientContractTest {
         "PUT /api/v1/review-workflow/tasks/{taskId}/assignment"
     );
     private static final List<String> MIGRATED_CLIENT_PREFIXES = List.of(
+        "githubCommentHistoryController",
         "cacheStatsController",
         "dataRetentionController",
         "dashboardController",
