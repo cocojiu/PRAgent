@@ -1,7 +1,8 @@
 <template>
   <section class="dashboard-grid">
-    <article class="dashboard-card chart-card chart-card--wide">
+    <article v-loading="moduleStates?.reviewTrend.loading" class="dashboard-card chart-card chart-card--wide">
       <h2>审查趋势</h2>
+      <DashboardModuleNotice :state="moduleStates?.reviewTrend" />
       <DeferredEChartPanel
         v-if="reviewTrend.length"
         accessible-label="审查趋势图"
@@ -10,8 +11,9 @@
       />
       <el-empty v-else class="chart-empty-state" description="暂无审查趋势数据" />
     </article>
-    <article class="dashboard-card chart-card">
+    <article v-loading="moduleStates?.riskDistribution.loading" class="dashboard-card chart-card">
       <h2>风险分布</h2>
+      <DashboardModuleNotice :state="moduleStates?.riskDistribution" />
       <DeferredEChartPanel
         v-if="riskDistribution.length"
         accessible-label="风险分布图"
@@ -20,8 +22,9 @@
       />
       <el-empty v-else class="chart-empty-state" description="暂无风险分布数据" />
     </article>
-    <article class="dashboard-card chart-card">
+    <article v-loading="moduleStates?.rules.loading" class="dashboard-card chart-card">
       <h2>规则命中</h2>
+      <DashboardModuleNotice :state="moduleStates?.rules" />
       <div v-if="ruleHits.length" class="donut-layout">
         <div
           class="rule-donut-chart"
@@ -51,6 +54,8 @@
 import { computed } from "vue";
 import type { EChartsOption } from "echarts";
 import DeferredEChartPanel from "@/components/DeferredEChartPanel.vue";
+import DashboardModuleNotice from "./DashboardModuleNotice.vue";
+import type { DashboardModuleStates } from "../composables/useDashboardOverview";
 import type { ChartSlice, ReviewTrendPoint } from "@/types";
 
 const props = defineProps<{
@@ -60,6 +65,7 @@ const props = defineProps<{
   totalRuleHits: number;
   trendOption: EChartsOption;
   riskOption: EChartsOption;
+  moduleStates?: Pick<DashboardModuleStates, "reviewTrend" | "riskDistribution" | "rules">;
 }>();
 
 const trendSummary = computed(() =>

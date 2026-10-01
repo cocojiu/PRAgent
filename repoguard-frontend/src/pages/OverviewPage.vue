@@ -1,13 +1,21 @@
 <template>
   <div v-loading="loading" class="overview-page">
-    <el-alert v-if="errorMessage" class="page-alert" type="error" :title="errorMessage" show-icon :closable="false" />
+    <el-alert
+      v-if="errorMessage"
+      class="page-alert"
+      type="error"
+      :title="errorMessage"
+      :description="moduleStates.summary.lastSuccessAt ? `当前显示上次成功数据：${moduleStates.summary.lastSuccessAt}` : undefined"
+      show-icon
+      :closable="false"
+    />
 
     <PersonalOnboardingCard v-if="canManage" />
 
     <MetricGrid
       :metrics="overviewMetricItems"
       :resolve-icon="getMetricIcon"
-      :loading="loading || (!errorMessage && overviewMetricItems.length === 0)"
+      :loading="loading || (!errorMessage && !moduleStates.summary.lastSuccessAt)"
     />
 
     <DashboardChartSection
@@ -17,11 +25,13 @@
       :total-rule-hits="totalRuleHits"
       :trend-option="trendOption"
       :risk-option="riskOption"
+      :module-states="moduleStates"
     />
 
     <template v-if="deferredSectionsVisible">
       <LlmQualitySection
-        :loading="deferredLoading || llmQualityLoading"
+        :loading="llmQualityLoading"
+        :state="moduleStates.llmQuality"
         :trend-days="llmTrendDays"
         :trend-window-options="llmTrendWindowOptions"
         :quality-trend="llmQualityTrend"
@@ -37,6 +47,9 @@
         :system-health="systemHealth"
         :last-health-check-at="lastHealthCheckAt"
         :loading="healthLoading"
+        :high-risk-state="moduleStates.highRiskReviews"
+        :rules-state="moduleStates.rules"
+        :health-state="moduleStates.systemHealth"
         @refresh="loadSystemHealth"
       />
     </template>
@@ -77,10 +90,10 @@ const getMetricIcon = useMetricIcon(metricIconMap, FileText);
 const {
   loading,
   moduleLoading,
-  deferredLoading,
   llmQualityLoading,
   healthLoading,
   errorMessage,
+  moduleStates,
   lastHealthCheckAt,
   llmTrendDays,
   llmTrendWindowOptions,
@@ -107,16 +120,20 @@ onMounted(() => {
 });
 
 const deferredSectionsVisible = ref(false);
+let pageDisposed = false;
 let firstPaintFrame: number | undefined;
 let secondPaintFrame: number | undefined;
 let deferredIdleHandle: number | undefined;
 let deferredTimer: ReturnType<typeof setTimeout> | undefined;
 
 const loadPrimaryModulesAfterPaint = () => {
+  if (pageDisposed) return;
   firstPaintFrame = window.requestAnimationFrame(() => {
     firstPaintFrame = undefined;
+    if (pageDisposed) return;
     secondPaintFrame = window.requestAnimationFrame(() => {
       secondPaintFrame = undefined;
+      if (pageDisposed) return;
       void loadDashboardModules();
     });
   });
@@ -125,7 +142,7 @@ const loadPrimaryModulesAfterPaint = () => {
 const activateDeferredSections = () => {
   deferredIdleHandle = undefined;
   deferredTimer = undefined;
-  if (deferredSectionsVisible.value) {
+  if (pageDisposed || deferredSectionsVisible.value) {
     return;
   }
   deferredSectionsVisible.value = true;
@@ -134,7 +151,7 @@ const activateDeferredSections = () => {
 };
 
 const scheduleDeferredSections = () => {
-  if (deferredSectionsVisible.value || deferredIdleHandle !== undefined || deferredTimer !== undefined) {
+  if (pageDisposed || deferredSectionsVisible.value || deferredIdleHandle !== undefined || deferredTimer !== undefined) {
     return;
   }
   if ("requestIdleCallback" in window) {
@@ -147,6 +164,7 @@ const scheduleDeferredSections = () => {
 watch(loading, async (isLoading, wasLoading) => {
   if (wasLoading && !isLoading && !errorMessage.value) {
     await nextTick();
+    if (pageDisposed) return;
     recordRoutePerformanceMilestone(routeNames.overview, "summary-ready");
     loadPrimaryModulesAfterPaint();
   }
@@ -155,7 +173,8 @@ watch(loading, async (isLoading, wasLoading) => {
 watch(moduleLoading, async (isLoading, wasLoading) => {
   if (wasLoading && !isLoading) {
     await nextTick();
-    if (!errorMessage.value) {
+    if (pageDisposed) return;
+    if ([moduleStates.reviewTrend, moduleStates.riskDistribution, moduleStates.rules].every(state => !state.error)) {
       recordRoutePerformanceMilestone(routeNames.overview, "data-ready");
     }
     scheduleDeferredSections();
@@ -169,6 +188,7 @@ const riskOption = computed(() => buildRiskDistributionOption(riskDistribution.v
 const llmQualityTrendOption = computed(() => buildLlmQualityTrendOption(llmQualityTrend.value));
 
 onBeforeUnmount(() => {
+  pageDisposed = true;
   if (firstPaintFrame !== undefined) {
     window.cancelAnimationFrame(firstPaintFrame);
   }
