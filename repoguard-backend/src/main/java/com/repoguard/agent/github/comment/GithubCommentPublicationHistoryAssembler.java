@@ -29,6 +29,14 @@ public class GithubCommentPublicationHistoryAssembler {
         GithubCommentPublicationBatch batch,
         List<GithubCommentPublicationBatchItem> items
     ) {
+        return assembleBatch(batch, items, items.size());
+    }
+
+    public GithubCommentPublicationBatchDto assembleBatch(
+        GithubCommentPublicationBatch batch,
+        List<GithubCommentPublicationBatchItem> items,
+        long itemsTotal
+    ) {
         return new GithubCommentPublicationBatchDto(
             batch.getId(),
             batch.getStatus(),
@@ -41,7 +49,9 @@ public class GithubCommentPublicationHistoryAssembler {
             format(batch.getCompletedAt()),
             format(batch.getNextRetryAt()),
             batch.getLastError(),
-            items.stream().map(this::assembleItem).toList()
+            items.stream().map(this::assembleItem).toList(),
+            itemsTotal,
+            itemsTotal > items.size()
         );
     }
 

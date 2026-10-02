@@ -57,6 +57,7 @@ export type HumanReviewResponse = {
 
 export type LlmStatus = {
   completionTokens?: number;
+  costSnapshot?: LlmUsageCostSnapshot;
   duration?: string;
   durationMs?: number;
   estimatedCost?: string;
@@ -69,6 +70,20 @@ export type LlmStatus = {
   riskLevel?: string;
   status?: string;
   totalTokens?: number;
+};
+
+export type LlmUsageCostSnapshot = {
+  cachedInputTokenPricePerMillion?: number;
+  cachedInputTokens?: number;
+  costSource?: string;
+  currency?: string;
+  estimatedAmount?: number;
+  inputTokenPricePerMillion?: number;
+  normalInputTokens?: number;
+  outputTokenPricePerMillion?: number;
+  priceSource?: string;
+  pricingVersion?: string;
+  usageSource?: string;
 };
 
 export type MissingTest = {

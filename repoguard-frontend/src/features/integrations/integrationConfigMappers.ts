@@ -103,7 +103,9 @@ export const buildReviewPolicyIntegrationPatch = (config: ReviewPolicyConfig): I
     { label: "Chunk Max Files", value: String(config.chunkMaxFiles ?? 4), type: "text" },
     { label: "Chunk Max Lines", value: String(config.chunkMaxLines ?? 450), type: "text" },
     { label: "Input CNY/1M Tokens", value: String(config.inputTokenPricePerMillion ?? 0), type: "text" },
-    { label: "Output CNY/1M Tokens", value: String(config.outputTokenPricePerMillion ?? 0), type: "text" }
+    { label: "Output CNY/1M Tokens", value: String(config.outputTokenPricePerMillion ?? 0), type: "text" },
+    { label: "Cached Input CNY/1M Tokens", value: config.cachedInputTokenPricePerMillion == null
+      ? "" : String(config.cachedInputTokenPricePerMillion), type: "text", placeholder: "留空表示未知；0 表示已知免费" }
   ]
 });
 

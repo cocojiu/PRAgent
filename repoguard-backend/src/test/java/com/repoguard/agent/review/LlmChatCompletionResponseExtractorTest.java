@@ -56,4 +56,25 @@ class LlmChatCompletionResponseExtractorTest {
         assertThatThrownBy(() -> extractor.extract((String) null))
             .isInstanceOf(Exception.class);
     }
+
+    @Test
+    void normalizesInclusiveCachedInputWithoutTreatingMissingAsZero() throws Exception {
+        for (int cached : new int[] {0, 40, 100}) {
+            var response = extractor.extract("{\"usage\":{\"prompt_tokens\":100,\"completion_tokens\":10,"
+                + "\"total_tokens\":110,\"prompt_tokens_details\":{\"cached_tokens\":" + cached + "}}}");
+            assertThat(response.promptTokens()).isEqualTo(100);
+            assertThat(response.cachedInputTokens()).isEqualTo(cached);
+            assertThat(response.usageSource()).isEqualTo("OPENAI_COMPATIBLE_CACHE_DETAILS");
+        }
+        var missing = extractor.extract("{\"usage\":{\"prompt_tokens\":100,\"completion_tokens\":10}}");
+        assertThat(missing.cachedInputTokens()).isNull();
+        assertThat(missing.usageSource()).isEqualTo("CACHE_USAGE_UNKNOWN");
+        for (String cached : new String[] {"101", "-1", "1.5", "\"40\"", "2147483648"}) {
+            var response = extractor.extract("{\"usage\":{\"prompt_tokens\":100,"
+                + "\"prompt_tokens_details\":{\"cached_tokens\":" + cached + "}}}");
+            assertThat(response.cachedInputTokens()).isNull();
+            assertThat(response.usageSource()).isEqualTo("INVALID_CACHE_DETAILS");
+        }
+        assertThat(extractor.extract("{}").usageSource()).isEqualTo("UNKNOWN");
+    }
 }

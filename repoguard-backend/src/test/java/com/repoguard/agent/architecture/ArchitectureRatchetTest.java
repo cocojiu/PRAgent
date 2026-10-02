@@ -346,7 +346,7 @@ class ArchitectureRatchetTest {
     private static Set<String> productionScriptNames() throws IOException {
         try (Stream<Path> paths = Files.list(REPOSITORY_ROOT.resolve("scripts"))) {
             return paths.filter(Files::isRegularFile)
-                .filter(path -> Set.of(".sh", ".ps1", ".bat", ".cmd").contains(extension(path)))
+                .filter(path -> Set.of(".sh", ".ps1", ".bat", ".cmd", ".py").contains(extension(path)))
                 .map(path -> path.getFileName().toString())
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
         }

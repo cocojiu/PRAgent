@@ -28,6 +28,8 @@ public class ReviewPolicyConfig {
     private Integer chunkMaxLines;
     private BigDecimal inputTokenPricePerMillion;
     private BigDecimal outputTokenPricePerMillion;
+    @com.baomidou.mybatisplus.annotation.TableField(updateStrategy = com.baomidou.mybatisplus.annotation.FieldStrategy.ALWAYS)
+    private BigDecimal cachedInputTokenPricePerMillion;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -178,6 +180,9 @@ public class ReviewPolicyConfig {
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
+
+    public BigDecimal getCachedInputTokenPricePerMillion() { return cachedInputTokenPricePerMillion; }
+    public void setCachedInputTokenPricePerMillion(BigDecimal value) { cachedInputTokenPricePerMillion = value; }
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;

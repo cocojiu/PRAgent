@@ -22,6 +22,7 @@ const reviewDetailTypesPath = resolve(
 );
 const checkOnly = process.argv.includes("--check");
 const migratedOperationPrefixes = [
+  "githubCommentHistoryController",
   "ciSarifSetupController",
   "ciSarifControllerIssueCredential",
   "githubFeedbackController",
@@ -54,6 +55,7 @@ const reviewDetailSchemaAliases = new Map([
   ["HumanReviewRequest", "HumanReviewRequest"],
   ["HumanReviewResponse", "HumanReviewResponse"],
   ["LlmStatusDto", "LlmStatus"],
+  ["LlmUsageCostSnapshot", "LlmUsageCostSnapshot"],
   ["MissingTestDto", "MissingTest"],
   ["PrReviewSummaryDto", "PrReviewSummary"],
   ["PrRiskFileDto", "PrRiskFile"],

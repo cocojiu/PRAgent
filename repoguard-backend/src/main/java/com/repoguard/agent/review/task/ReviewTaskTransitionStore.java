@@ -229,6 +229,7 @@ public class ReviewTaskTransitionStore {
             .set("llm_completion_tokens", null)
             .set("llm_total_tokens", null)
             .set("llm_estimated_cost", null)
+            .set("llm_cost_snapshot_json", null)
             .set("human_review_required", false)
             .set("human_review_status", HumanReviewStatus.NOT_REQUIRED.code())
             .set("human_review_note", null)
@@ -266,6 +267,7 @@ public class ReviewTaskTransitionStore {
         task.setLlmCompletionTokens(null);
         task.setLlmTotalTokens(null);
         task.setLlmEstimatedCost(null);
+        task.setLlmCostSnapshotJson(null);
         task.setHumanReviewRequired(false);
         task.setHumanReviewStatus(HumanReviewStatus.NOT_REQUIRED.code());
         task.setHumanReviewNote(null);

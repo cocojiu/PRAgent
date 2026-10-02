@@ -223,6 +223,12 @@ LLM 评测与模型发布中心：
 - `monolith` 必须搭配 `combined`；`split` 必须使用 `api` + `worker`。
 - 横向扩展 API 前必须确认共享限流、数据库连接和缓存失效策略已经启用。
 
+共享限流默认使用 `local`。选择 `REPOGUARD_RATE_LIMIT_STORE=database` 时，认证请求仅在同一事务中递增和读取当前窗口计数；数据库或提交失败仍拒绝请求。过期窗口由 `worker`/`combined` 的全局租约任务清理，API 角色不执行清理。
+
+后台清理默认每60秒运行，每批500行、每轮最多10批；只删除早于当前分钟减2的窗口。`REPOGUARD_RATE_LIMIT_CLEANUP_ENABLED=false` 可停止清理。`REPOGUARD_RATE_LIMIT_CLEANUP_INTERVAL_MS`、`REPOGUARD_RATE_LIMIT_CLEANUP_BATCH_SIZE`、`REPOGUARD_RATE_LIMIT_CLEANUP_MAX_BATCHES_PER_RUN` 和 `REPOGUARD_RATE_LIMIT_CLEANUP_MAX_RUN_MS` 可调整间隔和预算。默认3秒预算用于停止启动新批次，每条删除语句及事务另有2秒超时；它不是整轮执行的硬截止时间。
+
+观测 `repoguard.security.shared_rate_limit.cleanup.deleted_rows`、`cleanup.backlog`、`cleanup.failed` 及 `cleanup.duration`。`backlog` 记录触及批数/时间上限的轮次，不表示剩余行数。清理失败不改变有效计数，认证计数失败仍记录 `repoguard.security.shared_rate_limit.fail_closed`。
+
 ## 本地日志观测
 
 本地可以使用 Loki、Alloy 和 Grafana 查看 RepoGuard 日志。管理员密码只在当前 Shell 中临时设置，不要写入 README 或仓库文件：
@@ -256,11 +262,19 @@ $env:REPOGUARD_LOG_PATH = "../logs/backend"
 
 手动启用部署时应遵循以下边界：
 
-1. 只使用已经通过质量门禁的镜像标签或 digest。
+1. 使用已通过质量门禁并附可信发布清单的镜像，生产按目标仓库 `@sha256` 部署。
 2. 服务器、镜像仓库、SSH 和备份凭据只从受保护的 Secret/Environment 读取。
 3. 主机密钥必须离线核验并启用严格校验，禁止运行时自动信任未知主机。
 4. 回滚只选择已验证的旧镜像，不删除数据库或消息队列数据卷。
 5. 任一凭据、镜像或健康检查缺失时立即停止，保持 fail-closed。
+
+构建成功后保存签名的源发布清单，绑定 Git SHA、Release Images 的 run/attempt、源镜像 digest、平台镜像 ID、扫描/SBOM 结果和 schema 要求。普通手动发布优先复用同一 SHA 的已验证构建；`release_run_id` 可明确指定源构建。复用前校验 GitHub artifact attestations 的仓库、工作流、Git SHA、ref 和运行身份。
+
+推广到 ACR 后重新读取目标 digest 并核对平台镜像 ID；源、目标 manifest digest 可以不同。受保护的生产环境批准后保存签名的目标清单。手动回滚需同时指定 `deploy_existing_tag` 和该版本成功部署的 `release_run_id`，按清单中的目标 digest 拉取；标签被改写不会改变选定镜像。缺少可信清单、过期制品或未成功的源运行会拒绝部署。GitHub 清单制品保留90天，长期留存应保存签名清单及其验证材料。
+
+部署主机需提供 Python 3 标准库运行环境。`deploy-prod.sh` 在拉取前验证清单 SHA256、批准运行及目标仓库，拉取后核对预期 SHA/版本/镜像 ID，启动后验证 Compose MySQL 的 Flyway schema。API 仍先执行迁移，Worker 后启动；自动故障回滚保留已运行镜像的不可变 ID。应用回滚不会撤销数据库迁移，涉及不兼容数据变更时需独立恢复方案。
+
+首次采用清单发布时，应先记录当前运行版本、镜像 ID 和配置备份，并验证旧应用对扩展后 schema 的兼容性。首次部署失败可尝试自动恢复先前运行镜像；成功部署后，尚无批准清单的历史版本不能通过 `deploy_existing_tag` 手动回滚，需要另行审阅的恢复方案。普通分支的手动构建仍执行质量与镜像扫描，但仅 main/master 和版本标签生成可复用的可信源清单。
 
 本项目按个人项目范围维护，不做生产环境验收；生产工作流保持默认关闭，代码和 CI 门禁不构成线上部署证明。
 
@@ -279,11 +293,15 @@ $env:REPOGUARD_LOG_PATH = "../logs/backend"
 
 API 响应通常使用统一 `ApiResponse` 包装。业务错误优先使用稳定 `ErrorCode`。
 
+评论回写历史保留原 `/reviews/{id}/github-comments/publications` 完整内嵌明细契约。新界面使用 `/publications/batches` 获取摘要及 `itemsTotal/hasMore`，展开后通过 `/publications/{batchId}/items?afterId=0&pageSize=20` 按游标加载；明细每页最多100条。先发布包含新接口及覆盖索引迁移的后端，再发布前端。
+
 ## LLM 费用估算
 
 新配置的输入、输出单价统一使用人民币（CNY）/百万 tokens；费用上限也使用人民币。
 请按实际模型、地域和输入长度核对供应商报价，不要把美元价格直接填入人民币字段。
-费用由输入、输出用量乘对应单价估算，不是供应商账单；当前固定单价不自动适配阶梯、缓存、Batch、免费额度或账户折扣。
+费用由输入、输出用量乘对应单价估算，不是供应商账单；固定单价不自动适配阶梯、Batch、免费额度或账户折扣。
+缓存输入单价可单独配置，留空表示未知，显式 `0` 表示缓存输入免费。兼容 Chat Completions 的 `usage.prompt_tokens_details.cached_tokens` 属于 `prompt_tokens` 的子集，普通输入为总输入减缓存输入；缺失或无效的缓存量保留为未知，按完整输入保守计价。
+新调用保存当次单价、计价版本、CNY 币种和估算来源快照；配置变更不会重算历史费用。缓存单价未知时按完整输入保守估算，预算预留不预先假定缓存命中或优惠。
 输入、输出单价均为正数且用量拆分完整时才产生可确认的调用估算；未配置、缺失和历史聚合的 0 不代表免费。
 失败或取消后，未知用量的调用可能保留保守预算预留，不得将其当作实际扣费。
 未配置价格时，费用上限不能约束真实账单，必须同时设置 token 和时长上限。
@@ -296,6 +314,14 @@ API 响应通常使用统一 `ApiResponse` 包装。业务错误优先使用稳�
 诊断只调度选中的样本。结果展示逐样本状态、失败分类和已记录用量，失败或取消不计入成功数；运行结束不代表每条样本都成功。诊断不生成质量报告，不能用于模型晋升。未知费用显示未计价，运行合计可能包含中断请求的保守预算预留，不能当作供应商账单。
 
 运行 ID 可用于重新查询或取消；重启后保留已落库摘要，超过原执行期限的中断运行标记失败，不自动重放付费请求。关闭诊断入口或回退应用时保留新增的可空字段，不回填历史报告、不删除已发布迁移。
+
+反馈与评估运行的载荷保留：
+
+- 管理员可先调用 `GET /api/v1/config/data-retention/payload-preview` 查看当前租户候选数量、最老时间和载荷字节上界；预览不执行清理。
+- `REPOGUARD_FEEDBACK_PAYLOAD_PURGE_ENABLED`、`REPOGUARD_EVALUATION_RUN_PAYLOAD_PURGE_ENABLED` 默认均为 `false`；对应 `*_PAYLOAD_RETENTION_DAYS` 默认90天，最少30天。启用前应审阅预览范围，保存备份并验证隔离恢复。
+- 清理只处理过期终态载荷：反馈的备注/操作者和未引用报告的评估运行目录/操作者/逐样本诊断。`retention_protected=true` 的记录、运行中的任务、可重试 FAILED 反馈、报告引用及关联抑制审计范围均排除。
+- delivery/comment/run_key、终态、汇总及诊断样本选择保留为持久去重凭据，不删除整行。清理后旧事件和旧运行键仍返回已有结果，不重新发布或调用模型；清理不会减少去重行数。
+- 清理复用租户定时任务租约、短批事务及审计；每批最多配置的 batch-size，每轮最多 max-batches-per-run。关闭开关即停止新增清理，已清理载荷只能从备份恢复，应用回退不能恢复载荷。
 
 ## GitHub 评论反馈
 
@@ -321,7 +347,9 @@ SARIF 导出包含当前审查的 findings，按扫描器名称与版本分组�
 
 企业版通知按超时复核、执行失败、高风险和 LLM 降级分别查询待处理候选，较早任务不会因新增普通任务而消失。超时任务按 SLA 顺序优先显示，系统配置提醒保留展示位置，其余类型轮流补齐；同一任务只显示优先级最高的一条提醒。复核已完成、已被替代或已重试的任务按当前状态退出对应待处理类别；标记已读只改变阅读状态。通知最多展示 12 条，`total` 表示本次展示条数，完整任务和待复核列表可从通知底部进入。
 
-Schema 期望版本为 V100；迁移新增通知高风险候选的租户索引，不改写历史数据。API 迁移所有者完成升级后再启动非迁移角色，旧应用版本可继续使用该索引。
+企业日报/周报在当前租户内一次聚合最近1/7天的任务，时间范围包含 `from`、不包含 `to`。完成数包括 `COMPLETED` 和 `APPROVED`；高风险数包括 `HIGH` 和 `CRITICAL`；待人工复核且 SLA 截止时间不晚于同一 `to` 的任务计入超时。空范围返回0，报表不加载完整任务实体。个人版仍受原有企业版条件开关保护。
+
+Schema 期望版本为 V103；新增评论历史游标索引、可空的用量费用快照，以及默认不清理的载荷保留字段和候选索引。API 迁移所有者完成升级后再启动非迁移角色；迁移不回填历史费用，不删除历史记录。
 
 ## 开发规范
 

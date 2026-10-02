@@ -134,6 +134,7 @@ public class ReviewTaskClaimService {
                 .set("llm_completion_tokens", task.getLlmCompletionTokens())
                 .set("llm_total_tokens", task.getLlmTotalTokens())
                 .set("llm_estimated_cost", task.getLlmEstimatedCost())
+                .set("llm_cost_snapshot_json", task.getLlmCostSnapshotJson())
                 .set("human_review_required", task.getHumanReviewRequired())
                 .set("human_review_status", task.getHumanReviewStatus())
                 .set("human_review_note", task.getHumanReviewNote())

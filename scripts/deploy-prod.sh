@@ -15,6 +15,10 @@ DEPLOY_STATE_DIR="${DEPLOY_STATE_DIR:-.deploy-state}"
 PREFLIGHT_ONLY="${PREFLIGHT_ONLY:-false}"
 MIGRATE_LEGACY_SECRET_FILES="${MIGRATE_LEGACY_SECRET_FILES:-false}"
 INITIALIZE_MISSING_ENCRYPTION_SALT="${INITIALIZE_MISSING_ENCRYPTION_SALT:-false}"
+RELEASE_MANIFEST="${RELEASE_MANIFEST:-}"
+RELEASE_MANIFEST_SHA256="${RELEASE_MANIFEST_SHA256:-}"
+RELEASE_TARGET_REPOSITORY="${RELEASE_TARGET_REPOSITORY:-}"
+RELEASE_APPROVAL_RUN_ID="${RELEASE_APPROVAL_RUN_ID:-}"
 # On the small production host, restarting the application stack can briefly
 # starve the long-lived MySQL/RabbitMQ health checks. Keep a dedicated
 # eight-minute infrastructure window so a recoverable startup stall is not
@@ -481,6 +485,38 @@ required_image_label() {
   printf '%s\n' "$value"
 }
 
+validate_release_manifest() {
+  if [ "$PREFLIGHT_ONLY" = "true" ]; then
+    return 0
+  fi
+  test -n "$RELEASE_MANIFEST" && test -s "$RELEASE_MANIFEST" || {
+    echo "An approved release manifest is required before deployment." >&2
+    return 1
+  }
+  command -v python3 >/dev/null 2>&1 || {
+    echo "python3 is required to validate the release manifest." >&2
+    return 1
+  }
+  requested_backend_image="$BACKEND_IMAGE"
+  requested_frontend_image="$FRONTEND_IMAGE"
+  mkdir -p "$DEPLOY_STATE_DIR"
+  manifest_environment="$(mktemp "$DEPLOY_STATE_DIR/release-identities.XXXXXX")"
+  if ! python3 scripts/release-manifest.py deployment-env \
+    --manifest "$RELEASE_MANIFEST" --sha256 "$RELEASE_MANIFEST_SHA256" \
+    --target-repository "$RELEASE_TARGET_REPOSITORY" --approval-run-id "$RELEASE_APPROVAL_RUN_ID" \
+    > "$manifest_environment"; then
+    rm -f -- "$manifest_environment"
+    return 1
+  fi
+  . "$manifest_environment"
+  rm -f -- "$manifest_environment"
+  if [ "$requested_backend_image" != "$BACKEND_IMAGE" ] || [ "$requested_frontend_image" != "$FRONTEND_IMAGE" ]; then
+    echo "Requested images differ from the approved target digests." >&2
+    return 1
+  fi
+  export BACKEND_IMAGE FRONTEND_IMAGE
+}
+
 preflight_release_images() {
   backend_version="$(required_image_label "$BACKEND_IMAGE" "org.opencontainers.image.version")"
   backend_revision="$(required_image_label "$BACKEND_IMAGE" "org.opencontainers.image.revision")"
@@ -490,6 +526,37 @@ preflight_release_images() {
     echo "Backend and frontend release identities do not match" >&2
     echo "  backend:  version=$backend_version revision=$backend_revision" >&2
     echo "  frontend: version=$frontend_version revision=$frontend_revision" >&2
+    return 1
+  fi
+  if [ "$backend_revision" != "$EXPECTED_RELEASE_SHA" ] || [ "$backend_version" != "$EXPECTED_RELEASE_VERSION" ]; then
+    echo "Pulled images differ from the expected release SHA or version." >&2
+    return 1
+  fi
+  actual_backend_id="$(docker image inspect --format '{{.Id}}' "$BACKEND_IMAGE")"
+  actual_frontend_id="$(docker image inspect --format '{{.Id}}' "$FRONTEND_IMAGE")"
+  if [ "$actual_backend_id" != "$EXPECTED_BACKEND_IMAGE_ID" ] || [ "$actual_frontend_id" != "$EXPECTED_FRONTEND_IMAGE_ID" ]; then
+    echo "Pulled platform images differ from the scanned release identities." >&2
+    return 1
+  fi
+}
+
+verify_release_schema() {
+  release_database="$(read_env_value APP_MYSQL_DATABASE)"
+  release_database="${release_database:-$(read_env_value MYSQL_DATABASE)}"
+  release_database="${release_database:-repoguard}"
+  case "$release_database" in
+    *[!A-Za-z0-9_]*|"") echo "Invalid release database name." >&2; return 1 ;;
+  esac
+  deployed_schema="$(compose exec -T -e "RELEASE_DATABASE=$release_database" mysql sh -ec '
+    MYSQL_PWD="$(cat /run/secrets/mysql.root-password)" \
+      mysql --user=root --database="$RELEASE_DATABASE" --batch --skip-column-names \
+      --execute="SELECT COALESCE(MAX(CAST(version AS UNSIGNED)),0) FROM flyway_schema_history WHERE success=1"
+  ')" || return 1
+  case "$deployed_schema" in
+    *[!0-9]*|"") echo "Unable to verify the deployed schema." >&2; return 1 ;;
+  esac
+  if [ "$deployed_schema" -lt "$EXPECTED_SCHEMA_VERSION" ]; then
+    echo "Schema $deployed_schema does not meet approved release requirement $EXPECTED_SCHEMA_VERSION." >&2
     return 1
   fi
 }
@@ -878,6 +945,7 @@ verify_deployment() {
     assert_same_release_identity backend backend-worker
   fi
   assert_service_image frontend "$FRONTEND_IMAGE"
+  verify_release_schema
   echo "Deployment release identities:"
   print_service_release_identity backend
   if has_compose_service backend-worker; then
@@ -905,6 +973,7 @@ echo "  frontend: $FRONTEND_IMAGE"
 echo "  domains:  ${REPOGUARD_FRONTEND_SERVER_NAME:-}"
 
 validate_required_bind_sources
+validate_release_manifest
 validate_secret_files
 validate_edge_observability_isolation
 validate_split_runtime_mode

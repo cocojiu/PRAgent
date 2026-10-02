@@ -61,7 +61,8 @@ class GithubCommentPublishCandidateLoaderTest {
         ReviewFinding persisting = finding(103L, "src/App.java", 21);
         persisting.setComparisonStatus("PERSISTING");
         when(reviewFindingMapper.selectGithubCommentPreviewFindingStat(521L)).thenReturn(stat);
-        when(reviewFindingMapper.selectList(any())).thenReturn(List.of(persisting));
+        when(reviewFindingMapper.countCommentablePersistingFindings(521L)).thenReturn(1L);
+        when(reviewFindingMapper.selectCommentablePersistingSummary(521L)).thenReturn(List.of(persisting));
         when(reviewFindingMapper.selectFindingSeverityCounts(521L))
             .thenReturn(new SeverityCounts(0L, 0L, 0L, 3L, 0L));
         when(reviewFindingMapper.selectCount(any())).thenReturn(0L);
@@ -75,6 +76,20 @@ class GithubCommentPublishCandidateLoaderTest {
             .contains("持续问题汇总")
             .contains("仍有 1 条问题")
             .contains("src/App.java:21");
+    }
+
+    @Test
+    void loadOverviewKeepsTheExactCountWithOnlyTwentySummaryRows() {
+        when(reviewFindingMapper.countCommentablePersistingFindings(521L)).thenReturn(5000L);
+        when(reviewFindingMapper.selectCommentablePersistingSummary(521L)).thenReturn(
+            java.util.stream.IntStream.rangeClosed(1, 20).mapToObj(i -> finding((long) i, "src/" + i + ".java", i)).toList());
+        when(changedFileMapper.selectTopChangedFilesByChurn(521L, 3)).thenReturn(List.of());
+
+        var overview = loader.loadOverview(task());
+
+        assertThat(overview.prSummaryCandidate().commentBody()).contains("仍有 5000 条问题").contains("其余 4980 条持续问题已折叠");
+        org.mockito.Mockito.verify(reviewFindingMapper, org.mockito.Mockito.never()).selectList(any());
+        verify(reviewFindingMapper).selectCommentablePersistingSummary(521L);
     }
 
     @Test

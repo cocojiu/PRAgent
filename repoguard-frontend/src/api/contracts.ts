@@ -77,6 +77,7 @@ import type {
   CacheStats,
   GithubCommentPreview,
   GithubCommentPublicationHistory,
+  GithubCommentPublicationItems,
   GithubCommentPublish,
   GithubChecksPolicyRequest,
   GithubChecksPreviewRequest,
@@ -268,6 +269,14 @@ export type ApiContract = {
   fetchGithubCommentPublicationHistory: ApiOperation<
     { id: number; page?: number; pageSize?: number; status?: string },
     GithubCommentPublicationHistory
+  >;
+  fetchGithubCommentPublicationBatches: ApiOperation<
+    { id: number; page?: number; pageSize?: number; status?: string },
+    GithubCommentPublicationHistory
+  >;
+  fetchGithubCommentPublicationItems: ApiOperation<
+    { id: number; batchId: number; afterId?: number; pageSize?: number },
+    GithubCommentPublicationItems
   >;
   publishGithubComments: ApiOperation<{ id: number }, GithubCommentPublish>;
   submitHumanReview: ApiOperation<{ id: number; payload: HumanReviewRequest }, HumanReviewResponse>;
@@ -609,6 +618,14 @@ const apiEndpoints: ApiEndpointMap = {
   ),
   publishGithubComments: generatedEndpoint("reviewControllerPublishGithubComments", {
     path: input => ({ id: input.id })
+  }),
+  fetchGithubCommentPublicationBatches: generatedEndpoint("githubCommentHistoryControllerGetBatches", {
+    path: input => ({ taskId: input.id }),
+    query: input => ({ page: input.page, pageSize: input.pageSize, status: input.status })
+  }),
+  fetchGithubCommentPublicationItems: generatedEndpoint("githubCommentHistoryControllerGetItems", {
+    path: input => ({ taskId: input.id, batchId: input.batchId }),
+    query: input => ({ afterId: input.afterId, pageSize: input.pageSize })
   }),
   submitHumanReview: generatedEndpoint("reviewControllerSubmitHumanReview", {
     path: input => ({ id: input.id }),

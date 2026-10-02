@@ -35,8 +35,18 @@ interface LlmEvaluationRunStore {
         LocalDateTime submittedAt,
         LocalDateTime startedAt,
         LocalDateTime finishedAt,
-        LlmEvaluationRunDto.Diagnostics diagnostics
+        LlmEvaluationRunDto.Diagnostics diagnostics,
+        LocalDateTime payloadPurgedAt
     ) {
+        StoredRun(long tenantId, String runId, String runKey, String status, String dataDirectory,
+            int maxConcurrency, long maxTokens, BigDecimal maxCost, int maxDurationSeconds, String operator,
+            int totalSamples, int completedSamples, long totalTokens, BigDecimal totalCost, Long reportId,
+            String failureCode, LocalDateTime submittedAt, LocalDateTime startedAt, LocalDateTime finishedAt,
+            LlmEvaluationRunDto.Diagnostics diagnostics) {
+            this(tenantId, runId, runKey, status, dataDirectory, maxConcurrency, maxTokens, maxCost,
+                maxDurationSeconds, operator, totalSamples, completedSamples, totalTokens, totalCost, reportId,
+                failureCode, submittedAt, startedAt, finishedAt, diagnostics, null);
+        }
         LlmEvaluationRunDto dto() {
             return new LlmEvaluationRunDto(
                 runId,
@@ -51,7 +61,7 @@ interface LlmEvaluationRunStore {
                 submittedAt,
                 startedAt,
                 finishedAt,
-                diagnostics
+                diagnostics, payloadPurgedAt
             );
         }
 

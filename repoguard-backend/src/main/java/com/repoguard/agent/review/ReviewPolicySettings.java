@@ -20,8 +20,25 @@ public record ReviewPolicySettings(
     Integer chunkMaxLines,
     BigDecimal inputTokenPricePerMillion,
     BigDecimal outputTokenPricePerMillion,
-    ReviewStrategyRelease strategyRelease
+    ReviewStrategyRelease strategyRelease,
+    BigDecimal cachedInputTokenPricePerMillion
 ) {
+
+    public ReviewPolicySettings(boolean exists, Boolean llmEnabled, String llmProvider, String modelName,
+        String baseUrl, String apiKey, Integer timeoutSeconds, BigDecimal temperature, Integer maxTokens,
+        Boolean fallbackToRules, Integer workerConcurrency, Integer chunkFileThreshold, Integer chunkLineThreshold,
+        Integer chunkMaxFiles, Integer chunkMaxLines, BigDecimal inputTokenPricePerMillion,
+        BigDecimal outputTokenPricePerMillion, ReviewStrategyRelease strategyRelease) {
+        this(exists, llmEnabled, llmProvider, modelName, baseUrl, apiKey, timeoutSeconds, temperature, maxTokens,
+            fallbackToRules, workerConcurrency, chunkFileThreshold, chunkLineThreshold, chunkMaxFiles, chunkMaxLines,
+            inputTokenPricePerMillion, outputTokenPricePerMillion, strategyRelease, null);
+    }
+
+    /** Budget reservations must never assume a cache hit or a discount. */
+    public BigDecimal conservativeInputTokenPricePerMillion() {
+        return inputTokenPricePerMillion == null ? null : cachedInputTokenPricePerMillion == null
+            ? inputTokenPricePerMillion : inputTokenPricePerMillion.max(cachedInputTokenPricePerMillion);
+    }
 
     public ReviewPolicySettings {
         strategyRelease = strategyRelease == null ? ReviewStrategyRelease.observeDefaults() : strategyRelease;

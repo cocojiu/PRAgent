@@ -7,6 +7,18 @@ import {
 } from "./integrationConfigMappers";
 
 describe("integration config mappers", () => {
+  it("keeps an unknown cache price distinct from an explicit zero and permits clearing it", () => {
+    for (const price of [null, 0, 0.2]) {
+      const config = { ...configuredConfig(), cachedInputTokenPricePerMillion: price };
+      const patch = buildReviewPolicyIntegrationPatch(config);
+      const form = { "spring-ai": Object.fromEntries(patch.fields.map((field) => [field.label, String(field.value)])) };
+      expect(buildSpringAiPayload(form, config).cachedInputTokenPricePerMillion).toBe(price);
+      form["spring-ai"]["Cached Input CNY/1M Tokens"] = "";
+      expect(buildSpringAiPayload(form, config).cachedInputTokenPricePerMillion).toBeNull();
+      form["spring-ai"]["Cached Input CNY/1M Tokens"] = "invalid";
+      expect(() => buildSpringAiPayload(form, config)).toThrow("缓存输入单价");
+    }
+  });
   it("round trips CNY price fields without losing configured values", () => {
     const config = { ...configuredConfig(), inputTokenPricePerMillion: 2, outputTokenPricePerMillion: 8 };
     const patch = buildReviewPolicyIntegrationPatch(config);

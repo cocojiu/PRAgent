@@ -23,6 +23,7 @@ class OpenApiGeneratedClientContractTest {
         Path.of("src/test/resources/contracts/openapi-generated-client.frontend-signature.snapshot");
 
     private static final Set<String> SERVER_ONLY_ENDPOINTS = Set.of(
+        "GET /api/v1/config/data-retention/payload-preview",
         "POST /api/v1/auth/refresh",
         "GET /api/v1/enterprise/tenants",
         "GET /api/v1/enterprise/tenants/{tenantKey}",
@@ -60,6 +61,7 @@ class OpenApiGeneratedClientContractTest {
         "PUT /api/v1/review-workflow/tasks/{taskId}/assignment"
     );
     private static final List<String> MIGRATED_CLIENT_PREFIXES = List.of(
+        "githubCommentHistoryController",
         "cacheStatsController",
         "dataRetentionController",
         "dashboardController",

@@ -33,7 +33,7 @@ final class LlmEvaluationReviewCaller implements LlmReviewCaller {
             configured.maxTokens(), configured.fallbackToRules(), configured.workerConcurrency(),
             configured.chunkFileThreshold(), configured.chunkLineThreshold(), configured.chunkMaxFiles(),
             configured.chunkMaxLines(), configured.inputTokenPricePerMillion(),
-            configured.outputTokenPricePerMillion(), configured.strategyRelease()
+            configured.outputTokenPricePerMillion(), configured.strategyRelease(), configured.cachedInputTokenPricePerMillion()
         );
     }
 

@@ -3,6 +3,7 @@ archive-prod-mysql-binlogs.sh|Production MySQL binlog archive|production-mysql-b
 backup-prod-mysql.sh|Production MySQL backup|production-mysql-backup.yml schedule or manual dispatch|Retire only after the replacement backup and restore rehearsal cover encrypted and legacy inputs.
 bootstrap-docker-server.sh|Deployment host bootstrap|Operator one-time manual run|Retire when supported hosts are provisioned by an approved image or infrastructure pipeline.
 deploy-prod.sh|Production image deployment|release-images.yml manual opt-in|Retire when a replacement deployment entrypoint preserves preflight, rollback and environment approval.
+release-manifest.py|Trusted release identity and promotion|release-images.yml and deploy-prod.sh|Retire only when replacement provenance verification and digest deployment preserve rollback identity.
 drop-retired-prod-mysql-indexes.sh|Production MySQL index retirement|Operator manual evidence-gated run|Retire after the index-usage report and rollback window are no longer required.
 migrate-legacy-mysql-backups.sh|Legacy MySQL backup migration|production-mysql-legacy-backups.yml manual dispatch|Retire after all legacy plaintext backups have verified encrypted copies and the support window closes.
 migrate-prod-secret-files.sh|Production secret file migration|release-images.yml migration input|Retire after all supported deployments use mounted secret files and the legacy compatibility window closes.

@@ -34,7 +34,7 @@
       <p>输入运行 ID，查看已保存的评估或诊断结果；不会启动新运行或调用模型。</p>
       <div class="evaluation-run-form">
         <el-input v-model="lookupRunId" :maxlength="64" placeholder="已有运行 ID" aria-label="已有运行 ID" />
-        <el-button :loading="lookupLoading" :disabled="runLoading" @click="loadExistingRun">查看已有运行</el-button>
+        <el-button :loading="lookupLoading" :disabled="runLoading || runCancelling" @click="loadExistingRun">查看已有运行</el-button>
       </div>
     </div>
     <div class="evaluation-run-panel" aria-label="启动真实 PR 评估">
@@ -55,7 +55,7 @@
         <el-input-number v-model="runForm.maxTokens" :min="1" :max="1000000" controls-position="right" aria-label="最大令牌数" />
         <el-input-number v-model="runForm.maxCost" :min="0" :precision="4" :step="1" controls-position="right" aria-label="最大估算费用（人民币）" />
         <el-input-number v-model="runForm.maxDurationSeconds" :min="1" :max="3600" controls-position="right" aria-label="最大时长秒数" />
-        <el-button type="primary" :loading="runLoading" :disabled="lookupLoading" @click="startRun">{{ diagnosticMode ? "启动诊断" : "启动评估" }}</el-button>
+        <el-button type="primary" :loading="runLoading" :disabled="lookupLoading || runCancelling" @click="startRun">{{ diagnosticMode ? "启动诊断" : "启动评估" }}</el-button>
       </div>
       <el-alert
         v-if="activeRun"
@@ -71,16 +71,20 @@
             {{ activeRun.totalTokens }} tokens，费用 {{ estimatedCostText(activeRun.totalCost) }}
             <span v-if="activeRun.failureCode"> · {{ activeRun.failureCode }}</span>
             <span v-if="activeRun.reportId"> · 报告 #{{ activeRun.reportId }}</span>
+            <span v-if="runUpdatedAt"> · 状态更新 {{ formatDate(runUpdatedAt) }}</span>
           </span>
           <el-button
             v-if="activeRun.status === 'QUEUED' || activeRun.status === 'RUNNING'"
             size="small"
+            :loading="runCancelling"
+            :disabled="runLoading || lookupLoading"
             type="danger"
             plain
             @click="cancelRun"
           >取消运行</el-button>
         </template>
       </el-alert>
+      <p v-if="activeRun?.payloadPurgedAt">该运行的过期诊断载荷已于 {{ formatDate(activeRun.payloadPurgedAt) }} 清理；汇总和幂等键仍保留，重复提交不会再次调用模型。</p>
       <template v-if="activeRun?.diagnostics">
         <p>诊断仅用于排查，不生成正式质量报告。逐样本用量为系统记录值；未知费用和中断请求不代表免费，运行合计可能包含保守预算预留。</p>
         <el-table :data="activeRun.diagnostics.samples" row-key="sampleId" aria-label="逐样本诊断">
@@ -88,11 +92,13 @@
           <el-table-column prop="status" label="执行状态" />
           <el-table-column prop="failureCode" label="失败类型" />
           <el-table-column prop="totalTokens" label="记录 tokens" />
-          <el-table-column label="用量来源"><template #default="{ row }">{{ row.usageSource === 'RECORDED_USAGE' ? '系统记录' : '未知' }}</template></el-table-column>
+          <el-table-column label="用量来源"><template #default="{ row }">{{ llmUsageSourceText(row.usageSource) }}</template></el-table-column>
+          <el-table-column label="缓存输入"><template #default="{ row }">{{ row.costSnapshot?.cachedInputTokens ?? '未知' }}</template></el-table-column>
           <el-table-column label="估算费用"><template #default="{ row }">{{ estimatedCostText(row.estimatedCost) }}</template></el-table-column>
+          <el-table-column label="计价来源" min-width="240"><template #default="{ row }"><span :title="row.costSnapshot?.pricingVersion">{{ llmCostSourceText(row.costSnapshot) }}</span></template></el-table-column>
         </el-table>
       </template>
-      <el-button v-if="activeRun" @click="beginPolling">刷新运行状态</el-button>
+      <el-button v-if="activeRun" :disabled="runLoading || lookupLoading || runCancelling" @click="beginPolling">刷新运行状态</el-button>
     </div>
 
     <el-alert
@@ -173,6 +179,7 @@
 <script setup lang="ts">
 import { selectedEvaluationSampleIds } from "../composables/useLlmModelReleaseCenter";
 import { estimatedCostText } from "@/utils/estimatedCost";
+import { llmCostSourceText, llmUsageSourceText } from "@/features/review-detail/reviewDetailDisplayMappers";
 import { onMounted, onUnmounted, ref } from "vue";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import {
@@ -191,6 +198,8 @@ const selectedReport = ref<LlmEvaluationReport | null>(null);
 const loading = ref(false);
 const errorMessage = ref("");
 const runLoading = ref(false);
+const runCancelling = ref(false);
+const runUpdatedAt = ref("");
 const lookupRunId = ref("");
 const lookupLoading = ref(false);
 const diagnosticMode = ref(false);
@@ -206,17 +215,34 @@ const runForm = ref<LlmEvaluationRunRequest>({
 });
 let pollTimer: number | undefined;
 let runStateVersion = 0;
+let reportStateVersion = 0;
+let disposed = false;
+let pollFailures = 0;
+let pollController: AbortController | undefined;
+let actionController: AbortController | undefined;
+let reportController: AbortController | undefined;
+const isRunning = (run: LlmEvaluationRun | null) => !!run && ["QUEUED", "RUNNING"].includes(run.status);
+const isCurrent = (version: number, controller: AbortController) =>
+  !disposed && version === runStateVersion && !controller.signal.aborted;
 
 const loadReports = async () => {
+  const version = ++reportStateVersion;
+  reportController?.abort();
+  const controller = new AbortController();
+  reportController = controller;
   loading.value = true;
   errorMessage.value = "";
   try {
-    reports.value = await fetchLlmEvaluationReports(50);
+    const result = await fetchLlmEvaluationReports(50, { signal: controller.signal });
+    if (disposed || version !== reportStateVersion || controller.signal.aborted) return;
+    reports.value = result;
     selectedReport.value = reports.value[0] ?? null;
   } catch (error) {
-    errorMessage.value = getErrorMessage(error, "评估报告加载失败");
+    if (!disposed && version === reportStateVersion && !controller.signal.aborted) {
+      errorMessage.value = getErrorMessage(error, "评估报告加载失败");
+    }
   } finally {
-    loading.value = false;
+    if (!disposed && version === reportStateVersion) loading.value = false;
   }
 };
 
@@ -230,86 +256,134 @@ const loadExistingRun = async () => {
     errorMessage.value = "请输入有效的已有运行 ID";
     return;
   }
-  const version = ++runStateVersion;
-  stopPolling();
+  const version = invalidateRun();
+  const controller = new AbortController();
+  actionController = controller;
   activeRun.value = null;
+  runUpdatedAt.value = "";
   lookupLoading.value = true;
   errorMessage.value = "";
   try {
-    const result = await fetchLlmEvaluationRun(runId);
-    if (version !== runStateVersion) return;
+    const result = await fetchLlmEvaluationRun(runId, { signal: controller.signal });
+    if (!isCurrent(version, controller)) return;
     activeRun.value = result;
+    runUpdatedAt.value = new Date().toISOString();
     lookupRunId.value = result.runId;
-    if (["QUEUED", "RUNNING"].includes(result.status)) beginPolling();
+    if (isRunning(result)) beginPolling();
   } catch (error) {
-    if (version === runStateVersion) errorMessage.value = getErrorMessage(error, "已有运行加载失败");
+    if (isCurrent(version, controller)) errorMessage.value = getErrorMessage(error, "已有运行加载失败");
   } finally {
-    if (version === runStateVersion) lookupLoading.value = false;
+    if (isCurrent(version, controller)) lookupLoading.value = false;
   }
 };
 
 const startRun = async () => {
-  runStateVersion++;
-  stopPolling();
+  const version = invalidateRun();
+  const controller = new AbortController();
+  actionController = controller;
   runLoading.value = true;
   errorMessage.value = "";
   try {
     const sampleIds = selectedEvaluationSampleIds(diagnosticMode.value, sampleIdsText.value);
-    activeRun.value = await startLlmEvaluationRun({ ...runForm.value, sampleIds });
-    beginPolling();
+    const result = await startLlmEvaluationRun({ ...runForm.value, sampleIds }, { signal: controller.signal });
+    if (!isCurrent(version, controller)) return;
+    activeRun.value = result;
+    runUpdatedAt.value = new Date().toISOString();
+    if (isRunning(result)) beginPolling();
   } catch (error) {
-    errorMessage.value = getErrorMessage(error, "评估运行启动失败");
+    if (isCurrent(version, controller)) errorMessage.value = getErrorMessage(error, "评估运行启动失败");
   } finally {
-    runLoading.value = false;
+    if (isCurrent(version, controller)) runLoading.value = false;
   }
 };
 
 const refreshRun = async () => {
-  if (!activeRun.value) return;
+  if (disposed || !activeRun.value || document.hidden || (pollController && !pollController.signal.aborted)) return;
   const runId = activeRun.value.runId;
   const version = runStateVersion;
+  const controller = new AbortController();
+  pollController = controller;
   try {
-    const result = await fetchLlmEvaluationRun(runId);
-    if (version !== runStateVersion || activeRun.value?.runId !== runId) return;
+    const result = await fetchLlmEvaluationRun(runId, { signal: controller.signal });
+    if (!isCurrent(version, controller) || activeRun.value?.runId !== runId) return;
+    if (!isRunning(activeRun.value) && isRunning(result)) return;
+    const wasRunning = isRunning(activeRun.value);
     activeRun.value = result;
+    runUpdatedAt.value = new Date().toISOString();
+    pollFailures = 0;
     errorMessage.value = "";
-    if (!["QUEUED", "RUNNING"].includes(activeRun.value.status)) {
+    if (!isRunning(result)) {
       stopPolling();
-      if (activeRun.value.status === "COMPLETE") {
+      if (wasRunning && activeRun.value.status === "COMPLETE") {
         ElMessage.success(activeRun.value.diagnostics ? "诊断运行结束，请查看逐样本结果" : "评估运行完成，报告已生成");
         if (activeRun.value.reportId) await loadReports();
       }
     }
   } catch (error) {
-    if (version !== runStateVersion) return;
-    stopPolling();
+    if (!isCurrent(version, controller) || activeRun.value?.runId !== runId) return;
+    pollFailures++;
     errorMessage.value = getErrorMessage(error, "评估运行状态加载失败");
+  } finally {
+    if (pollController === controller) pollController = undefined;
+    if (!disposed && version === runStateVersion && isRunning(activeRun.value) && !document.hidden && pollFailures < 4) {
+      stopPolling();
+      pollTimer = window.setTimeout(() => void refreshRun(), Math.min(30000, 2000 * 2 ** pollFailures));
+    }
   }
 };
 
 const beginPolling = () => {
   stopPolling();
+  pollFailures = 0;
   void refreshRun();
-  pollTimer = window.setInterval(() => void refreshRun(), 2000);
 };
 
 const stopPolling = () => {
   if (pollTimer !== undefined) {
-    window.clearInterval(pollTimer);
+    window.clearTimeout(pollTimer);
     pollTimer = undefined;
   }
 };
 
-const cancelRun = async () => {
-  if (!activeRun.value) return;
+const invalidateRun = () => {
   runStateVersion++;
   stopPolling();
-  try {
-    activeRun.value = await cancelLlmEvaluationRun(activeRun.value.runId);
+  pollController?.abort();
+  actionController?.abort();
+  pollFailures = 0;
+  runLoading.value = false;
+  lookupLoading.value = false;
+  runCancelling.value = false;
+  return runStateVersion;
+};
+
+const handleVisibility = () => {
+  if (document.hidden) {
     stopPolling();
-    ElMessage.success("评估运行已取消");
+    pollController?.abort();
+  } else if (isRunning(activeRun.value)) beginPolling();
+};
+
+const cancelRun = async () => {
+  if (!activeRun.value) return;
+  const runId = activeRun.value.runId;
+  const version = invalidateRun();
+  const controller = new AbortController();
+  actionController = controller;
+  runCancelling.value = true;
+  try {
+    const result = await cancelLlmEvaluationRun(runId, { signal: controller.signal });
+    if (!isCurrent(version, controller)) return;
+    activeRun.value = result;
+    runUpdatedAt.value = new Date().toISOString();
+    if (isRunning(result)) beginPolling();
+    else ElMessage.success("评估运行已结束");
   } catch (error) {
+    if (!isCurrent(version, controller)) return;
     ElMessage.error(getErrorMessage(error, "评估运行取消失败"));
+    if (isRunning(activeRun.value)) beginPolling();
+  } finally {
+    if (isCurrent(version, controller)) runCancelling.value = false;
   }
 };
 
@@ -380,6 +454,12 @@ const lifecycleTag = (status: string) => {
   return "warning";
 };
 
-onMounted(loadReports);
-onUnmounted(() => { runStateVersion++; stopPolling(); });
+onMounted(() => { document.addEventListener("visibilitychange", handleVisibility); void loadReports(); });
+onUnmounted(() => {
+  disposed = true;
+  invalidateRun();
+  reportStateVersion++;
+  reportController?.abort();
+  document.removeEventListener("visibilitychange", handleVisibility);
+});
 </script>

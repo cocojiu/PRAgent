@@ -30,6 +30,8 @@ enterpriseTenantQuotaControllerGet(input: { path: { tenantKey: string } }): Prom
 enterpriseTenantQuotaControllerUpdate(input: { path: { tenantKey: string }; body: EnterpriseTenantQuotaRequest }): Promise<EnterpriseTenantQuota>; // PUT /api/v1/enterprise/tenants/{tenantKey}/quota
 feedbackSummaryControllerSummary(): Promise<FeedbackSummary>; // GET /api/v1/config/feedback-summary
 frontendPerformanceControllerRecordPerformance(input: { body: FrontendPerformanceReport }): Promise<void>; // POST /api/v1/observability/frontend/performance
+githubCommentHistoryControllerGetBatches(input: { path: { taskId: number }; query?: { page?: number; pageSize?: number; status?: string } }): Promise<GithubCommentPublicationHistory>; // GET /api/v1/reviews/{taskId}/github-comments/publications/batches
+githubCommentHistoryControllerGetItems(input: { path: { batchId: number; taskId: number }; query?: { afterId?: number; pageSize?: number } }): Promise<GithubCommentPublicationItems>; // GET /api/v1/reviews/{taskId}/github-comments/publications/{batchId}/items
 githubFeedbackControllerDiagnostics(input?: { query?: { limit?: number } }): Promise<GithubFeedbackDiagnostics>; // GET /api/v1/github/feedback-events
 githubFeedbackControllerRetry(input: { path: { id: number } }): Promise<void>; // POST /api/v1/github/feedback-events/{id}/retry
 githubWebhookControllerReceive(input: { body: Uint8Array }): Promise<GithubWebhookResponse>; // POST /api/v1/github/webhooks
@@ -48,6 +50,7 @@ notificationIntegrationControllerRetryEvent(input: { path: { id: number } }): Pr
 notificationIntegrationControllerTestBinding(input: { path: { id: number } }): Promise<ConnectionTestResult>; // POST /api/v1/config/notification-bindings/{id}/test
 notificationIntegrationControllerUpdateBinding(input: { path: { id: number }; body: NotificationBindingRequest }): Promise<NotificationBinding>; // PUT /api/v1/config/notification-bindings/{id}
 notificationIntegrationControllerUpdateBindingStatus(input: { path: { id: number }; body: NotificationBindingStatusRequest }): Promise<NotificationBinding>; // PUT /api/v1/config/notification-bindings/{id}/status
+operationalPayloadRetentionControllerPreview(): Promise<OperationalPayloadRetentionPreview[]>; // GET /api/v1/config/data-retention/payload-preview
 repositoryPolicyControllerActivate(input: { path: { id: number }; query?: { reason?: string } }): Promise<RepositorySuppressionResponse>; // POST /api/v1/config/repository-policy/suppressions/{id}/activate
 repositoryPolicyControllerCreateSuppression(input: { body: RepositorySuppressionRequest }): Promise<RepositorySuppressionResponse>; // POST /api/v1/config/repository-policy/suppressions
 repositoryPolicyControllerListSuppressions(input?: { query?: { limit?: number; organization: string; repository: string } }): Promise<RepositorySuppressionResponse[]>; // GET /api/v1/config/repository-policy/suppressions

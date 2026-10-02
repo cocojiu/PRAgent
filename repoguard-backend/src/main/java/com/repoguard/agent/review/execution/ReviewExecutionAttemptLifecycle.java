@@ -1,5 +1,6 @@
 package com.repoguard.agent.review.execution;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.repoguard.agent.entity.ReviewExecutionAttempt;
 import com.repoguard.agent.entity.ReviewTask;
@@ -35,8 +36,8 @@ public class ReviewExecutionAttemptLifecycle {
     private final ReviewFindingMapper findingMapper;
     private final ChangedFileMapper changedFileMapper;
     private final RepoGuardMetrics metrics;
+    private final ObjectMapper objectMapper;
 
-    @Autowired
     public ReviewExecutionAttemptLifecycle(
         ReviewExecutionAttemptMapper attemptMapper,
         ReviewTaskMapper taskMapper,
@@ -44,11 +45,25 @@ public class ReviewExecutionAttemptLifecycle {
         ChangedFileMapper changedFileMapper,
         RepoGuardMetrics metrics
     ) {
+        this(attemptMapper, taskMapper, findingMapper, changedFileMapper, metrics,
+            new com.repoguard.agent.config.JacksonConfig().objectMapper());
+    }
+
+    @Autowired
+    public ReviewExecutionAttemptLifecycle(
+        ReviewExecutionAttemptMapper attemptMapper,
+        ReviewTaskMapper taskMapper,
+        ReviewFindingMapper findingMapper,
+        ChangedFileMapper changedFileMapper,
+        RepoGuardMetrics metrics,
+        ObjectMapper objectMapper
+    ) {
         this.attemptMapper = Objects.requireNonNull(attemptMapper, "attemptMapper");
         this.taskMapper = Objects.requireNonNull(taskMapper, "taskMapper");
         this.findingMapper = Objects.requireNonNull(findingMapper, "findingMapper");
         this.changedFileMapper = Objects.requireNonNull(changedFileMapper, "changedFileMapper");
         this.metrics = Objects.requireNonNull(metrics, "metrics");
+        this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
     }
 
     public ReviewExecutionAttemptLifecycle(
@@ -62,6 +77,7 @@ public class ReviewExecutionAttemptLifecycle {
         this.findingMapper = Objects.requireNonNull(findingMapper, "findingMapper");
         this.changedFileMapper = Objects.requireNonNull(changedFileMapper, "changedFileMapper");
         this.metrics = null;
+        this.objectMapper = new com.repoguard.agent.config.JacksonConfig().objectMapper();
     }
 
     public ReviewExecutionAttempt start(
@@ -186,7 +202,9 @@ public class ReviewExecutionAttemptLifecycle {
                 .set(ReviewExecutionAttempt::getPromptTokens, result.llmPromptTokens())
                 .set(ReviewExecutionAttempt::getCompletionTokens, result.llmCompletionTokens())
                 .set(ReviewExecutionAttempt::getTotalTokens, result.llmTotalTokens())
-                .set(ReviewExecutionAttempt::getEstimatedCost, result.llmEstimatedCost());
+                .set(ReviewExecutionAttempt::getEstimatedCost, result.llmEstimatedCost())
+                .set(ReviewExecutionAttempt::getCostSnapshotJson,
+                    result.costSnapshot() == null ? null : result.costSnapshot().toJson(objectMapper));
         }
         if (provenance != null) {
             update

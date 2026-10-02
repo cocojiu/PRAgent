@@ -34,6 +34,7 @@ public class ReviewExecutionAttempt {
     private Integer completionTokens;
     private Integer totalTokens;
     private BigDecimal estimatedCost;
+    private String costSnapshotJson;
     private LocalDateTime queuedAt;
     private LocalDateTime startedAt;
     private LocalDateTime finishedAt;
@@ -89,6 +90,8 @@ public class ReviewExecutionAttempt {
     public Integer getTotalTokens() { return totalTokens; }
     public void setTotalTokens(Integer totalTokens) { this.totalTokens = totalTokens; }
     public BigDecimal getEstimatedCost() { return estimatedCost; }
+    public String getCostSnapshotJson() { return costSnapshotJson; }
+    public void setCostSnapshotJson(String value) { costSnapshotJson = value; }
     public void setEstimatedCost(BigDecimal estimatedCost) { this.estimatedCost = estimatedCost; }
     public LocalDateTime getQueuedAt() { return queuedAt; }
     public void setQueuedAt(LocalDateTime queuedAt) { this.queuedAt = queuedAt; }

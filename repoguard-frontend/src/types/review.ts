@@ -245,6 +245,19 @@ export interface GithubCommentPublicationBatch {
   nextRetryAt?: string;
   lastError?: string;
   items: GithubCommentPublicationHistoryItem[];
+  itemsTotal?: number;
+  hasMore?: boolean;
+}
+
+export interface GithubCommentPublicationItems {
+  taskId: number;
+  batchId: number;
+  total: number;
+  pageSize: number;
+  afterId: number;
+  nextAfterId?: number | null;
+  hasMore: boolean;
+  items: GithubCommentPublicationHistoryItem[];
 }
 
 export type GithubCommentPublicationHistoryItem = GithubCommentPublishItem;

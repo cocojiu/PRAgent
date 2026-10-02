@@ -282,19 +282,35 @@ class ReviewWorkflowServiceImplTest {
 
     @Test
     void buildsDailyAndWeeklyReportWithRiskAndSlaCounts() {
-        ReviewTask completed = task(7L, null);
-        completed.setStatus("COMPLETED");
-        completed.setRiskLevel("HIGH");
-        ReviewTask overdue = task(8L, LocalDateTime.now().minusMinutes(2));
-        when(reviewTaskMapper.selectList(any())).thenReturn(List.of(completed, overdue));
+        when(reviewTaskMapper.selectNotificationReportSummary(any(), any()))
+            .thenReturn(new ReviewTaskMapper.NotificationReportSummary(2, 1, 0, 1, 1, 1));
 
-        var report = service.report("weekly");
+        var report = service.report(" weekly ");
 
         assertThat(report.period()).isEqualTo("WEEKLY");
         assertThat(report.totalReviews()).isEqualTo(2);
         assertThat(report.completedReviews()).isEqualTo(1);
         assertThat(report.highRiskReviews()).isEqualTo(1);
         assertThat(report.overdueHumanReviews()).isEqualTo(1);
+        var from = org.mockito.ArgumentCaptor.forClass(LocalDateTime.class);
+        var to = org.mockito.ArgumentCaptor.forClass(LocalDateTime.class);
+        verify(reviewTaskMapper).selectNotificationReportSummary(from.capture(), to.capture());
+        assertThat(java.time.Duration.between(from.getValue(), to.getValue())).isEqualTo(java.time.Duration.ofDays(7));
+        verify(reviewTaskMapper, org.mockito.Mockito.never()).selectList(any());
+
+        reset(reviewTaskMapper);
+        when(reviewTaskMapper.selectNotificationReportSummary(any(), any()))
+            .thenReturn(new ReviewTaskMapper.NotificationReportSummary(0, 0, 0, 0, 0, 0));
+        var empty = service.report("daily");
+        assertThat(empty.totalReviews()).isZero();
+        assertThat(empty.completedReviews()).isZero();
+        assertThat(empty.failedReviews()).isZero();
+        assertThat(empty.pendingHumanReviews()).isZero();
+        assertThat(empty.highRiskReviews()).isZero();
+        assertThat(empty.overdueHumanReviews()).isZero();
+        verify(reviewTaskMapper).selectNotificationReportSummary(from.capture(), to.capture());
+        assertThat(java.time.Duration.between(from.getValue(), to.getValue())).isEqualTo(java.time.Duration.ofDays(1));
+        verify(reviewTaskMapper, org.mockito.Mockito.never()).selectList(any());
     }
 
     private ReviewTask task(Long id, LocalDateTime deadline) {

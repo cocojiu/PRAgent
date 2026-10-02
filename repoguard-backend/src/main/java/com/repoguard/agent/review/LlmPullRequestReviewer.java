@@ -333,7 +333,8 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
                 extracted.promptTokens(),
                 extracted.completionTokens(),
                 extracted.totalTokens(),
-                outputStatus
+                outputStatus,
+                extracted.cachedInputTokens(), extracted.usageSource()
             );
         } catch (RuntimeException ex) {
             if (ex instanceof LlmEvaluationBudget.BudgetExceededException) {
@@ -376,7 +377,8 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
                 response.content(),
                 response.promptTokens(),
                 response.completionTokens(),
-                response.totalTokens()
+                response.totalTokens(), LlmStructuredOutputStatus.NOT_REQUESTED,
+                response.cachedInputTokens(), response.usageSource()
             );
         } catch (Exception ex) {
             throw new IllegalStateException("Unable to parse LLM HTTP response", ex);

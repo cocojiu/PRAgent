@@ -18,6 +18,8 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.List;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 /**
@@ -80,6 +82,7 @@ public class GithubCommentPublicationRecorder {
         return publication;
     }
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Long recordBatch(GithubCommentPublishResponse response) {
         Long batchId = createBatch(response.taskId(), response.totalFindings());
         completeBatch(batchId, response);
@@ -189,6 +192,7 @@ public class GithubCommentPublicationRecorder {
         );
     }
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void completeBatch(Long batchId, GithubCommentPublishResponse response) {
         LocalDateTime now = LocalDateTime.now();
         int updated = githubCommentPublicationBatchMapper.update(
@@ -196,6 +200,7 @@ public class GithubCommentPublicationRecorder {
                 .eq("id", batchId)
                 .isNull("completed_at")
                 .set("status", resolvePublicationBatchStatus(response))
+                .eq("task_id", response.taskId())
                 .set("total_findings", safe(response.totalFindings()))
                 .set("attempted_count", safe(response.attemptedCount()))
                 .set("succeeded_count", safe(response.succeededCount()))
@@ -214,9 +219,12 @@ public class GithubCommentPublicationRecorder {
             .map(item -> historyItem(batchId, response.taskId(), item, now))
             .toList();
         for (int from = 0; from < historyItems.size(); from += HISTORY_BATCH_SIZE) {
-            githubCommentPublicationBatchItemMapper.insertBatch(
-                historyItems.subList(from, Math.min(from + HISTORY_BATCH_SIZE, historyItems.size()))
+            List<GithubCommentPublicationBatchItem> chunk = historyItems.subList(
+                from, Math.min(from + HISTORY_BATCH_SIZE, historyItems.size())
             );
+            if (githubCommentPublicationBatchItemMapper.insertBatch(chunk) != chunk.size()) {
+                throw new IllegalStateException("GitHub publication history was not completely inserted");
+            }
         }
     }
 

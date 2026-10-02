@@ -21,7 +21,11 @@ on:
         required: false
         type: string
       deploy_existing_tag:
-        description: Existing image tag to deploy without rebuilding, for rollback
+        description: Approved manifest version for rollback; requires release_run_id
+        required: false
+        type: string
+      release_run_id:
+        description: Successful release run to reuse; omitted selects a verified build for this SHA
         required: false
         type: string
       deploy:
@@ -41,6 +45,7 @@ on:
         type: boolean
 
 permissions:
+  actions: read
   attestations: write
   contents: read
   id-token: write
@@ -59,10 +64,29 @@ env:
   ALIYUN_REGISTRY_USERNAME: ${{ secrets.ALIYUN_REGISTRY_USERNAME || vars.ALIYUN_REGISTRY_USERNAME }}
 
 jobs:
+  resolve:
+    name: Resolve verified release artifacts
+    runs-on: ubuntu-latest
+    outputs:
+      reuse_run_id: ${{ steps.resolve.outputs.reuse_run_id }}
+      manifest_kind: ${{ steps.resolve.outputs.manifest_kind }}
+    steps:
+      - name: Checkout release verifier
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Select and verify reusable manifest
+        id: resolve
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_RUN_ID_INPUT: ${{ inputs.release_run_id }}
+          DEPLOY_EXISTING_TAG: ${{ inputs.deploy_existing_tag }}
+          IMAGE_TAG_INPUT: ${{ inputs.image_tag }}
+        run: python3 scripts/release-manifest.py resolve --directory "$RUNNER_TEMP/reused-release"
+
   build:
     name: Build and Push Images
     runs-on: ubuntu-latest
-    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.deploy_existing_tag != '') }}
+    needs: resolve
+    if: ${{ needs.resolve.outputs.reuse_run_id == '' }}
     outputs:
       image_version: ${{ steps.images.outputs.image_version }}
       backend_digest: ${{ steps.backend_image.outputs.digest }}
@@ -527,14 +551,36 @@ jobs:
           vuln-type: os,library
           severity: HIGH,CRITICAL
 
+      - name: Bind checked source images to release manifest
+        if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v') }}
+        env:
+          BACKEND_DIGEST: ${{ steps.backend_image.outputs.digest }}
+          FRONTEND_DIGEST: ${{ steps.frontend_image.outputs.digest }}
+        run: python3 scripts/release-manifest.py create-source --output "$RUNNER_TEMP/release-source-manifest.json"
+
+      - name: Attest checked release manifest
+        if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v') }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: ${{ runner.temp }}/release-source-manifest.json
+
+      - name: Preserve verified source manifest
+        if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v') }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-source-manifest-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-source-manifest.json
+          if-no-files-found: error
+          retention-days: 90
+
   deploy:
     name: Deploy to production (manual opt-in)
     runs-on: ubuntu-latest
-    needs: build
+    needs: [resolve, build]
     # Keep this guard fail-closed: no push event, test branch, or omitted input
     # can reach the production host. A maintainer must explicitly set deploy=true
     # from a protected main/master branch or v* tag.
-    if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.deploy == true && (github.ref_name == 'main' || github.ref_name == 'master' || startsWith(github.ref, 'refs/tags/v')) && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
+    if: ${{ always() && needs.resolve.result == 'success' && github.event_name == 'workflow_dispatch' && inputs.deploy == true && (github.ref_name == 'main' || github.ref_name == 'master' || startsWith(github.ref, 'refs/tags/v')) && (needs.build.result == 'success' || (needs.build.result == 'skipped' && needs.resolve.outputs.reuse_run_id != '')) }}
     concurrency:
       group: production-deploy
       cancel-in-progress: false
@@ -542,6 +588,33 @@ jobs:
     steps:
       - name: Checkout compose file
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Load verified release manifest before touching production
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REUSE_RUN_ID: ${{ needs.resolve.outputs.reuse_run_id }}
+          MANIFEST_KIND: ${{ needs.resolve.outputs.manifest_kind }}
+          DEPLOY_EXISTING_TAG: ${{ inputs.deploy_existing_tag }}
+          IMAGE_TAG_INPUT: ${{ inputs.image_tag }}
+        run: |
+          set -euo pipefail
+          source_run_id="${REUSE_RUN_ID:-$GITHUB_RUN_ID}"
+          kind="${MANIFEST_KIND:-source}"
+          python3 scripts/release-manifest.py fetch --run-id "$source_run_id" --kind "$kind" \
+            --tag "$DEPLOY_EXISTING_TAG" --directory "$RUNNER_TEMP/release"
+          if [ "$kind" = source ]; then
+            manifest="$RUNNER_TEMP/release/release-source-manifest.json"
+          else
+            manifest="$RUNNER_TEMP/release/release-manifest.json"
+          fi
+          echo "RELEASE_MANIFEST_KIND=$kind" >> "$GITHUB_ENV"
+          echo "RELEASE_VERSION=$(jq -r .version "$manifest")" >> "$GITHUB_ENV"
+          for role in backend frontend; do
+            prefix="${role^^}"
+            echo "SOURCE_${prefix}_DIGEST=$(jq -r ".images.$role.source.digest" "$manifest")" >> "$GITHUB_ENV"
+            echo "SOURCE_${prefix}_IMAGE=$(jq -r ".images.$role.source.repository" "$manifest")@$(jq -r ".images.$role.source.digest" "$manifest")" >> "$GITHUB_ENV"
+          done
 
       - name: Prepare SSH key
         uses: ./.github/actions/bootstrap-production-ssh
@@ -617,6 +690,7 @@ jobs:
           run_transfer docker-compose.smoke.yml "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/docker-compose.smoke.yml"
           run_transfer Caddyfile "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/Caddyfile"
           run_transfer scripts/deploy-prod.sh "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/scripts/deploy-prod.sh"
+          run_transfer scripts/release-manifest.py "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/scripts/release-manifest.py"
           run_transfer scripts/migrate-prod-secret-files.sh "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/scripts/migrate-prod-secret-files.sh"
           run_transfer \
             performance/remote/run-isolated-real-chain-smoke.sh \
@@ -628,7 +702,7 @@ jobs:
                         '${DEPLOY_PATH}/performance/remote/run-real-chain-smoke.sh'"
 
       - name: Mirror checked images to Aliyun ACR over VPC
-        if: ${{ inputs.deploy_existing_tag == '' }}
+        if: ${{ env.RELEASE_MANIFEST_KIND == 'source' }}
         shell: bash
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -638,10 +712,10 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
-          BACKEND_DIGEST: ${{ needs.build.outputs.backend_digest }}
-          FRONTEND_DIGEST: ${{ needs.build.outputs.frontend_digest }}
-          BACKEND_TARGET: ${{ env.ALIYUN_DEPLOY_REGISTRY }}/${{ env.ALIYUN_NAMESPACE }}/${{ env.ALIYUN_REPOSITORY }}:backend-${{ needs.build.outputs.image_version }}
-          FRONTEND_TARGET: ${{ env.ALIYUN_DEPLOY_REGISTRY }}/${{ env.ALIYUN_NAMESPACE }}/${{ env.ALIYUN_REPOSITORY }}:frontend-${{ needs.build.outputs.image_version }}
+          BACKEND_DIGEST: ${{ env.SOURCE_BACKEND_DIGEST }}
+          FRONTEND_DIGEST: ${{ env.SOURCE_FRONTEND_DIGEST }}
+          BACKEND_TARGET: ${{ env.ALIYUN_DEPLOY_REGISTRY }}/${{ env.ALIYUN_NAMESPACE }}/${{ env.ALIYUN_REPOSITORY }}:backend-${{ env.RELEASE_VERSION }}
+          FRONTEND_TARGET: ${{ env.ALIYUN_DEPLOY_REGISTRY }}/${{ env.ALIYUN_NAMESPACE }}/${{ env.ALIYUN_REPOSITORY }}:frontend-${{ env.RELEASE_VERSION }}
         run: |
           set -euo pipefail
           test -n "$GHCR_TOKEN" && test -n "$ACR_TOKEN"
@@ -650,8 +724,8 @@ jobs:
           owner="${GITHUB_REPOSITORY_OWNER,,}"
           repo="${GITHUB_REPOSITORY#*/}"
           repo="${repo,,}"
-          BACKEND_SOURCE="${REGISTRY}/${owner}/${repo}-backend@${BACKEND_DIGEST}"
-          FRONTEND_SOURCE="${REGISTRY}/${owner}/${repo}-frontend@${FRONTEND_DIGEST}"
+          BACKEND_SOURCE="${SOURCE_BACKEND_IMAGE}"
+          FRONTEND_SOURCE="${SOURCE_FRONTEND_IMAGE}"
           backend_transfer="pragent-backend-transfer:${BACKEND_DIGEST#sha256:}"
           frontend_transfer="pragent-frontend-transfer:${FRONTEND_DIGEST#sha256:}"
           remote="${DEPLOY_USER}@${DEPLOY_HOST}"
@@ -713,6 +787,49 @@ jobs:
             docker manifest inspect '${FRONTEND_TARGET}' >/dev/null
             docker image rm '${backend_transfer}' '${frontend_transfer}' >/dev/null
           "
+          # Re-read the actual target platform objects after promotion. Target
+          # manifest digests may differ from GHCR; their image IDs must match.
+          ssh "${ssh_args[@]}" "$remote" "
+            set -e
+            docker pull '${BACKEND_TARGET}' >/dev/null
+            docker pull '${FRONTEND_TARGET}' >/dev/null
+            docker image inspect '${BACKEND_TARGET}' '${FRONTEND_TARGET}'
+          " > "$RUNNER_TEMP/promoted-images.json"
+
+      - name: Bind immutable target deployment identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          target_repository="${ALIYUN_DEPLOY_REGISTRY}/${ALIYUN_NAMESPACE}/${ALIYUN_REPOSITORY}"
+          manifest="$RUNNER_TEMP/release/release-manifest.json"
+          if [ "$RELEASE_MANIFEST_KIND" = source ]; then
+            python3 scripts/release-manifest.py promote --source "$RUNNER_TEMP/release/release-source-manifest.json" \
+              --inspections "$RUNNER_TEMP/promoted-images.json" --target-repository "$target_repository" --output "$manifest"
+          fi
+          manifest_sha="$(sha256sum "$manifest" | cut -d' ' -f1)"
+          approval_run_id="$(jq -r .approval.runId "$manifest")"
+          python3 scripts/release-manifest.py deployment-env --manifest "$manifest" --sha256 "$manifest_sha" \
+            --target-repository "$target_repository" --approval-run-id "$approval_run_id" > "$RUNNER_TEMP/release-identities.env"
+          . "$RUNNER_TEMP/release-identities.env"
+          echo "RELEASE_BACKEND_IMAGE=$BACKEND_IMAGE" >> "$GITHUB_ENV"
+          echo "RELEASE_FRONTEND_IMAGE=$FRONTEND_IMAGE" >> "$GITHUB_ENV"
+          echo "RELEASE_MANIFEST_SHA256=$manifest_sha" >> "$GITHUB_ENV"
+          echo "RELEASE_APPROVAL_RUN_ID=$approval_run_id" >> "$GITHUB_ENV"
+
+      - name: Attest approved target manifest
+        if: ${{ env.RELEASE_MANIFEST_KIND == 'source' }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: ${{ runner.temp }}/release/release-manifest.json
+
+      - name: Preserve approved target manifest
+        if: ${{ env.RELEASE_MANIFEST_KIND == 'source' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: approved-release-manifest-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release/release-manifest.json
+          if-no-files-found: error
+          retention-days: 90
 
       - name: Pull and restart
         shell: bash
@@ -726,10 +843,8 @@ jobs:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
-          DEPLOY_EXISTING_TAG: ${{ inputs.deploy_existing_tag }}
           APP_CORS_ALLOWED_ORIGINS: ${{ secrets.APP_CORS_ALLOWED_ORIGINS || vars.APP_CORS_ALLOWED_ORIGINS }}
           HEALTH_URL: ${{ secrets.HEALTH_URL || vars.HEALTH_URL }}
-          IMAGE_TAG_INPUT: ${{ inputs.image_tag }}
           MIGRATE_LEGACY_SECRET_FILES: ${{ inputs.migrate_legacy_secret_files }}
           INITIALIZE_MISSING_ENCRYPTION_SALT: ${{ inputs.initialize_missing_encryption_salt }}
           REPOGUARD_FRONTEND_SERVER_NAME: ${{ secrets.REPOGUARD_FRONTEND_SERVER_NAME || vars.REPOGUARD_FRONTEND_SERVER_NAME }}
@@ -739,35 +854,34 @@ jobs:
           test -n "${ALIYUN_NAMESPACE}" || { echo "Missing ALIYUN_NAMESPACE secret or variable"; exit 1; }
           test -n "${ALIYUN_REPOSITORY}" || { echo "Missing ALIYUN_REPOSITORY secret or variable"; exit 1; }
           test -n "${ALIYUN_REGISTRY_USERNAME}" || { echo "Missing ALIYUN_REGISTRY_USERNAME secret or variable"; exit 1; }
-          if [ -n "${DEPLOY_EXISTING_TAG}" ]; then
-            image_tag="${DEPLOY_EXISTING_TAG}"
-          elif [ -n "${IMAGE_TAG_INPUT}" ]; then
-            image_tag="${IMAGE_TAG_INPUT}"
-          elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
-            image_tag="${GITHUB_REF_NAME}"
-          else
-            ref_slug="$(echo "${GITHUB_REF_NAME}" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9_.-]+/-/g; s/^-+|-+$//g')"
-            image_tag="${ref_slug}-${GITHUB_SHA::12}"
-          fi
-          test -n "${image_tag}" || { echo "Missing resolved image tag"; exit 1; }
           test -n "${REPOGUARD_FRONTEND_SERVER_NAME}" || { echo "Missing REPOGUARD_FRONTEND_SERVER_NAME secret or variable"; exit 1; }
           test -n "${APP_CORS_ALLOWED_ORIGINS}" || { echo "Missing APP_CORS_ALLOWED_ORIGINS secret or variable"; exit 1; }
-          backend_image="${ALIYUN_DEPLOY_REGISTRY}/${ALIYUN_NAMESPACE}/${ALIYUN_REPOSITORY}:backend-${image_tag}"
-          frontend_image="${ALIYUN_DEPLOY_REGISTRY}/${ALIYUN_NAMESPACE}/${ALIYUN_REPOSITORY}:frontend-${image_tag}"
+          backend_image="${RELEASE_BACKEND_IMAGE}"
+          frontend_image="${RELEASE_FRONTEND_IMAGE}"
           health_url="${HEALTH_URL:-http://127.0.0.1/healthz}"
           health_url="${health_url%%,*}"
           health_url="${health_url%% *}"
           test -n "${health_url}" || { echo "HEALTH_URL resolved to an empty value"; exit 1; }
-          printf '%s' "${ALIYUN_REGISTRY_PASSWORD}" | ssh \
-            -o ServerAliveInterval=15 -o ServerAliveCountMax=80 \
-            -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+          release_manifest=".deploy-state/release-manifest-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
+          ssh_args=(-o BatchMode=yes -o ConnectTimeout=15 -o ConnectionAttempts=1
+            -o ServerAliveInterval=15 -o ServerAliveCountMax=80
+            -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}")
+          timeout --signal=TERM --kill-after=10s 120s ssh "${ssh_args[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "mkdir -p '${DEPLOY_PATH}/.deploy-state'"
+          timeout --signal=TERM --kill-after=10s 120s scp -o BatchMode=yes -o ConnectTimeout=15 -o ConnectionAttempts=1 \
+            -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" "$RUNNER_TEMP/release/release-manifest.json" \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/${release_manifest}"
+          printf '%s' "${ALIYUN_REGISTRY_PASSWORD}" | timeout --signal=TERM --kill-after=10s 120s \
+            ssh "${ssh_args[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "docker login '${ALIYUN_DEPLOY_REGISTRY}' -u '${ALIYUN_REGISTRY_USERNAME}' --password-stdin"
-          ssh \
-            -o ServerAliveInterval=15 -o ServerAliveCountMax=80 \
-            -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+          ssh "${ssh_args[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "cd '${DEPLOY_PATH}' && \
              BACKEND_IMAGE='${backend_image}' \
              FRONTEND_IMAGE='${frontend_image}' \
+             RELEASE_MANIFEST='${release_manifest}' \
+             RELEASE_MANIFEST_SHA256='${RELEASE_MANIFEST_SHA256}' \
+             RELEASE_APPROVAL_RUN_ID='${RELEASE_APPROVAL_RUN_ID}' \
+             RELEASE_TARGET_REPOSITORY='${ALIYUN_DEPLOY_REGISTRY}/${ALIYUN_NAMESPACE}/${ALIYUN_REPOSITORY}' \
              REPOGUARD_FRONTEND_SERVER_NAME='${REPOGUARD_FRONTEND_SERVER_NAME}' \
              APP_CORS_ALLOWED_ORIGINS='${APP_CORS_ALLOWED_ORIGINS}' \
              HEALTH_URL='${health_url}' \

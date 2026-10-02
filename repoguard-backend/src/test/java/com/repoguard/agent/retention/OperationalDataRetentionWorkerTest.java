@@ -3,6 +3,7 @@ package com.repoguard.agent.retention;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -39,6 +40,8 @@ class OperationalDataRetentionWorkerTest {
         verify(mapper).deleteNotificationEvents(any(), eq(37));
         verify(mapper).deleteTenantQuotaUsage(eq(1L), any(), eq(37));
         verify(mapper).deleteCleanupAudits(any(), eq(37));
+        verify(mapper, never()).purgeFeedbackPayload(anyLong(), any(), anyInt());
+        verify(mapper, never()).purgeEvaluationRunPayload(anyLong(), any(), anyInt());
     }
 
     @Test
@@ -89,5 +92,25 @@ class OperationalDataRetentionWorkerTest {
                 .count()
         ).isEqualTo(1.0);
         meterRegistry.close();
+    }
+
+    @Test
+    void payloadPurgingIsOptInTenantScopedAndBounded() {
+        var mapper = mock(OperationalDataRetentionMapper.class);
+        var properties = new OperationalDataRetentionProperties();
+        properties.setFeedbackPayloadPurgeEnabled(true);
+        properties.setEvaluationRunPayloadPurgeEnabled(true);
+        properties.setBatchSize(2);
+        properties.setMaxBatchesPerRun(2);
+        when(mapper.purgeFeedbackPayload(eq(23L), any(), eq(2))).thenReturn(2);
+        var registry = new SimpleMeterRegistry();
+        try (TenantContext.Scope _ = TenantContext.withTenant(23L)) {
+            new OperationalDataRetentionWorker(mapper, properties, registry).cleanupTenantData();
+        }
+        verify(mapper, times(2)).purgeFeedbackPayload(eq(23L), any(), eq(2));
+        verify(mapper).purgeEvaluationRunPayload(eq(23L), any(), eq(2));
+        assertThat(registry.get("repoguard.operational.retention.backlog")
+            .tag("table", "github_feedback_event_payload").counter().count()).isEqualTo(1);
+        registry.close();
     }
 }

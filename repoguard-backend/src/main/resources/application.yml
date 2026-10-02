@@ -137,7 +137,7 @@ repoguard:
     # Roles that do not own Flyway migrations refuse to start below this version.
     # Keep in sync with the highest version under db/migration; the production
     # readiness check enforces the match.
-    expected-version: ${REPOGUARD_SCHEMA_EXPECTED_VERSION:100}
+    expected-version: ${REPOGUARD_SCHEMA_EXPECTED_VERSION:103}
   tenancy:
     enabled: ${REPOGUARD_TENANCY_ENABLED:false}
     header-name: ${REPOGUARD_TENANCY_HEADER_NAME:X-RepoGuard-Tenant}
@@ -195,6 +195,10 @@ repoguard:
     tenant-quota-usage-days: ${REPOGUARD_TENANT_QUOTA_USAGE_RETENTION_DAYS:90}
     review-attempt-payload-days: ${REPOGUARD_REVIEW_ATTEMPT_PAYLOAD_RETENTION_DAYS:90}
     review-attempt-metadata-days: ${REPOGUARD_REVIEW_ATTEMPT_METADATA_RETENTION_DAYS:180}
+    feedback-payload-purge-enabled: ${REPOGUARD_FEEDBACK_PAYLOAD_PURGE_ENABLED:false}
+    feedback-payload-days: ${REPOGUARD_FEEDBACK_PAYLOAD_RETENTION_DAYS:90}
+    evaluation-run-payload-purge-enabled: ${REPOGUARD_EVALUATION_RUN_PAYLOAD_PURGE_ENABLED:false}
+    evaluation-run-payload-days: ${REPOGUARD_EVALUATION_RUN_PAYLOAD_RETENTION_DAYS:90}
   observability:
     thresholds:
       enabled: ${REPOGUARD_OBSERVABILITY_THRESHOLDS_ENABLED:true}
@@ -316,6 +320,12 @@ app:
       instance-count: ${REPOGUARD_API_INSTANCE_COUNT:}
   security:
     rate-limit-store: ${REPOGUARD_RATE_LIMIT_STORE:local}
+    rate-limit-cleanup:
+      enabled: ${REPOGUARD_RATE_LIMIT_CLEANUP_ENABLED:true}
+      interval-ms: ${REPOGUARD_RATE_LIMIT_CLEANUP_INTERVAL_MS:60000}
+      batch-size: ${REPOGUARD_RATE_LIMIT_CLEANUP_BATCH_SIZE:500}
+      max-batches-per-run: ${REPOGUARD_RATE_LIMIT_CLEANUP_MAX_BATCHES_PER_RUN:10}
+      max-run-ms: ${REPOGUARD_RATE_LIMIT_CLEANUP_MAX_RUN_MS:3000}
     admin-api-key:
       enabled: ${REPOGUARD_ADMIN_API_KEY_ENABLED:true}
       key: ${REPOGUARD_ADMIN_API_KEY:}

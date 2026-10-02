@@ -2,6 +2,7 @@ DELETE /api/v1/config/notification-bindings/{id} query=[] body=- bodyRequired=fa
 GET /api/v1/auth/me query=[] body=- bodyRequired=false
 GET /api/v1/cache/stats query=[] body=- bodyRequired=false
 GET /api/v1/config/data-retention/cleanup-audits query=[page, pageSize, mode, status, backupReference] body=- bodyRequired=false
+GET /api/v1/config/data-retention/payload-preview query=[] body=- bodyRequired=false
 GET /api/v1/config/feedback-summary query=[] body=- bodyRequired=false
 GET /api/v1/config/integrations/github query=[] body=- bodyRequired=false
 GET /api/v1/config/integrations/github/checks query=[organization, repository] body=- bodyRequired=false
@@ -66,6 +67,8 @@ GET /api/v1/reviews/{taskId}/attempts/{attemptId} query=[page, pageSize] body=- 
 GET /api/v1/reviews/{taskId}/attempts/{attemptId}/changed-files query=[cursor, limit] body=- bodyRequired=false
 GET /api/v1/reviews/{taskId}/attempts/{attemptId}/findings query=[cursor, limit] body=- bodyRequired=false
 GET /api/v1/reviews/{taskId}/attempts/{candidateAttemptId}/comparison query=[baselineAttemptId, page, pageSize] body=- bodyRequired=false
+GET /api/v1/reviews/{taskId}/github-comments/publications/batches query=[page, pageSize, status] body=- bodyRequired=false
+GET /api/v1/reviews/{taskId}/github-comments/publications/{batchId}/items query=[afterId, pageSize] body=- bodyRequired=false
 GET /api/v1/scanners/sarif/ci/tasks/{taskId}/setup query=[] body=- bodyRequired=false
 GET /api/v1/scanners/sarif/tasks/{taskId}/export query=[] body=- bodyRequired=false
 GET /api/v1/scm/providers query=[] body=- bodyRequired=false

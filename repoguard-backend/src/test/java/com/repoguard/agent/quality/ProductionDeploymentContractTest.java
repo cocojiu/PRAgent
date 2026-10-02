@@ -209,11 +209,11 @@ class ProductionDeploymentContractTest {
             .contains("image-ref: ${{ env.FRONTEND_IMAGE }}@${{ steps.frontend_image.outputs.digest }}")
             .contains("environment: production")
             .contains("name: Mirror checked images to Aliyun ACR over VPC")
-            .contains("if: ${{ inputs.deploy_existing_tag == '' }}")
-            .contains("BACKEND_DIGEST: ${{ needs.build.outputs.backend_digest }}")
-            .contains("FRONTEND_DIGEST: ${{ needs.build.outputs.frontend_digest }}")
-            .contains("BACKEND_SOURCE=\"${REGISTRY}/${owner}/${repo}-backend@${BACKEND_DIGEST}\"")
-            .contains("FRONTEND_SOURCE=\"${REGISTRY}/${owner}/${repo}-frontend@${FRONTEND_DIGEST}\"")
+            .contains("if: ${{ env.RELEASE_MANIFEST_KIND == 'source' }}")
+            .contains("BACKEND_DIGEST: ${{ env.SOURCE_BACKEND_DIGEST }}")
+            .contains("FRONTEND_DIGEST: ${{ env.SOURCE_FRONTEND_DIGEST }}")
+            .contains("BACKEND_SOURCE=\"${SOURCE_BACKEND_IMAGE}\"")
+            .contains("FRONTEND_SOURCE=\"${SOURCE_FRONTEND_IMAGE}\"")
             .contains("timeout 600s docker pull \"$BACKEND_SOURCE\"")
             .contains("timeout 600s docker pull \"$FRONTEND_SOURCE\"")
             .contains("docker save \"$backend_transfer\" \"$frontend_transfer\" | gzip -1 > \"$archive\"")
@@ -240,6 +240,42 @@ class ProductionDeploymentContractTest {
         assertThat(backendScan).isPositive().isLessThan(mirror);
         assertThat(frontendScan).isPositive().isLessThan(mirror);
         assertThat(mirror).isLessThan(restart);
+    }
+
+    @Test
+    void releaseManifestBindsBothScansAndIsVerifiedBeforeProductionAssets() throws IOException {
+        String workflow = read(repositoryRoot().resolve(".github/workflows/release-images.yml"));
+        assertThat(workflow.indexOf("- name: Bind checked source images"))
+            .isGreaterThan(workflow.indexOf("- name: Scan frontend image"));
+        assertThat(workflow.indexOf("- name: Load verified release manifest"))
+            .isLessThan(workflow.indexOf("- name: Upload deployment and smoke assets"));
+        assertThat(workflow).contains("release_run_id:", "subject-path: ${{ runner.temp }}/release-source-manifest.json",
+            "approved-release-manifest-${{ github.run_id }}-${{ github.run_attempt }}",
+            "backend_image=\"${RELEASE_BACKEND_IMAGE}\"", "RELEASE_MANIFEST_SHA256='${RELEASE_MANIFEST_SHA256}'");
+        List<Object> buildSteps = list(map(map(yaml(repositoryRoot().resolve(
+            ".github/workflows/release-images.yml")).get("jobs")).get("build")).get("steps"));
+        String trustedRef = "${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'"
+            + " || startsWith(github.ref, 'refs/tags/v') }}";
+        for (String stepName : List.of("Bind checked source images to release manifest",
+            "Attest checked release manifest", "Preserve verified source manifest")) {
+            Map<String, Object> step = buildSteps.stream().map(this::map)
+                .filter(candidate -> stepName.equals(candidate.get("name"))).findFirst().orElseThrow();
+            assertThat(step).as("Only trusted refs may seal reusable production provenance")
+                .containsEntry("if", trustedRef);
+        }
+        for (String stepName : List.of("Scan backend image for high and critical CVEs",
+            "Scan frontend image for high and critical CVEs")) {
+            Map<String, Object> step = buildSteps.stream().map(this::map)
+                .filter(candidate -> stepName.equals(candidate.get("name"))).findFirst().orElseThrow();
+            assertThat(step).as("Manual branch builds must still pass both image scans")
+                .doesNotContainKey("if");
+        }
+        String verifier = read(repositoryRoot().resolve("scripts/release-manifest.py"));
+        assertThat(verifier).contains("--source-digest", "--source-ref", "--deny-self-hosted-runners", "--signer-workflow",
+            "Attestation belongs to a different run", "Promotion changed the scanned platform image");
+        String script = read(repositoryRoot().resolve("scripts/deploy-prod.sh"));
+        assertThat(script.lastIndexOf("\nvalidate_release_manifest\n")).isLessThan(script.lastIndexOf("\ncompose pull $deploy_services\n"));
+        assertThat(script).contains("$EXPECTED_RELEASE_SHA", "$EXPECTED_BACKEND_IMAGE_ID", "verify_release_schema");
     }
 
     @Test

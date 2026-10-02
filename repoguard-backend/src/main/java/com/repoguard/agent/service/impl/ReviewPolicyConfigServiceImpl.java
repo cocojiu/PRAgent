@@ -108,6 +108,7 @@ public class ReviewPolicyConfigServiceImpl implements ReviewPolicyConfigService 
         config.setChunkMaxLines(request.chunkMaxLines());
         config.setInputTokenPricePerMillion(request.inputTokenPricePerMillion());
         config.setOutputTokenPricePerMillion(request.outputTokenPricePerMillion());
+        config.setCachedInputTokenPricePerMillion(request.cachedInputTokenPricePerMillion());
         config.setUpdatedAt(LocalDateTime.now());
         reviewPolicyConfigMapper.updateById(config);
         if (config.getApiKeyValue() == null) {
@@ -176,7 +177,7 @@ public class ReviewPolicyConfigServiceImpl implements ReviewPolicyConfigService 
             decimalOrZero(config.getInputTokenPricePerMillion()),
             decimalOrZero(config.getOutputTokenPricePerMillion()),
             format(config.getUpdatedAt()),
-            secret.status()
+            secret.status(), config.getCachedInputTokenPricePerMillion()
         );
     }
 

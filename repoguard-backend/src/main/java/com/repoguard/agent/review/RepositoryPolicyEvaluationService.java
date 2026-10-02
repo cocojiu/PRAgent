@@ -100,7 +100,7 @@ public class RepositoryPolicyEvaluationService {
                 result.llmCompletionTokens(),
                 result.llmTotalTokens(),
                 result.llmEstimatedCost(),
-                result.executionProvenance()
+                result.executionProvenance(), result.costSnapshot()
             );
         }
         if (evaluation.costBudget() != null
@@ -230,7 +230,7 @@ public class RepositoryPolicyEvaluationService {
             server.chunkMaxLines(),
             server.inputTokenPricePerMillion(),
             server.outputTokenPricePerMillion(),
-            server.strategyRelease()
+            server.strategyRelease(), server.cachedInputTokenPricePerMillion()
         );
     }
 

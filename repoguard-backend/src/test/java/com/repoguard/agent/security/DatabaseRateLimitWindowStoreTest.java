@@ -33,10 +33,6 @@ class DatabaseRateLimitWindowStoreTest {
             meterRegistry
         );
         when(jdbcTemplate.queryForObject("SELECT LAST_INSERT_ID()", Long.class)).thenReturn(3L);
-        when(jdbcTemplate.update(
-            "DELETE FROM api_rate_limit_window WHERE window_epoch_minute < ?",
-            40L
-        )).thenReturn(7);
 
         assertThat(store.tryAcquire("auth-ip", "login:203.0.113.10", 42L, 2)).isFalse();
 
@@ -47,7 +43,7 @@ class DatabaseRateLimitWindowStoreTest {
                 && !new String(digest, StandardCharsets.UTF_8).contains("203.0.113.10")),
             eq(42L)
         );
-        verify(jdbcTemplate).update(
+        verify(jdbcTemplate, org.mockito.Mockito.never()).update(
             "DELETE FROM api_rate_limit_window WHERE window_epoch_minute < ?",
             40L
         );
@@ -59,9 +55,6 @@ class DatabaseRateLimitWindowStoreTest {
             .tags("operation", "acquire", "outcome", "success")
             .timer()
             .count()).isEqualTo(1L);
-        assertThat(meterRegistry.get("repoguard.security.shared_rate_limit.cleanup.deleted_rows")
-            .counter()
-            .count()).isEqualTo(7.0d);
     }
 
     @Test
@@ -121,7 +114,7 @@ class DatabaseRateLimitWindowStoreTest {
     }
 
     @Test
-    void retriesCleanupAfterFailureAndRecordsDeletedRows() {
+    void acquisitionDoesNotRunCleanupEvenWhenDeletionWouldFail() {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
         AuthProperties authProperties = new AuthProperties();
         authProperties.setTokenSecret("0123456789abcdef0123456789abcdef");
@@ -140,20 +133,14 @@ class DatabaseRateLimitWindowStoreTest {
             new SQLException("deadlock", "40001", 1213)
         )).thenReturn(2);
 
-        assertThat(store.tryAcquire("auth-ip", "client-a", 42L, 10)).isFalse();
+        assertThat(store.tryAcquire("auth-ip", "client-a", 42L, 10)).isTrue();
         assertThat(store.tryAcquire("auth-ip", "client-b", 42L, 10)).isTrue();
 
-        verify(jdbcTemplate, times(2)).update(
+        verify(jdbcTemplate, org.mockito.Mockito.never()).update(
             "DELETE FROM api_rate_limit_window WHERE window_epoch_minute < ?",
             40L
         );
-        assertThat(meterRegistry.get("repoguard.security.shared_rate_limit.database.failures")
-            .tags("operation", "cleanup", "reason", "deadlock")
-            .counter()
-            .count()).isEqualTo(1.0d);
-        assertThat(meterRegistry.get("repoguard.security.shared_rate_limit.cleanup.deleted_rows")
-            .counter()
-            .count()).isEqualTo(2.0d);
+        assertThat(meterRegistry.find("repoguard.security.shared_rate_limit.fail_closed").counter()).isNull();
     }
 
     @Test

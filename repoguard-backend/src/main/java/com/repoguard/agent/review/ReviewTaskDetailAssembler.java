@@ -1,9 +1,11 @@
 package com.repoguard.agent.review;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.dto.ChangedFileDto;
 import com.repoguard.agent.dto.ChunkedReviewDto;
 import com.repoguard.agent.dto.FindingSeverityCountsDto;
 import com.repoguard.agent.dto.LlmStatusDto;
+import com.repoguard.agent.dto.LlmUsageCostSnapshot;
 import com.repoguard.agent.dto.MissingTestDto;
 import com.repoguard.agent.dto.PrRiskProfileDto;
 import com.repoguard.agent.dto.RabbitMqStatusDto;
@@ -18,6 +20,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.StringUtils;
 
 @Component
@@ -25,13 +28,24 @@ public class ReviewTaskDetailAssembler {
 
     private final ReviewRiskProfileBuilder riskProfileBuilder;
     private final PrReviewSummaryBuilder reviewSummaryBuilder;
+    private final ObjectMapper objectMapper;
 
     public ReviewTaskDetailAssembler(
         ReviewRiskProfileBuilder riskProfileBuilder,
         PrReviewSummaryBuilder reviewSummaryBuilder
     ) {
+        this(riskProfileBuilder, reviewSummaryBuilder, new com.repoguard.agent.config.JacksonConfig().objectMapper());
+    }
+
+    @Autowired
+    public ReviewTaskDetailAssembler(
+        ReviewRiskProfileBuilder riskProfileBuilder,
+        PrReviewSummaryBuilder reviewSummaryBuilder,
+        ObjectMapper objectMapper
+    ) {
         this.riskProfileBuilder = Objects.requireNonNull(riskProfileBuilder, "riskProfileBuilder must not be null");
         this.reviewSummaryBuilder = Objects.requireNonNull(reviewSummaryBuilder, "reviewSummaryBuilder must not be null");
+        this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
     }
 
     public ReviewTaskDetail assemble(
@@ -149,7 +163,8 @@ public class ReviewTaskDetailAssembler {
                 task.getLlmPromptTokens(),
                 task.getLlmCompletionTokens(),
                 task.getLlmTotalTokens(),
-                task.getLlmEstimatedCost() == null ? null : task.getLlmEstimatedCost().toPlainString()
+                task.getLlmEstimatedCost() == null ? null : task.getLlmEstimatedCost().toPlainString(),
+            LlmUsageCostSnapshot.fromJson(task.getLlmCostSnapshotJson(), objectMapper)
             ),
             buildChunkedReview(task.getLlmPromptSummary()),
             new RabbitMqStatusDto(task.getMqRetries() + 1, task.getMqRetries(), "confirmed"),

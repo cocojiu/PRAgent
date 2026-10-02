@@ -10,6 +10,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
@@ -19,7 +20,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
  * Exercises the supported rolling-upgrade path against a real MySQL instance.
  *
  * <p>The test is opt-in because local unit-test runs do not provision a database. CI enables it
- * with an isolated database and verifies the V76 expand state through the V100 notification risk index.
+ * with an isolated database and verifies the V76 expand state through the V103 retention metadata.
  */
 @EnabledIfEnvironmentVariable(named = "REPOGUARD_RUN_INTEGRATION_TESTS", matches = "true")
 class FlywayMigrationUpgradePathIntegrationTest {
@@ -303,6 +304,45 @@ class FlywayMigrationUpgradePathIntegrationTest {
                     assertThat(rows.getString(1)).isEqualTo("tenant_id,assessment_status,risk_level,created_at,id");
                 }
             }
+            migrateTo(url, username, password, "101");
+            try (Connection connection = open(url, username, password)) {
+                assertThat(latestSuccessfulMigration(connection)).isEqualTo("101");
+                assertThat(indexColumnNames(connection, "github_comment_publication_batch_item",
+                    "idx_github_comment_item_tenant_task_batch_id")).isEqualTo("tenant_id,task_id,batch_id,id");
+            }
+            migrateTo(url, username, password, "102");
+            try (Connection connection = open(url, username, password);
+                 PreparedStatement snapshot = connection.prepareStatement("""
+                     select t.llm_cost_snapshot_json, a.cost_snapshot_json, p.cached_input_token_price_per_million
+                     from review_task t join review_execution_attempt a on a.task_id = t.id and a.tenant_id = t.tenant_id
+                     join review_policy_config p on p.tenant_id = t.tenant_id
+                     where t.id = ? and a.id = ? and t.tenant_id = ?
+                     """)) {
+                assertThat(latestSuccessfulMigration(connection)).isEqualTo("102");
+                snapshot.setLong(1, taskId);
+                snapshot.setLong(2, attemptId);
+                snapshot.setLong(3, tenantId);
+                try (ResultSet rows = snapshot.executeQuery()) {
+                    assertThat(rows.next()).as("Existing task, attempt and policy survive the additive migration").isTrue();
+                    for (int column = 1; column <= 3; column++) assertThat(rows.getObject(column)).isNull();
+                }
+            }
+            migrateTo(url, username, password, "103");
+            try (Connection connection = open(url, username, password)) {
+                assertThat(latestSuccessfulMigration(connection)).isEqualTo("103");
+                for (String table : List.of("github_feedback_event", "llm_evaluation_run")) {
+                    assertThat(columnExists(connection, table, "retention_protected")).isTrue();
+                    assertThat(columnExists(connection, table, "payload_purged_at")).isTrue();
+                    assertRetentionColumnDefaults(connection, table);
+                }
+                assertThat(indexColumnNames(connection, "github_feedback_event", "idx_feedback_payload_retention"))
+                    .isEqualTo("tenant_id,payload_purged_at,status,updated_at,id");
+                assertThat(indexColumnNames(connection, "llm_evaluation_run", "idx_evaluation_run_payload_retention"))
+                    .isEqualTo("tenant_id,payload_purged_at,status,finished_at,id");
+                assertThat(compositeUniqueIndexExists(connection, "github_feedback_event", "uk_feedback_delivery", 2)).isTrue();
+                assertThat(compositeUniqueIndexExists(connection, "github_feedback_event", "uk_feedback_comment", 4)).isTrue();
+                assertThat(compositeUniqueIndexExists(connection, "llm_evaluation_run", "uk_llm_evaluation_run_tenant_key", 2)).isTrue();
+            }
         } finally {
             cleanup(url, username, password, tenantId, taskId, attemptId);
         }
@@ -564,6 +604,40 @@ class FlywayMigrationUpgradePathIntegrationTest {
                 return result.getInt("non_unique") == 0
                     ? result.getInt("column_count")
                     : 0;
+            }
+        }
+    }
+
+    private void assertRetentionColumnDefaults(Connection connection, String table) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+            select column_name, column_default, is_nullable from information_schema.columns
+            where table_schema = database() and table_name = ?
+              and column_name in ('retention_protected', 'payload_purged_at') order by column_name
+            """)) {
+            statement.setString(1, table);
+            try (ResultSet result = statement.executeQuery()) {
+                assertThat(result.next()).isTrue();
+                assertThat(result.getString("column_name")).isEqualTo("payload_purged_at");
+                assertThat(result.getString("column_default")).isNull();
+                assertThat(result.getString("is_nullable")).isEqualTo("YES");
+                assertThat(result.next()).isTrue();
+                assertThat(result.getString("column_name")).isEqualTo("retention_protected");
+                assertThat(result.getString("column_default")).isEqualTo("0");
+                assertThat(result.getString("is_nullable")).isEqualTo("NO");
+            }
+        }
+    }
+
+    private String indexColumnNames(Connection connection, String table, String index) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+            select group_concat(column_name order by seq_in_index) from information_schema.statistics
+            where table_schema = database() and table_name = ? and index_name = ?
+            """)) {
+            statement.setString(1, table);
+            statement.setString(2, index);
+            try (ResultSet result = statement.executeQuery()) {
+                assertThat(result.next()).isTrue();
+                return result.getString(1);
             }
         }
     }

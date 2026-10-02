@@ -45,7 +45,7 @@ final class LlmChatTransport {
             systemPrompt,
             userPrompt,
             maxTokens,
-            settings.inputTokenPricePerMillion(),
+            settings.conservativeInputTokenPricePerMillion(),
             settings.outputTokenPricePerMillion(),
             () -> executeRequest(settings, payload, capability),
             responseExtractor::extractUsage

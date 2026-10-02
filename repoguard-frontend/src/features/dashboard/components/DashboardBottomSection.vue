@@ -1,7 +1,8 @@
 <template>
   <section class="bottom-grid">
-    <article class="dashboard-card">
+    <article v-loading="highRiskState?.loading" class="dashboard-card">
       <h2>近期高风险审查</h2>
+      <DashboardModuleNotice :state="highRiskState" />
       <el-table :data="highRiskReviews" class="rg-table" size="large" max-height="360" aria-label="近期高风险审查列表">
         <el-table-column prop="title" label="PR 标题" min-width="220" />
         <el-table-column prop="repository" label="仓库" width="150" />
@@ -31,8 +32,9 @@
       <RouterLink class="card-footer-link" :to="{ name: 'tasks' }">查看更多</RouterLink>
     </article>
 
-    <article class="dashboard-card">
+    <article v-loading="rulesState?.loading" class="dashboard-card">
       <h2>高频失败规则</h2>
+      <DashboardModuleNotice :state="rulesState" />
       <el-table :data="failedRules" class="rg-table" size="large" max-height="360" aria-label="高频失败规则列表">
         <el-table-column prop="name" label="规则名称" min-width="180" />
         <el-table-column prop="count" label="命中次数" width="100" />
@@ -51,8 +53,9 @@
       <RouterLink class="card-footer-link" :to="{ name: 'rules' }">查看更多</RouterLink>
     </article>
 
-    <article class="dashboard-card health-card">
+    <article v-loading="loading" class="dashboard-card health-card">
       <h2>系统健康</h2>
+      <DashboardModuleNotice :state="healthState" />
       <div v-if="systemHealth.length" class="health-list">
         <div v-for="item in systemHealth" :key="item.name" class="health-item">
           <span>{{ item.name }}</span>
@@ -73,6 +76,8 @@ import { formatDateTime } from "@/utils/dateTime";
 import { RouterLink } from "vue-router";
 import { riskText } from "@/utils/risk";
 import type { FailedRuleStat, HighRiskReview, SystemHealthItem } from "@/types";
+import DashboardModuleNotice from "./DashboardModuleNotice.vue";
+import type { DashboardModuleState } from "../composables/useDashboardOverview";
 
 defineProps<{
   highRiskReviews: HighRiskReview[];
@@ -80,6 +85,9 @@ defineProps<{
   systemHealth: SystemHealthItem[];
   lastHealthCheckAt: string;
   loading: boolean;
+  highRiskState?: DashboardModuleState;
+  rulesState?: DashboardModuleState;
+  healthState?: DashboardModuleState;
 }>();
 
 defineEmits<{

@@ -29,6 +29,11 @@
         <dt>风险级别</dt><dd>{{ riskText(task.llm.riskLevel) }}</dd>
         <dt>Token 用量</dt><dd>{{ llmTokenUsageText }}</dd>
         <dt>成本估算</dt><dd>{{ llmCostText }}</dd>
+        <dt>计价来源</dt><dd>{{ llmCostSourceText(task.llm.costSnapshot) }}</dd>
+        <template v-if="task.llm.costSnapshot">
+          <dt>快照单价</dt><dd>普通输入 {{ task.llm.costSnapshot.inputTokenPricePerMillion ?? '未知' }} / 缓存输入 {{ task.llm.costSnapshot.cachedInputTokenPricePerMillion ?? '未知' }} / 输出 {{ task.llm.costSnapshot.outputTokenPricePerMillion ?? '未知' }} CNY/百万 tokens</dd>
+          <dt>计价版本</dt><dd class="status-reason">{{ task.llm.costSnapshot.pricingVersion }}</dd>
+        </template>
         <dt>分片审查</dt><dd>{{ task.chunkedReview.enabled ? "已启用" : "未启用" }}</dd>
         <dt v-if="task.chunkedReview.enabled">分片数量</dt><dd v-if="task.chunkedReview.enabled">{{ task.chunkedReview.chunkCount }}</dd>
         <dt v-if="task.chunkedReview.enabled">聚合风险</dt><dd v-if="task.chunkedReview.enabled">{{ chunkAggregateRiskText(task.chunkedReview.aggregateRisk) }}</dd>
@@ -58,6 +63,7 @@
 <script setup lang="ts">
 import { RefreshCw } from "@lucide/vue";
 import type { ReviewStatus, ReviewTaskDetail, RiskLevel, TimelineItemViewModel } from "@/types";
+import { llmCostSourceText } from "../reviewDetailDisplayMappers";
 
 defineProps<{
   task: ReviewTaskDetail;

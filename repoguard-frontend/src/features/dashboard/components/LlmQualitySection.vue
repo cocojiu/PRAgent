@@ -11,6 +11,7 @@
           @update:model-value="onTrendDaysChange"
         />
       </div>
+      <DashboardModuleNotice :state="state" />
       <ul v-if="qualityTrend.length" class="chart-inline-legend" aria-label="LLM 质量趋势图例">
         <li><span class="legend-swatch legend-swatch--task"></span>任务数</li>
         <li><span class="legend-swatch legend-swatch--parse"></span>解析率</li>
@@ -27,6 +28,7 @@
     </article>
     <article class="dashboard-card">
       <h2>模型质量</h2>
+      <DashboardModuleNotice :state="state" />
       <el-table :data="qualityByModel" class="rg-table" size="large" max-height="360" aria-label="模型质量统计">
         <el-table-column prop="model" label="模型" min-width="180" />
         <el-table-column prop="taskCount" label="任务" width="80" />
@@ -45,6 +47,7 @@
     </article>
     <article class="dashboard-card">
       <h2>仓库质量</h2>
+      <DashboardModuleNotice :state="state" />
       <el-table :data="qualityByRepository" class="rg-table" size="large" max-height="360" aria-label="仓库质量统计">
         <el-table-column prop="repository" label="仓库" min-width="180" />
         <el-table-column prop="taskCount" label="任务" width="80" />
@@ -64,6 +67,8 @@
 import { computed } from "vue";
 import type { EChartsOption } from "echarts";
 import DeferredEChartPanel from "@/components/DeferredEChartPanel.vue";
+import DashboardModuleNotice from "./DashboardModuleNotice.vue";
+import type { DashboardModuleState } from "../composables/useDashboardOverview";
 import type { LlmQualityByModel, LlmQualityByRepository, LlmQualityTrendPoint } from "@/types";
 
 interface TrendWindowOption {
@@ -73,6 +78,7 @@ interface TrendWindowOption {
 
 const props = defineProps<{
   loading: boolean;
+  state?: DashboardModuleState;
   trendDays: number;
   trendWindowOptions: TrendWindowOption[];
   qualityTrend: LlmQualityTrendPoint[];

@@ -17,6 +17,16 @@ public record GithubCommentPublicationBatchDto(
     String completedAt,
     String nextRetryAt,
     String lastError,
-    List<GithubCommentPublicationHistoryItem> items
+    List<GithubCommentPublicationHistoryItem> items,
+    long itemsTotal,
+    boolean hasMore
 ) {
+    public GithubCommentPublicationBatchDto(
+        Long batchId, String status, Integer totalFindings, Integer attemptedCount, Integer succeededCount,
+        Integer failedCount, Integer skippedCount, String createdAt, String completedAt,
+        String nextRetryAt, String lastError, List<GithubCommentPublicationHistoryItem> items
+    ) {
+        this(batchId, status, totalFindings, attemptedCount, succeededCount, failedCount, skippedCount,
+            createdAt, completedAt, nextRetryAt, lastError, items, items.size(), false);
+    }
 }

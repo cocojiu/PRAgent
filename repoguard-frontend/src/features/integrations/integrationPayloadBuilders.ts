@@ -45,6 +45,12 @@ export const buildSpringAiPayload = (
   reviewPolicyConfig?: ReviewPolicyConfig
 ): ReviewPolicyConfigRequest => {
   const providers = reverseProviderMap();
+  const cachePriceField = formState["spring-ai"]?.["Cached Input CNY/1M Tokens"];
+  const cachePrice = cachePriceField === undefined ? reviewPolicyConfig?.cachedInputTokenPricePerMillion ?? null
+    : cachePriceField.trim() === "" ? null : Number(cachePriceField);
+  if (cachePrice != null && (!Number.isFinite(cachePrice) || cachePrice < 0 || cachePrice > 9999)) {
+    throw new Error("缓存输入单价必须留空或为 0 至 9999 的数字");
+  }
   return {
     llmEnabled: true,
     llmProvider: providers[integrationFieldValue(formState, "spring-ai", "Provider")] ?? "dashscope",
@@ -76,6 +82,7 @@ export const buildSpringAiPayload = (
       "Input CNY/1M Tokens",
       reviewPolicyConfig?.inputTokenPricePerMillion ?? 0
     ),
+    cachedInputTokenPricePerMillion: cachePrice,
     outputTokenPricePerMillion: numberFieldValue(
       formState,
       "spring-ai",

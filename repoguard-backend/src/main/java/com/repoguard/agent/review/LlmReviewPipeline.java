@@ -1,4 +1,5 @@
 package com.repoguard.agent.review;
+import com.repoguard.agent.dto.LlmUsageCostSnapshot;
 
 import com.repoguard.agent.review.ReviewPolicySettings;
 import com.repoguard.agent.external.ExternalCallException;
@@ -201,6 +202,7 @@ class LlmReviewPipeline {
                     budget
                 );
                 LlmCallResult completeUsage = LlmCallResult.combine(callResult, verified.verificationUsage());
+                LlmUsageCostSnapshot snapshot = costEstimator.snapshot(settings, completeUsage, false);
                 return ReviewResult.completed(
                     verified.review().riskLevel(),
                     verified.review().findings(),
@@ -213,12 +215,8 @@ class LlmReviewPipeline {
                     completeUsage.promptTokens(),
                     completeUsage.completionTokens(),
                     completeUsage.totalTokens(),
-                    costEstimator.estimate(
-                        settings,
-                        completeUsage.promptTokens(),
-                        completeUsage.completionTokens()
-                    )
-                );
+                    snapshot.estimatedAmount()
+                ).withCostSnapshot(snapshot);
             }
 
             return chunkReviewAggregator.aggregate(
@@ -327,7 +325,7 @@ class LlmReviewPipeline {
                 parsed.llmTotalTokens(),
                 parsed.llmEstimatedCost(),
                 ReviewExecutionProvenance.from(settings.strategyRelease())
-            ).withStatusDetail(parsed.statusDetail());
+            ).withCostSnapshot(parsed.costSnapshot()).withStatusDetail(parsed.statusDetail());
             if (ruleReview.statusDetail() != null
                 && ruleReview.statusDetail().contains(ReviewBudgetExceededException.CATEGORY)) {
                 completed = completed.withIncompleteInput(

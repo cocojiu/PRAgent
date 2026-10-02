@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fetchGithubCommentPublicationHistory, publishGithubComments } from "@/api/reviews";
+import { effectScope } from "vue";
+import { fetchGithubCommentPublicationBatches, publishGithubComments } from "@/api/reviews";
 import { useReviewDetailGithubComments } from "./useReviewDetailGithubComments";
 import type { GithubCommentPublicationBatch, GithubCommentPublicationHistory } from "@/types";
 
@@ -11,7 +12,8 @@ const messages = vi.hoisted(() => ({
 
 vi.mock("@/api/reviews", () => ({
   fetchGithubCommentPreview: vi.fn(),
-  fetchGithubCommentPublicationHistory: vi.fn(),
+  fetchGithubCommentPublicationBatches: vi.fn(),
+  fetchGithubCommentPublicationItems: vi.fn(),
   publishGithubComments: vi.fn()
 }));
 vi.mock("element-plus/es/components/message/index.mjs", () => ({
@@ -45,11 +47,11 @@ const historyBatch = (status: string): GithubCommentPublicationBatch => ({
 });
 
 describe("useReviewDetailGithubComments", () => {
-  const fetchHistory = vi.mocked(fetchGithubCommentPublicationHistory);
+  const fetchHistory = vi.mocked(fetchGithubCommentPublicationBatches);
   const publishComments = vi.mocked(publishGithubComments);
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   it("loads publication history with bounded pagination parameters", async () => {
@@ -65,7 +67,7 @@ describe("useReviewDetailGithubComments", () => {
       page: 2,
       pageSize: 5,
       status: "completed"
-    });
+    }, { signal: expect.any(AbortSignal) });
     expect(comments.historyPage.value).toBe(2);
     expect(comments.historyPageSize).toBe(5);
     expect(comments.historyStatus.value).toBe("completed");
@@ -86,7 +88,7 @@ describe("useReviewDetailGithubComments", () => {
       page: 1,
       pageSize: 5,
       status: undefined
-    });
+    }, { signal: expect.any(AbortSignal) });
     expect(comments.historyPage.value).toBe(1);
   });
 
@@ -146,12 +148,42 @@ describe("useReviewDetailGithubComments", () => {
       expect(fetchHistory).toHaveBeenCalledWith(521, {
         page: 1,
         pageSize: 5
-      });
+      }, { signal: expect.any(AbortSignal) });
       expect(comments.githubCommentPublishResult.value?.status).toBe("completed");
       expect(comments.githubCommentPublishResult.value?.succeededCount).toBe(3);
       expect(afterPublish).toHaveBeenCalledTimes(2);
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("ignores an old summary after switching tasks", async () => {
+    let resolveOld!: (value: GithubCommentPublicationHistory) => void;
+    fetchHistory.mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve; }));
+    fetchHistory.mockResolvedValueOnce({ ...historyResponse(1), taskId: 522 });
+    const comments = useReviewDetailGithubComments();
+    const old = comments.loadGithubCommentPublicationHistory(521);
+    const signal = fetchHistory.mock.calls[0]![2]!.signal!;
+    await comments.loadGithubCommentPublicationHistory(522);
+    expect(signal.aborted).toBe(true);
+    resolveOld(historyResponse(2));
+    await old;
+    expect(comments.githubCommentPublicationHistory.value?.taskId).toBe(522);
+    expect(comments.historyPage.value).toBe(1);
+  });
+
+  it("cancels a summary and ignores an error after scope disposal", async () => {
+    let rejectRequest!: (reason: unknown) => void;
+    fetchHistory.mockImplementationOnce(() => new Promise((_, reject) => { rejectRequest = reject; }));
+    const scope = effectScope();
+    const comments = scope.run(() => useReviewDetailGithubComments())!;
+    const request = comments.loadGithubCommentPublicationHistory(521);
+    const signal = fetchHistory.mock.calls[0]![2]!.signal!;
+    scope.stop();
+    rejectRequest(new Error("late network failure"));
+    await request;
+    expect(signal.aborted).toBe(true);
+    expect(comments.githubCommentPublicationHistory.value).toBeNull();
+    expect(comments.historyError.value).toBe("");
   });
 });

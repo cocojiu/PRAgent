@@ -18,6 +18,10 @@ public class OperationalDataRetentionProperties {
     private int tenantQuotaUsageDays = 90;
     private int reviewAttemptPayloadDays = 90;
     private int reviewAttemptMetadataDays = 180;
+    private boolean feedbackPayloadPurgeEnabled;
+    private boolean evaluationRunPayloadPurgeEnabled;
+    private int feedbackPayloadDays = 90;
+    private int evaluationRunPayloadDays = 90;
 
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
@@ -43,6 +47,16 @@ public class OperationalDataRetentionProperties {
     public void setReviewAttemptMetadataDays(int reviewAttemptMetadataDays) { this.reviewAttemptMetadataDays = reviewAttemptMetadataDays; }
 
     public int normalizedBatchSize() { return Math.max(1, Math.min(batchSize, 5_000)); }
+    public boolean isFeedbackPayloadPurgeEnabled() { return feedbackPayloadPurgeEnabled; }
+    public void setFeedbackPayloadPurgeEnabled(boolean value) { feedbackPayloadPurgeEnabled = value; }
+    public boolean isEvaluationRunPayloadPurgeEnabled() { return evaluationRunPayloadPurgeEnabled; }
+    public void setEvaluationRunPayloadPurgeEnabled(boolean value) { evaluationRunPayloadPurgeEnabled = value; }
+    public int getFeedbackPayloadDays() { return feedbackPayloadDays; }
+    public void setFeedbackPayloadDays(int value) { feedbackPayloadDays = value; }
+    public int getEvaluationRunPayloadDays() { return evaluationRunPayloadDays; }
+    public void setEvaluationRunPayloadDays(int value) { evaluationRunPayloadDays = value; }
+    public int normalizedFeedbackPayloadDays() { return Math.max(30, Math.min(feedbackPayloadDays, 3_650)); }
+    public int normalizedEvaluationRunPayloadDays() { return Math.max(30, Math.min(evaluationRunPayloadDays, 3_650)); }
     public int normalizedMaxBatchesPerRun() { return Math.max(1, Math.min(maxBatchesPerRun, 100)); }
     public int normalizedReviewAttemptPayloadDays() { return Math.max(1, reviewAttemptPayloadDays); }
     public int normalizedReviewAttemptMetadataDays() {
