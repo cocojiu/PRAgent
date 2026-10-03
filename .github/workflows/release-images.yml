@@ -710,6 +710,7 @@ jobs:
           ACR_REGISTRY: ${{ env.ALIYUN_DEPLOY_REGISTRY }}
           ACR_USER: ${{ env.ALIYUN_REGISTRY_USERNAME }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
           BACKEND_DIGEST: ${{ env.SOURCE_BACKEND_DIGEST }}
@@ -737,7 +738,7 @@ jobs:
           cleanup() {
             docker logout ghcr.io >/dev/null 2>&1 || true
             timeout 30s ssh "${ssh_args[@]}" "$remote" \
-              "rm -f -- '${remote_dir}'/part-*; rmdir -- '${remote_dir}'" >/dev/null 2>&1 || true
+              "rm -f -- '${remote_dir}'/part-* '${remote_dir}/inspections.json'; rmdir -- '${remote_dir}'" >/dev/null 2>&1 || true
           }
           trap cleanup EXIT
           printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
@@ -788,12 +789,14 @@ jobs:
             docker image rm '${backend_transfer}' '${frontend_transfer}' >/dev/null
           "
           # Re-read the actual target platform objects after promotion. Target
-          # manifest digests may differ from GHCR; their image IDs must match.
+          # manifest digests may differ from GHCR; their config digests must match.
           ssh "${ssh_args[@]}" "$remote" "
             set -e
             docker pull '${BACKEND_TARGET}' >/dev/null
             docker pull '${FRONTEND_TARGET}' >/dev/null
-            docker image inspect '${BACKEND_TARGET}' '${FRONTEND_TARGET}'
+            python3 '${DEPLOY_PATH}/scripts/release-manifest.py' inspect-images \
+              --output '${remote_dir}/inspections.json' '${BACKEND_TARGET}' '${FRONTEND_TARGET}'
+            cat '${remote_dir}/inspections.json'
           " > "$RUNNER_TEMP/promoted-images.json"
 
       - name: Bind immutable target deployment identities
