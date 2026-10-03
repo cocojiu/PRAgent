@@ -1,6 +1,10 @@
 package com.repoguard.agent.common;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
@@ -9,9 +13,51 @@ import ch.qos.logback.core.read.ListAppender;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 class GlobalExceptionHandlerTest {
+
+    @Test
+    void mvcMissingResourcesReturn404WhileApplicationFailuresKeep500Diagnostics() throws Exception {
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new MissingResourceController())
+            .setControllerAdvice(handler)
+            .build();
+        Logger logger = (Logger) LoggerFactory.getLogger(GlobalExceptionHandler.class);
+        ListAppender<ILoggingEvent> appender = new EagerListAppender();
+        appender.setContext(logger.getLoggerContext());
+        appender.start();
+        logger.addAppender(appender);
+
+        try {
+            mvc.perform(get("/api/session/properties"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"))
+                .andExpect(jsonPath("$.message").value("Requested resource not found"))
+                .andExpect(header().doesNotExist(GlobalExceptionHandler.ERROR_ID_HEADER));
+            mvc.perform(get("/api/unmapped-resource"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
+            assertThat(appender.list).noneMatch(event -> event.getLevel() == Level.ERROR);
+
+            mvc.perform(get("/application-failure"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("INTERNAL_ERROR"))
+                .andExpect(jsonPath("$.message").value("系统内部异常，请联系管理员。"))
+                .andExpect(header().exists(GlobalExceptionHandler.ERROR_ID_HEADER));
+            assertThat(appender.list.stream().filter(event -> event.getLevel() == Level.ERROR)).hasSize(1);
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
+    }
 
     @Test
     void conflictBusinessExceptionReturnsHttp409() {
@@ -112,6 +158,19 @@ class GlobalExceptionHandlerTest {
         protected void append(ILoggingEvent event) {
             event.prepareForDeferredProcessing();
             super.append(event);
+        }
+    }
+
+    @RestController
+    static final class MissingResourceController {
+        @GetMapping("/api/session/properties")
+        void missingStaticResource() throws NoResourceFoundException {
+            throw new NoResourceFoundException(HttpMethod.GET, "/api/session/properties", "api/session/properties");
+        }
+
+        @GetMapping("/application-failure")
+        void applicationFailure() {
+            throw new IllegalStateException("internal failure detail");
         }
     }
 }
