@@ -532,8 +532,8 @@ preflight_release_images() {
     echo "Pulled images differ from the expected release SHA or version." >&2
     return 1
   fi
-  actual_backend_id="$(docker image inspect --format '{{.Id}}' "$BACKEND_IMAGE")"
-  actual_frontend_id="$(docker image inspect --format '{{.Id}}' "$FRONTEND_IMAGE")"
+  actual_backend_id="$(python3 scripts/release-manifest.py image-id --image "$BACKEND_IMAGE")" || return 1
+  actual_frontend_id="$(python3 scripts/release-manifest.py image-id --image "$FRONTEND_IMAGE")" || return 1
   if [ "$actual_backend_id" != "$EXPECTED_BACKEND_IMAGE_ID" ] || [ "$actual_frontend_id" != "$EXPECTED_FRONTEND_IMAGE_ID" ]; then
     echo "Pulled platform images differ from the scanned release identities." >&2
     return 1

@@ -81,7 +81,46 @@ def validate(manifest, target=False):
 
 
 def inspection(image, reference):
-    return json.loads(subprocess.check_output(["docker", "image", "inspect", reference], text=True))[0]
+    metadata = json.loads(subprocess.check_output(["docker", "image", "inspect", reference], text=True))[0]
+    repository = reference.split("@", 1)[0] if "@" in reference else reference.rsplit(":", 1)[0]
+    require(IMAGE_REPOSITORY.fullmatch(repository), "Invalid inspected image repository")
+    digests = {ref for ref in metadata["RepoDigests"] if ref.startswith(repository + "@")}
+    require(len(digests) == 1, "Inspected image digest is missing or ambiguous")
+    immutable = next(iter(digests))
+    pinned_digest = immutable.split("@", 1)[1]
+    require(DIGEST.fullmatch(pinned_digest), "Invalid inspected image digest")
+    require("@" not in reference or reference == immutable, "Local image differs from requested digest")
+    platform = {"os": metadata["Os"], "architecture": metadata["Architecture"]}
+    require(platform == {"os": "linux", "architecture": "amd64"}, "Unsupported inspected image platform")
+    verbose = json.loads(subprocess.check_output(["docker", "manifest", "inspect", "--verbose", immutable], text=True))
+    entries = verbose if isinstance(verbose, list) else [verbose]
+    matching = [entry for entry in entries if entry["Descriptor"].get("platform") == platform]
+    require(len(matching) == 1, "Registry platform image is missing or ambiguous")
+    entry = matching[0]
+    descriptor = entry["Descriptor"]
+    require(DIGEST.fullmatch(descriptor["digest"]), "Invalid registry platform digest")
+    if not isinstance(verbose, list):
+        require(descriptor["digest"] == pinned_digest, "Registry manifest differs from requested digest")
+    manifests = [entry[key] for key in ("OCIManifest", "SchemaV2Manifest") if key in entry]
+    require(len(manifests) == 1 and manifests[0]["schemaVersion"] == 2, "Unsupported registry manifest")
+    config_digest = manifests[0]["config"]["digest"]
+    require(DIGEST.fullmatch(config_digest), "Invalid registry configuration digest")
+    # Classic Docker IDs identify the config; containerd IDs identify a manifest
+    # or index. Bind either local representation to the same immutable image.
+    if metadata["Id"] != config_digest:
+        local_descriptor = metadata.get("Descriptor", {})
+        require(metadata["Id"] == local_descriptor.get("digest") and metadata["Id"] in (pinned_digest, descriptor["digest"]),
+                "Local image is unrelated to the registry platform image")
+    return {"Id": config_digest, "RuntimeId": metadata["Id"], "Os": metadata["Os"],
+            "Architecture": metadata["Architecture"], "RepoDigests": [immutable]}
+
+
+def inspect_images(args):
+    write_json(args.output, [inspection("", reference) for reference in args.images])
+
+
+def image_id(args):
+    print(inspection("", args.image)["Id"])
 
 
 def create_source(args):
@@ -203,6 +242,8 @@ def main():
     download = commands.add_parser("fetch"); download.add_argument("--run-id", required=True); download.add_argument("--kind", choices=("source", "approved"), required=True); download.add_argument("--directory", required=True); download.add_argument("--tag", default=""); download.set_defaults(function=fetch)
     resolver = commands.add_parser("resolve"); resolver.add_argument("--directory", required=True); resolver.set_defaults(function=resolve)
     promotion = commands.add_parser("promote"); promotion.add_argument("--source", required=True); promotion.add_argument("--inspections", required=True); promotion.add_argument("--target-repository", required=True); promotion.add_argument("--output", required=True); promotion.set_defaults(function=promote)
+    images = commands.add_parser("inspect-images"); images.add_argument("--output", required=True); images.add_argument("images", nargs="+"); images.set_defaults(function=inspect_images)
+    identity = commands.add_parser("image-id"); identity.add_argument("--image", required=True); identity.set_defaults(function=image_id)
     deployment = commands.add_parser("deployment-env"); deployment.add_argument("--manifest", required=True); deployment.add_argument("--sha256", required=True); deployment.add_argument("--target-repository", required=True); deployment.add_argument("--approval-run-id", required=True); deployment.set_defaults(function=deployment_env)
     args = parser.parse_args()
     try:
