@@ -137,9 +137,10 @@ class ScheduledMysqlBackupLinuxIntegrationTest {
         resetFailed();
         nextSecond(first.path("finishedAtUnix").asLong());
         systemctl("start", UNIT + ".timer");
-        await(() -> { try { JsonNode s = status(); return s.path("state").asText().equals("success") && !s.path("archive").path("name").asText().equals(firstName); } catch (Exception e) { return false; } }, 45);
-        systemctl("stop", UNIT + ".timer");
-        assertThat(checked(List.of("systemctl", "show", "--value", "--property=LastTriggerUSecMonotonic", UNIT + ".timer"))).isNotBlank().isNotIn("0", "n/a");
+        try {
+            await(() -> { try { JsonNode s = status(); return s.path("state").asText().equals("success") && !s.path("archive").path("name").asText().equals(firstName); } catch (Exception e) { return false; } }, 45);
+            assertThat(checked(List.of("systemctl", "show", "--value", "--property=LastTriggerUSecMonotonic", UNIT + ".timer"))).isNotBlank().isNotIn("0", "n/a");
+        } finally { systemctl("stop", UNIT + ".timer"); }
         for (int count = 2; count < 8; count++) runBackup();
         assertThat(catalog().size()).isEqualTo(7);
         assertThat(catalog().findValuesAsText("name")).doesNotContain(firstName);
@@ -163,14 +164,7 @@ class ScheduledMysqlBackupLinuxIntegrationTest {
         byte[] original = command(List.of("sudo", "-n", "cat", "--", archive.toString()), null, Map.of(), Duration.ofSeconds(10)).successful();
         byte[] corrupt = original.clone(); corrupt[corrupt.length - 1] ^= 1;
         overwrite(archive, corrupt);
-        resetFailed();
-        for (int count = 0; count < 3; count++) {
-            assertThat(command(List.of("sudo", "-n", "systemctl", "start", UNIT + ".service"), null, Map.of(), Duration.ofSeconds(30)).exit()).isNotZero();
-            assertThat(status().path("reason").asText()).isEqualTo("archive_checksum_mismatch");
-            systemctl("stop", UNIT + ".service");
-        }
-        assertThat(command(List.of("sudo", "-n", "systemctl", "start", UNIT + ".service"), null, Map.of(), Duration.ofSeconds(30)).exit()).isNotZero();
-        assertThat(property("Result")).isEqualTo("start-limit-hit");
+        verifyRestartLimit();
         overwrite(archive, original);
         assertThat(catalog().size()).isEqualTo(7);
         interruptWhileMysqlIsLocked();
@@ -179,6 +173,33 @@ class ScheduledMysqlBackupLinuxIntegrationTest {
         assertThat(catalog().size()).isEqualTo(7);
         runBackup(); assertThat(status().path("state").asText()).isEqualTo("success");
         assertThat(catalog().size()).isEqualTo(7);
+    }
+
+    private static void verifyRestartLimit() throws Exception {
+        assertThat(property("Restart")).isEqualTo("on-failure");
+        String originalDelay = property("RestartUSec");
+        assertThat(originalDelay).isEqualTo("15min");
+        Path override = temporary.resolve("retry-fixture.conf");
+        Files.writeString(override, "[Service]\nRestartSec=1s\n");
+        String target = "/run/systemd/system/" + UNIT + ".service.d/retry-fixture.conf";
+        checked(List.of("sudo", "-n", "install", "-d", "-m", "0755", "/run/systemd/system/" + UNIT + ".service.d"));
+        checked(List.of("sudo", "-n", "install", "-m", "0644", "--", override.toString(), target));
+        checked(List.of("sudo", "-n", "systemctl", "daemon-reload"));
+        try {
+            resetFailed();
+            systemctl("start", "--no-block", UNIT + ".service");
+            await(() -> { try { return property("Result").equals("start-limit-hit"); } catch (Exception e) { return false; } }, 30);
+            assertThat(Integer.parseInt(property("NRestarts"))).isGreaterThanOrEqualTo(2);
+            assertThat(status().path("reason").asText()).isEqualTo("archive_checksum_mismatch");
+        } catch (Exception | AssertionError error) {
+            reportFixtureFailure(); throw error;
+        } finally {
+            command(List.of("sudo", "-n", "systemctl", "stop", UNIT + ".service"), null, Map.of(), Duration.ofSeconds(30));
+            assertThat(property("MainPID")).isEqualTo("0");
+            checked(List.of("sudo", "-n", "rm", "-f", "--", target));
+            checked(List.of("sudo", "-n", "systemctl", "daemon-reload"));
+            assertThat(property("RestartUSec")).isEqualTo(originalDelay);
+        }
     }
 
     private static void verifyPersistentCatchup() throws Exception {
@@ -316,7 +337,7 @@ class ScheduledMysqlBackupLinuxIntegrationTest {
                 assertThat(property("MainPID")).isEqualTo("0");
                 assertThat(property("ActiveState")).isIn("inactive", "failed");
                 resetFailed();
-                checked(List.of("sudo", "-n", "rm", "-f", "--", "/run/systemd/system/" + UNIT + ".service", "/run/systemd/system/" + UNIT + ".timer", "/run/systemd/system/" + UNIT + ".timer.d/fixture.conf"));
+                checked(List.of("sudo", "-n", "rm", "-f", "--", "/run/systemd/system/" + UNIT + ".service", "/run/systemd/system/" + UNIT + ".timer", "/run/systemd/system/" + UNIT + ".timer.d/fixture.conf", "/run/systemd/system/" + UNIT + ".service.d/retry-fixture.conf"));
                 checked(List.of("sudo", "-n", "systemctl", "daemon-reload"));
             }
         } finally {
