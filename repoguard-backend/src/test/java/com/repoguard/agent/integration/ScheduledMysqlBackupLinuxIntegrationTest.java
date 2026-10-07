@@ -131,7 +131,7 @@ class ScheduledMysqlBackupLinuxIntegrationTest {
         checked(List.of("sudo", "-n", "install", "-d", "-m", "0755", "/run/systemd/system/" + UNIT + ".timer.d"));
         checked(List.of("sudo", "-n", "install", "-m", "0644", "--", override.toString(), "/run/systemd/system/" + UNIT + ".timer.d/fixture.conf"));
         checked(List.of("sudo", "-n", "systemctl", "daemon-reload"));
-        systemctl("reset-failed", UNIT + ".service");
+        resetFailed();
         nextSecond(first.path("finishedAtUnix").asLong());
         systemctl("start", UNIT + ".timer");
         await(() -> { try { JsonNode s = status(); return s.path("state").asText().equals("success") && !s.path("archive").path("name").asText().equals(firstName); } catch (Exception e) { return false; } }, 45);
@@ -147,7 +147,7 @@ class ScheduledMysqlBackupLinuxIntegrationTest {
         checked(List.of("sudo", "-n", "test", "!", "-e", budgetFile.toString()));
         checked(List.of("sudo", "-n", "truncate", "--size=2147483648", "--", budgetFile.toString()));
         try {
-            systemctl("reset-failed", UNIT + ".service");
+            resetFailed();
             assertThat(command(List.of("sudo", "-n", "systemctl", "start", UNIT + ".service"), null, Map.of(), Duration.ofSeconds(30)).exit()).isNotZero();
             assertThat(status().path("reason").asText()).isEqualTo("backup_storage_budget_exhausted");
             assertThat(catalog()).isEqualTo(retained);
@@ -160,7 +160,7 @@ class ScheduledMysqlBackupLinuxIntegrationTest {
         byte[] original = command(List.of("sudo", "-n", "cat", "--", archive.toString()), null, Map.of(), Duration.ofSeconds(10)).successful();
         byte[] corrupt = original.clone(); corrupt[corrupt.length - 1] ^= 1;
         overwrite(archive, corrupt);
-        systemctl("reset-failed", UNIT + ".service");
+        resetFailed();
         for (int count = 0; count < 3; count++) {
             assertThat(command(List.of("sudo", "-n", "systemctl", "start", UNIT + ".service"), null, Map.of(), Duration.ofSeconds(30)).exit()).isNotZero();
             assertThat(status().path("reason").asText()).isEqualTo("archive_checksum_mismatch");
@@ -186,7 +186,7 @@ class ScheduledMysqlBackupLinuxIntegrationTest {
         Path override = temporary.resolve("catchup.conf"); Files.writeString(override, configuration);
         checked(List.of("sudo", "-n", "install", "-m", "0644", "--", override.toString(), "/run/systemd/system/" + UNIT + ".timer.d/fixture.conf"));
         checked(List.of("sudo", "-n", "systemctl", "daemon-reload"));
-        systemctl("reset-failed", UNIT + ".service");
+        resetFailed();
         systemctl("start", UNIT + ".timer"); systemctl("stop", UNIT + ".timer");
         assertThat(Instant.now().getEpochSecond()).isLessThan(scheduled.getEpochSecond());
         await(() -> Instant.now().getEpochSecond() > scheduled.getEpochSecond(), 12);
@@ -204,7 +204,7 @@ class ScheduledMysqlBackupLinuxIntegrationTest {
         try {
             var line = CompletableFuture.supplyAsync(() -> { try { return reader.readLine(); } catch (Exception e) { throw new IllegalStateException(e); } });
             String held = line.get(10, TimeUnit.SECONDS); assertThat(held).matches("HELD:[1-9][0-9]*"); connection = held.substring(5);
-            systemctl("reset-failed", UNIT + ".service");
+            resetFailed();
             long before = status().path("startedAtUnix").asLong(); nextSecond(before);
             systemctl("start", "--no-block", UNIT + ".service");
             await(() -> { try { JsonNode s = status(); return s.path("state").asText().equals("running") && s.path("startedAtUnix").asLong() > before; } catch (Exception e) { return false; } }, 15);
@@ -223,7 +223,7 @@ class ScheduledMysqlBackupLinuxIntegrationTest {
 
     private static void runBackup() throws Exception {
         if (command(List.of("sudo", "-n", "test", "-f", BACKUPS.resolve("status.json").toString()), null, Map.of(), Duration.ofSeconds(5)).exit() == 0) nextSecond(status().path("finishedAtUnix").asLong());
-        systemctl("reset-failed", UNIT + ".service");
+        resetFailed();
         Result started = command(List.of("sudo", "-n", "systemctl", "start", UNIT + ".service"), null, Map.of(), Duration.ofMinutes(3));
         if (started.exit() != 0) reportFixtureFailure();
         started.successful();
@@ -270,6 +270,16 @@ class ScheduledMysqlBackupLinuxIntegrationTest {
     private static void systemctl(String... args) throws Exception {
         List<String> command = new ArrayList<>(List.of("sudo", "-n", "systemctl")); command.addAll(List.of(args)); checked(command);
     }
+    private static void resetFailed() throws Exception {
+        Result reset = command(List.of("sudo", "-n", "systemctl", "reset-failed", UNIT + ".service"), null, Map.of(), Duration.ofSeconds(10));
+        if (reset.exit() == 0) return;
+        // systemd may garbage-collect an inactive unit before reset-failed can address it.
+        String response = new String(reset.output(), StandardCharsets.UTF_8).strip();
+        assertThat(response).contains("Unit " + UNIT + ".service not loaded.");
+        assertThat(property("LoadState")).isEqualTo("loaded");
+        assertThat(property("ActiveState")).isEqualTo("inactive");
+        assertThat(property("MainPID")).isEqualTo("0");
+    }
     private static String checked(List<String> args) throws Exception { return checked(args, Map.of()); }
     private static String checked(List<String> args, Map<String, String> env) throws Exception {
         return new String(command(args, null, env, Duration.ofMinutes(3)).successful(), StandardCharsets.UTF_8).strip();
@@ -302,7 +312,7 @@ class ScheduledMysqlBackupLinuxIntegrationTest {
                 command(List.of("sudo", "-n", "systemctl", "stop", UNIT + ".timer", UNIT + ".service"), null, Map.of(), Duration.ofSeconds(30));
                 assertThat(property("MainPID")).isEqualTo("0");
                 assertThat(property("ActiveState")).isIn("inactive", "failed");
-                systemctl("reset-failed", UNIT + ".service");
+                resetFailed();
                 checked(List.of("sudo", "-n", "rm", "-f", "--", "/run/systemd/system/" + UNIT + ".service", "/run/systemd/system/" + UNIT + ".timer", "/run/systemd/system/" + UNIT + ".timer.d/fixture.conf"));
                 checked(List.of("sudo", "-n", "systemctl", "daemon-reload"));
             }
