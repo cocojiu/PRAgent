@@ -195,6 +195,10 @@
                     <execution>
                         <configuration>
                             <propertyName>jacoco.agent.argLine</propertyName>
+                            <!-- Generated dependency tokenizer exceeds the JVM method limit after instrumentation. -->
+                            <excludes>
+                                <exclude>net.sf.jsqlparser.parser.CCJSqlParserTokenManager</exclude>
+                            </excludes>
                         </configuration>
                         <goals>
                             <goal>prepare-agent</goal>
