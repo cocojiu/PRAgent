@@ -1,0 +1,12 @@
+# Optional read-only metadata exposure. Never mount the encrypted archives or credentials into the API.
+services:
+  backend:
+    environment:
+      REPOGUARD_BACKUP_STATUS_FILE: /run/repoguard-backup-status/status.json
+    volumes:
+      - type: bind
+        source: /opt/repoguard/backup-status
+        target: /run/repoguard-backup-status
+        read_only: true
+        bind:
+          create_host_path: false

@@ -1,0 +1,28 @@
+[Unit]
+Description=RepoGuard encrypted daily MySQL snapshot
+Requires=docker.service
+After=docker.service
+StartLimitIntervalSec=3600
+StartLimitBurst=3
+
+[Service]
+Type=oneshot
+User=root
+UMask=0077
+LoadCredential=backup-password:/etc/repoguard/backup-password
+Environment=REPOGUARD_BACKUP_STATUS_PUBLISH=true
+ExecStart=/usr/bin/python3 /opt/repoguard/scripts/scheduled-mysql-backup.py run
+ExecStopPost=/usr/bin/python3 /opt/repoguard/scripts/scheduled-mysql-backup.py finalize
+TimeoutStartSec=16min
+Restart=on-failure
+RestartSec=15min
+Nice=10
+IOSchedulingClass=idle
+CPUQuota=25%
+MemoryMax=192M
+TasksMax=32
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/repoguard/backups /opt/repoguard/backup-status
+NoNewPrivileges=true

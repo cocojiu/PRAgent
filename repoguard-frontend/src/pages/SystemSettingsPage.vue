@@ -118,6 +118,7 @@
       </article>
     </section>
 
+    <BackupStatusPanel v-if="canManageTenants" />
     <SecretReEncryptionPanel :can-manage="canManage" />
     <DataRetentionCleanupAuditsPanel />
 
@@ -157,10 +158,11 @@ security:
 
 <script setup lang="ts">
 import "@/features/system-settings/systemSettings.css";
+import BackupStatusPanel from "@/features/system-settings/components/BackupStatusPanel.vue";
 import { onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
-import { canManage } from "@/stores/authState";
+import { canManage, canManageTenants } from "@/stores/authState";
 import { applyUiPreferences } from "@/stores/uiPreferences";
 import { enterpriseEditionEnabled } from "@/config/edition";
 import { fetchSystemSettings, updateSystemSettings } from "@/api/config";
