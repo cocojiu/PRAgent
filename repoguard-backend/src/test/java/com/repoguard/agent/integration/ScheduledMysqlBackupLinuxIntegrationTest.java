@@ -42,7 +42,7 @@ class ScheduledMysqlBackupLinuxIntegrationTest {
     private static final Path ROOT = Path.of("/opt/repoguard");
     private static final Path BACKUPS = ROOT.resolve("backups/scheduled-mysql");
     private static final String IMAGE = "mysql:8.0.46@sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b";
-    private static final String MYSQL = "MYSQL_PWD=\"$MYSQL_ROOT_PASSWORD\" exec mysql --batch --skip-column-names --unbuffered --user=root repoguard_ci_backup --execute=\"$1\"";
+    private static final String MYSQL = "MYSQL_PWD=\"$MYSQL_ROOT_PASSWORD\" exec mysql --protocol=TCP --host=127.0.0.1 --batch --skip-column-names --unbuffered --user=root repoguard_ci_backup --execute=\"$1\"";
     private static final String OWNER = "backup-" + UUID.randomUUID().toString().replace("-", "");
     private static final String UNIT = "repoguard-ci-" + OWNER;
     private static final List<String> CONTAINERS = new ArrayList<>();
@@ -235,10 +235,11 @@ class ScheduledMysqlBackupLinuxIntegrationTest {
         List<String> args = List.of("docker", "run", "--detach", "--name", name, "--label", "com.repoguard.ci.owner=" + OWNER,
             "--network", "none", "--memory", "512m", "--memory-swap", "512m", "--cpus", "0.50", "--restart", "no",
             "--env", "MYSQL_ROOT_PASSWORD", "--env", "MYSQL_DATABASE=repoguard_ci_backup",
-            "--health-cmd", "MYSQL_PWD=\"$MYSQL_ROOT_PASSWORD\" mysqladmin ping --silent --user=root", "--health-interval", "1s", "--health-timeout", "3s", "--health-retries", "90",
+            "--health-cmd", "MYSQL_PWD=\"$MYSQL_ROOT_PASSWORD\" mysql --protocol=TCP --host=127.0.0.1 --user=root --database=repoguard_ci_backup --execute='SELECT 1' >/dev/null", "--health-interval", "1s", "--health-timeout", "3s", "--health-retries", "90",
             IMAGE, "--innodb-buffer-pool-size=64M", "--max-connections=16", "--performance-schema=OFF");
         checked(args, Map.of("MYSQL_ROOT_PASSWORD", password)); CONTAINERS.add(name);
         await(() -> { try { return checked(List.of("docker", "inspect", "--format", "{{.State.Health.Status}}", name)).equals("healthy"); } catch (Exception e) { return false; } }, 120);
+        assertThat(sql(name, "SELECT 1;")).isEqualTo("1");
         assertThat(checked(List.of("docker", "inspect", "--format", "{{.HostConfig.NetworkMode}}", name))).isEqualTo("none");
         return name;
     }
