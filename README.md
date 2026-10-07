@@ -173,6 +173,79 @@ powershell -ExecutionPolicy Bypass -File scripts/production-readiness-check.ps1 
 
 敏感配置必须通过本地未跟踪的环境文件、文件化 Secret 或受保护的 CI Secret 注入。README 不保存真实密码、令牌、API Key、私钥、主机地址、主机指纹、备份位置或镜像仓库凭据；示例只允许使用占位符。缺少必要凭据时，应用和工作流应保持 fail-closed。
 
+### 独立 Linux 质量检查
+
+已有 `Repository Governance` 工作流提供默认关闭的 `linux_quality` 手动选项。需要验证未创建 PR 的候选分支时，选择该分支并开启此选项；仓库治理通过后，复用 `Pull Request Quality` 的 Ubuntu 检查，运行后端、前端、临时 MySQL/RabbitMQ 和迁移验证。也可使用 `gh workflow run repository-governance.yml --ref <候选分支> -f linux_quality=true`。该入口仅授予仓库读取权限，不传递生产 Secret，不创建 PR、推送镜像或连接生产主机；依赖差异审查仍仅在 PR 事件运行。它验证 runner 上实际执行的检查，不能替代生产调度、恢复、代理流式传输或真实业务验收。
+
+### 可选服务器定时数据库备份
+
+`deploy/systemd/repoguard-mysql-backup.{service,timer}` 提供独立于操作电脑的日常加密 MySQL 逻辑备份。默认不安装、不启用；生产启用须先完成备份与恢复预检。需要 Linux、systemd（支持 `LoadCredential`）、Python 3.8+、Docker、Bash 和 OpenSSL。将两个生产脚本 `scripts/scheduled-mysql-backup.py`、`scripts/backup-prod-mysql.sh` 安装到单元配置中的脚本目录，创建单元指定的备份父目录，并用受保护的运维通道配置 `LoadCredential` 指向的密钥文件（仅 root 可读，至少32字节）。密钥必须另行离线保管，不写入命令行、Git 或日志。
+
+经审批启用 timer 后，每天北京时间20:00加最多5分钟随机延迟执行；服务器停机错过的计划在恢复后补执行一次。失败15分钟后重试，1小时内最多启动3次。独立目录和互斥锁隔离调度产物；仅在新备份完成解密/gzip验证和 SHA256 核对后清理旧的已验证副本，保留最多7份、目标总量2 GiB。单份超出预算时保留最新副本并报告超预算，后续运行停止，需人工处理；不会为腾出空间删除唯一备份。服务资源限制不限制 MySQL 容器内的 dump，因此首次启用仍需检查业务负载。
+
+在服务器运行 `python3 /opt/repoguard/scripts/scheduled-mysql-backup.py status` 查看最近执行记录；可用 `--max-age-hours 30` 设置记录新鲜度（1～168小时，默认30小时）。输出 JSON，最近成功且未超存储预算时退出0，16分钟以内的运行中记录退出1，失败、过期、超时未结束、缺失或无效记录退出2。查询只读取有界状态文件，不读取密钥或解密备份，也不检查进程存活、timer 是否启用、归档当前完整性或恢复能力；`SUCCESS_RECORDED` 仅表示记录成功。结合 `systemctl status repoguard-mysql-backup.timer repoguard-mysql-backup.service` 和 `journalctl -u repoguard-mysql-backup.service` 诊断实际调度与中断，失败不会自动发送外部通知。电脑上线后使用已有 OpenSSH 别名补拉当前保留的已验证加密副本：
+
+```text
+python scripts/scheduled-mysql-backup.py pull --host <已配置SSH别名> --destination <本地加密备份目录>
+```
+
+拉取要求已登记的主机指纹和非交互认证。远端目录清单最多64 KiB，单次清单的归档总量最多2 GiB；下载过程中限制写入量，超量、超时或连接失败时终止，校验长度与 SHA256 后才发布本地文件。目标目录应使用支持硬链接的本地文件系统（如 NTFS、ext4），不通过符号链接或目录联接访问；原子发布拒绝覆盖下载期间由其他进程创建的目标，不支持硬链接时直接失败。相同副本跳过，冲突副本和已有元数据拒绝覆盖；仅清理本次创建的临时文件，已有 `.partial` 文件需人工核查后处理。离线时间超过服务器保留窗口的旧备份不能补回。停止调度使用 `systemctl disable --now repoguard-mysql-backup.timer`；需要中止当前运行时另行停止 service，停止操作不会删除已完成副本。
+
+日常产物仅包含数据库逻辑快照，不包含配置、Secret、消息队列或上传卷，不提供 PITR，也不执行恢复容器。完整一致备份、同版本全栈恢复演练和异地副本必须分别维护。
+
+系统设置页提供仅系统管理员可见的备份状态卡片。接口 `GET /api/v1/system/backup-status` 默认返回未配置；不允许租户管理员、审查员或只读用户读取主机级元数据。启用前由运维创建 `/opt/repoguard/backup-status`（root 所有、0755、禁止组和其他用户写入）；systemd 单元将执行状态的受限投影写入此目录，文件0644，只包含时间、状态、份数、大小及固定原因码，不包含备份路径、归档哈希或密钥。投影失败不会中止数据库备份，页面会显示缺失或旧记录。
+
+在已审核的部署配置中显式叠加 `docker-compose.backup-status.yml`，仅向 API 只读挂载上述状态目录；每次部署均需保留该覆盖配置。不要把备份或密钥目录挂进应用。该覆盖文件设置 `REPOGUARD_BACKUP_STATUS_FILE`；直接运行后端时也可将其指向已发布的绝对状态文件路径，以 `REPOGUARD_BACKUP_STATUS_MAX_AGE_HOURS` 调整1～168小时的新鲜度。页面只在打开及人工刷新时查询，不触发备份操作；状态成功不代表已验证恢复。关闭该集成只需移除状态文件配置和只读挂载，不删除备份。
+
+### 可选审查进度推送
+
+后端设置 `REPOGUARD_REVIEW_PROGRESS_STREAM_ENABLED=true`，前端构建设置 `VITE_REVIEW_PROGRESS_STREAM=true`，可启用任务详情 SSE 进度更新；两个开关默认关闭。端点为 `GET /api/v1/reviews/{id}/events`，使用普通用户 Bearer 会话和现有租户请求头，不接受 URL 凭据或长期管理员 Key。
+
+事件仅携带任务标识和持久化 timeline 游标，客户端收到后读取既有状态接口；中间事件可合并，不用于审计回放。每次连接均重新同步当前状态，`Last-Event-ID` 不能跳过鉴权。API 每5秒重新检查账号、会话、租户成员资格和任务存在性；停用账号或撤销权限后最迟受账号缓存5秒及采样周期影响关闭连接。
+
+每实例最多16连接、每用户最多2连接，最长连接120秒，正常110秒轮换。服务重启或历史归档后从持久化当前状态恢复或回退轮询；浏览器隐藏、断网、20秒无数据或连续3次短连接失败时释放连接并使用现有页面感知轮询。代理需允许 SSE 并尊重 `X-Accel-Buffering: no`；前端构建及后端开关应配套启用。Worker 不持有流连接，不修改 RabbitMQ 消费事务。
+
+### 离线 Diff 预审与代码所有者建议
+
+先用项目要求的 JDK/Maven 打包后端，在有 Python 3.8+、Git 和同版本 Java 的电脑执行：
+
+```text
+python scripts/repoguard-review.py --repo <仓库目录> --base origin/main --backend-jar <后端可执行jar>
+python scripts/repoguard-review.py --repo <仓库目录> --base origin/main --staged --backend-jar <后端可执行jar> --format sarif --output <新的报告文件>
+python scripts/repoguard-review.py --repo <仓库目录> --base origin/main --include-untracked --full-context --backend-jar <后端可执行jar> --format json
+```
+
+默认比较基础分支与 HEAD 的 merge-base 到已跟踪工作区的差异，包含提交、暂存和未暂存修改；`--staged` 比较 merge-base 到索引。`--include-untracked` 可额外扫描未被 Git 忽略的新文件，不能与 `--staged` 同用。按 Git 50% 相似度识别重命名，报告保留新旧路径，CODEOWNERS 建议覆盖两者；未识别的移动仍表现为删除和新增。删除文件只保留差异上下文；二进制、子模块和其他纯元数据变化列为未完成范围。
+
+`--full-context` 为已有上下文感知规则加载同一索引或工作区中的完整文件，默认仍只传 diff。文件内容留在本机且不写入报告，不宣称来自远端提交；扫描仍限于变更行，不能替代完整 PR 审查。工作区内容读取支持 Windows 和具有 `/proc/self/fd` 的 Linux，拒绝符号链接、Windows 重解析点和越出仓库的文件句柄；无法读取请求的上下文时报告缺口并退出2。浅克隆缺少基础提交时直接提示失败，不联网补取；detached HEAD 只要能解析基础提交即可使用。每次最多200个文件、单文件内容或 patch 各256 KiB、diff 加完整上下文共2 MiB；限制超出或采集中检测到改动时拒绝生成成功结论。
+
+CLI 启动独立的 Java 主类，复用服务端14个内置规则检测器及结果去重逻辑，不启动 Spring 应用、数据库、MQ 或模型调用。默认策略是显式标记的离线 OBSERVE 基线（MEDIUM 严重级别、80置信度），不等同生产仓库策略。可用 `--policy <JSON文件>` 提供本地 `ReviewRuleSettings` 数组，要求内置规则 ID、检测器版本和配置版本有效；不支持声明式规则、不自动下载生产配置，输出始终标明生产策略未验证。
+
+支持终端摘要、JSON、SARIF；报告不包含原始 diff 或凭据。默认发现问题仍退出0，`--fail-on MEDIUM` 等参数显式开启本地严重级别门禁后命中退出1；执行失败或范围不完整退出2。`--output` 只创建新文件，不覆盖已有报告。预审不创建正式任务、不发布评论或 Check Run，不进入质量准入样本或绩效统计。
+
+CODEOWNERS 只从指定基础分支读取，按 `.github/CODEOWNERS`、根目录、`docs/CODEOWNERS` 顺序选第一个文件。支持大小写敏感路径、`*`、`?`、`**`、目录规则、后匹配覆盖及空所有者清除；不支持的转义/否定/字符组规则会给出行号提示。文件最多128 KiB、2000行；解析问题仅影响推荐，不阻止规则预审。输出最多3个按覆盖文件数排列的外部身份及每条路径的匹配依据、未覆盖列表，不验证 GitHub 写权限或映射租户成员，不自动分派。语义依据：[GitHub CODEOWNERS 文档](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners)。
+
+### 在线 CODEOWNERS 复核推荐
+
+该入口仅装配于 `enterprise-experimental` API，默认关闭。开启前应具备真实仓库的合法读取权限、至少 30 次可追溯的人工分派或领取记录，以及可计算的接受率和 SLA 数据。设置 `REPOGUARD_CODEOWNERS_ROUTING_ENABLED=true` 与 `REPOGUARD_CODEOWNERS_MAPPING_FILE`；映射文件必须是 API 进程可读的绝对规范路径、普通文件，不能经过符号链接，内容不超过 256 KiB。映射由运维配置，HTTP 调用者不能上传映射或自授所有者权限。
+
+映射文件是 JSON 数组，按租户 ID 和完整仓库名隔离；外部身份必须精确匹配，并映射到系统用户 ID。例如：
+
+```json
+[{"tenantId":7,"repository":"owner/repo","owners":{"@owner/backend":[11,12],"reviewer@example.com":[13]}}]
+```
+
+任务详情页的推荐入口仅对管理员、租户管理员和复核成员开放，适用于当前批次的待人工复核任务。点击“查看推荐”后，系统从 PR 的不可变 base 提交按 `.github/CODEOWNERS`、根目录、`docs/CODEOWNERS` 顺序读取规则，最多展示 3 位候选人、匹配依据、覆盖范围及未覆盖路径。候选人必须仍为当前活动租户的有效复核成员；外部所有者文本不会直接成为系统用户名。
+
+“接受推荐并分派”需要用户明确点击。服务端重新查询候选人、校验提交与批次，在事务中检查成员资格，并以任务版本和原分派状态约束更新；过期推荐或并发分派变化返回冲突。推荐查询不自动写入分派，不发布 GitHub 评论，也不代替仓库的必需审查策略。查询和接受接口分别为 `GET /api/v1/review-workflow/tasks/{taskId}/codeowners` 和 `POST /api/v1/review-workflow/tasks/{taskId}/codeowners/accept`，响应禁止浏览器缓存。
+
+企业版任务详情也提供独立的“人工选择复核成员”入口，不依赖推荐开关。可按用户名开头查找当前租户的有效复核成员，每次最多显示 20 位；只有选择成员并点击“确认分派”才写入。确认携带任务批次、提交和原分派版本，服务端按成员 ID 重新检查并锁定资格，版本或资格变化时需刷新后重新选择。该入口不会展示账号邮箱或凭据，个人版不装配。成员查询和确认分别使用 `GET /api/v1/review-workflow/tasks/{taskId}/assignment-options` 与 `POST /api/v1/review-workflow/tasks/{taskId}/assignment/confirm`，响应禁止缓存。
+
+重命名同时匹配新旧路径的 base 规则；同一候选人的文件数、风险和 Finding 按实际变更去重，页面保留旧路径及其关联变更的依据。旧路径由 [GitHub PR 文件列表](https://docs.github.com/en/rest/pulls/pulls#list-pull-requests-files) 补取，读取前后校验 PR 版本，远端文件集合必须与当前批次一致。只保留路径元数据，不加载文件上下文；最多读取 3 页、200 个实际变更文件和 512 KiB 的路径元数据，60 秒单调时间预算超限后回退。
+
+规则文件最多 128 KiB、2000 行；支持的 glob 子集和离线 CLI 一致，含重命名前路径的唯一匹配路径最多 200 个，所有者标识最长 255 字符。无法解析、缺失配置、没有合格成员、预算超限或缺少重命名前路径时显示原因并保留人工分派。运维映射的解析缓存最多 8 个租户/仓库/内容指纹条目，60 秒单调时间过期；每次仍重新读取映射文件、任务版本和成员资格，不缓存最终候选人。关闭开关后立即停止推荐查询与接受分派。
+
+
 需要使用文件化 Secret 时，应用支持以 `*_FILE` 形式传入路径，例如：
 
 - `MYSQL_ROOT_PASSWORD_FILE`
@@ -342,6 +415,8 @@ SARIF 导出包含当前审查的 findings，按扫描器名称与版本分组�
 每次导入最多 20 个 run、5,000 个 result。普通导入与 CI 上传都会在解析完成后重新核对任务、attempt 和 commit；准备期间任务被重试时返回冲突，需要重新获取绑定。报告批次、finding、旧批次替代状态及 CI 上传记录在同一事务中提交，任一步写入失败都会整体回滚。
 
 第一版用于手动接入验收：报告生成后获取 10 分钟短期凭证，再启动读取已有报告的上传作业，或下载报告后运行通用片段。凭证通过 `REPOGUARD_CI_CREDENTIAL` secret 注入，上传后删除临时 secret；不可作为长期定时任务凭证。真实凭证不会进入片段、页面正文或浏览器存储，复制、关闭向导、刷新绑定或过期后清除页面持有的值。重试相同报告时保持 `SARIF_SCAN_RUN` 不变；任务重试或 commit 更新后需要重新获取绑定与凭证。
+
+企业版人工分派及机器人分派仅接受当前租户内启用的审查成员（ADMIN、PLATFORM_ADMIN、TENANT_ADMIN 或 REVIEWER 成员角色）。停用账号、失效租户、非成员及只读/规则管理成员不能接收分派；用户名采用系统记录中的规范名称。清空分派不要求原接收者仍有效，便于回收失效成员的任务。
 
 企业版人工复核超时后，升级扫描只选择仍待复核、未到升级上限且已过冷却期的任务。升级间隔默认 30 分钟，可通过 `REPOGUARD_HUMAN_REVIEW_ESCALATION_INTERVAL_MINUTES`（1 至 10,080）调整；升级上限仍默认为 3。扫描周期与业务升级间隔独立，重新分派、完成复核或状态变化后，旧候选不会触发升级。
 
