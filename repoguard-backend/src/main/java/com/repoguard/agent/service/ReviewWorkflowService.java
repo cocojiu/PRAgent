@@ -4,6 +4,7 @@ import com.repoguard.agent.dto.NotificationReadRequest;
 import com.repoguard.agent.dto.NotificationReportDto;
 import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.ReviewAssignmentRequest;
+import com.repoguard.agent.dto.ReviewAssignmentSnapshot;
 import com.repoguard.agent.dto.ReviewBotCommandRequest;
 import com.repoguard.agent.dto.ReviewBotCommandResponse;
 import com.repoguard.agent.dto.ReviewEscalationResponse;
@@ -15,6 +16,8 @@ public interface ReviewWorkflowService {
     PageResponse<ReviewWorkflowItemDto> listQueue(int page, int pageSize, String assignee, Boolean overdue);
 
     ReviewWorkflowItemDto assign(Long taskId, ReviewAssignmentRequest request, String operator);
+
+    ReviewWorkflowItemDto assignRecommended(Long taskId, String assignee, ReviewAssignmentSnapshot expected, String operator);
 
     ReviewEscalationResponse escalateOverdue();
 

@@ -201,7 +201,8 @@ class ReviewTaskTransitionStoreTest {
 
         ArgumentCaptor<UpdateWrapper<ReviewTask>> captor = ArgumentCaptor.captor();
         verify(reviewTaskMapper).update(captor.capture());
-        assertThat(captor.getValue().getSqlSegment()).contains("id", "status");
+        assertThat(captor.getValue().getSqlSegment()).contains("id", "status", "current_attempt_id IS NULL", "commit_sha IS NULL",
+            "generation IS NULL", "review_assignee IS NULL", "review_assigned_at IS NULL", "review_sla_deadline IS NULL");
         assertThat(captor.getValue().getSqlSet())
             .contains("review_assignee", "review_assigned_at", "review_sla_deadline", "review_escalation_level");
         assertThat(captor.getValue().getParamNameValuePairs().values())
@@ -349,5 +350,16 @@ class ReviewTaskTransitionStoreTest {
         assertThat(task.getStartedAt()).isNull();
         assertThat(task.getFinishedAt()).isNull();
         assertThat(task.getDurationSeconds()).isZero();
+    }
+    @Test void assignmentFencesTheNonNullVersionAndObservedAssignment() {
+        var task = new ReviewTask(); task.setId(81L); task.setCurrentAttemptId(12L); task.setCommitSha("a".repeat(40)); task.setGeneration(3L);
+        task.setReviewAssignee("old-reviewer"); task.setReviewAssignedAt(LocalDateTime.parse("2026-08-01T10:00:00"));
+        task.setReviewSlaDeadline(LocalDateTime.parse("2026-08-01T12:00:00")); when(reviewTaskMapper.update(any())).thenReturn(1);
+        assertThat(store.assignHumanReview(task, "new-reviewer", LocalDateTime.parse("2026-08-01T11:00:00"), LocalDateTime.parse("2026-08-01T13:00:00"))).isTrue();
+        ArgumentCaptor<UpdateWrapper<ReviewTask>> captor = ArgumentCaptor.captor(); verify(reviewTaskMapper).update(captor.capture());
+        assertThat(captor.getValue().getSqlSegment()).contains("current_attempt_id =", "commit_sha =", "generation =", "review_assignee =",
+            "review_assigned_at =", "review_sla_deadline =").doesNotContain("IS NULL");
+        assertThat(captor.getValue().getParamNameValuePairs().values()).contains(12L, "a".repeat(40), 3L, "old-reviewer",
+            LocalDateTime.parse("2026-08-01T10:00:00"), LocalDateTime.parse("2026-08-01T12:00:00"));
     }
 }

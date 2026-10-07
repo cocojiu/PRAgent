@@ -20,6 +20,8 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.NotificationReadStateMapper;
 import com.repoguard.agent.mapper.ReviewBotCommandAuditMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
+import com.repoguard.agent.mapper.TenantMembershipMapper;
+import com.repoguard.agent.tenancy.TenantContext;
 import com.repoguard.agent.service.ReviewTaskCommandService;
 import com.repoguard.agent.review.task.ReviewTaskTransitionStore;
 import java.time.LocalDateTime;
@@ -34,14 +36,16 @@ class ReviewWorkflowServiceImplTest {
     private final ReviewBotCommandAuditMapper botAuditMapper = org.mockito.Mockito.mock(ReviewBotCommandAuditMapper.class);
     private final ReviewTaskCommandService reviewTaskCommandService = org.mockito.Mockito.mock(ReviewTaskCommandService.class);
     private final ReviewTaskTransitionStore transitionStore = org.mockito.Mockito.mock(ReviewTaskTransitionStore.class);
+    private final TenantMembershipMapper membershipMapper = org.mockito.Mockito.mock(TenantMembershipMapper.class);
     private final ReviewWorkflowProperties properties = new ReviewWorkflowProperties();
     private final ReviewWorkflowServiceImpl service = new ReviewWorkflowServiceImpl(
-        reviewTaskMapper, readStateMapper, botAuditMapper, reviewTaskCommandService, transitionStore, properties
+        reviewTaskMapper, readStateMapper, botAuditMapper, reviewTaskCommandService, transitionStore, properties, membershipMapper
     );
 
     @BeforeEach
     void resetMocks() {
-        reset(reviewTaskMapper, readStateMapper, botAuditMapper, reviewTaskCommandService, transitionStore);
+        reset(reviewTaskMapper, readStateMapper, botAuditMapper, reviewTaskCommandService, transitionStore, membershipMapper);
+        when(membershipMapper.selectAssignableUsernameForUpdate(1L, "reviewer")).thenReturn("reviewer");
     }
 
     @Test
@@ -73,6 +77,38 @@ class ReviewWorkflowServiceImplTest {
         var cleared = service.assign(2L, new ReviewAssignmentRequest(" ", 10), "admin");
         assertThat(cleared.assignee()).isNull();
         verify(transitionStore, org.mockito.Mockito.times(2)).assignHumanReview(any(), any(), any(), any());
+    }
+
+    @Test
+    void rejectsUnknownOrIneligibleMemberWithoutChangingAssignment() {
+        when(reviewTaskMapper.selectById(2L)).thenReturn(task(2L, null));
+        for (String name : List.of("missing", "disabled", "read-only", "other-tenant")) {
+            assertThatThrownBy(() -> service.assign(2L, new ReviewAssignmentRequest(name, null), "admin"))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("active review member");
+        }
+        org.mockito.Mockito.verifyNoInteractions(transitionStore);
+    }
+
+    @Test
+    @SuppressWarnings("try")
+    void resolvesCanonicalMemberWithinAuthenticatedTenant() {
+        when(reviewTaskMapper.selectById(2L)).thenReturn(task(2L, null));
+        when(membershipMapper.selectAssignableUsernameForUpdate(7L, "REVIEWER")).thenReturn("Reviewer");
+        when(transitionStore.assignHumanReview(any(), any(), any(), any())).thenReturn(true);
+        try (var ignored = TenantContext.withTenant(7L)) {
+            assertThat(service.assign(2L, new ReviewAssignmentRequest("REVIEWER", null), "admin").assignee())
+                .isEqualTo("Reviewer");
+        }
+        verify(membershipMapper).selectAssignableUsernameForUpdate(7L, "REVIEWER");
+    }
+
+    @Test
+    void botAssignmentCannotBypassMembershipValidation() {
+        when(reviewTaskMapper.selectById(2L)).thenReturn(task(2L, null));
+        var result = service.executeBotCommand("github",
+            new ReviewBotCommandRequest("denied-member", "/repoguard assign 2 missing", null), "admin");
+        assertThat(result.status()).isEqualTo("REJECTED");
+        org.mockito.Mockito.verifyNoInteractions(transitionStore);
     }
 
     @Test
@@ -326,5 +362,31 @@ class ReviewWorkflowServiceImplTest {
         task.setReviewEscalationLevel(0);
         task.setCreatedAt(LocalDateTime.now().minusHours(1));
         return task;
+    }
+    @Test void recommendedAssignmentRejectsChangesBeforeMemberLookupOrWriting() {
+        var original = task(2L, null); original.setCurrentAttemptId(12L); original.setCommitSha("a".repeat(40)); original.setGeneration(3L);
+        var expected = com.repoguard.agent.dto.ReviewAssignmentSnapshot.from(original);
+        for (int change = 0; change < 6; change++) {
+            var changed = task(2L, null); changed.setCurrentAttemptId(12L); changed.setCommitSha("a".repeat(40)); changed.setGeneration(3L);
+            switch (change) {
+                case 0 -> changed.setCurrentAttemptId(13L); case 1 -> changed.setCommitSha("b".repeat(40));
+                case 2 -> changed.setGeneration(4L); case 3 -> changed.setReviewAssignee("other");
+                case 4 -> changed.setReviewAssignedAt(LocalDateTime.now()); case 5 -> changed.setReviewSlaDeadline(LocalDateTime.now());
+                default -> throw new AssertionError();
+            }
+            when(reviewTaskMapper.selectById(2L)).thenReturn(changed);
+            assertThatThrownBy(() -> service.assignRecommended(2L, "reviewer", expected, "admin")).isInstanceOf(BusinessException.class)
+                .hasMessageContaining("assignment changed");
+        }
+        org.mockito.Mockito.verifyNoInteractions(membershipMapper, transitionStore);
+    }
+    @Test void recommendedAssignmentRechecksMembershipAndUsesTheNormalTransactionalWrite() {
+        var current = task(2L, null); current.setCurrentAttemptId(12L); current.setCommitSha("a".repeat(40)); current.setGeneration(3L);
+        var expected = com.repoguard.agent.dto.ReviewAssignmentSnapshot.from(current);
+        when(reviewTaskMapper.selectById(2L)).thenReturn(current);
+        when(transitionStore.assignHumanReview(any(), any(), any(), any())).thenReturn(true);
+        assertThat(service.assignRecommended(2L, "reviewer", expected, "admin").assignee()).isEqualTo("reviewer");
+        verify(membershipMapper).selectAssignableUsernameForUpdate(1L, "reviewer");
+        verify(transitionStore).assignHumanReview(org.mockito.ArgumentMatchers.eq(current), org.mockito.ArgumentMatchers.eq("reviewer"), any(), any());
     }
 }
