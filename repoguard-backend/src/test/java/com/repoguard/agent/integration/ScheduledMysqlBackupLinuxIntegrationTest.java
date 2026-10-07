@@ -295,6 +295,11 @@ class ScheduledMysqlBackupLinuxIntegrationTest {
         List<String> command = new ArrayList<>(List.of("sudo", "-n", "systemctl")); command.addAll(List.of(args)); checked(command);
     }
     private static void resetFailed() throws Exception {
+        await(() -> {
+            try {
+                return List.of("inactive", "failed").contains(property("ActiveState")) && property("MainPID").equals("0");
+            } catch (Exception e) { return false; }
+        }, 15);
         Result reset = command(List.of("sudo", "-n", "systemctl", "reset-failed", UNIT + ".service"), null, Map.of(), Duration.ofSeconds(10));
         if (reset.exit() == 0) return;
         // systemd may garbage-collect an inactive unit before reset-failed can address it.
