@@ -38,3 +38,5 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.linux_quality == true }}
     needs: guard
     uses: ./.github/workflows/pr-quality.yml
+    with:
+      linux_backup_integration: true
