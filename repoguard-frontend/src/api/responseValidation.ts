@@ -4,6 +4,10 @@ import type {
   GithubIntegrationConfig,
   GithubFeedbackDiagnostics,
   FeedbackSummary,
+  CodeownersRecommendations,
+  CodeownersAcceptance,
+  ReviewAssignmentOptions,
+  ReviewMemberAssignment,
   GithubChecksSetupStatus,
   PageResponse,
   ReviewPolicyConfig,
@@ -200,3 +204,46 @@ export const isFeedbackSummary: ApiResponseValidator<FeedbackSummary> = (value):
   && Array.isArray(value.details) && value.details.length <= 20 && value.details.every(row =>
     isRecord(row) && hasNumber(row, "findingId") && hasNumber(row, "taskId") && hasNumber(row, "prNumber")
     && ["source", "status", "actor", "feedbackAt", "repository", "headSha"].every(key => hasString(row, key)));
+
+const positiveId = (value: unknown) => typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+const boundedCount = (value: unknown, max: number): value is number =>
+  typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && value <= max;
+const boundedStrings = (value: unknown, count: number, length: number): value is string[] =>
+  Array.isArray(value) && value.length <= count && value.every(item => typeof item === "string" && item.length <= length);
+const optionalSha = (value: unknown) => value == null || typeof value === "string" && /^[a-f0-9]{40}$/i.test(value);
+
+export const isCodeownersRecommendations: ApiResponseValidator<CodeownersRecommendations> =
+  (value): value is CodeownersRecommendations => {
+    if (!isRecord(value) || typeof value.status !== "string" || value.status.length > 64 || !positiveId(value.taskId)
+      || !(value.attemptId == null || positiveId(value.attemptId)) || !optionalSha(value.headSha) || !optionalSha(value.baseSha)
+      || !(value.sourcePath == null || typeof value.sourcePath === "string" && [".github/CODEOWNERS", "CODEOWNERS", "docs/CODEOWNERS"].includes(value.sourcePath))
+      || !Array.isArray(value.candidates) || value.candidates.length > 3 || !value.candidates.every(candidate =>
+        isRecord(candidate) && positiveId(candidate.userId) && typeof candidate.username === "string"
+        && candidate.username.trim().length > 0 && candidate.username.length <= 128
+        && boundedCount(candidate.coveredFiles, 200) && candidate.coveredFiles > 0 && boundedCount(candidate.findingCount, 200000)
+        && boundedCount(candidate.riskScore, 1600) && boundedStrings(candidate.externalIdentities, 1000, 255)
+        && boundedStrings(candidate.paths, 200, 512) && candidate.paths.length > 0)
+      || !Array.isArray(value.basis) || value.basis.length > 200 || !value.basis.every(row =>
+        isRecord(row) && typeof row.path === "string" && row.path.length <= 512
+        && (row.pattern == null || typeof row.pattern === "string" && row.pattern.length <= 256)
+        && boundedCount(row.line, 2000) && boundedStrings(row.owners, 20, 255) && boundedStrings(row.changedFiles, 200, 512) && row.changedFiles.length > 0)
+      || !boundedStrings(value.uncoveredPaths, 200, 512) || !boundedStrings(value.unmappedIdentities, 4000, 255)) return false;
+    if (new Set(value.candidates.map(candidate => candidate.userId)).size !== value.candidates.length) return false;
+    return value.status !== "RECOMMENDATIONS" || value.candidates.length > 0 && positiveId(value.attemptId)
+      && typeof value.headSha === "string" && typeof value.baseSha === "string" && typeof value.sourcePath === "string";
+  };
+
+export const isCodeownersAcceptance: ApiResponseValidator<CodeownersAcceptance> = (value): value is CodeownersAcceptance =>
+  isRecord(value) && positiveId(value.taskId) && positiveId(value.attemptId) && typeof value.headSha === "string"
+  && /^[a-f0-9]{40}$/i.test(value.headSha) && typeof value.assignee === "string"
+  && value.assignee.trim().length > 0 && value.assignee.length <= 128;
+
+export const isReviewAssignmentOptions: ApiResponseValidator<ReviewAssignmentOptions> =
+  (value): value is ReviewAssignmentOptions => isRecord(value) && positiveId(value.taskId) && positiveId(value.attemptId)
+  && typeof value.headSha === "string" && /^[a-f0-9]{40}$/i.test(value.headSha)
+  && typeof value.assignmentVersion === "string" && /^[a-f0-9]{64}$/.test(value.assignmentVersion)
+  && typeof value.hasMore === "boolean" && Array.isArray(value.members) && value.members.length <= 20
+  && value.members.every(member => isRecord(member) && positiveId(member.userId) && typeof member.username === "string"
+    && member.username.trim().length > 0 && member.username.length <= 128)
+  && new Set(value.members.map(member => member.userId)).size === value.members.length;
+export const isReviewMemberAssignment: ApiResponseValidator<ReviewMemberAssignment> = isCodeownersAcceptance;

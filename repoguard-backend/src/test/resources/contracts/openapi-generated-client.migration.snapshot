@@ -1,3 +1,4 @@
+acceptCodeownersRecommendation -> codeownersRecommendationControllerAccept // POST /api/v1/review-workflow/tasks/{taskId}/codeowners/accept
 activateRepositorySuppression -> repositoryPolicyControllerActivate // POST /api/v1/config/repository-policy/suppressions/{id}/activate
 bindEnterpriseTenantIdentity -> enterpriseTenantControllerPutIdentity // PUT /api/v1/enterprise/tenants/{tenantKey}/identities
 bindEnterpriseTenantMembership -> enterpriseTenantControllerPutMembership // PUT /api/v1/enterprise/tenants/{tenantKey}/memberships
@@ -6,6 +7,7 @@ cancelLlmEvaluationRun -> reviewCalibrationControllerCancelEvaluationRun // POST
 changePassword -> authControllerChangePassword // POST /api/v1/auth/password/change
 cleanupDataRetention -> dataRetentionControllerCleanup // POST /api/v1/config/data-retention/cleanup
 compareLlmEvaluationReports -> reviewCalibrationControllerCompareEvaluationReports // GET /api/v1/config/review-calibration/evaluation-reports/{reportId}/compare/{candidateReportId}
+confirmReviewMemberAssignment -> reviewMemberAssignmentControllerConfirm // POST /api/v1/review-workflow/tasks/{taskId}/assignment/confirm
 createEnterpriseTenant -> enterpriseTenantControllerCreate // POST /api/v1/enterprise/tenants
 createLlmEvaluationReport -> reviewCalibrationControllerCreateEvaluationReport // POST /api/v1/config/review-calibration/evaluation-reports
 createNotificationBinding -> notificationIntegrationControllerCreateBinding // POST /api/v1/config/notification-bindings
@@ -15,8 +17,10 @@ createUser -> userManagementControllerCreateUser // POST /api/v1/users
 deleteNotificationBinding -> notificationIntegrationControllerDeleteBinding // DELETE /api/v1/config/notification-bindings/{id}
 exportLlmEvaluationReport -> reviewCalibrationControllerExportEvaluationReport // GET /api/v1/config/review-calibration/evaluation-reports/{reportId}/export
 exportLlmModelReleaseAudits -> reviewCalibrationControllerExportModelReleaseAudits // GET /api/v1/config/review-calibration/release-center/audits/export
+fetchBackupStatus -> backupStatusControllerStatus // GET /api/v1/system/backup-status
 fetchCacheStats -> cacheStatsControllerGetStats // GET /api/v1/cache/stats
 fetchCiSarifSetup -> ciSarifSetupControllerGetSetup // GET /api/v1/scanners/sarif/ci/tasks/{taskId}/setup
+fetchCodeownersRecommendations -> codeownersRecommendationControllerRecommendations // GET /api/v1/review-workflow/tasks/{taskId}/codeowners
 fetchDashboardHighRiskReviews -> dashboardControllerGetHighRiskReviews // GET /api/v1/dashboard/high-risk-reviews
 fetchDashboardLlmQuality -> dashboardControllerGetLlmQuality // GET /api/v1/dashboard/llm-quality
 fetchDashboardOverview -> dashboardControllerGetOverview // GET /api/v1/dashboard/overview
@@ -55,6 +59,7 @@ fetchNotifications -> notificationControllerGetNotifications // GET /api/v1/noti
 fetchRabbitMqIntegrationConfig -> systemConfigControllerGetRabbitMqIntegration // GET /api/v1/config/integrations/rabbitmq
 fetchRepositoryPolicyPreview -> repositoryPolicyControllerPreview // GET /api/v1/config/repository-policy/preview
 fetchRepositorySuppressions -> repositoryPolicyControllerListSuppressions // GET /api/v1/config/repository-policy/suppressions
+fetchReviewAssignmentOptions -> reviewMemberAssignmentControllerOptions // GET /api/v1/review-workflow/tasks/{taskId}/assignment-options
 fetchReviewAttemptComparison -> reviewExecutionAttemptComparisonControllerCompare // GET /api/v1/reviews/{taskId}/attempts/{candidateAttemptId}/comparison
 fetchReviewCalibrationQueue -> reviewCalibrationControllerGetReviewCalibrationQueue // GET /api/v1/config/review-calibration/queue
 fetchReviewChangedFiles -> reviewControllerListChangedFiles // GET /api/v1/reviews/{id}/changed-files

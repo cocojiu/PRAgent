@@ -1,4 +1,5 @@
 {
+  "BackupStatusResponse": "BackupStatus",
   "LlmUsageCostSnapshot": "LlmUsageCostSnapshot",
   "GithubCommentPublicationItemsResponse": "GithubCommentPublicationItems",
   "CiSarifSetupDto": "CiSarifSetup",
@@ -47,5 +48,11 @@
   "ServiceIntegrationConfigDto": "ServiceIntegrationConfig",
   "SystemSettingsDto": "SystemSettings",
   "UserManagementItemDto": "ManagedUser",
-  "UserOperationAuditDto": "UserOperationAudit"
+  "UserOperationAuditDto": "UserOperationAudit",
+  "CodeownersRecommendationResponse": "CodeownersRecommendations",
+  "CodeownersAcceptRequest": "CodeownersAcceptanceRequest",
+  "CodeownersAcceptResponse": "CodeownersAcceptance",
+  "ReviewAssignmentOptionsResponse": "ReviewAssignmentOptions",
+  "ReviewMemberAssignmentRequest": "ReviewMemberAssignmentRequest",
+  "ReviewMemberAssignmentResponse": "ReviewMemberAssignment"
 }

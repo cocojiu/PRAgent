@@ -7,6 +7,8 @@ const frontendPerformance = vi.hoisted(() => ({
 vi.mock("@/observability/frontendPerformanceBuffer", () => frontendPerformance);
 
 import { apiRequest } from "./contracts";
+import { fetchReviewAssignmentOptions, confirmReviewMemberAssignment } from "./reviewAssignment";
+import { fetchCodeownersRecommendations, acceptCodeownersRecommendation } from "./codeowners";
 import { fetchCiSarifSetup, issueCiSarifCredential } from "./ciSarif";
 import { fetchReviews, fetchReviewListSummary, fetchReviewRepositories } from "./reviews";
 import { clearAuthToken, saveAuthToken } from "./authSession";
@@ -988,3 +990,54 @@ const setCsrfCookie = (token: string) => {
 const clearCsrfCookie = () => {
   document.cookie = "repoguard_csrf_token=; Max-Age=0; path=/";
 };
+
+describe("CODEOWNERS API wrappers", () => {
+  it("binds reads and explicit acceptance to the selected tenant and immutable version", async () => {
+    const selection = { userId: 11, attemptId: 12, headSha: "a".repeat(40), baseSha: "b".repeat(40) };
+    const data = { status: "DISABLED", taskId: 9, candidates: [], basis: [], uncoveredPaths: [], unmappedIdentities: [] };
+    const fetchMock = vi.fn().mockResolvedValueOnce(okResponse(data)).mockResolvedValueOnce(okResponse({ taskId: 9, ...selection, assignee: "reviewer" }));
+    vi.stubGlobal("fetch", fetchMock); setActiveTenant("Tenant-One"); saveAuthToken("contract-access-token", false);
+    const controller = new AbortController();
+    await fetchCodeownersRecommendations(9, { signal: controller.signal });
+    await acceptCodeownersRecommendation(9, selection, { signal: controller.signal });
+    const [readUrl, readInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [writeUrl, writeInit] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(new URL(readUrl).pathname).toBe("/api/v1/review-workflow/tasks/9/codeowners");
+    expect(readInit.body).toBeUndefined();
+    expect(new URL(writeUrl).pathname).toBe("/api/v1/review-workflow/tasks/9/codeowners/accept");
+    expect(writeInit.method).toBe("POST"); expect(JSON.parse(writeInit.body as string)).toEqual(selection);
+    for (const init of [readInit, writeInit]) {
+      expect(new Headers(init.headers).get("X-RepoGuard-Tenant")).toBe("tenant-one");
+      expect(new Headers(init.headers).get("Authorization")).toBe("Bearer contract-access-token");
+      expect(init.signal).toBeInstanceOf(AbortSignal);
+    }
+  });
+  it("rejects malformed read and write responses instead of handing them to the component", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(okResponse({ status: "RECOMMENDATIONS", taskId: 9 }))
+      .mockResolvedValueOnce(okResponse({ taskId: 9, attemptId: 12, headSha: "a".repeat(40), assignee: null }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(fetchCodeownersRecommendations(9)).rejects.toMatchObject({ code: "INVALID_API_RESPONSE" });
+    await expect(acceptCodeownersRecommendation(9, { userId: 11, attemptId: 12, headSha: "a".repeat(40), baseSha: "b".repeat(40) }))
+      .rejects.toMatchObject({ code: "INVALID_API_RESPONSE" });
+  });
+});
+
+describe("Review member assignment API wrappers", () => {
+  afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); clearAuthToken(); clearActiveTenant(); clearCsrfCookie(); });
+it("uses generated member assignment endpoints and binds prefix, selected tenant and optimistic context", async () => {
+  const data = { taskId: 9, attemptId: 12, headSha: "a".repeat(40), assignmentVersion: "b".repeat(64),
+    members: [{ userId: 11, username: "reviewer" }], hasMore: false };
+  const confirmation = { taskId: 9, attemptId: 12, headSha: data.headSha, assignee: "reviewer" };
+  const fetchMock = vi.fn().mockResolvedValueOnce(okResponse(data)).mockResolvedValueOnce(okResponse(confirmation));
+  vi.stubGlobal("fetch", fetchMock); setActiveTenant("tenant-one"); saveAuthToken("contract-access-token", false);
+  const body = { userId: 11, attemptId: 12, headSha: data.headSha, assignmentVersion: data.assignmentVersion };
+  expect(await fetchReviewAssignmentOptions(9, "member_%")).toEqual(data);
+  expect(await confirmReviewMemberAssignment(9, body)).toEqual(confirmation);
+  const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+  expect(new URL(url).pathname).toBe("/api/v1/review-workflow/tasks/9/assignment-options");
+  expect(new URL(url).searchParams.get("search")).toBe("member_%"); expect(new Headers(init.headers).get("X-RepoGuard-Tenant")).toBe("tenant-one");
+  const [writeUrl, writeInit] = fetchMock.mock.calls[1] as [string, RequestInit];
+  expect(new URL(writeUrl).pathname).toBe("/api/v1/review-workflow/tasks/9/assignment/confirm");
+  expect(writeInit.method).toBe("POST"); expect(JSON.parse(String(writeInit.body))).toEqual(body);
+});
+});

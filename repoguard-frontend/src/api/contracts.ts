@@ -25,6 +25,10 @@ import type { AuthResponse, CurrentUser, LoginRequest, PasswordChangeRequest, Re
 import type { ManagedUser, UserCreateRequest, UserOperationAudit, UserRole, UserStatus } from "@/api/users";
 import {
   isAuthResponse,
+  isCodeownersRecommendations,
+  isCodeownersAcceptance,
+  isReviewAssignmentOptions,
+  isReviewMemberAssignment,
   isCurrentUser,
   isGithubChecksSetupStatus,
   isGithubFeedbackDiagnostics,
@@ -84,6 +88,13 @@ import type {
   GithubChecksSetupStatus,
   GithubFeedbackDiagnostics,
   FeedbackSummary,
+  BackupStatus,
+  CodeownersRecommendations,
+  CodeownersAcceptance,
+  CodeownersAcceptanceRequest,
+  ReviewAssignmentOptions,
+  ReviewMemberAssignmentRequest,
+  ReviewMemberAssignment,
   GithubIntegrationConfig,
   GithubIntegrationConfigRequest,
   GithubPullRequestOptions,
@@ -227,6 +238,11 @@ export type ApiContract = {
   fetchCiSarifSetup: ApiOperation<{ taskId: number }, CiSarifSetup>;
   issueCiSarifCredential: ApiOperation<{ taskId: number; attemptId: number }, CiSarifCredential>;
   fetchFeedbackSummary: ApiOperation<undefined, FeedbackSummary>;
+  fetchReviewAssignmentOptions: ApiOperation<{ taskId: number; search?: string }, ReviewAssignmentOptions>;
+  confirmReviewMemberAssignment: ApiOperation<{ taskId: number; input: ReviewMemberAssignmentRequest }, ReviewMemberAssignment>;
+  fetchCodeownersRecommendations: ApiOperation<{ taskId: number }, CodeownersRecommendations>;
+  acceptCodeownersRecommendation: ApiOperation<{ taskId: number; input: CodeownersAcceptanceRequest }, CodeownersAcceptance>;
+  fetchBackupStatus: ApiOperation<undefined, BackupStatus>;
   login: ApiOperation<LoginRequest, AuthResponse>;
   register: ApiOperation<RegisterRequest, AuthResponse>;
   getCurrentUser: ApiOperation<undefined, CurrentUser>;
@@ -465,6 +481,23 @@ const apiEndpoints: ApiEndpointMap = {
     path: input => ({ taskId: input.taskId }),
     query: input => ({ attemptId: input.attemptId })
   }),
+  fetchReviewAssignmentOptions: {
+    ...generatedEndpoint("reviewMemberAssignmentControllerOptions", { path: input => ({ taskId: input.taskId }), query: input => ({ search: input.search }) }),
+    validateResponse: isReviewAssignmentOptions
+  },
+  confirmReviewMemberAssignment: {
+    ...generatedEndpoint("reviewMemberAssignmentControllerConfirm", { path: input => ({ taskId: input.taskId }), body: input => input.input }),
+    validateResponse: isReviewMemberAssignment
+  },
+  acceptCodeownersRecommendation: {
+    ...generatedEndpoint("codeownersRecommendationControllerAccept", { path: input => ({ taskId: input.taskId }), body: input => input.input }),
+    validateResponse: isCodeownersAcceptance
+  },
+  fetchCodeownersRecommendations: {
+    ...generatedEndpoint("codeownersRecommendationControllerRecommendations", { path: input => ({ taskId: input.taskId }) }),
+    validateResponse: isCodeownersRecommendations
+  },
+  fetchBackupStatus: generatedEndpoint("backupStatusControllerStatus", {}),
   fetchFeedbackSummary: {
     ...generatedEndpoint("feedbackSummaryControllerSummary", {}),
     validateResponse: isFeedbackSummary
