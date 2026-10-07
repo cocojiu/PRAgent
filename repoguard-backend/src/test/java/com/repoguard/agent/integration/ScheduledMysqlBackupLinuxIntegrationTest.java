@@ -128,6 +128,7 @@ class ScheduledMysqlBackupLinuxIntegrationTest {
         assertThat(checked(List.of("sudo", "-n", "stat", "-c", "%a", BACKUPS.resolve(firstName).toString()))).isEqualTo("600");
         assertThat(checked(List.of("sudo", "-n", "stat", "-c", "%a", BACKUPS.resolve(firstName + ".sha256").toString()))).isEqualTo("600");
         assertThat(checked(List.of("sudo", "-n", "stat", "-c", "%a", BACKUPS.resolve(firstName + ".verified.json").toString()))).isEqualTo("600");
+        assertThat(checked(List.of("sudo", "-n", "stat", "-c", "%a", BACKUPS.resolve("status.json").toString()))).isEqualTo("600");
         String timerOverride = "[Timer]\nOnCalendar=\nOnActiveSec=2s\nRandomizedDelaySec=0\nAccuracySec=1ms\n";
         Path override = temporary.resolve("timer.conf"); Files.writeString(override, timerOverride);
         checked(List.of("sudo", "-n", "install", "-d", "-m", "0755", "/run/systemd/system/" + UNIT + ".timer.d"));

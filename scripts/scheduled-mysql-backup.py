@@ -30,7 +30,7 @@ def digest(path):
     return result.hexdigest()
 
 
-def atomic_json(path, value, mode=None):
+def atomic_json(path, value, mode=0o600):
     temporary = path.with_suffix('.json.partial')
     with temporary.open('w', encoding='utf-8') as stream:
         json.dump(value, stream, ensure_ascii=True, indent=2)
