@@ -223,8 +223,20 @@ class ScheduledMysqlBackupLinuxIntegrationTest {
 
     private static void runBackup() throws Exception {
         if (command(List.of("sudo", "-n", "test", "-f", BACKUPS.resolve("status.json").toString()), null, Map.of(), Duration.ofSeconds(5)).exit() == 0) nextSecond(status().path("finishedAtUnix").asLong());
-        systemctl("reset-failed", UNIT + ".service"); systemctl("start", UNIT + ".service");
+        systemctl("reset-failed", UNIT + ".service");
+        Result started = command(List.of("sudo", "-n", "systemctl", "start", UNIT + ".service"), null, Map.of(), Duration.ofMinutes(3));
+        if (started.exit() != 0) reportFixtureFailure();
+        started.successful();
         assertThat(status().path("state").asText()).isEqualTo("success");
+    }
+    private static void reportFixtureFailure() {
+        try {
+            System.out.println("Isolated backup unit: Result=" + property("Result") + ", ExecMainStatus=" + property("ExecMainStatus"));
+            Result journal = command(List.of("sudo", "-n", "journalctl", "--unit=" + UNIT + ".service", "--no-pager", "--output=cat", "--lines=30"), null, Map.of(), Duration.ofSeconds(10));
+            String diagnostic = new String(journal.output(), StandardCharsets.UTF_8)
+                .replace(HexFormat.of().formatHex(KEY), "[masked]").replaceAll("[a-fA-F0-9]{32,}", "[masked]");
+            System.out.println("Isolated fixture journal: " + diagnostic.substring(0, Math.min(4096, diagnostic.length())));
+        } catch (Exception ignored) { System.out.println("Isolated fixture diagnostics unavailable"); }
     }
     private static void nextSecond(long timestamp) throws Exception {
         await(() -> System.currentTimeMillis() / 1000 > timestamp, 3);
@@ -284,18 +296,26 @@ class ScheduledMysqlBackupLinuxIntegrationTest {
     }
 
     @AfterAll static void close() throws Exception {
-        if (unitsInstalled) {
-            systemctl("stop", UNIT + ".timer", UNIT + ".service"); systemctl("reset-failed", UNIT + ".service");
-            checked(List.of("sudo", "-n", "rm", "-f", "--", "/run/systemd/system/" + UNIT + ".service", "/run/systemd/system/" + UNIT + ".timer", "/run/systemd/system/" + UNIT + ".timer.d/fixture.conf"));
-            checked(List.of("sudo", "-n", "systemctl", "daemon-reload"));
+        try {
+            if (unitsInstalled) {
+                // A failed ExecStopPost may make stop return nonzero even after all processes exit.
+                command(List.of("sudo", "-n", "systemctl", "stop", UNIT + ".timer", UNIT + ".service"), null, Map.of(), Duration.ofSeconds(30));
+                assertThat(property("MainPID")).isEqualTo("0");
+                assertThat(property("ActiveState")).isIn("inactive", "failed");
+                systemctl("reset-failed", UNIT + ".service");
+                checked(List.of("sudo", "-n", "rm", "-f", "--", "/run/systemd/system/" + UNIT + ".service", "/run/systemd/system/" + UNIT + ".timer", "/run/systemd/system/" + UNIT + ".timer.d/fixture.conf"));
+                checked(List.of("sudo", "-n", "systemctl", "daemon-reload"));
+            }
+        } finally {
+            try {
+                for (String container : CONTAINERS) {
+                    String identity = checked(List.of("docker", "inspect", "--format", "{{.Id}} {{index .Config.Labels \"com.repoguard.ci.owner\"}}", container));
+                    String[] parts = identity.split(" ", 2);
+                    assertThat(parts).hasSize(2); assertThat(parts[0]).matches("[a-f0-9]{64}"); assertThat(parts[1]).isEqualTo(OWNER);
+                    checked(List.of("docker", "rm", "--force", "--volumes", parts[0]));
+                }
+                if (rootClaimed) assertThat(checked(List.of("sudo", "-n", "cat", "--", ROOT.resolve(".ci-owner").toString()))).isEqualTo(OWNER);
+            } finally { java.util.Arrays.fill(KEY, (byte) 0); }
         }
-        for (String container : CONTAINERS) {
-            String identity = checked(List.of("docker", "inspect", "--format", "{{.Id}} {{index .Config.Labels \"com.repoguard.ci.owner\"}}", container));
-            String[] parts = identity.split(" ", 2);
-            assertThat(parts).hasSize(2); assertThat(parts[0]).matches("[a-f0-9]{64}"); assertThat(parts[1]).isEqualTo(OWNER);
-            checked(List.of("docker", "rm", "--force", "--volumes", parts[0]));
-        }
-        if (rootClaimed) assertThat(checked(List.of("sudo", "-n", "cat", "--", ROOT.resolve(".ci-owner").toString()))).isEqualTo(OWNER);
-        java.util.Arrays.fill(KEY, (byte) 0);
     }
 }
