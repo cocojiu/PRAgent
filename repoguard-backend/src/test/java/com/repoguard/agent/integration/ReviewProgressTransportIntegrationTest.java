@@ -137,6 +137,11 @@ class ReviewProgressTransportIntegrationTest {
     @EnabledOnOs(OS.LINUX)
     @EnabledIfEnvironmentVariable(named = "REPOGUARD_RUN_LINUX_BACKUP_INTEGRATION", matches = "true")
     void realCaddyTlsNginxChainEnforcesLimitsAndReleasesDisconnectedStreams() throws Exception {
+        try { verifyProxyTransport(); }
+        catch (Exception | AssertionError failure) { reportProxyFailure(); throw failure; }
+    }
+
+    private void verifyProxyTransport() throws Exception {
         Path repository = Path.of(System.getenv("GITHUB_WORKSPACE")).toRealPath();
         network = command("docker", "network", "create", "--internal", "--label", "com.repoguard.ci.owner=" + OWNER, "repoguard-ci-" + OWNER);
         assertThat(network).matches("[a-f0-9]{64}");
@@ -164,7 +169,7 @@ class ReviewProgressTransportIntegrationTest {
             try {
                 ca[0] = command("docker", "exec", edge, "cat", "/data/caddy/pki/authorities/local/root.crt").getBytes(StandardCharsets.US_ASCII);
                 return ca[0].length > 0;
-            } catch (Exception e) { return false; }
+            } catch (Exception | AssertionError e) { return false; }
         }, 15);
         String binding = command("docker", "port", edge, "443/tcp");
         assertThat(binding).matches("127\\.0\\.0\\.1:[1-9][0-9]*");
@@ -195,6 +200,18 @@ class ReviewProgressTransportIntegrationTest {
             assertThat(active()).isEqualTo(1);
             recovered.reader().close(); open.clear();
             await(() -> active() == 0 && scheduler().getQueue().isEmpty(), 20);
+        }
+    }
+
+    private void reportProxyFailure() {
+        for (String id : containers) {
+            try {
+                String diagnostic = command("docker", "inspect", "--format", "{{.State.Status}}|{{.State.ExitCode}}|{{.State.OOMKilled}}", id)
+                    + "\n" + command("docker", "logs", "--tail", "20", id);
+                for (String token : TOKENS.values()) diagnostic = diagnostic.replace(token, "[masked]");
+                diagnostic = diagnostic.replaceAll("[a-fA-F0-9]{32,}", "[masked]");
+                System.out.println("Isolated proxy fixture: " + diagnostic.substring(0, Math.min(4096, diagnostic.length())));
+            } catch (Exception | AssertionError ignored) { System.out.println("Isolated proxy diagnostics unavailable"); }
         }
     }
 
