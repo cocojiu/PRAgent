@@ -270,7 +270,7 @@ def pull(host, destination):
         try:
             with temporary.open('xb') as stream:
                 owned = True
-                bounded_command(ssh + ['cat -- ' + str(ROOT / name)], stream, size, 300)
+                bounded_command(ssh + ['cat -- ' + (ROOT / name).as_posix()], stream, size, 300)
                 stream.flush()
                 os.fsync(stream.fileno())
             if temporary.stat().st_size != size or digest(temporary) != expected:
