@@ -6,9 +6,11 @@ USER 101
 
 ARG OCI_VERSION
 ARG OCI_REVISION
+ARG REVIEW_PROGRESS_STREAM=false
 
 LABEL org.opencontainers.image.version="${OCI_VERSION}" \
-      org.opencontainers.image.revision="${OCI_REVISION}"
+      org.opencontainers.image.revision="${OCI_REVISION}" \
+      io.repoguard.frontend.review-progress-stream="${REVIEW_PROGRESS_STREAM}"
 
 COPY dist/ /usr/share/nginx/html/
 COPY nginx.conf /etc/nginx/nginx.conf

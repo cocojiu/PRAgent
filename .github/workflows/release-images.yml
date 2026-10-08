@@ -33,6 +33,11 @@ on:
         required: false
         default: false
         type: boolean
+      frontend_progress_stream:
+        description: Build the opt-in SSE frontend variant; backend activation is separate
+        required: false
+        default: false
+        type: boolean
       migrate_legacy_secret_files:
         description: Preserve active inline values in secret files before the first configtree deployment
         required: false
@@ -57,6 +62,7 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
+  VITE_REVIEW_PROGRESS_STREAM: ${{ github.event_name == 'workflow_dispatch' && inputs.frontend_progress_stream == true && 'true' || 'false' }}
   ALIYUN_REGISTRY: ${{ secrets.ALIYUN_REGISTRY || vars.ALIYUN_REGISTRY }}
   ALIYUN_DEPLOY_REGISTRY: ${{ secrets.ALIYUN_DEPLOY_REGISTRY || vars.ALIYUN_DEPLOY_REGISTRY }}
   ALIYUN_NAMESPACE: ${{ secrets.ALIYUN_NAMESPACE || vars.ALIYUN_NAMESPACE }}
@@ -357,6 +363,13 @@ jobs:
             ref_slug="$(echo "${GITHUB_REF_NAME}" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9_.-]+/-/g; s/^-+|-+$//g')"
             image_tag="${ref_slug}-${GITHUB_SHA::12}"
           fi
+          if [ "${VITE_REVIEW_PROGRESS_STREAM}" = "true" ] && [[ "${image_tag}" != *-sse ]]; then
+            image_tag="${image_tag}-sse"
+          fi
+          if [ "${VITE_REVIEW_PROGRESS_STREAM}" != "true" ] && [[ "${image_tag}" == *-sse ]]; then
+            echo "The -sse variant tag requires frontend_progress_stream=true"; exit 1
+          fi
+          test "${#image_tag}" -le 128 || { echo "Variant image tag exceeds 128 characters"; exit 1; }
           test -n "${image_tag}" || { echo "Missing resolved image tag"; exit 1; }
           backend_image="${REGISTRY}/${owner}/${repo}-backend:${image_tag}"
           frontend_image="${REGISTRY}/${owner}/${repo}-frontend:${image_tag}"
@@ -450,10 +463,13 @@ jobs:
           # Keep the mirrored manifest compatible with Aliyun ACR; attestations are stored in GitHub.
           sbom: false
           provenance: false
+          cache-from: type=gha,scope=frontend
+          # Bind the compiled frontend option to the immutable image config.
+          # It is also checked before signing the reusable source manifest.
           build-args: |
             OCI_VERSION=${{ env.IMAGE_VERSION }}
             OCI_REVISION=${{ github.sha }}
-          cache-from: type=gha,scope=frontend
+            REVIEW_PROGRESS_STREAM=${{ env.VITE_REVIEW_PROGRESS_STREAM }}
           cache-to: type=gha,scope=frontend,mode=max
           tags: ${{ env.FRONTEND_IMAGE }}
 

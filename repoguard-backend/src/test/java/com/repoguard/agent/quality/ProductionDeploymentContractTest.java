@@ -22,6 +22,22 @@ import org.yaml.snakeyaml.Yaml;
 class ProductionDeploymentContractTest {
 
     @Test
+    void frontendSseBuildRequiresExplicitManualOptInAndImmutableImageLabel() throws IOException {
+        String workflow = read(repositoryRoot().resolve(".github/workflows/release-images.yml"));
+        assertThat(workflow).contains("frontend_progress_stream:",
+            "github.event_name == 'workflow_dispatch' && inputs.frontend_progress_stream == true",
+            "REVIEW_PROGRESS_STREAM=${{ env.VITE_REVIEW_PROGRESS_STREAM }}");
+        Map<String, Object> root = yaml(repositoryRoot().resolve(".github/workflows/release-images.yml"));
+        Map<String, Object> events = map(root.getOrDefault("on", root.get(Boolean.TRUE)));
+        Map<String, Object> option = map(map(map(events.get("workflow_dispatch")).get("inputs"))
+            .get("frontend_progress_stream"));
+        assertThat(option).containsEntry("default", false).containsEntry("type", "boolean");
+        assertThat(read(repositoryRoot().resolve("repoguard-frontend/Dockerfile")))
+            .contains("ARG REVIEW_PROGRESS_STREAM=false",
+                "io.repoguard.frontend.review-progress-stream=\"${REVIEW_PROGRESS_STREAM}\"");
+    }
+
+    @Test
     void evaluationRuntimeRevisionUsesThePublishedImageCommit() throws IOException {
         String dockerfile = read(repositoryRoot().resolve("repoguard-backend/Dockerfile"));
         String workflow = read(repositoryRoot().resolve(".github/workflows/release-images.yml"));
