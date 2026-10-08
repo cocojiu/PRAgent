@@ -136,6 +136,22 @@
 
           <ReviewDetailCiSarifGuide v-if="canManageHotTask" :key="selectedTask.id" :task-id="selectedTask.id" />
 
+          <ReviewMemberAssignmentCard
+            v-if="canReadCodeowners && selectedTask.status === 'pending_human_review' && !isArchivedTask"
+            :key="selectedTask.id"
+            :task-id="selectedTask.id"
+            :head-sha="selectedTask.commit"
+            @assigned="refreshDetail()"
+          />
+
+          <CodeownersRecommendationCard
+            v-if="canReadCodeowners && selectedTask.status === 'pending_human_review' && !isArchivedTask"
+            :key="selectedTask.id"
+            :task-id="selectedTask.id"
+            :head-sha="selectedTask.commit"
+            @assigned="refreshDetail()"
+          />
+
           <ReviewDetailFindingsCard
             :can-manage="canManageHotTask"
             :archived="isArchivedTask"
@@ -252,11 +268,14 @@
 
 <script setup lang="ts">
 import "@/features/review-detail/reviewDetail.css";
+import ReviewMemberAssignmentCard from "@/features/review-detail/components/ReviewMemberAssignmentCard.vue";
+import CodeownersRecommendationCard from "@/features/review-detail/components/CodeownersRecommendationCard.vue";
+import { enterpriseEditionEnabled } from "@/config/edition";
 import ReviewDetailCiSarifGuide from "@/features/review-detail/components/ReviewDetailCiSarifGuide.vue";
 import { computed, onBeforeUnmount, onMounted, watch } from "vue";
 import { ArrowLeft, ExternalLink, RefreshCw, ShieldAlert } from "@lucide/vue";
 import Github from "@/components/icons/GithubIcon.vue";
-import { canManage } from "@/stores/authState";
+import { canManage, currentUser } from "@/stores/authState";
 import { useRoute, useRouter } from "vue-router";
 import { routeNames } from "@/router/names";
 import {
@@ -311,6 +330,9 @@ import {
 import { riskText } from "@/utils/risk";
 import { statusClass, statusText } from "@/utils/status";
 import { formatDateTime } from "@/utils/dateTime";
+
+const canReadCodeowners = computed(() => enterpriseEditionEnabled
+  && new Set(["ADMIN", "PLATFORM_ADMIN", "TENANT_ADMIN", "REVIEWER"]).has(currentUser.value?.role?.toUpperCase() || ""));
 
 const POLL_INTERVAL_MS = 5000;
 const MAX_POLL_FAILURES = 3;
@@ -542,6 +564,7 @@ const currentPollIntervalMs = computed(() =>
 const currentPollIntervalSeconds = computed(() => currentPollIntervalMs.value / 1000);
 
 const polling = useReviewDetailPolling({
+  getTaskId: () => Number(route.params.id),
   currentPollIntervalMs,
   maxPollFailures: MAX_POLL_FAILURES,
   pollFailureCount,

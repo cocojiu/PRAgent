@@ -1,4 +1,5 @@
 export * from "./dashboard";
+export * from "./backupStatus";
 export type { CiSarifCredential, CiSarifSetup } from "../api/ciSarif";
 export * from "./enterpriseTenant";
 export * from "./integration";
@@ -12,3 +13,7 @@ export * from "./repositoryPolicy";
 export * from "./shared";
 export * from "./systemSettings";
 export type { ManagedUser, UserCreateRequest, UserOperationAudit } from "../api/users";
+
+export * from "./codeowners";
+
+export * from "./reviewAssignment";

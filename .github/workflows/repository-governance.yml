@@ -7,6 +7,12 @@ on:
       - master
       - PRAgent-test
   workflow_dispatch:
+    inputs:
+      linux_quality:
+        description: Run the existing Linux quality suite on this ref without creating a PR or deploying
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -26,3 +32,11 @@ jobs:
       - name: Run repository governance checks
         shell: pwsh
         run: ./scripts/production-readiness-check.ps1 -Mode quick -SkipBackendTests
+
+  linux-quality:
+    name: Isolated Linux quality
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.linux_quality == true }}
+    needs: guard
+    uses: ./.github/workflows/pr-quality.yml
+    with:
+      linux_backup_integration: true

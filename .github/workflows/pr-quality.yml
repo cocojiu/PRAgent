@@ -1,6 +1,13 @@
 name: Pull Request Quality
 
 on:
+  workflow_call:
+    inputs:
+      linux_backup_integration:
+        description: Validate scheduled backups and SSE proxy transport in a fresh hosted runner
+        required: false
+        default: false
+        type: boolean
   pull_request:
     branches:
       - main
@@ -302,8 +309,52 @@ jobs:
         working-directory: repoguard-backend
         run: ./mvnw -B -Dtest=FlywayMigrationUpgradePathIntegrationTest test
 
+  scheduled-backup-integration:
+    name: Linux backup restore and SSE proxy transport
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.linux_backup_integration == true }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      REPOGUARD_RUN_LINUX_BACKUP_INTEGRATION: 'true'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Run real systemd restore and TLS proxy streaming checks
+        working-directory: repoguard-backend
+        run: ./mvnw -B -Dtest=ScheduledMysqlBackupLinuxIntegrationTest,ReviewProgressTransportIntegrationTest test
+      - name: Require actual Linux integration execution
+        shell: pwsh
+        working-directory: repoguard-backend
+        run: |
+          $expectedSuites = @{
+            ScheduledMysqlBackupLinuxIntegrationTest = 1
+            ReviewProgressTransportIntegrationTest = 2
+          }
+          foreach ($suiteName in $expectedSuites.Keys) {
+            [xml]$testReport = Get-Content -LiteralPath "target/surefire-reports/TEST-com.repoguard.agent.integration.$suiteName.xml" -Raw
+            $suite = $testReport.testsuite
+            if ([int]$suite.tests -ne $expectedSuites[$suiteName] -or [int]$suite.skipped -ne 0 -or [int]$suite.failures -ne 0 -or [int]$suite.errors -ne 0) {
+              throw "Linux $suiteName must actually execute and pass without skipping."
+            }
+          }
+      - name: Upload bounded test results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: scheduled-backup-linux-${{ github.run_id }}
+          path: |
+            repoguard-backend/target/surefire-reports/*ScheduledMysqlBackupLinuxIntegrationTest*
+            repoguard-backend/target/surefire-reports/*ReviewProgressTransportIntegrationTest*
+          if-no-files-found: warn
+          retention-days: 7
+
   dependency-review:
     name: Dependency review
+    if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

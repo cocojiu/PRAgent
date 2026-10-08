@@ -1,0 +1,11 @@
+[Unit]
+Description=RepoGuard daily backup independent of operator workstation
+
+[Timer]
+OnCalendar=*-*-* 20:00:00 Asia/Shanghai
+Persistent=true
+RandomizedDelaySec=5min
+Unit=repoguard-mysql-backup.service
+
+[Install]
+WantedBy=timers.target

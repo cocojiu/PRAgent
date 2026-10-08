@@ -2,6 +2,8 @@ package com.repoguard.agent.github;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.repoguard.agent.external.ExternalCallResilience;
+import com.repoguard.agent.external.ExternalCallException;
+import java.nio.charset.StandardCharsets;
 import com.repoguard.agent.external.ExternalHttpJsonResponseReader;
 import com.repoguard.agent.external.ExternalHttpResponseProfile;
 import com.repoguard.agent.external.OutboundEndpointPolicy;
@@ -102,8 +104,49 @@ public class GithubPullRequestHeadReader {
         } catch (RuntimeException ex) {
             throw new IllegalStateException("GitHub pull request updated_at is invalid", ex);
         }
-        return new GithubPullRequestHeadSnapshot(sha.trim(), updatedAt);
+        return new GithubPullRequestHeadSnapshot(sha.trim(), updatedAt,
+            response.base() == null ? null : response.base().sha());
     }
+
+    /** Resolve only immutable base contents, with matching PR state before and after the reads. */
+    public CodeownersSource fetchCodeowners(
+        GithubIntegrationSettings settings, String baseUrl, String owner, String repository,
+        Integer pullNumber, String expectedHeadSha, ExternalCallResilience resilience,
+        GithubChangedFileContentReader contentReader
+    ) {
+        if (expectedHeadSha == null || !expectedHeadSha.matches("[0-9a-fA-F]{40}")) {
+            throw new IllegalArgumentException("Expected immutable PR head is required");
+        }
+        var before = fetchHead(settings, baseUrl, owner, repository, pullNumber, resilience);
+        if (!expectedHeadSha.equalsIgnoreCase(before.sha()) || before.baseSha() == null
+            || !before.baseSha().matches("[0-9a-fA-F]{40}")) {
+            throw new IllegalStateException("PR version unavailable or changed");
+        }
+        CodeownersSource result = new CodeownersSource(before.baseSha(), null, null, "MISSING");
+        for (String path : List.of(".github/CODEOWNERS", "CODEOWNERS", "docs/CODEOWNERS")) {
+            try {
+                String content = contentReader.fetch(settings, baseUrl, owner, repository,
+                    before.baseSha(), path, resilience);
+                if (content == null || content.getBytes(StandardCharsets.UTF_8).length > 131072
+                    || content.lines().limit(2001).count() > 2000) {
+                    result = new CodeownersSource(before.baseSha(), path, null, "BUDGET_EXCEEDED");
+                } else {
+                    result = new CodeownersSource(before.baseSha(), path, content, "AVAILABLE");
+                }
+                break;
+            } catch (ExternalCallException failure) {
+                if (!Integer.valueOf(404).equals(failure.getStatusCode())) throw failure;
+            }
+        }
+        var after = fetchHead(settings, baseUrl, owner, repository, pullNumber, resilience);
+        if (!before.sha().equals(after.sha()) || !before.baseSha().equals(after.baseSha())
+            || !before.updatedAt().equals(after.updatedAt())) {
+            throw new IllegalStateException("PR version changed during CODEOWNERS read");
+        }
+        return result;
+    }
+
+    public record CodeownersSource(String baseSha, String path, String content, String status) { }
 
     private GithubPullRequestResponse readJsonResponse(
         org.springframework.http.client.ClientHttpResponse response
@@ -126,6 +169,7 @@ public class GithubPullRequestHeadReader {
 
     private record GithubPullRequestResponse(
         GithubPullRequestHead head,
+        GithubPullRequestHead base,
         @JsonProperty("updated_at") String updatedAt
     ) {
     }
@@ -133,7 +177,8 @@ public class GithubPullRequestHeadReader {
     private record GithubPullRequestHead(String sha) {
     }
 
-    public record GithubPullRequestHeadSnapshot(String sha, LocalDateTime updatedAt) {
+    public record GithubPullRequestHeadSnapshot(String sha, LocalDateTime updatedAt, String baseSha) {
+        public GithubPullRequestHeadSnapshot(String sha, LocalDateTime updatedAt) { this(sha, updatedAt, null); }
         public GithubPullRequestHeadSnapshot {
             Objects.requireNonNull(sha, "sha");
             Objects.requireNonNull(updatedAt, "updatedAt");

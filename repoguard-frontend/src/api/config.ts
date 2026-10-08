@@ -31,6 +31,9 @@ export type DataRetentionCleanupAuditQuery = {
   backupReference?: string;
 };
 
+export const fetchBackupStatus = (options?: ApiRequestOptions) =>
+  apiRequest("fetchBackupStatus", undefined, options);
+
 export const fetchGithubIntegrationConfig = () =>
   apiRequest("fetchGithubIntegrationConfig", undefined);
 

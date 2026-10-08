@@ -10,6 +10,7 @@ import com.repoguard.agent.dto.NotificationReadRequest;
 import com.repoguard.agent.dto.NotificationReportDto;
 import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.ReviewAssignmentRequest;
+import com.repoguard.agent.dto.ReviewAssignmentSnapshot;
 import com.repoguard.agent.dto.ReviewBotCommandRequest;
 import com.repoguard.agent.dto.ReviewBotCommandResponse;
 import com.repoguard.agent.dto.ReviewEscalationResponse;
@@ -20,6 +21,8 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.NotificationReadStateMapper;
 import com.repoguard.agent.mapper.ReviewBotCommandAuditMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
+import com.repoguard.agent.mapper.TenantMembershipMapper;
+import com.repoguard.agent.tenancy.TenantContext;
 import com.repoguard.agent.review.ReviewTaskStatus;
 import com.repoguard.agent.service.ReviewTaskCommandService;
 import com.repoguard.agent.service.ReviewWorkflowService;
@@ -49,6 +52,7 @@ public class ReviewWorkflowServiceImpl implements ReviewWorkflowService {
     private final ReviewTaskCommandService reviewTaskCommandService;
     private final ReviewTaskTransitionStore transitionStore;
     private final ReviewWorkflowProperties properties;
+    private final TenantMembershipMapper membershipMapper;
 
     public ReviewWorkflowServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
@@ -56,7 +60,8 @@ public class ReviewWorkflowServiceImpl implements ReviewWorkflowService {
         ReviewBotCommandAuditMapper botAuditMapper,
         ReviewTaskCommandService reviewTaskCommandService,
         ReviewTaskTransitionStore transitionStore,
-        ReviewWorkflowProperties properties
+        ReviewWorkflowProperties properties,
+        TenantMembershipMapper membershipMapper
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.readStateMapper = readStateMapper;
@@ -64,6 +69,7 @@ public class ReviewWorkflowServiceImpl implements ReviewWorkflowService {
         this.reviewTaskCommandService = reviewTaskCommandService;
         this.transitionStore = transitionStore;
         this.properties = properties;
+        this.membershipMapper = membershipMapper;
     }
 
     @Override
@@ -84,11 +90,30 @@ public class ReviewWorkflowServiceImpl implements ReviewWorkflowService {
     @Override
     @Transactional
     public ReviewWorkflowItemDto assign(Long taskId, ReviewAssignmentRequest request, String operator) {
+        return assignTask(requireTask(taskId), request);
+    }
+
+    @Override
+    @Transactional
+    public ReviewWorkflowItemDto assignRecommended(Long taskId, String assignee, ReviewAssignmentSnapshot expected, String operator) {
         ReviewTask task = requireTask(taskId);
+        if (expected == null || !expected.matches(task)) {
+            throw new BusinessException(ErrorCode.CONFLICT, "Review task or assignment changed, please refresh");
+        }
+        return assignTask(task, new ReviewAssignmentRequest(assignee, null));
+    }
+
+    private ReviewWorkflowItemDto assignTask(ReviewTask task, ReviewAssignmentRequest request) {
         if (!PENDING_HUMAN_REVIEW.equalsIgnoreCase(task.getStatus())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Only pending human review tasks can be assigned");
         }
         String assignee = StringUtils.hasText(request == null ? null : request.assignee()) ? clean(request.assignee()) : null;
+        if (assignee != null) {
+            assignee = membershipMapper.selectAssignableUsernameForUpdate(TenantContext.currentTenantIdOrDefault(), assignee);
+            if (!StringUtils.hasText(assignee)) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST, "Assignee must be an active review member of this tenant");
+            }
+        }
         int slaMinutes = request != null && request.slaMinutes() != null
             ? request.slaMinutes() : properties.getHumanReviewSlaMinutes();
         LocalDateTime now = LocalDateTime.now();

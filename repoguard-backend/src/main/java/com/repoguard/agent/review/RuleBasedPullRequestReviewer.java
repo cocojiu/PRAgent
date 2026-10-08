@@ -13,7 +13,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class RuleBasedPullRequestReviewer {
 
-    private final ReviewRuleProvider reviewRuleProvider;
+    private final java.util.function.Supplier<Map<String, ReviewRuleSettings>> ruleSettings;
     private final List<ReviewRule> lineRules;
     private final List<PullRequestReviewRule> pullRequestRules;
     private final FindingPolicyResolver findingPolicyResolver;
@@ -51,7 +51,21 @@ public class RuleBasedPullRequestReviewer {
         ServerRiskAggregator riskAggregator,
         DeclarativeRuleMatcher declarativeRuleMatcher
     ) {
-        this.reviewRuleProvider = Objects.requireNonNull(reviewRuleProvider, "reviewRuleProvider");
+        this(Objects.requireNonNull(reviewRuleProvider, "reviewRuleProvider")::getRulesById,
+            reviewRuleRegistry, findingPolicyResolver, reviewFindingFactory, findingDeduplicator,
+            riskAggregator, declarativeRuleMatcher);
+    }
+
+    RuleBasedPullRequestReviewer(
+        java.util.function.Supplier<Map<String, ReviewRuleSettings>> ruleSettings,
+        ReviewRuleRegistry reviewRuleRegistry,
+        FindingPolicyResolver findingPolicyResolver,
+        ReviewFindingFactory reviewFindingFactory,
+        ReviewFindingSemanticDeduplicator findingDeduplicator,
+        ServerRiskAggregator riskAggregator,
+        DeclarativeRuleMatcher declarativeRuleMatcher
+    ) {
+        this.ruleSettings = Objects.requireNonNull(ruleSettings, "ruleSettings");
         ReviewRuleRegistry registry = Objects.requireNonNull(reviewRuleRegistry, "reviewRuleRegistry");
         this.lineRules = registry.lineRules();
         this.pullRequestRules = registry.pullRequestRules();
@@ -83,7 +97,7 @@ public class RuleBasedPullRequestReviewer {
     }
 
     public ReviewResult review(PullRequestDiff diff, ReviewDeadline deadline) {
-        Map<String, ReviewRuleSettings> loadedRules = reviewRuleProvider.getRulesById();
+        Map<String, ReviewRuleSettings> loadedRules = ruleSettings.get();
         Map<String, ReviewRuleSettings> configuredRules = loadedRules == null ? Map.of() : loadedRules;
         List<RuleMatch> matches = new ArrayList<>();
         List<PullRequestChangedFile> files = diff.files() == null ? List.of() : diff.files();

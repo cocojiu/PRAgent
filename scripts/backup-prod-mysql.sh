@@ -300,11 +300,13 @@ dump_database "${MYSQL_CONTAINER}" "${database_name}" \
       -out "${backup_partial}"
 
 [[ -s "${backup_partial}" ]] || fail "encrypted_backup_is_empty"
+chmod 0600 -- "${backup_partial}"
 mv -- "${backup_partial}" "${backup_path}"
 backup_partial=""
 
 backup_sha256="$(sha256sum "${backup_path}" | cut -d ' ' -f 1)"
 printf '%s  %s\n' "${backup_sha256}" "${backup_name}" >"${checksum_path}"
+chmod 0600 -- "${checksum_path}"
 (
   cd -- "${BACKUP_ROOT}"
   sha256sum --check --status "${backup_name}.sha256"

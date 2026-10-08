@@ -6356,6 +6356,240 @@
         }
       }
     },
+    "/api/v1/review-workflow/tasks/{taskId}/assignment-options" : {
+      "get" : {
+        "tags" : [ "ReviewMemberAssignment" ],
+        "operationId" : "reviewMemberAssignmentControllerOptions",
+        "x-controller-operation" : "ReviewMemberAssignmentController#options",
+        "parameters" : [ {
+          "name" : "taskId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        }, {
+          "name" : "search",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 128
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ReviewAssignmentOptionsResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ReviewAssignmentOptionsResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/review-workflow/tasks/{taskId}/assignment/confirm" : {
+      "post" : {
+        "tags" : [ "ReviewMemberAssignment" ],
+        "operationId" : "reviewMemberAssignmentControllerConfirm",
+        "x-controller-operation" : "ReviewMemberAssignmentController#confirm",
+        "parameters" : [ {
+          "name" : "taskId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "ReviewMemberAssignmentRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ReviewMemberAssignmentRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ReviewMemberAssignmentResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ReviewMemberAssignmentResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/review-workflow/tasks/{taskId}/codeowners" : {
+      "get" : {
+        "tags" : [ "CodeownersRecommendation" ],
+        "operationId" : "codeownersRecommendationControllerRecommendations",
+        "x-controller-operation" : "CodeownersRecommendationController#recommendations",
+        "parameters" : [ {
+          "name" : "taskId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "CodeownersRecommendationResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/CodeownersRecommendationResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/review-workflow/tasks/{taskId}/codeowners/accept" : {
+      "post" : {
+        "tags" : [ "CodeownersRecommendation" ],
+        "operationId" : "codeownersRecommendationControllerAccept",
+        "x-controller-operation" : "CodeownersRecommendationController#accept",
+        "parameters" : [ {
+          "name" : "taskId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "CodeownersAcceptRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CodeownersAcceptRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "CodeownersAcceptResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/CodeownersAcceptResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/reviews" : {
       "get" : {
         "tags" : [ "Review" ],
@@ -8830,6 +9064,48 @@
         }
       }
     },
+    "/api/v1/system/backup-status" : {
+      "get" : {
+        "tags" : [ "BackupStatus" ],
+        "operationId" : "backupStatusControllerStatus",
+        "x-controller-operation" : "BackupStatusController#status",
+        "parameters" : [ ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "BackupStatusResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/BackupStatusResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/system/health/summary" : {
       "get" : {
         "tags" : [ "SystemHealth" ],
@@ -9555,6 +9831,59 @@
           }
         }
       },
+      "BackupStatusResponse" : {
+        "type" : "object",
+        "x-java-type" : "BackupStatusResponse",
+        "properties" : {
+          "status" : {
+            "type" : "string"
+          },
+          "checkedAt" : {
+            "type" : "object",
+            "x-java-type" : "Instant"
+          },
+          "startedAt" : {
+            "type" : "object",
+            "x-java-type" : "Instant"
+          },
+          "finishedAt" : {
+            "type" : "object",
+            "x-java-type" : "Instant"
+          },
+          "ageSeconds" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "maxAgeHours" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "retained" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "archiveBytes" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "reasonCode" : {
+            "type" : "string"
+          },
+          "restoreVerified" : {
+            "type" : "boolean"
+          },
+          "archiveIntegrityChecked" : {
+            "type" : "boolean"
+          },
+          "processLivenessChecked" : {
+            "type" : "boolean"
+          },
+          "timerEnabledChecked" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "maxAgeHours", "restoreVerified", "archiveIntegrityChecked", "processLivenessChecked", "timerEnabledChecked" ]
+      },
       "BaseSettingsDto" : {
         "type" : "object",
         "x-java-type" : "BaseSettingsDto",
@@ -9845,6 +10174,166 @@
           }
         },
         "required" : [ "imported", "skipped" ]
+      },
+      "CodeownersAcceptRequest" : {
+        "type" : "object",
+        "x-java-type" : "CodeownersAcceptRequest",
+        "properties" : {
+          "userId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "attemptId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "headSha" : {
+            "type" : "string",
+            "pattern" : "[a-fA-F0-9]{40}"
+          },
+          "baseSha" : {
+            "type" : "string",
+            "pattern" : "[a-fA-F0-9]{40}"
+          }
+        },
+        "required" : [ "userId", "attemptId", "headSha", "baseSha" ]
+      },
+      "CodeownersAcceptResponse" : {
+        "type" : "object",
+        "x-java-type" : "CodeownersAcceptResponse",
+        "properties" : {
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "attemptId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "headSha" : {
+            "type" : "string"
+          },
+          "assignee" : {
+            "type" : "string"
+          }
+        }
+      },
+      "CodeownersCandidate" : {
+        "type" : "object",
+        "x-java-type" : "CodeownersCandidate",
+        "properties" : {
+          "userId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "username" : {
+            "type" : "string"
+          },
+          "coveredFiles" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "findingCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "riskScore" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "externalIdentities" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "paths" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          }
+        },
+        "required" : [ "coveredFiles", "findingCount", "riskScore" ]
+      },
+      "CodeownersPath" : {
+        "type" : "object",
+        "x-java-type" : "CodeownersPath",
+        "properties" : {
+          "path" : {
+            "type" : "string"
+          },
+          "pattern" : {
+            "type" : "string"
+          },
+          "line" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "owners" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "changedFiles" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          }
+        },
+        "required" : [ "line" ]
+      },
+      "CodeownersRecommendationResponse" : {
+        "type" : "object",
+        "x-java-type" : "CodeownersRecommendationResponse",
+        "properties" : {
+          "status" : {
+            "type" : "string"
+          },
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "attemptId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "headSha" : {
+            "type" : "string"
+          },
+          "baseSha" : {
+            "type" : "string"
+          },
+          "sourcePath" : {
+            "type" : "string"
+          },
+          "candidates" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/CodeownersCandidate"
+            }
+          },
+          "basis" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/CodeownersPath"
+            }
+          },
+          "uncoveredPaths" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "unmappedIdentities" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          }
+        }
       },
       "ConnectionTestResultDto" : {
         "type" : "object",
@@ -13101,6 +13590,19 @@
           }
         }
       },
+      "Member" : {
+        "type" : "object",
+        "x-java-type" : "Member",
+        "properties" : {
+          "userId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "username" : {
+            "type" : "string"
+          }
+        }
+      },
       "MessageQueueExceptionTaskDto" : {
         "type" : "object",
         "x-java-type" : "MessageQueueExceptionTaskDto",
@@ -14008,6 +14510,36 @@
           }
         }
       },
+      "ReviewAssignmentOptionsResponse" : {
+        "type" : "object",
+        "x-java-type" : "ReviewAssignmentOptionsResponse",
+        "properties" : {
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "attemptId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "headSha" : {
+            "type" : "string"
+          },
+          "assignmentVersion" : {
+            "type" : "string"
+          },
+          "members" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/Member"
+            }
+          },
+          "hasMore" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "hasMore" ]
+      },
       "ReviewAssignmentRequest" : {
         "type" : "object",
         "x-java-type" : "ReviewAssignmentRequest",
@@ -14807,6 +15339,49 @@
             "type" : "string"
           },
           "anchorType" : {
+            "type" : "string"
+          }
+        }
+      },
+      "ReviewMemberAssignmentRequest" : {
+        "type" : "object",
+        "x-java-type" : "ReviewMemberAssignmentRequest",
+        "properties" : {
+          "userId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "attemptId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "headSha" : {
+            "type" : "string",
+            "pattern" : "[a-fA-F0-9]{40}"
+          },
+          "assignmentVersion" : {
+            "type" : "string",
+            "pattern" : "[a-f0-9]{64}"
+          }
+        },
+        "required" : [ "userId", "attemptId", "headSha", "assignmentVersion" ]
+      },
+      "ReviewMemberAssignmentResponse" : {
+        "type" : "object",
+        "x-java-type" : "ReviewMemberAssignmentResponse",
+        "properties" : {
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "attemptId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "headSha" : {
+            "type" : "string"
+          },
+          "assignee" : {
             "type" : "string"
           }
         }

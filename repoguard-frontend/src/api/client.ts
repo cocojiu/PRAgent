@@ -122,6 +122,13 @@ const doRequest = async (
   }) as Promise<Response>;
 };
 
+/** Streaming caller owns cancellation and idle timeout; normal polling handles session refresh on fallback. */
+export const openReviewEventStream = (taskId: number, signal: AbortSignal, lastEventId: string) =>
+  doRequest(`/api/v1/reviews/${taskId}/events`, undefined, {
+    signal,
+    headers: { Accept: "text/event-stream", ...(lastEventId ? { "Last-Event-ID": lastEventId } : {}) }
+  });
+
 const unwrapResponseWithMeta = async <T>(response: Response): Promise<RequestWithMetaResult<T>> => {
   const responseBytes = responseSizeBytes(response);
   return {

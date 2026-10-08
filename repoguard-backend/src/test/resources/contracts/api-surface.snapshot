@@ -50,6 +50,8 @@ GET /api/v1/notifications query=[] body=- bodyRequired=false
 GET /api/v1/notifications/read query=[] body=- bodyRequired=false
 GET /api/v1/notifications/reports query=[period] body=- bodyRequired=false
 GET /api/v1/review-workflow/queue query=[page, pageSize, assignee, overdue] body=- bodyRequired=false
+GET /api/v1/review-workflow/tasks/{taskId}/assignment-options query=[search] body=- bodyRequired=false
+GET /api/v1/review-workflow/tasks/{taskId}/codeowners query=[] body=- bodyRequired=false
 GET /api/v1/reviews query=[page, pageSize, repository, status, riskLevel, source, triggerSource, keyword, cursor] body=- bodyRequired=false
 GET /api/v1/reviews/github/pull-requests query=[] body=- bodyRequired=false
 GET /api/v1/reviews/repositories query=[] body=- bodyRequired=false
@@ -75,6 +77,7 @@ GET /api/v1/scm/providers query=[] body=- bodyRequired=false
 GET /api/v1/scm/providers/{provider}/change-requests query=[] body=- bodyRequired=false
 GET /api/v1/scm/providers/{provider}/tasks/{taskId}/diff query=[] body=- bodyRequired=false
 GET /api/v1/scm/providers/{provider}/tasks/{taskId}/head query=[] body=- bodyRequired=false
+GET /api/v1/system/backup-status query=[] body=- bodyRequired=false
 GET /api/v1/system/health/summary query=[] body=- bodyRequired=false
 GET /api/v1/users query=[page, pageSize, role, status, keyword] body=- bodyRequired=false
 GET /api/v1/users/audits query=[page, pageSize] body=- bodyRequired=false
@@ -119,6 +122,8 @@ POST /api/v1/notifications/read query=[] body=NotificationReadRequest bodyRequir
 POST /api/v1/observability/frontend/performance query=[] body=FrontendPerformanceReportRequest bodyRequired=true
 POST /api/v1/review-workflow/bot/{provider}/commands query=[] body=ReviewBotCommandRequest bodyRequired=true
 POST /api/v1/review-workflow/escalations query=[] body=- bodyRequired=false
+POST /api/v1/review-workflow/tasks/{taskId}/assignment/confirm query=[] body=ReviewMemberAssignmentRequest bodyRequired=true
+POST /api/v1/review-workflow/tasks/{taskId}/codeowners/accept query=[] body=CodeownersAcceptRequest bodyRequired=true
 POST /api/v1/reviews/manual query=[] body=ManualReviewRequest bodyRequired=true
 POST /api/v1/reviews/{id}/findings/{findingId}/feedback query=[] body=FindingFeedbackRequest bodyRequired=true
 POST /api/v1/reviews/{id}/github-comments query=[] body=- bodyRequired=false

@@ -1,3 +1,4 @@
+acceptCodeownersRecommendation -> codeownersRecommendationControllerAccept(input: { path: { taskId: number }; body: CodeownersAcceptanceRequest }): Promise<CodeownersAcceptance>; // POST /api/v1/review-workflow/tasks/{taskId}/codeowners/accept
 activateRepositorySuppression -> repositoryPolicyControllerActivate(input: { path: { id: number }; query?: { reason?: string } }): Promise<RepositorySuppressionResponse>; // POST /api/v1/config/repository-policy/suppressions/{id}/activate
 bindEnterpriseTenantIdentity -> enterpriseTenantControllerPutIdentity(input: { path: { tenantKey: string }; body: EnterpriseIdentityBindingRequest }): Promise<void>; // PUT /api/v1/enterprise/tenants/{tenantKey}/identities
 bindEnterpriseTenantMembership -> enterpriseTenantControllerPutMembership(input: { path: { tenantKey: string }; body: EnterpriseTenantMembershipRequest }): Promise<void>; // PUT /api/v1/enterprise/tenants/{tenantKey}/memberships
@@ -6,6 +7,7 @@ cancelLlmEvaluationRun -> reviewCalibrationControllerCancelEvaluationRun(input: 
 changePassword -> authControllerChangePassword(input: { body: AuthPasswordChangeRequest }): Promise<void>; // POST /api/v1/auth/password/change
 cleanupDataRetention -> dataRetentionControllerCleanup(input?: { body?: DataRetentionCleanupRequest }): Promise<DataRetentionCleanupResponse>; // POST /api/v1/config/data-retention/cleanup
 compareLlmEvaluationReports -> reviewCalibrationControllerCompareEvaluationReports(input: { path: { candidateReportId: number; reportId: number } }): Promise<LlmEvaluationReportComparison>; // GET /api/v1/config/review-calibration/evaluation-reports/{reportId}/compare/{candidateReportId}
+confirmReviewMemberAssignment -> reviewMemberAssignmentControllerConfirm(input: { path: { taskId: number }; body: ReviewMemberAssignmentRequest }): Promise<ReviewMemberAssignment>; // POST /api/v1/review-workflow/tasks/{taskId}/assignment/confirm
 createEnterpriseTenant -> enterpriseTenantControllerCreate(input: { body: EnterpriseTenantCreateRequest }): Promise<EnterpriseTenant>; // POST /api/v1/enterprise/tenants
 createLlmEvaluationReport -> reviewCalibrationControllerCreateEvaluationReport(input: { body: LlmEvaluationRequest }): Promise<LlmEvaluationReport>; // POST /api/v1/config/review-calibration/evaluation-reports
 createNotificationBinding -> notificationIntegrationControllerCreateBinding(input: { body: NotificationBindingRequest }): Promise<NotificationBinding>; // POST /api/v1/config/notification-bindings
@@ -15,8 +17,10 @@ createUser -> userManagementControllerCreateUser(input: { body: UserCreateReques
 deleteNotificationBinding -> notificationIntegrationControllerDeleteBinding(input: { path: { id: number } }): Promise<void>; // DELETE /api/v1/config/notification-bindings/{id}
 exportLlmEvaluationReport -> reviewCalibrationControllerExportEvaluationReport(input: { path: { reportId: number }; query?: { format?: string } }): Promise<LlmEvaluationExport>; // GET /api/v1/config/review-calibration/evaluation-reports/{reportId}/export
 exportLlmModelReleaseAudits -> reviewCalibrationControllerExportModelReleaseAudits(input?: { query?: { action?: string; format?: string; from?: string; operator?: string; releaseId?: number; releaseKey?: string; to?: string } }): Promise<LlmModelReleaseAuditExport>; // GET /api/v1/config/review-calibration/release-center/audits/export
+fetchBackupStatus -> backupStatusControllerStatus(): Promise<BackupStatus>; // GET /api/v1/system/backup-status
 fetchCacheStats -> cacheStatsControllerGetStats(): Promise<CacheStats>; // GET /api/v1/cache/stats
 fetchCiSarifSetup -> ciSarifSetupControllerGetSetup(input: { path: { taskId: number } }): Promise<CiSarifSetup>; // GET /api/v1/scanners/sarif/ci/tasks/{taskId}/setup
+fetchCodeownersRecommendations -> codeownersRecommendationControllerRecommendations(input: { path: { taskId: number } }): Promise<CodeownersRecommendations>; // GET /api/v1/review-workflow/tasks/{taskId}/codeowners
 fetchDashboardHighRiskReviews -> dashboardControllerGetHighRiskReviews(): Promise<HighRiskReview[]>; // GET /api/v1/dashboard/high-risk-reviews
 fetchDashboardLlmQuality -> dashboardControllerGetLlmQuality(input?: { query?: { llmTrendDays?: number } }): Promise<DashboardLlmQuality>; // GET /api/v1/dashboard/llm-quality
 fetchDashboardOverview -> dashboardControllerGetOverview(input?: { query?: { llmTrendDays?: number } }): Promise<DashboardOverview>; // GET /api/v1/dashboard/overview
@@ -55,6 +59,7 @@ fetchNotifications -> notificationControllerGetNotifications(): Promise<Notifica
 fetchRabbitMqIntegrationConfig -> systemConfigControllerGetRabbitMqIntegration(): Promise<ServiceIntegrationConfig>; // GET /api/v1/config/integrations/rabbitmq
 fetchRepositoryPolicyPreview -> repositoryPolicyControllerPreview(input?: { query?: { headSha?: string; organization: string; repository: string } }): Promise<RepositoryPolicyPreviewResponse>; // GET /api/v1/config/repository-policy/preview
 fetchRepositorySuppressions -> repositoryPolicyControllerListSuppressions(input?: { query?: { limit?: number; organization: string; repository: string } }): Promise<RepositorySuppressionResponse[]>; // GET /api/v1/config/repository-policy/suppressions
+fetchReviewAssignmentOptions -> reviewMemberAssignmentControllerOptions(input: { path: { taskId: number }; query?: { search?: string } }): Promise<ReviewAssignmentOptions>; // GET /api/v1/review-workflow/tasks/{taskId}/assignment-options
 fetchReviewAttemptComparison -> reviewExecutionAttemptComparisonControllerCompare(input: { path: { candidateAttemptId: number; taskId: number }; query?: { baselineAttemptId?: number; page?: number; pageSize?: number } }): Promise<ReviewAttemptComparison>; // GET /api/v1/reviews/{taskId}/attempts/{candidateAttemptId}/comparison
 fetchReviewCalibrationQueue -> reviewCalibrationControllerGetReviewCalibrationQueue(input?: { query?: { includeIgnored?: boolean; limit?: number; ruleId: string } }): Promise<ReviewCalibrationQueue>; // GET /api/v1/config/review-calibration/queue
 fetchReviewChangedFiles -> reviewControllerListChangedFiles(input: { path: { id: number }; query?: { hasFinding?: boolean; page?: number; pageSize?: number } }): Promise<PageResponse<ChangedFile>>; // GET /api/v1/reviews/{id}/changed-files
