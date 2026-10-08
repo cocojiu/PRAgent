@@ -188,8 +188,14 @@ class ScheduledMysqlBackupLinuxIntegrationTest {
         try {
             resetFailed();
             systemctl("start", "--no-block", UNIT + ".service");
-            await(() -> { try { return property("Result").equals("start-limit-hit"); } catch (Exception e) { return false; } }, 30);
-            assertThat(Integer.parseInt(property("NRestarts"))).isGreaterThanOrEqualTo(2);
+            await(() -> {
+                try { return property("ActiveState").equals("failed") && hasStartLimitEvent(); }
+                catch (Exception e) { return false; }
+            }, 30);
+            assertThat(property("MainPID")).isEqualTo("0");
+            assertThat(property("Result")).isIn("start-limit-hit", "exit-code");
+            assertThat(property("ExecMainStatus")).isEqualTo("1");
+            assertThat(Integer.parseInt(property("NRestarts"))).isEqualTo(3);
             assertThat(status().path("reason").asText()).isEqualTo("archive_checksum_mismatch");
         } catch (Exception | AssertionError error) {
             reportFixtureFailure(); throw error;
@@ -200,6 +206,18 @@ class ScheduledMysqlBackupLinuxIntegrationTest {
             checked(List.of("sudo", "-n", "systemctl", "daemon-reload"));
             assertThat(property("RestartUSec")).isEqualTo(originalDelay);
         }
+    }
+
+    private static boolean hasStartLimitEvent() throws Exception {
+        Result journal = command(List.of("sudo", "-n", "journalctl", "--unit=" + UNIT + ".service", "--no-pager", "--output=json", "--lines=60"),
+            null, Map.of(), Duration.ofSeconds(5));
+        String records = new String(journal.successful(), StandardCharsets.UTF_8);
+        for (String line : records.lines().filter(value -> !value.isBlank()).toList()) {
+            JsonNode record = JSON.readTree(line);
+            if (record.path("_PID").asText().equals("1")
+                && record.path("MESSAGE").asText().equals(UNIT + ".service: Start request repeated too quickly.")) return true;
+        }
+        return false;
     }
 
     private static void verifyPersistentCatchup() throws Exception {
