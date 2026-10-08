@@ -143,7 +143,8 @@ class ReviewProgressTransportIntegrationTest {
 
     private void verifyProxyTransport() throws Exception {
         Path repository = Path.of(System.getenv("GITHUB_WORKSPACE")).toRealPath();
-        network = command("docker", "network", "create", "--internal", "--label", "com.repoguard.ci.owner=" + OWNER, "repoguard-ci-" + OWNER);
+        network = command("docker", "network", "create", "--driver", "bridge", "--opt", "com.docker.network.bridge.host_binding_ipv4=127.0.0.1",
+            "--label", "com.repoguard.ci.owner=" + OWNER, "repoguard-ci-" + OWNER);
         assertThat(network).matches("[a-f0-9]{64}");
         String gateway = command("docker", "network", "inspect", "--format", "{{(index .IPAM.Config 0).Gateway}}", network);
         assertThat(gateway).matches("[0-9.]+");
