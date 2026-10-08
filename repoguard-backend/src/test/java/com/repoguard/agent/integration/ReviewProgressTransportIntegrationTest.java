@@ -161,9 +161,13 @@ class ReviewProgressTransportIntegrationTest {
         assertThat(product.split(java.util.regex.Pattern.quote(site), -1).length).isEqualTo(2);
         Files.writeString(caddyfile, product.replace(site, site + "\n    tls internal"));
         String edge = container(List.of(CADDY, "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"), List.of(
-            "--entrypoint", "caddy", "--publish", "127.0.0.1::443", "--env", "REPOGUARD_FRONTEND_SERVER_NAME=localhost",
+            "--entrypoint", "caddy", "--cap-add", "NET_BIND_SERVICE", "--publish", "127.0.0.1::443", "--env", "REPOGUARD_FRONTEND_SERVER_NAME=localhost",
             "--tmpfs", "/data:rw,noexec,nosuid,size=16m", "--tmpfs", "/config:rw,noexec,nosuid,size=4m",
             "--volume", caddyfile + ":/etc/caddy/Caddyfile:ro"));
+        assertThat(JSON.readTree(command("docker", "inspect", "--format", "{{json .HostConfig.CapDrop}}", edge)))
+            .isEqualTo(JSON.readTree("[\"ALL\"]"));
+        assertThat(JSON.readTree(command("docker", "inspect", "--format", "{{json .HostConfig.CapAdd}}", edge)))
+            .isEqualTo(JSON.readTree("[\"NET_BIND_SERVICE\"]"));
         byte[][] ca = new byte[1][];
         await(() -> {
             try {
