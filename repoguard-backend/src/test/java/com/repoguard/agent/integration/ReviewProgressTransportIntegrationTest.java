@@ -167,7 +167,7 @@ class ReviewProgressTransportIntegrationTest {
         assertThat(JSON.readTree(command("docker", "inspect", "--format", "{{json .HostConfig.CapDrop}}", edge)))
             .isEqualTo(JSON.readTree("[\"ALL\"]"));
         assertThat(JSON.readTree(command("docker", "inspect", "--format", "{{json .HostConfig.CapAdd}}", edge)))
-            .isEqualTo(JSON.readTree("[\"NET_BIND_SERVICE\"]"));
+            .isEqualTo(JSON.readTree("[\"CAP_NET_BIND_SERVICE\"]"));
         byte[][] ca = new byte[1][];
         await(() -> {
             try {
@@ -179,6 +179,13 @@ class ReviewProgressTransportIntegrationTest {
         assertThat(binding).matches("127\\.0\\.0\\.1:[1-9][0-9]*");
         URI endpoint = URI.create("https://localhost:" + binding.substring(binding.lastIndexOf(':') + 1) + "/api/v1/reviews/9/events");
         try (HttpClient client = client(trust(ca[0]))) {
+            URI health = endpoint.resolve("/healthz");
+            await(() -> {
+                try {
+                    return client.send(HttpRequest.newBuilder(health).timeout(Duration.ofSeconds(2)).GET().build(),
+                        HttpResponse.BodyHandlers.discarding()).statusCode() == 200;
+                } catch (Exception e) { return false; }
+            }, 15);
             assertThat(statusCode(client, endpoint, null)).isEqualTo(401);
             for (int user = 1; user <= 8; user++) {
                 for (int connection = 0; connection < 2; connection++) {
