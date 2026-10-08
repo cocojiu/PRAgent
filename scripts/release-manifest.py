@@ -41,13 +41,39 @@ def write_json(path, value):
     Path(path).write_text(json.dumps(value, sort_keys=True, indent=2) + "\n", encoding="utf-8")
 
 
+def frontend_progress_stream(manifest):
+    features = manifest.get("features", {"frontendReviewProgressStream": False})
+    require(isinstance(features, dict) and set(features) == {"frontendReviewProgressStream"}
+            and type(features["frontendReviewProgressStream"]) is bool, "Invalid release feature options")
+    return features["frontendReviewProgressStream"]
+
+
+def requested_frontend_progress_stream():
+    value = os.environ.get("VITE_REVIEW_PROGRESS_STREAM", "false")
+    require(value in ("true", "false"), "Invalid frontend progress stream build option")
+    return value == "true"
+
+
+def requested_image_tag():
+    tag = os.environ.get("IMAGE_TAG_INPUT", "")
+    if tag and requested_frontend_progress_stream() and not tag.endswith("-sse"):
+        tag += "-sse"
+    require(not tag.endswith("-sse") or requested_frontend_progress_stream(), "SSE variant tag requires opt-in")
+    require(not tag or TAG.fullmatch(tag), "Invalid variant image tag")
+    return tag
+
+
 def validate(manifest, target=False):
     require(isinstance(manifest, dict), "Release manifest must be a JSON object")
+    frontend_progress_stream(manifest)
     for field in ("source", "schema", "images"):
         require(isinstance(manifest.get(field), dict), f"Invalid manifest {field} object")
     require(manifest.get("formatVersion") == 1, "Unsupported release manifest")
     require(SHA.fullmatch(manifest.get("gitSha", "")), "Invalid release Git SHA")
     require(TAG.fullmatch(manifest.get("version", "")), "Invalid release version")
+    if "features" in manifest:
+        require(frontend_progress_stream(manifest) == manifest["version"].endswith("-sse"),
+                "Release version differs from frontend build variant")
     source = manifest["source"]
     require(REPOSITORY.fullmatch(source.get("repository", "")), "Invalid source repository")
     require(source.get("workflow") == WORKFLOW and trusted_ref(source.get("ref")), "Untrusted release workflow or ref")
@@ -111,8 +137,12 @@ def inspection(image, reference):
         local_descriptor = metadata.get("Descriptor", {})
         require(metadata["Id"] == local_descriptor.get("digest") and metadata["Id"] in (pinned_digest, descriptor["digest"]),
                 "Local image is unrelated to the registry platform image")
+    feature_label = (metadata.get("Config") or {}).get("Labels") or {}
+    feature_label = feature_label.get("io.repoguard.frontend.review-progress-stream", "false")
+    require(feature_label in ("true", "false"), "Invalid inspected frontend build option")
     return {"Id": config_digest, "RuntimeId": metadata["Id"], "Os": metadata["Os"],
-            "Architecture": metadata["Architecture"], "RepoDigests": [immutable]}
+            "Architecture": metadata["Architecture"], "RepoDigests": [immutable],
+            "FrontendReviewProgressStream": feature_label == "true"}
 
 
 def inspect_images(args):
@@ -131,7 +161,8 @@ def create_source(args):
                            "runId": int(os.environ["GITHUB_RUN_ID"]), "runAttempt": int(os.environ["GITHUB_RUN_ATTEMPT"]),
                            "ref": os.environ["GITHUB_REF"], "event": os.environ["GITHUB_EVENT_NAME"]},
                 "schema": {"requiredVersion": schema, "minimumRollbackVersion": 100},
-                "checks": {"backendScan": "passed", "frontendScan": "passed", "backendSbom": "attested", "frontendSbom": "attested"}, "images": {}}
+                "checks": {"backendScan": "passed", "frontendScan": "passed", "backendSbom": "attested", "frontendSbom": "attested"},
+                "features": {"frontendReviewProgressStream": requested_frontend_progress_stream()}, "images": {}}
     for role in ("backend", "frontend"):
         repository = f"ghcr.io/{os.environ['GITHUB_REPOSITORY'].lower()}-{role}"
         digest = os.environ[f"{role.upper()}_DIGEST"]
@@ -139,6 +170,9 @@ def create_source(args):
         reference = f"{repository}@{digest}"
         subprocess.run(["docker", "pull", reference], check=True, stdout=sys.stderr)
         metadata = inspection(role, reference)
+        if role == "frontend":
+            require(metadata["FrontendReviewProgressStream"] == frontend_progress_stream(manifest),
+                    "Frontend image build option differs from release request")
         manifest["images"][role] = {"source": {"repository": repository, "digest": digest}, "imageId": metadata["Id"],
                                      "platform": f"{metadata['Os']}/{metadata['Architecture']}"}
     write_json(args.output, validate(manifest))
@@ -148,7 +182,7 @@ def api(path):
     return json.loads(subprocess.check_output(["gh", "api", path], text=True))
 
 
-def fetch(args):
+def fetch(args, match_build_options=True):
     repository = os.environ["GITHUB_REPOSITORY"]
     require(REPOSITORY.fullmatch(repository) and re.fullmatch(r"[1-9][0-9]*", args.run_id), "Invalid artifact source")
     run = api(f"repos/{repository}/actions/runs/{args.run_id}")
@@ -181,15 +215,23 @@ def fetch(args):
         require(manifest["version"] == args.tag, "Requested rollback tag differs from approved manifest")
     if args.kind == "source":
         require(manifest["gitSha"] == os.environ["GITHUB_SHA"], "Reused build does not match current release SHA")
-        tag_input = os.environ.get("IMAGE_TAG_INPUT", "")
-        require(not tag_input or manifest["version"] == tag_input, "Image tag override differs from reused build")
+        if match_build_options:
+            require(frontend_progress_stream(manifest) == requested_frontend_progress_stream(),
+                    "Frontend build option differs from reused build")
+            tag_input = requested_image_tag()
+            require(not tag_input or manifest["version"] == tag_input, "Image tag override differs from reused build")
     print(str(path))
+    return manifest
 
 
 def resolve(args):
     run_id = os.environ.get("RELEASE_RUN_ID_INPUT", "")
     rollback = os.environ.get("DEPLOY_EXISTING_TAG", "")
     require(not rollback or run_id, "Rollback requires release_run_id of a successful approved manifest")
+    require(not rollback or not requested_frontend_progress_stream(),
+            "Rollback cannot override the approved frontend build option")
+    requested_frontend_progress_stream()
+    tag_input = requested_image_tag()
     if run_id:
         fetch(argparse.Namespace(run_id=run_id, kind="approved" if rollback else "source", directory=args.directory, tag=rollback))
     elif os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch":
@@ -197,9 +239,17 @@ def resolve(args):
         for run in runs:
             artifacts = api(f"repos/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{run['id']}/artifacts?per_page=100")["artifacts"]
             if any(a["name"] == f"release-source-manifest-{run['id']}-{run['run_attempt']}" and not a["expired"] for a in artifacts):
-                run_id = str(run["id"])
-                fetch(argparse.Namespace(run_id=run_id, kind="source", directory=args.directory, tag=""))
-                break
+                positive(run["id"], "candidate source run ID")
+                candidate_directory = Path(args.directory) / str(run["id"])
+                manifest = fetch(argparse.Namespace(run_id=str(run["id"]), kind="source",
+                    directory=candidate_directory, tag=""), match_build_options=False)
+                if (frontend_progress_stream(manifest) == requested_frontend_progress_stream()
+                        and (not tag_input or manifest["version"] == tag_input)):
+                    run_id = str(run["id"])
+                    Path(args.directory).mkdir(parents=True, exist_ok=True)
+                    (Path(args.directory) / "release-source-manifest.json").write_bytes(
+                        (candidate_directory / "release-source-manifest.json").read_bytes())
+                    break
     with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
         output.write(f"reuse_run_id={run_id}\nmanifest_kind={'approved' if rollback else 'source'}\n")
 
@@ -211,6 +261,10 @@ def promote(args):
     for role, target in zip(("backend", "frontend"), metadata):
         image = manifest["images"][role]
         require(target["Id"] == image["imageId"] and f"{target['Os']}/{target['Architecture']}" == image["platform"], "Promotion changed the scanned platform image")
+        if role == "frontend":
+            option = target.get("FrontendReviewProgressStream", False)
+            require(type(option) is bool and option == frontend_progress_stream(manifest),
+                    "Promotion changed the frontend build option")
         digests = [ref.split("@", 1)[1] for ref in target["RepoDigests"] if ref.startswith(args.target_repository + "@")]
         require(len(set(digests)) == 1, "Target digest is missing or ambiguous")
         image["target"] = {"repository": args.target_repository, "digest": digests[0]}

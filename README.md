@@ -201,6 +201,8 @@ python scripts/scheduled-mysql-backup.py pull --host <已配置SSH别名> --dest
 
 后端设置 `REPOGUARD_REVIEW_PROGRESS_STREAM_ENABLED=true`，前端构建设置 `VITE_REVIEW_PROGRESS_STREAM=true`，可启用任务详情 SSE 进度更新；两个开关默认关闭。端点为 `GET /api/v1/reviews/{id}/events`，使用普通用户 Bearer 会话和现有租户请求头，不接受 URL 凭据或长期管理员 Key。
 
+正式镜像通过手动 `Release Images` 的 `frontend_progress_stream=true` 构建前端 SSE 变体；普通推送和省略该输入时仍关闭。变体版本追加 `-sse`，签名清单记录构建选项并核对前端镜像标签；复用源清单时必须选择相同选项，默认镜像与 SSE 变体不能混用。仅构建时保持 `deploy=false`；实际生产发布及后端开关启用仍需单独授权和线上验收。回滚使用原已批准清单，保留原镜像的构建选项。
+
 事件仅携带任务标识和持久化 timeline 游标，客户端收到后读取既有状态接口；中间事件可合并，不用于审计回放。每次连接均重新同步当前状态，`Last-Event-ID` 不能跳过鉴权。API 每5秒重新检查账号、会话、租户成员资格和任务存在性；停用账号或撤销权限后最迟受账号缓存5秒及采样周期影响关闭连接。
 
 每实例最多16连接、每用户最多2连接，最长连接120秒，正常110秒轮换。服务重启或历史归档后从持久化当前状态恢复或回退轮询；浏览器隐藏、断网、20秒无数据或连续3次短连接失败时释放连接并使用现有页面感知轮询。代理需允许 SSE 并尊重 `X-Accel-Buffering: no`；前端构建及后端开关应配套启用。Worker 不持有流连接，不修改 RabbitMQ 消费事务。

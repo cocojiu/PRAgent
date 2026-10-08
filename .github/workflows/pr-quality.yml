@@ -197,6 +197,11 @@ jobs:
       - name: Run quality gate
         working-directory: repoguard-frontend
         run: npm run quality
+      - name: Build opt-in SSE frontend
+        working-directory: repoguard-frontend
+        env:
+          VITE_REVIEW_PROGRESS_STREAM: 'true'
+        run: npm run build
       - name: Build and run browser end-to-end tests
         working-directory: repoguard-frontend
         env:
