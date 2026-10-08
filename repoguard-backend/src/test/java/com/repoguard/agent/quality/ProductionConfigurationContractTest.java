@@ -161,6 +161,7 @@ class ProductionConfigurationContractTest {
             "REPOGUARD_RUNTIME_ROLE",
             "REPOGUARD_API_INSTANCE_COUNT",
             "REPOGUARD_AUTH_REGISTRATION_ENABLED",
+            "REPOGUARD_REVIEW_PROGRESS_STREAM_ENABLED",
             "SPRING_DATASOURCE_HIKARI_MAXIMUMPOOLSIZE",
             "SPRING_DATASOURCE_HIKARI_MINIMUMIDLE"
         );
@@ -172,6 +173,12 @@ class ProductionConfigurationContractTest {
                 .isEqualTo(backendEnvironment.get(key));
         }
         assertThat(workerEnvironment.keySet()).containsAll(backendEnvironment.keySet());
+        assertThat(backendEnvironment).containsEntry(
+            "REPOGUARD_REVIEW_PROGRESS_STREAM_ENABLED",
+            "${REPOGUARD_REVIEW_PROGRESS_STREAM_ENABLED:-false}"
+        );
+        assertThat(workerEnvironment)
+            .containsEntry("REPOGUARD_REVIEW_PROGRESS_STREAM_ENABLED", false);
         for (String key : backendEnvironment.keySet()) {
             if (!serviceSpecificKeys.contains(key)) {
                 assertThat(workerEnvironment.get(key))
