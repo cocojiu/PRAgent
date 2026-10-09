@@ -31,6 +31,7 @@ import {
   fetchGithubFeedback,
   fetchNotificationEvents,
   fetchNotificationDeliveries,
+  fetchSystemSettings,
   transitionLlmEvaluationReportLifecycle
 } from "./config";
 import {
@@ -65,6 +66,7 @@ describe("apiRequest", () => {
     { name: "GitHub feedback", read: (signal: AbortSignal) => fetchGithubFeedback(20, { signal }) },
     { name: "notification events", read: (signal: AbortSignal) => fetchNotificationEvents({ page: 2 }, { signal }) },
     { name: "notification deliveries", read: (signal: AbortSignal) => fetchNotificationDeliveries({ page: 2 }, { signal }) },
+    { name: "system settings", read: (signal: AbortSignal) => fetchSystemSettings({ signal }) },
     { name: "release center", read: (signal: AbortSignal) => fetchLlmModelReleaseCenter(7, { signal }) },
     { name: "runtime metrics", read: (signal: AbortSignal) => fetchLlmModelReleaseRuntimeMetrics({ days: 7 }, { signal }) },
     { name: "release audits", read: (signal: AbortSignal) => fetchLlmModelReleaseAudits({ page: 2 }, { signal }) },

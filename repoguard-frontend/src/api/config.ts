@@ -87,7 +87,7 @@ export const activateRepositorySuppression = (id: number, reason?: string) =>
 export const revokeRepositorySuppression = (id: number, reason?: string) =>
   apiRequest("revokeRepositorySuppression", { id, reason });
 
-export const fetchSystemSettings = () => apiRequest("fetchSystemSettings", undefined);
+export const fetchSystemSettings = (options?: ApiRequestOptions) => apiRequest("fetchSystemSettings", undefined, options);
 
 export const updateSystemSettings = (payload: SystemSettingsRequest) =>
   apiRequest("updateSystemSettings", payload);

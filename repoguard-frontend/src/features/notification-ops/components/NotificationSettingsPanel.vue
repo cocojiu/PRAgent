@@ -1,6 +1,9 @@
 <template>
   <article class="notification-settings-card">
     <h2>触发策略</h2>
+    <el-alert v-if="loadErrorMessage" :title="loadErrorMessage" type="error" :closable="false" />
+    <el-alert v-if="saveErrorMessage" :title="saveErrorMessage" type="error" :closable="false" />
+    <el-button v-if="loadErrorMessage" :loading="loading" @click="emit('reload')">重新读取通知设置</el-button>
     <div class="switch-row">
       <span>GitHub 评论通知</span>
       <el-switch v-model="form.githubComment" :disabled="!canManage" @change="emit('save')" />
@@ -14,6 +17,9 @@
       <el-switch v-model="form.highRiskPr" :disabled="!canManage" @change="emit('save')" />
     </div>
     <p class="settings-help-text">审查完成、人工复核、评论回写等细粒度事件可在渠道绑定中按仓库配置。</p>
+    <p v-if="saving" role="status">正在保存本次提交；等待期间的新编辑会保留。</p>
+    <p v-else-if="hasUnsavedChanges" role="status">有未保存的修改，请保存触发策略。</p>
+    <el-button type="primary" :loading="saving" :disabled="!canSave" @click="emit('save')">保存触发策略</el-button>
 
     <h2 class="settings-section-title">默认通知范围</h2>
     <el-form label-position="top">
@@ -73,10 +79,17 @@ import type { NotificationSettings } from "@/types";
 defineProps<{
   canManage: boolean;
   form: NotificationSettings;
+  saving?: boolean;
+  loading?: boolean;
+  canSave?: boolean;
+  hasUnsavedChanges?: boolean;
+  loadErrorMessage?: string;
+  saveErrorMessage?: string;
 }>();
 
 const emit = defineEmits<{
   save: [];
+  reload: [];
 }>();
 
 const recipientTarget = ref("members");

@@ -24,7 +24,14 @@
             <NotificationSettingsPanel
               :can-manage="canManage"
               :form="notificationForm"
+              :saving="savingSettings"
+              :loading="settingsLoading"
+              :can-save="canSaveSettings"
+              :has-unsaved-changes="hasUnsavedChanges"
+              :load-error-message="loadErrorMessage"
+              :save-error-message="saveErrorMessage"
               @save="saveNotificationSettings"
+              @reload="loadSystemSettings"
             />
 
             <div class="notification-main-area">
@@ -294,6 +301,12 @@ const {
 } = useNotificationOpsRecords({ canManage, loadNotificationBindings });
 const {
   notificationForm,
+  savingSettings,
+  settingsLoading,
+  canSaveSettings,
+  hasUnsavedChanges,
+  loadErrorMessage,
+  saveErrorMessage,
   loadSystemSettings,
   saveNotificationSettings
 } = useNotificationOpsSettings({ canManage });
