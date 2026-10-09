@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { effectScope, type EffectScope } from "vue";
 import { currentUser } from "@/stores/authState";
 import { clearActiveTenant, setActiveTenant } from "@/stores/tenantContext";
-import type { NotificationBinding } from "@/types";
+import type { ConnectionTestResult, NotificationBinding } from "@/types";
 import { useNotificationBindings } from "./useNotificationBindings";
 
 const api = vi.hoisted(() => ({ fetchNotificationBindings: vi.fn(), createNotificationBinding: vi.fn(), deleteNotificationBinding: vi.fn(),
@@ -26,8 +26,8 @@ afterEach(() => { scopes.splice(0).forEach(scope => scope.stop()); clearActiveTe
 
 describe("notification binding operation exclusion", () => {
   it.each(["toggle", "remove", "save", "test"])("blocks every conflicting write while %s owns the same channel", async operation => {
-    const { state } = await setup(); const pending = deferred<NotificationBinding>();
-    let call: Promise<void>;
+    const { state } = await setup(); const pending = deferred<NotificationBinding | ConnectionTestResult>();
+    let call: Promise<unknown>;
     if (operation === "save") { state.openBindingDialog(row()); state.bindingForm.name = "changed"; api.updateNotificationBinding.mockReturnValueOnce(pending.promise); call = state.saveBinding(); }
     else if (operation === "remove") { api.deleteNotificationBinding.mockReturnValueOnce(pending.promise); call = state.removeBinding(1); }
     else if (operation === "test") { api.testNotificationBinding.mockReturnValueOnce(pending.promise); call = state.runBindingTest(1); }
@@ -36,7 +36,7 @@ describe("notification binding operation exclusion", () => {
     await state.toggleBinding(row()); await state.removeBinding(1); await state.runBindingTest(1); await state.saveBinding();
     const writes = api.updateNotificationBinding.mock.calls.length + api.updateNotificationBindingStatus.mock.calls.length
       + api.deleteNotificationBinding.mock.calls.length + api.testNotificationBinding.mock.calls.length;
-    expect(writes).toBe(1); pending.resolve({ ...row(), enabled: false }); await call; expect(state.busyBindingIds.value).toEqual([]);
+    expect(writes).toBe(1); pending.resolve(operation === "test" ? { success: true, message: "connected", status: "connected", checkedAt: "2026-10-09T15:30:00Z" } : { ...row(), enabled: false }); await call; expect(state.busyBindingIds.value).toEqual([]);
   });
 
   it("allows independent channels to change while the first channel is pending", async () => {

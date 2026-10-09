@@ -211,6 +211,10 @@
     />
 
     <el-dialog v-model="testDialogVisible" title="测试发送" width="520px">
+      <el-alert v-if="testErrorMessage" :title="testErrorMessage" type="error" :closable="false" />
+      <el-alert v-if="testInfoMessage" :title="testInfoMessage" type="info" :closable="false" />
+      <p v-if="!bindingsCurrent" role="status">当前渠道列表尚未确认最新状态，请先刷新渠道。</p>
+      <el-button v-if="!bindingsCurrent" :loading="bindingsLoading" @click="loadNotificationBindings">刷新渠道列表</el-button>
       <el-form label-width="96px">
         <el-form-item label="通知渠道">
           <el-select v-model="selectedTestBindingId" placeholder="请选择要测试的渠道绑定">
@@ -228,7 +232,7 @@
       </el-form>
       <template #footer>
         <el-button @click="testDialogVisible = false">取消</el-button>
-        <el-button type="primary" :disabled="!selectedTestBindingId" :loading="testingBindingId === selectedTestBindingId" @click="runSelectedBindingTest">
+        <el-button type="primary" :disabled="!canRunSelectedBindingTest" :loading="sendingTest" @click="runSelectedBindingTest">
           发送测试
         </el-button>
       </template>
@@ -292,6 +296,7 @@ const {
   openBindingDialog,
   saveBinding,
   runBindingTest,
+  canTestBinding,
   toggleBinding,
   removeBinding,
   changeBindingPage,
@@ -331,10 +336,16 @@ const {
   enabledNotificationBindings,
   selectedTestBindingId,
   testDialogVisible,
+  sendingTest,
+  testErrorMessage,
+  testInfoMessage,
+  canRunSelectedBindingTest,
   openTestDialog,
   runSelectedBindingTest
 } = useNotificationOpsTestDialog({
   notificationBindings,
+  canManage,
+  canTestBinding,
   runBindingTest
 });
 

@@ -41,6 +41,10 @@ const toBindingForm = (binding?: NotificationBinding): NotificationBindingReques
   notifyGithubComment: binding?.notifyGithubComment ?? true
 });
 const bindingFields = Object.keys(defaultBindingForm()) as Array<keyof NotificationBindingRequest>;
+export const notificationBindingTestSignature = (binding?: NotificationBinding, includeVersion = true) => binding
+  ? JSON.stringify([binding.id, toBindingForm(binding), binding.webhookUrlStatus, binding.secretStatus, includeVersion ? binding.updatedAt : undefined]) : "";
+export type NotificationBindingTestOutcome = { status: "success" | "failure"; message: string; refreshed: boolean }
+  | { status: "skipped" | "stale" };
 
 export const useNotificationBindings = () => {
   const notificationBindings = ref<NotificationBinding[]>([]);
@@ -95,6 +99,7 @@ export const useNotificationBindings = () => {
 
   const canChangeBinding = (id: number) => bindingsCurrent.value && !pendingBindingIds.value.has(id)
     && notificationBindings.value.some(binding => binding.id === id);
+  const canTestBinding = (id: number) => canChangeBinding(id) && testingBindingId.value === undefined;
 
   const loadNotificationBindings = async (): Promise<boolean> => {
     if (disposed || !canManage.value) return false;
@@ -176,19 +181,34 @@ export const useNotificationBindings = () => {
     }
   };
 
-  const runBindingTest = async (id: number) => {
-    if (!canChangeBinding(id) || testingBindingId.value !== undefined) return;
+  const runBindingTest = async (id: number, isCurrent: () => boolean = () => true): Promise<NotificationBindingTestOutcome> => {
+    if (!canTestBinding(id) || !isCurrent()) return { status: "skipped" };
     const version = contextRevision; const context = bindingContext();
-    const current = () => !disposed && canManage.value && version === contextRevision;
+    const target = notificationBindings.value.find(binding => binding.id === id)!;
+    const signature = notificationBindingTestSignature(target);
+    const configuration = notificationBindingTestSignature(target, false);
+    const contextCurrent = () => !disposed && canManage.value && version === contextRevision;
+    const findTarget = () => notificationBindings.value.find(binding => binding.id === id);
+    const current = () => contextCurrent() && isCurrent() && notificationBindingTestSignature(findTarget()) === signature;
     testingBindingId.value = id; pendingBindingIds.value.add(id); cancelBindingRead();
     try {
       const result = await testNotificationBinding(id);
-      if (!current()) return;
+      if (!contextCurrent()) return { status: "stale" };
+      const accepted = current();
       invalidateBindings(false);
-      ElMessage[result.success ? "success" : "error"](result.message);
-      await loadNotificationBindings();
+      if (!accepted) return { status: "stale" };
+      const message = result.message || (result.success ? "消息通知测试成功" : "消息通知测试失败");
+      ElMessage[result.success ? "success" : "error"](message);
+      const refreshed = await loadNotificationBindings();
+      if (!contextCurrent() || !isCurrent() || notificationBindingTestSignature(findTarget(), false) !== configuration) return { status: "stale" };
+      if (!refreshed && !bindingsCurrent.value) ElMessage.warning("消息通知测试已完成，渠道列表尚未刷新成功");
+      return { status: result.success ? "success" : "failure", message, refreshed: refreshed || bindingsCurrent.value };
     } catch (error) {
-      if (current()) { invalidateBindings(false); ElMessage.error(getErrorMessage(error, "消息通知测试失败")); }
+      const accepted = current();
+      if (contextCurrent()) invalidateBindings(false);
+      if (!accepted) return { status: "stale" };
+      const message = getErrorMessage(error, "消息通知测试失败"); ElMessage.error(message);
+      return { status: "failure", message, refreshed: false };
     } finally {
       finishBindingOperation(id, version, context);
       testingBindingId.value = undefined;
@@ -257,6 +277,7 @@ export const useNotificationBindings = () => {
     testingBindingId,
     busyBindingIds,
     canChangeBinding,
+    canTestBinding,
     editingBindingId,
     bindingForm,
     bindingHasUnsavedChanges,

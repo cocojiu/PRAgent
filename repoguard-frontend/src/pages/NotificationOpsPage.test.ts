@@ -5,13 +5,13 @@ import type { SystemSettingsRequest } from "@/types";
 import Page from "./NotificationOpsPage.vue";
 
 /* eslint-disable vue/one-component-per-file -- Stubs preserve real page/composable wiring for notification drafts, errors and list freshness. */
-const api = vi.hoisted(() => ({ settings: vi.fn(), update: vi.fn(), events: vi.fn(), deliveries: vi.fn(), bindings: vi.fn() }));
+const api = vi.hoisted(() => ({ settings: vi.fn(), update: vi.fn(), events: vi.fn(), deliveries: vi.fn(), bindings: vi.fn(), test: vi.fn() }));
 const messages = vi.hoisted(() => ({ success: vi.fn(), warning: vi.fn(), error: vi.fn() }));
 vi.mock("element-plus/es/components/message/index.mjs", () => ({ ElMessage: messages }));
 vi.mock("@/api/config", () => ({
   fetchSystemSettings: api.settings, updateSystemSettings: api.update, fetchNotificationEvents: api.events, fetchNotificationDeliveries: api.deliveries,
   fetchNotificationBindings: api.bindings, retryNotificationEvent: vi.fn(), createNotificationBinding: vi.fn(), updateNotificationBinding: vi.fn(),
-  updateNotificationBindingStatus: vi.fn(), deleteNotificationBinding: vi.fn(), testNotificationBinding: vi.fn()
+  updateNotificationBindingStatus: vi.fn(), deleteNotificationBinding: vi.fn(), testNotificationBinding: api.test
 }));
 let app: App | undefined; let host: HTMLDivElement;
 const settings = () => ({ base: { systemName: "RepoGuard" }, policy: { autoComment: false }, security: { secretMasking: true },
@@ -32,12 +32,14 @@ const mount = async () => {
   app.component("ElAlert", defineComponent({ props: { title: { type: String, default: "" } }, setup: props => () => h("div", { role: "alert" }, props.title) }));
   app.component("ElSelect", defineComponent({ props: { modelValue: { type: [String, Number], default: undefined } }, emits: ["update:modelValue"],
     setup: (props, { attrs, slots, emit }) => () => h("select", { ...attrs, value: props.modelValue,
-      onChange: (event: Event) => emit("update:modelValue", (event.target as HTMLSelectElement).value) }, slots.default?.()) }));
+      onChange: (event: Event) => { const value = (event.target as HTMLSelectElement).value; emit("update:modelValue", typeof props.modelValue === "number" ? Number(value) : value); } }, slots.default?.()) }));
   app.component("ElOption", defineComponent({ props: { value: { type: [String, Number], default: "" }, label: { type: String, default: "" } },
     setup: props => () => h("option", { value: props.value }, props.label) }));
   app.component("ElTable", defineComponent({ props: { data: { type: Array, default: () => [] } }, setup: (props, { attrs }) => () => h("div", attrs, JSON.stringify(props.data)) }));
+  app.component("ElDialog", defineComponent({ props: { modelValue: Boolean, title: { type: String, default: "" } },
+    setup: (props, { slots }) => () => props.modelValue ? h("section", { role: "dialog", "aria-label": props.title }, [slots.default?.(), slots.footer?.()]) : null }));
   for (const name of ["ElTabs", "ElTabPane", "ElForm", "ElFormItem"]) app.component(name, defineComponent({ setup: (_, { slots }) => () => h("div", slots.default?.()) }));
-  for (const name of ["ElTableColumn", "ElDialog", "ElInput", "ElInputNumber", "ElEmpty", "ElPagination", "ElCheckbox", "ElTag"]) app.component(name, defineComponent({ setup: () => () => null }));
+  for (const name of ["ElTableColumn", "ElInput", "ElInputNumber", "ElEmpty", "ElPagination", "ElCheckbox", "ElTag"]) app.component(name, defineComponent({ setup: () => () => null }));
   app.mount(host); await flush();
 };
 beforeEach(() => {
@@ -45,11 +47,40 @@ beforeEach(() => {
   api.settings.mockResolvedValue(settings()); api.update.mockImplementation((payload: SystemSettingsRequest) => Promise.resolve({ ...settings(), notification: payload.notification }));
   api.events.mockResolvedValue({ items: [{ id: 1, status: "FAILED", taskId: 7 }], total: 25 });
   api.deliveries.mockResolvedValue({ items: [], total: 0 }); api.bindings.mockResolvedValue({ items: [], total: 0 });
+  api.test.mockResolvedValue({ success: true, message: "connected" });
   host = document.createElement("div"); document.body.append(host);
 });
 afterEach(() => { app?.unmount(); app = undefined; host.remove(); currentUser.value = undefined; });
 
 describe("notification operations page", () => {
+  const testBindings = () => ({ items: [1, 2].map(id => ({ id, name: `channel-${id}`, provider: "DINGTALK", organization: "org", repository: "repo", enabled: true,
+    notifyReviewCompleted: true, notifyReviewFailed: true, notifyHumanReviewRequired: true, notifyGithubComment: true, status: "CONFIGURED" })), total: 2 });
+  const testDialog = () => host.querySelector('[role="dialog"][aria-label="测试发送"]');
+
+  it("keeps failed test sending visible and offers a read before explicit retry", async () => {
+    api.bindings.mockResolvedValue(testBindings()); await mount(); button("测试发送").click(); await flush();
+    api.test.mockRejectedValueOnce(new Error("test offline")); button("发送测试").click(); await flush();
+    expect(testDialog()!.textContent).toContain("test offline"); expect(button("发送测试").disabled).toBe(true);
+    button("刷新渠道列表").click(); await flush(); expect(api.test).toHaveBeenCalledTimes(1); expect(button("发送测试").disabled).toBe(false);
+    button("发送测试").click(); await flush(); expect(api.test).toHaveBeenCalledTimes(2); expect(testDialog()).toBeNull();
+  });
+
+  it("does not close a new selected channel when the previous test completes", async () => {
+    api.bindings.mockResolvedValue(testBindings()); await mount(); button("测试发送").click(); await flush();
+    const pending = deferred<{ success: boolean; message: string }>(); api.test.mockReturnValueOnce(pending.promise); button("发送测试").click(); await flush();
+    expect(button("发送测试").disabled).toBe(true); const selection = testDialog()!.querySelector<HTMLSelectElement>("select")!;
+    selection.value = "2"; selection.dispatchEvent(new Event("change")); await flush(); pending.resolve({ success: true, message: "old connected" }); await flush();
+    expect(testDialog()).not.toBeNull(); expect(selection.value).toBe("2"); expect(messages.success).not.toHaveBeenCalledWith("old connected");
+  });
+
+  it("keeps a reopened test dialog intact after the original request completes", async () => {
+    api.bindings.mockResolvedValue(testBindings()); await mount(); button("测试发送").click(); await flush();
+    const pending = deferred<{ success: boolean; message: string }>(); api.test.mockReturnValueOnce(pending.promise); button("发送测试").click(); await flush();
+    button("取消").click(); button("测试发送").click(); await flush(); expect(testDialog()).not.toBeNull();
+    pending.resolve({ success: true, message: "old connected" }); await flush(); expect(testDialog()).not.toBeNull();
+    expect(messages.success).not.toHaveBeenCalledWith("old connected"); expect(api.test).toHaveBeenCalledWith(1);
+  });
+
   it("shows a current binding query failure and offers a cancellable refresh", async () => {
     api.bindings.mockRejectedValueOnce(new Error("bindings offline")); await mount();
     expect(host.textContent).toContain("bindings offline"); expect(host.textContent).toContain("当前渠道列表尚未确认最新状态");
