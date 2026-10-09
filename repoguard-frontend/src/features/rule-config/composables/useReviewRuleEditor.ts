@@ -40,7 +40,11 @@ const createEmptyRuleForm = (): ReviewRuleConfigRequest => ({
 export const useReviewRuleEditor = ({ canManage, reloadRules, rules, rulesCurrent = ref(true),
   cancelRulesRead = () => undefined, invalidateRules = () => undefined }: ReviewRuleEditorOptions) => {
   const saving = ref(false);
-  const statusSavingId = ref("");
+  const pendingRuleIds = ref(new Set<string>());
+  const pendingStatusIds = ref(new Set<string>());
+  const statusSavingId = computed(() => [...pendingStatusIds.value][0] ?? "");
+  const busyRuleIds = computed(() => [...pendingRuleIds.value]);
+  const ruleOperationErrors = ref<Record<string, string>>({});
   const dialogVisible = ref(false);
   const editingRuleId = ref("");
   const editingPolicyVersion = ref(0);
@@ -64,11 +68,21 @@ export const useReviewRuleEditor = ({ canManage, reloadRules, rules, rulesCurren
     dialogVisible.value = false; editingRuleId.value = ""; editingPolicyVersion.value = 0;
     savedForm.value = createEmptyRuleForm(); Object.assign(ruleForm, savedForm.value);
     ruleSaveError.value = ""; ruleSaveNotice.value = ""; ruleRefreshError.value = "";
+    ruleOperationErrors.value = {};
   };
   watch([canManage, activeTenant, () => currentUser.value?.id], () => { contextRevision += 1; clearEditor(); }, { flush: "sync" });
   if (getCurrentScope()) onScopeDispose(() => { disposed = true; contextRevision += 1; clearEditor(); });
   const canSaveRule = computed(() => !disposed && canManage.value && rulesCurrent.value && dialogVisible.value
-    && !saving.value && !refreshingRule.value && !ruleVersionChanged.value && ruleHasUnsavedChanges.value);
+    && !saving.value && !refreshingRule.value && !ruleVersionChanged.value && ruleHasUnsavedChanges.value
+    && !pendingRuleIds.value.has(editingRuleId.value || ruleForm.id.trim().toUpperCase()));
+  const canChangeRule = (id: string) => !disposed && canManage.value && rulesCurrent.value
+    && !pendingRuleIds.value.has(id) && rules.value.some(rule => rule.id === id);
+  const canRefreshRule = computed(() => !disposed && canManage.value && dialogVisible.value && !saving.value && !refreshingRule.value
+    && !!ruleForm.id.trim() && !pendingRuleIds.value.has(editingRuleId.value || ruleForm.id.trim().toUpperCase()));
+  const finishRuleOperation = (id: string, version: number, context: string) => {
+    pendingRuleIds.value.delete(id); pendingStatusIds.value.delete(id);
+    if (!disposed && version !== contextRevision && context === contextIdentity()) invalidateRules();
+  };
 
   const resetForm = (rule?: ReviewRuleConfig) => {
     ruleForm.id = rule?.id ?? "";
@@ -171,7 +185,7 @@ export const useReviewRuleEditor = ({ canManage, reloadRules, rules, rulesCurren
   };
 
   const refreshEditingRule = async () => {
-    if (disposed || !canManage.value || !dialogVisible.value || saving.value || refreshingRule.value) return;
+    if (!canRefreshRule.value) return;
     const id = editingRuleId.value || ruleForm.id.trim().toUpperCase();
     if (!id) return;
     const version = contextRevision; let editor = editorRevision; const baseline = { ...savedForm.value };
@@ -205,6 +219,7 @@ export const useReviewRuleEditor = ({ canManage, reloadRules, rules, rulesCurren
     const current = () => contextCurrent() && dialogVisible.value && editor === editorRevision;
     if (id && payload.id !== id) { ruleSaveError.value = "规则 ID 与编辑目标不一致，请重新打开编辑。"; return; }
     saving.value = true; ruleSaveError.value = ""; ruleSaveNotice.value = ""; ruleRefreshError.value = ""; cancelRulesRead();
+    pendingRuleIds.value.add(payload.id);
     try {
       let saved: ReviewRuleConfig;
       try {
@@ -236,32 +251,38 @@ export const useReviewRuleEditor = ({ canManage, reloadRules, rules, rulesCurren
       } else if (accepted && !ruleHasUnsavedChanges.value) dialogVisible.value = false;
     } finally {
       saving.value = false;
-      if (!disposed && version !== contextRevision && context === contextIdentity()) invalidateRules();
+      finishRuleOperation(payload.id, version, context);
     }
   };
 
   const toggleRule = async (rule: ReviewRuleConfig, value: string | number | boolean) => {
-    if (!canManage.value || statusSavingId.value) {
-      rule.status = value === "enabled" ? "disabled" : "enabled";
-      return;
-    }
-    const nextStatus = value === "enabled" ? "enabled" : "disabled";
-    const previousStatus: RuleStatus = nextStatus === "enabled" ? "disabled" : "enabled";
-    statusSavingId.value = rule.id;
+    if (!canChangeRule(rule.id) || (value !== "enabled" && value !== "disabled")) return;
+    const latest = rules.value.find(row => row.id === rule.id)!;
+    if (latest.policyVersion !== rule.policyVersion || latest.status !== rule.status || value === latest.status) return;
+    const id = latest.id; const name = latest.name; const expectedPolicyVersion = latest.policyVersion;
+    const nextStatus: RuleStatus = value; const version = contextRevision; const context = contextIdentity();
+    const current = () => !disposed && canManage.value && version === contextRevision;
+    pendingRuleIds.value.add(id); pendingStatusIds.value.add(id); delete ruleOperationErrors.value[id]; cancelRulesRead();
     try {
-      const updated = await updateReviewRuleStatus(rule.id, {
+      const updated = await updateReviewRuleStatus(id, {
         status: nextStatus,
-        expectedPolicyVersion: rule.policyVersion
+        expectedPolicyVersion
       });
-      Object.assign(rule, updated);
-      ElMessage.success(`${rule.name} 已${nextStatus === "enabled" ? "启用" : "停用"}`);
-      await reloadRules();
+      if (!current()) return;
+      invalidateRules();
+      const acknowledged = updated?.id === id && updated.status === nextStatus
+        && Number.isSafeInteger(updated.policyVersion) && updated.policyVersion > 0;
+      if (acknowledged) ElMessage.success(`${name} 已${nextStatus === "enabled" ? "启用" : "停用"}`);
+      else { ruleOperationErrors.value[id] = "状态更新请求已返回，但规则标识、状态或版本不一致，请刷新确认。"; ElMessage.warning(ruleOperationErrors.value[id]); }
+      const refreshed = await readFreshRules();
+      if (current() && !refreshed) ElMessage.warning(acknowledged ? `${name} 状态已更新，规则列表尚未刷新成功` : "规则列表尚未刷新成功，请刷新确认");
     } catch (error) {
-      rule.status = previousStatus;
-      ElMessage.error(getErrorMessage(error, "规则操作失败"));
-      await reloadRules();
+      if (current()) {
+        invalidateRules(); ruleOperationErrors.value[id] = getErrorMessage(error, "规则状态更新失败");
+        ElMessage.error(ruleOperationErrors.value[id]); await readFreshRules();
+      }
     } finally {
-      statusSavingId.value = "";
+      finishRuleOperation(id, version, context);
     }
   };
 
@@ -279,6 +300,10 @@ export const useReviewRuleEditor = ({ canManage, reloadRules, rules, rulesCurren
     ruleRefreshError,
     refreshingRule,
     statusSavingId,
+    busyRuleIds,
+    canChangeRule,
+    canRefreshRule,
+    ruleOperationErrors,
     openEditDialog,
     openCreateDialog,
     resetForm,

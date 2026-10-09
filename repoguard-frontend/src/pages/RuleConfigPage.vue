@@ -13,6 +13,7 @@
     </div>
 
     <el-alert v-if="errorMessage" class="page-alert" type="error" :title="errorMessage" show-icon :closable="false" />
+    <el-alert v-for="(error, id) in ruleOperationErrors" :key="id" class="page-alert" type="error" :title="`${id}：${error}`" show-icon :closable="false" />
     <el-alert
       v-if="rulesNeedRefresh && (rules.length || strategyPolicy)"
       class="page-alert"
@@ -117,11 +118,11 @@
           <el-table-column label="启用状态" width="120">
             <template #default="{ row }">
               <el-switch
-                v-model="row.status"
+                :model-value="row.status"
                 active-value="enabled"
                 inactive-value="disabled"
-                :disabled="!canManage || !rulesCurrent"
-                :loading="statusSavingId === row.id"
+                :disabled="!canChangeRule(row.id)"
+                :loading="busyRuleIds.includes(row.id)"
                 @change="toggleRule(row, $event)"
               />
             </template>
@@ -148,7 +149,7 @@
           </el-table-column>
           <el-table-column label="操作" width="180" fixed="right">
             <template #default="{ row }">
-              <el-button size="small" type="primary" plain :disabled="!canManage || !rulesCurrent" @click="openEditDialog(row)">编辑</el-button>
+              <el-button size="small" type="primary" plain :disabled="!canChangeRule(row.id)" @click="openEditDialog(row)">编辑</el-button>
               <el-button size="small" @click="openRuleVersions(row)">历史</el-button>
             </template>
           </el-table-column>
@@ -277,7 +278,7 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button :disabled="saving || !canManage || !ruleForm.id.trim()" :loading="refreshingRule" @click="refreshEditingRule">刷新版本并保留草稿</el-button>
+        <el-button :disabled="!canRefreshRule" :loading="refreshingRule" @click="refreshEditingRule">刷新版本并保留草稿</el-button>
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" :disabled="!canSaveRule" :loading="saving" @click="saveRule">保存</el-button>
       </template>
@@ -408,7 +409,10 @@ const {
   ruleRefreshError,
   refreshingRule,
   refreshEditingRule,
-  statusSavingId,
+  busyRuleIds,
+  canChangeRule,
+  canRefreshRule,
+  ruleOperationErrors,
   openCreateDialog,
   openEditDialog,
   saveRule,

@@ -2,7 +2,7 @@ import { effectScope, ref, type EffectScope } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { currentUser } from "@/stores/authState";
 import { clearActiveTenant, setActiveTenant } from "@/stores/tenantContext";
-import type { ReviewRuleConfig, ReviewRuleConfigRequest } from "@/types";
+import type { ReviewRuleConfig, ReviewRuleConfigRequest, ReviewRuleStatusRequest } from "@/types";
 import { useReviewRuleEditor } from "./useReviewRuleEditor";
 
 const api = vi.hoisted(() => ({ createReviewRule: vi.fn(), updateReviewRule: vi.fn(), updateReviewRuleStatus: vi.fn() }));
@@ -35,6 +35,8 @@ const setup = () => {
     Promise.resolve(persist(rule({ ...payload, id, confidence: String(payload.confidence), policyVersion: version + 1 }))));
   api.createReviewRule.mockImplementation((payload: ReviewRuleConfigRequest) =>
     Promise.resolve(persist(rule({ ...payload, confidence: String(payload.confidence), policyVersion: 1 }))));
+  api.updateReviewRuleStatus.mockImplementation((id: string, payload: ReviewRuleStatusRequest) =>
+    Promise.resolve(persist(rule({ ...server.value.find(row => row.id === id)!, status: payload.status, policyVersion: payload.expectedPolicyVersion + 1 }))));
   const scope = effectScope(); scopes.push(scope);
   const state = scope.run(() => useReviewRuleEditor({ canManage, rules, rulesCurrent, reloadRules, invalidateRules, cancelRulesRead }))!;
   state.openEditDialog(rules.value[0]!);
@@ -42,6 +44,112 @@ const setup = () => {
 };
 beforeEach(() => {
   vi.resetAllMocks(); currentUser.value = { id: 1, username: "admin", email: "admin@example.test", role: "ADMIN", status: "ACTIVE" };
+});
+
+describe("rule save and status operation exclusion", () => {
+  it("excludes a status update while the same rule save is pending", async () => {
+    const { state, rules, persist } = setup(); const write = deferred<ReviewRuleConfig>(); api.updateReviewRule.mockReturnValueOnce(write.promise);
+    state.ruleForm.name = "draft"; const pending = state.saveRule(); await state.toggleRule(rules.value[0]!, "disabled");
+    expect(api.updateReviewRuleStatus).not.toHaveBeenCalled(); expect(state.busyRuleIds.value).toEqual(["RG-A"]);
+    write.resolve(persist(rule({ name: "draft", policyVersion: 4 }))); await pending;
+    expect(state.busyRuleIds.value).toEqual([]); expect(state.canChangeRule("RG-A")).toBe(true);
+  });
+
+  it("excludes saving and version refresh while the same status update is pending", async () => {
+    const { state, rules, reloadRules, persist } = setup(); const write = deferred<ReviewRuleConfig>(); api.updateReviewRuleStatus.mockReturnValueOnce(write.promise);
+    state.ruleForm.name = "draft"; const pending = state.toggleRule(rules.value[0]!, "disabled");
+    expect(state.canSaveRule.value).toBe(false); expect(state.canRefreshRule.value).toBe(false);
+    await state.saveRule(); await state.refreshEditingRule(); expect(api.updateReviewRule).not.toHaveBeenCalled(); expect(reloadRules).not.toHaveBeenCalled();
+    write.resolve(persist(rule({ status: "disabled", policyVersion: 4 }))); await pending;
+    expect(state.ruleForm.name).toBe("draft"); expect(state.ruleVersionChanged.value).toBe(true);
+    await state.refreshEditingRule(); expect(state.ruleForm.name).toBe("draft"); expect(state.ruleForm.status).toBe("disabled");
+    await state.saveRule(); expect(api.updateReviewRule.mock.calls[0]![1]).toBe(4);
+  });
+
+  it("keeps the same-rule lock through the authoritative post-write read", async () => {
+    const { state, rules, reloadRules, server, rulesCurrent } = setup(); const read = deferred<boolean>();
+    reloadRules.mockImplementationOnce(async () => { await read.promise; rules.value = [...server.value]; rulesCurrent.value = true; return true; });
+    const pending = state.toggleRule(rules.value[0]!, "disabled"); await flush();
+    expect(state.busyRuleIds.value).toEqual(["RG-A"]); await state.toggleRule(rule(), "disabled");
+    expect(api.updateReviewRuleStatus).toHaveBeenCalledOnce(); read.resolve(true); await pending;
+    expect(state.busyRuleIds.value).toEqual([]); expect(rules.value.find(row => row.id === "RG-A")!.status).toBe("disabled");
+  });
+
+  it("allows different rules to update in parallel and releases only each operation's lock", async () => {
+    const { state, rules, persist } = setup(); const first = deferred<ReviewRuleConfig>(); const second = deferred<ReviewRuleConfig>();
+    api.updateReviewRuleStatus.mockImplementation((id: string) => id === "RG-A" ? first.promise : second.promise);
+    const a = state.toggleRule(rules.value[0]!, "disabled"); const b = state.toggleRule(rules.value[1]!, "disabled");
+    expect(api.updateReviewRuleStatus).toHaveBeenCalledTimes(2); expect(state.busyRuleIds.value).toEqual(["RG-A", "RG-B"]);
+    first.resolve(persist(rule({ status: "disabled", policyVersion: 4 }))); await a;
+    expect(state.busyRuleIds.value).toEqual(["RG-B"]); expect(state.statusSavingId.value).toBe("RG-B");
+    second.resolve(persist(rule({ id: "RG-B", name: "second", status: "disabled", policyVersion: 4 }))); await b;
+    expect(state.busyRuleIds.value).toEqual([]); expect(state.statusSavingId.value).toBe("");
+  });
+
+  it("permits an independent rule status update during another rule save", async () => {
+    const { state, rules, persist } = setup(); const write = deferred<ReviewRuleConfig>(); api.updateReviewRule.mockReturnValueOnce(write.promise);
+    state.ruleForm.name = "draft"; const pending = state.saveRule(); await state.toggleRule(rules.value[1]!, "disabled");
+    expect(api.updateReviewRuleStatus).toHaveBeenCalledWith("RG-B", { status: "disabled", expectedPolicyVersion: 3 });
+    expect(state.busyRuleIds.value).toEqual(["RG-A"]); write.resolve(persist(rule({ name: "draft", policyVersion: 4 }))); await pending;
+  });
+
+  it("does not mutate the old row or reinsert it into a newer result", async () => {
+    const { state, rules, reloadRules } = setup(); const original = rules.value[0]!;
+    const write = deferred<ReviewRuleConfig>(); api.updateReviewRuleStatus.mockReturnValueOnce(write.promise);
+    const pending = state.toggleRule(original, "disabled");
+    reloadRules.mockImplementationOnce(async () => { rules.value = [rule({ id: "RG-B" })]; return true; });
+    write.resolve(rule({ status: "disabled", policyVersion: 4 })); await pending;
+    expect(original.status).toBe("enabled"); expect(original.policyVersion).toBe(3);
+    expect(rules.value.map(row => row.id)).toEqual(["RG-B"]);
+  });
+
+  it("separates status acknowledgment from read failure and blocks operations on unconfirmed rows", async () => {
+    const { state, rules, reloadRules } = setup(); reloadRules.mockResolvedValueOnce(false);
+    await state.toggleRule(rules.value[0]!, "disabled");
+    expect(messages.success).toHaveBeenCalledOnce(); expect(messages.error).not.toHaveBeenCalled(); expect(messages.warning).toHaveBeenCalledWith(expect.stringContaining("状态已更新"));
+    expect(state.canChangeRule("RG-A")).toBe(false); await state.toggleRule(rule(), "disabled"); expect(api.updateReviewRuleStatus).toHaveBeenCalledOnce();
+  });
+
+  it("retains a current status error and refreshes before a user-triggered retry", async () => {
+    const { state, rules } = setup(); api.updateReviewRuleStatus.mockRejectedValueOnce(new Error("status offline"));
+    await state.toggleRule(rules.value[0]!, "disabled"); expect(state.ruleOperationErrors.value["RG-A"]).toBe("status offline");
+    expect(rules.value[0]!.status).toBe("enabled"); expect(state.canChangeRule("RG-A")).toBe(true);
+    await state.toggleRule(rules.value[0]!, "disabled"); expect(api.updateReviewRuleStatus).toHaveBeenCalledTimes(2); expect(state.ruleOperationErrors.value["RG-A"]).toBeUndefined();
+  });
+
+  it.each(["wrong id", "wrong status", "invalid version"])("does not acknowledge a %s status reply", async issue => {
+    const { state, rules } = setup(); api.updateReviewRuleStatus.mockResolvedValueOnce(rule({
+      id: issue === "wrong id" ? "RG-B" : "RG-A", status: issue === "wrong status" ? "enabled" : "disabled", policyVersion: issue === "invalid version" ? 0 : 4
+    }));
+    await state.toggleRule(rules.value[0]!, "disabled"); expect(state.ruleOperationErrors.value["RG-A"]).toContain("不一致"); expect(messages.success).not.toHaveBeenCalled();
+    expect(rules.value[0]!.status).toBe("enabled");
+  });
+
+  it.each(["tenant", "account", "permission", "dispose"])("keeps the real pending lock and discards old status results after %s", async change => {
+    const { state, rules, canManage, scope, reloadRules } = setup(); const write = deferred<ReviewRuleConfig>(); api.updateReviewRuleStatus.mockReturnValueOnce(write.promise);
+    const pending = state.toggleRule(rules.value[0]!, "disabled");
+    if (change === "tenant") setActiveTenant("other");
+    else if (change === "account") currentUser.value = { ...currentUser.value!, id: 2 };
+    else if (change === "permission") canManage.value = false;
+    else scope.stop();
+    expect(state.busyRuleIds.value).toEqual(["RG-A"]); write.resolve(rule({ status: "disabled", policyVersion: 4 })); await pending;
+    expect(state.busyRuleIds.value).toEqual([]); expect(reloadRules).not.toHaveBeenCalled(); expect(messages.success).not.toHaveBeenCalled();
+  });
+
+  it("ignores a late status failure after the original tenant returns and invalidates the interim read", async () => {
+    const { state, rules, rulesCurrent, invalidateRules } = setup(); const write = deferred<ReviewRuleConfig>(); api.updateReviewRuleStatus.mockReturnValueOnce(write.promise);
+    const pending = state.toggleRule(rules.value[0]!, "disabled"); setActiveTenant("other"); clearActiveTenant();
+    await state.toggleRule(rules.value[0]!, "disabled"); expect(api.updateReviewRuleStatus).toHaveBeenCalledOnce();
+    write.reject(new Error("old offline")); await pending; expect(messages.error).not.toHaveBeenCalled();
+    expect(invalidateRules).toHaveBeenCalledOnce(); expect(rulesCurrent.value).toBe(false); expect(state.ruleOperationErrors.value).toEqual({});
+  });
+
+  it("does not issue invalid, stale, unchanged or unauthorized status writes", async () => {
+    const { state, rules, canManage } = setup();
+    await state.toggleRule(rule({ policyVersion: 2 }), "disabled"); await state.toggleRule(rules.value[0]!, "enabled");
+    await state.toggleRule(rules.value[0]!, "invalid"); await state.toggleRule(rule({ id: "MISSING" }), "disabled");
+    canManage.value = false; await state.toggleRule(rules.value[0]!, "disabled"); expect(api.updateReviewRuleStatus).not.toHaveBeenCalled();
+  });
 });
 afterEach(() => { scopes.splice(0).forEach(scope => scope.stop()); clearActiveTenant(); currentUser.value = undefined; });
 
