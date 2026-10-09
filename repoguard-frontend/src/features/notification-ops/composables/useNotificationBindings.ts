@@ -40,6 +40,7 @@ const toBindingForm = (binding?: NotificationBinding): NotificationBindingReques
   notifyHumanReviewRequired: binding?.notifyHumanReviewRequired ?? true,
   notifyGithubComment: binding?.notifyGithubComment ?? true
 });
+const bindingFields = Object.keys(defaultBindingForm()) as Array<keyof NotificationBindingRequest>;
 
 export const useNotificationBindings = () => {
   const notificationBindings = ref<NotificationBinding[]>([]);
@@ -54,11 +55,22 @@ export const useNotificationBindings = () => {
   const testingBindingId = ref<number>();
   const editingBindingId = ref<number>();
   const bindingForm = reactive<NotificationBindingRequest>(defaultBindingForm());
+  const savedBindingForm = ref(defaultBindingForm());
+  const bindingSaveError = ref("");
+  const bindingHasUnsavedChanges = computed(() => bindingFields.some(key => bindingForm[key] !== savedBindingForm.value[key]));
+  let editorRevision = 0;
+  watch([bindingDialogVisible, editingBindingId], () => { editorRevision += 1; }, { flush: "sync" });
   let disposed = false;
   let contextRevision = 0;
   let readController: AbortController | undefined;
   const bindingsCurrent = computed(() => !disposed && canManage.value && !bindingsLoading.value
     && !bindingsNeedRefresh.value && !bindingLoadError.value);
+  const bindingCanSave = computed(() => !disposed && canManage.value && bindingDialogVisible.value
+    && !savingBinding.value && (editingBindingId.value === undefined || bindingHasUnsavedChanges.value));
+  const clearEditor = () => {
+    bindingDialogVisible.value = false; editingBindingId.value = undefined;
+    savedBindingForm.value = defaultBindingForm(); Object.assign(bindingForm, defaultBindingForm()); bindingSaveError.value = "";
+  };
   const invalidateBindings = (clear = true) => {
     readController?.abort(); readController = undefined;
     bindingsLoading.value = false; bindingsNeedRefresh.value = true;
@@ -66,9 +78,9 @@ export const useNotificationBindings = () => {
   };
   watch([bindingPage, bindingPageSize], () => invalidateBindings(), { flush: "sync" });
   watch([canManage, activeTenant, () => currentUser.value?.id], () => {
-    contextRevision += 1; invalidateBindings();
+    contextRevision += 1; invalidateBindings(); clearEditor();
   }, { flush: "sync" });
-  if (getCurrentScope()) onScopeDispose(() => { disposed = true; contextRevision += 1; invalidateBindings(); });
+  if (getCurrentScope()) onScopeDispose(() => { disposed = true; contextRevision += 1; invalidateBindings(); clearEditor(); });
 
   const upsertBinding = (binding: NotificationBinding) => {
     const index = notificationBindings.value.findIndex((item) => item.id === binding.id);
@@ -109,29 +121,44 @@ export const useNotificationBindings = () => {
   };
 
   const openBindingDialog = (binding?: NotificationBinding) => {
-    editingBindingId.value = binding?.id;
-    Object.assign(bindingForm, toBindingForm(binding));
+    if (disposed || !canManage.value || (binding && !bindingsCurrent.value)) return;
+    const latest = binding ? notificationBindings.value.find(row => row.id === binding.id) : undefined;
+    if (binding && !latest) return;
+    editorRevision += 1;
+    editingBindingId.value = latest?.id;
+    savedBindingForm.value = toBindingForm(latest);
+    Object.assign(bindingForm, savedBindingForm.value); bindingSaveError.value = "";
     bindingDialogVisible.value = true;
   };
 
   const saveBinding = async () => {
-    if (!canManage.value || savingBinding.value) {
-      return;
-    }
-    savingBinding.value = true;
+    if (!bindingCanSave.value) return;
+    const id = editingBindingId.value; const submitted = { ...bindingForm };
+    const version = contextRevision; let editor = editorRevision;
+    const contextCurrent = () => !disposed && canManage.value && version === contextRevision;
+    const current = () => contextCurrent() && editor === editorRevision && bindingDialogVisible.value;
+    savingBinding.value = true; bindingSaveError.value = ""; invalidateBindings(false);
     try {
-      const saved = editingBindingId.value
-        ? await updateNotificationBinding(editingBindingId.value, { ...bindingForm })
-        : await createNotificationBinding({ ...bindingForm });
-      if (!editingBindingId.value) {
-        bindingPage.value = 1;
+      const saved = id === undefined ? await createNotificationBinding(submitted) : await updateNotificationBinding(id, submitted);
+      if (!contextCurrent()) return;
+      invalidateBindings(false);
+      if (!current()) return;
+      if ((id !== undefined && saved.id !== id) || !Number.isSafeInteger(saved.id) || saved.id <= 0) {
+        ElMessage.warning("保存请求已返回，渠道标识不一致，请刷新确认"); return;
       }
-      upsertBinding(saved);
-      await loadNotificationBindings();
-      bindingDialogVisible.value = false;
-      ElMessage.success("消息通知绑定已保存");
+      const normalized = toBindingForm(saved);
+      const edits = Object.fromEntries(bindingFields.filter(key => bindingForm[key] !== submitted[key]).map(key => [key, bindingForm[key]]));
+      savedBindingForm.value = normalized; Object.assign(bindingForm, normalized, edits);
+      editingBindingId.value = saved.id; editor = editorRevision;
+      if (id === undefined) bindingPage.value = 1;
+      ElMessage.success(bindingHasUnsavedChanges.value ? "消息通知绑定已保存，新的修改尚未保存" : "消息通知绑定已保存");
+      const refreshed = await loadNotificationBindings();
+      if (!current()) return;
+      if (!refreshed && !bindingsCurrent.value) ElMessage.warning("消息通知绑定已保存，渠道列表尚未刷新成功");
+      if (!bindingHasUnsavedChanges.value) bindingDialogVisible.value = false;
     } catch (error) {
-      ElMessage.error(getErrorMessage(error, "消息通知绑定保存失败"));
+      if (contextCurrent()) invalidateBindings(false);
+      if (current()) { bindingSaveError.value = getErrorMessage(error, "消息通知绑定保存失败"); ElMessage.error(bindingSaveError.value); }
     } finally {
       savingBinding.value = false;
     }
@@ -202,6 +229,9 @@ export const useNotificationBindings = () => {
     testingBindingId,
     editingBindingId,
     bindingForm,
+    bindingHasUnsavedChanges,
+    bindingCanSave,
+    bindingSaveError,
     loadNotificationBindings,
     openBindingDialog,
     saveBinding,

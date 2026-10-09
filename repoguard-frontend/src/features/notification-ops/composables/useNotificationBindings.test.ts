@@ -106,6 +106,7 @@ describe("useNotificationBindings", () => {
 
     const bindings = setup();
     await bindings.changeBindingPage(2);
+    bindings.openBindingDialog();
     await bindings.saveBinding();
 
     expect(configApi.createNotificationBinding).toHaveBeenCalled();

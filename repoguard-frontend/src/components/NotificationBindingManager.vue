@@ -47,6 +47,9 @@
       :editing-binding-id="editingBindingId"
       :form="bindingForm"
       :saving="savingBinding"
+      :can-save="bindingCanSave"
+      :has-unsaved-changes="bindingHasUnsavedChanges"
+      :save-error="bindingSaveError"
       @save="saveBinding"
     />
   </div>
@@ -71,6 +74,9 @@ const {
   testingBindingId,
   editingBindingId,
   bindingForm,
+  bindingCanSave,
+  bindingHasUnsavedChanges,
+  bindingSaveError,
   loadNotificationBindings: refreshNotificationBindings,
   openBindingDialog,
   saveBinding,
