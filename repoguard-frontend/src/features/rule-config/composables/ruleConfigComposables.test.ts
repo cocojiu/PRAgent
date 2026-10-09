@@ -99,7 +99,7 @@ describe("rule configuration composables", () => {
     expect(state.ruleForm.name).toBe("  本地编辑  ");
   });
 
-  it("uses the active snapshot for strategy updates and resynchronizes after conflicts", async () => {
+  it("uses the active snapshot and preserves the desired mode after conflicts", async () => {
     const policy = ref<ReviewStrategyPolicy | null>(strategyPolicy({ snapshotId: 9, enforcementMode: "observe" }));
     const reloadRules = vi.fn(async () => {
       policy.value = strategyPolicy({ snapshotId: 10, enforcementMode: "comment" });
@@ -119,7 +119,8 @@ describe("rule configuration composables", () => {
       expectedSnapshotId: 9
     });
     expect(policy.value?.snapshotId).toBe(10);
-    expect(state.strategyTargetMode.value).toBe("comment");
+    expect(state.strategyTargetMode.value).toBe("block");
+    expect(state.strategyHasUnsavedChanges.value).toBe(true);
     expect(messages.error).toHaveBeenCalledWith("快照版本冲突");
   });
 

@@ -39,13 +39,17 @@
           </el-select>
           <el-button
             type="primary"
-            :disabled="!canManage || !rulesCurrent || strategyTargetMode === strategyPolicy.enforcementMode"
+            :disabled="!canSaveStrategy"
             :loading="strategySaving"
             @click="saveStrategyEnforcement"
           >应用模式</el-button>
           <el-button @click="openStrategyVersions">版本历史</el-button>
         </div>
       </div>
+      <el-alert v-if="strategySaveError" class="page-alert" type="error" :title="strategySaveError" :closable="false" show-icon />
+      <el-alert v-if="strategyRefreshError" class="page-alert" type="warning" :title="strategyRefreshError" :closable="false" show-icon />
+      <el-alert v-if="strategySaveNotice" class="page-alert" type="info" :title="strategySaveNotice" :closable="false" show-icon />
+      <p v-if="strategyHasUnsavedChanges">{{ strategySaving ? '正在保存本次模式，后续选择仍需手动应用。' : '当前选择尚未保存。' }}</p>
       <div class="policy-version-grid">
         <div><span>策略快照</span><strong>#{{ strategyPolicy.snapshotId }}</strong></div>
         <div><span>Prompt</span><strong>{{ strategyPolicy.promptVersion }}</strong></div>
@@ -422,8 +426,13 @@ const {
 const {
   strategySaving,
   strategyTargetMode,
+  canSaveStrategy,
+  strategyHasUnsavedChanges,
+  strategySaveError,
+  strategyRefreshError,
+  strategySaveNotice,
   saveStrategyEnforcement
-} = useReviewStrategyGovernance({ canManage, reloadRules, strategyPolicy });
+} = useReviewStrategyGovernance({ canManage, reloadRules: loadRules, strategyPolicy, rulesCurrent, cancelRulesRead, invalidateRules });
 
 const {
   rollbackSavingId,
