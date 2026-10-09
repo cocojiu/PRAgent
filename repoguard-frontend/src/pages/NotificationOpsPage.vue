@@ -148,6 +148,7 @@
               :loading="bindingsLoading"
               :actions-disabled="!bindingsCurrent"
               :testing-binding-id="testingBindingId"
+              :busy-binding-ids="busyBindingIds"
               action-layout="group"
               table-class="rg-table task-table"
               size="large"
@@ -281,6 +282,7 @@ const {
   bindingDialogVisible,
   savingBinding,
   testingBindingId,
+  busyBindingIds,
   editingBindingId,
   bindingForm,
   bindingCanSave,

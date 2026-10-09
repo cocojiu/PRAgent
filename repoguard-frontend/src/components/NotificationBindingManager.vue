@@ -19,6 +19,7 @@
       :loading="loadingBindings"
       :actions-disabled="!bindingsCurrent"
       :testing-binding-id="testingBindingId"
+      :busy-binding-ids="busyBindingIds"
       :border="true"
       :action-width="320"
       :name-min-width="140"
@@ -72,6 +73,7 @@ const {
   bindingDialogVisible,
   savingBinding,
   testingBindingId,
+  busyBindingIds,
   editingBindingId,
   bindingForm,
   bindingCanSave,

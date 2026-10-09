@@ -31,12 +31,12 @@
     <el-table-column label="操作" :width="actionWidth" fixed="right">
       <template #default="{ row }">
         <div :class="{ 'table-actions': actionLayout === 'group' }">
-          <el-button size="small" :disabled="!canManage || actionsDisabled" @click="emit('edit', row)">编辑</el-button>
-          <el-button size="small" :disabled="!canManage || actionsDisabled" :loading="testingBindingId === row.id" @click="emit('test', row.id)">测试</el-button>
-          <el-button size="small" :disabled="!canManage || actionsDisabled" @click="emit('toggle', row)">
+          <el-button size="small" :disabled="!canManage || actionsDisabled || busyBindingIds.includes(row.id)" @click="emit('edit', row)">编辑</el-button>
+          <el-button size="small" :disabled="!canManage || actionsDisabled || busyBindingIds.includes(row.id) || testingBindingId !== undefined" :loading="testingBindingId === row.id" @click="emit('test', row.id)">测试</el-button>
+          <el-button size="small" :disabled="!canManage || actionsDisabled || busyBindingIds.includes(row.id)" @click="emit('toggle', row)">
             {{ row.enabled ? "停用" : "启用" }}
           </el-button>
-          <el-button size="small" type="danger" :disabled="!canManage || actionsDisabled" @click="emit('remove', row.id)">删除</el-button>
+          <el-button size="small" type="danger" :disabled="!canManage || actionsDisabled || busyBindingIds.includes(row.id)" @click="emit('remove', row.id)">删除</el-button>
         </div>
       </template>
     </el-table-column>
@@ -52,6 +52,7 @@ withDefaults(
   defineProps<{
     actionLayout?: "inline" | "group";
     actionsDisabled?: boolean;
+    busyBindingIds?: number[];
     actionWidth?: number;
     bindings: NotificationBinding[];
     border?: boolean;
@@ -67,6 +68,7 @@ withDefaults(
   {
     actionLayout: "inline",
     actionsDisabled: false,
+    busyBindingIds: () => [],
     actionWidth: 292,
     border: false,
     nameMinWidth: 150,

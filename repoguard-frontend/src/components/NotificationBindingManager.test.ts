@@ -46,6 +46,15 @@ beforeEach(() => {
 afterEach(() => { app?.unmount(); app = undefined; host.remove(); currentUser.value = undefined; });
 
 describe("notification binding manager UI", () => {
+  it.each(["toggle", "delete"])("disables conflicting row actions while %s is pending", async operation => {
+    await mount(); const pending = deferred<NotificationBinding>();
+    (operation === "toggle" ? api.updateNotificationBindingStatus : api.deleteNotificationBinding).mockReturnValueOnce(pending.promise);
+    button(operation === "toggle" ? "停用" : "删除").click(); await flush();
+    for (const text of ["编辑", "测试", "停用", "删除"]) expect(button(text).disabled).toBe(true);
+    pending.resolve({ ...row(), enabled: false }); await flush();
+    expect(button("编辑").disabled).toBe(false);
+  });
+
   it("shows failed query state and reloads before enabling row actions", async () => {
     api.fetchNotificationBindings.mockRejectedValueOnce(new Error("bindings offline")); await mount();
     expect(host.textContent).toContain("bindings offline"); button("刷新渠道").click(); await flush();

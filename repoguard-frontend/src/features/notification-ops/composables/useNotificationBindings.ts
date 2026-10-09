@@ -53,6 +53,8 @@ export const useNotificationBindings = () => {
   const bindingDialogVisible = ref(false);
   const savingBinding = ref(false);
   const testingBindingId = ref<number>();
+  const pendingBindingIds = ref(new Set<number>());
+  const busyBindingIds = computed(() => [...pendingBindingIds.value]);
   const editingBindingId = ref<number>();
   const bindingForm = reactive<NotificationBindingRequest>(defaultBindingForm());
   const savedBindingForm = ref(defaultBindingForm());
@@ -66,15 +68,24 @@ export const useNotificationBindings = () => {
   const bindingsCurrent = computed(() => !disposed && canManage.value && !bindingsLoading.value
     && !bindingsNeedRefresh.value && !bindingLoadError.value);
   const bindingCanSave = computed(() => !disposed && canManage.value && bindingDialogVisible.value
-    && !savingBinding.value && (editingBindingId.value === undefined || bindingHasUnsavedChanges.value));
+    && !savingBinding.value && (editingBindingId.value === undefined
+      || (!pendingBindingIds.value.has(editingBindingId.value) && bindingHasUnsavedChanges.value)));
   const clearEditor = () => {
     bindingDialogVisible.value = false; editingBindingId.value = undefined;
     savedBindingForm.value = defaultBindingForm(); Object.assign(bindingForm, defaultBindingForm()); bindingSaveError.value = "";
   };
-  const invalidateBindings = (clear = true) => {
+  const cancelBindingRead = () => {
     readController?.abort(); readController = undefined;
-    bindingsLoading.value = false; bindingsNeedRefresh.value = true;
+    bindingsLoading.value = false;
+  };
+  const invalidateBindings = (clear = true) => {
+    cancelBindingRead(); bindingsNeedRefresh.value = true;
     if (clear) { notificationBindings.value = []; bindingTotal.value = 0; bindingLoadError.value = ""; }
+  };
+  const bindingContext = () => JSON.stringify([activeTenant.value, currentUser.value?.id]);
+  const finishBindingOperation = (id: number | undefined, version: number, context: string) => {
+    if (id !== undefined) pendingBindingIds.value.delete(id);
+    if (!disposed && canManage.value && version !== contextRevision && context === bindingContext()) invalidateBindings(false);
   };
   watch([bindingPage, bindingPageSize], () => invalidateBindings(), { flush: "sync" });
   watch([canManage, activeTenant, () => currentUser.value?.id], () => {
@@ -82,14 +93,8 @@ export const useNotificationBindings = () => {
   }, { flush: "sync" });
   if (getCurrentScope()) onScopeDispose(() => { disposed = true; contextRevision += 1; invalidateBindings(); clearEditor(); });
 
-  const upsertBinding = (binding: NotificationBinding) => {
-    const index = notificationBindings.value.findIndex((item) => item.id === binding.id);
-    if (index >= 0) {
-      notificationBindings.value[index] = binding;
-      return;
-    }
-    notificationBindings.value = [binding, ...notificationBindings.value];
-  };
+  const canChangeBinding = (id: number) => bindingsCurrent.value && !pendingBindingIds.value.has(id)
+    && notificationBindings.value.some(binding => binding.id === id);
 
   const loadNotificationBindings = async (): Promise<boolean> => {
     if (disposed || !canManage.value) return false;
@@ -123,7 +128,7 @@ export const useNotificationBindings = () => {
   const openBindingDialog = (binding?: NotificationBinding) => {
     if (disposed || !canManage.value || (binding && !bindingsCurrent.value)) return;
     const latest = binding ? notificationBindings.value.find(row => row.id === binding.id) : undefined;
-    if (binding && !latest) return;
+    if (binding && (!latest || pendingBindingIds.value.has(binding.id))) return;
     editorRevision += 1;
     editingBindingId.value = latest?.id;
     savedBindingForm.value = toBindingForm(latest);
@@ -134,10 +139,12 @@ export const useNotificationBindings = () => {
   const saveBinding = async () => {
     if (!bindingCanSave.value) return;
     const id = editingBindingId.value; const submitted = { ...bindingForm };
-    const version = contextRevision; let editor = editorRevision;
+    const version = contextRevision; const context = bindingContext(); let editor = editorRevision;
     const contextCurrent = () => !disposed && canManage.value && version === contextRevision;
     const current = () => contextCurrent() && editor === editorRevision && bindingDialogVisible.value;
-    savingBinding.value = true; bindingSaveError.value = ""; invalidateBindings(false);
+    let lockedId = id;
+    if (lockedId !== undefined) pendingBindingIds.value.add(lockedId);
+    savingBinding.value = true; bindingSaveError.value = ""; cancelBindingRead();
     try {
       const saved = id === undefined ? await createNotificationBinding(submitted) : await updateNotificationBinding(id, submitted);
       if (!contextCurrent()) return;
@@ -145,6 +152,10 @@ export const useNotificationBindings = () => {
       if (!current()) return;
       if ((id !== undefined && saved.id !== id) || !Number.isSafeInteger(saved.id) || saved.id <= 0) {
         ElMessage.warning("保存请求已返回，渠道标识不一致，请刷新确认"); return;
+      }
+      if (lockedId === undefined) {
+        if (pendingBindingIds.value.has(saved.id)) { ElMessage.warning("保存请求已返回，渠道正在处理中，请刷新确认"); return; }
+        lockedId = saved.id; pendingBindingIds.value.add(lockedId);
       }
       const normalized = toBindingForm(saved);
       const edits = Object.fromEntries(bindingFields.filter(key => bindingForm[key] !== submitted[key]).map(key => [key, bindingForm[key]]));
@@ -160,48 +171,65 @@ export const useNotificationBindings = () => {
       if (contextCurrent()) invalidateBindings(false);
       if (current()) { bindingSaveError.value = getErrorMessage(error, "消息通知绑定保存失败"); ElMessage.error(bindingSaveError.value); }
     } finally {
+      finishBindingOperation(lockedId, version, context);
       savingBinding.value = false;
     }
   };
 
   const runBindingTest = async (id: number) => {
-    if (testingBindingId.value) {
-      return;
-    }
-    testingBindingId.value = id;
+    if (!canChangeBinding(id) || testingBindingId.value !== undefined) return;
+    const version = contextRevision; const context = bindingContext();
+    const current = () => !disposed && canManage.value && version === contextRevision;
+    testingBindingId.value = id; pendingBindingIds.value.add(id); cancelBindingRead();
     try {
       const result = await testNotificationBinding(id);
+      if (!current()) return;
+      invalidateBindings(false);
       ElMessage[result.success ? "success" : "error"](result.message);
       await loadNotificationBindings();
     } catch (error) {
-      ElMessage.error(getErrorMessage(error, "消息通知测试失败"));
+      if (current()) { invalidateBindings(false); ElMessage.error(getErrorMessage(error, "消息通知测试失败")); }
     } finally {
+      finishBindingOperation(id, version, context);
       testingBindingId.value = undefined;
     }
   };
 
   const toggleBinding = async (binding: NotificationBinding) => {
+    if (!canChangeBinding(binding.id)) return;
+    const latest = notificationBindings.value.find(row => row.id === binding.id)!;
+    if (latest.enabled !== binding.enabled) return;
+    const id = latest.id; const enabled = !latest.enabled; const version = contextRevision; const context = bindingContext();
+    const current = () => !disposed && canManage.value && version === contextRevision;
+    pendingBindingIds.value.add(id); cancelBindingRead();
     try {
-      const updated = await updateNotificationBindingStatus(binding.id, { enabled: !binding.enabled });
-      upsertBinding(updated);
+      const updated = await updateNotificationBindingStatus(id, { enabled });
+      if (!current()) return;
+      invalidateBindings(false);
+      if (updated.id !== id || updated.enabled !== enabled) { ElMessage.warning("状态请求已返回，渠道结果不一致，请刷新确认"); return; }
+      ElMessage.success("消息通知状态已更新");
+      const refreshed = await loadNotificationBindings();
+      if (current() && !refreshed && !bindingsCurrent.value) ElMessage.warning("消息通知状态已更新，渠道列表尚未刷新成功");
     } catch (error) {
-      ElMessage.error(getErrorMessage(error, "消息通知状态更新失败"));
-    }
+      if (current()) { invalidateBindings(false); ElMessage.error(getErrorMessage(error, "消息通知状态更新失败")); }
+    } finally { finishBindingOperation(id, version, context); }
   };
 
   const removeBinding = async (id: number) => {
+    if (!canChangeBinding(id)) return;
+    const version = contextRevision; const context = bindingContext();
+    const current = () => !disposed && canManage.value && version === contextRevision;
+    pendingBindingIds.value.add(id); cancelBindingRead();
     try {
       await deleteNotificationBinding(id);
-      notificationBindings.value = notificationBindings.value.filter((binding) => binding.id !== id);
-      bindingTotal.value = Math.max(0, bindingTotal.value - 1);
-      if (notificationBindings.value.length === 0 && bindingPage.value > 1) {
-        bindingPage.value -= 1;
-      }
-      await loadNotificationBindings();
+      if (!current()) return;
+      invalidateBindings();
       ElMessage.success("消息通知绑定已删除");
+      const refreshed = await loadNotificationBindings();
+      if (current() && !refreshed && !bindingsCurrent.value) ElMessage.warning("消息通知绑定已删除，渠道列表尚未刷新成功");
     } catch (error) {
-      ElMessage.error(getErrorMessage(error, "消息通知绑定删除失败"));
-    }
+      if (current()) { invalidateBindings(false); ElMessage.error(getErrorMessage(error, "消息通知绑定删除失败")); }
+    } finally { finishBindingOperation(id, version, context); }
   };
 
   const changeBindingPage = async (page: number) => {
@@ -227,6 +255,8 @@ export const useNotificationBindings = () => {
     bindingDialogVisible,
     savingBinding,
     testingBindingId,
+    busyBindingIds,
+    canChangeBinding,
     editingBindingId,
     bindingForm,
     bindingHasUnsavedChanges,
