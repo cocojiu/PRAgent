@@ -413,6 +413,9 @@ const canPublishGithubComments = computed(() =>
     canManage.value
       && !isArchivedTask.value
       && !isSupersededTask.value
+      && !previewLoading.value
+      && !previewError.value
+      && githubCommentPreview.value?.taskId === Number(route.params.id)
       && githubCommentPreview.value?.commentableCount
       && writebackCheck.value?.tokenConfigured !== false
       && isHumanReviewPublishAllowed.value
@@ -638,8 +641,8 @@ const changeGithubCommentHistoryItemsPage = async (batchId: number, direction: "
   if (Number.isFinite(id) && canLoadGithubComments.value) await changeHistoryItemsPage(id, batchId, direction);
 };
 
-const { feedbackSavingId, submitFindingFeedback } = useReviewDetailFindingFeedback({
-  canManage,
+const { feedbackSavingId, submitFindingFeedback, cancelFindingFeedback } = useReviewDetailFindingFeedback({
+  canManage: canManageHotTask,
   findingFeedbackPromptTitle,
   isTerminalTask,
   loadGithubCommentPreview: refreshLoadedGithubCommentPreview,
@@ -692,6 +695,8 @@ const loadGithubCommentData = async () => {
 watch(
   () => route.params.id,
   () => {
+    cancelFindingFeedback();
+    clearGithubCommentState();
     stopGithubCommentPublishPolling();
     stopPolling();
     resetDetailSections();
@@ -704,6 +709,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  cancelFindingFeedback();
   cancelPendingRequests();
   resetDetailSections();
   stopGithubCommentPublishPolling();

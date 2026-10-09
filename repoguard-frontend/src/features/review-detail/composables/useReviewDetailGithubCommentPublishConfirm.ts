@@ -1,4 +1,5 @@
 import { ElMessageBox } from "element-plus/es/components/message-box/index.mjs";
+import { getCurrentScope, onScopeDispose } from "vue";
 import type { ComputedRef, Ref } from "vue";
 import type { GithubCommentPreview, GithubCommentWritebackCheck, ReviewTaskDetail } from "@/types";
 
@@ -25,13 +26,20 @@ export const useReviewDetailGithubCommentPublishConfirm = ({
   selectedTask,
   writebackCheck
 }: UseReviewDetailGithubCommentPublishConfirmOptions) => {
+  let confirming = false;
+  let disposed = false;
+  if (getCurrentScope()) onScopeDispose(() => { disposed = true; });
   const confirmPublishGithubComments = async () => {
     const task = selectedTask.value;
     const preview = githubCommentPreview.value;
-    if (!canManage.value || !task || publishingComments.value || !canPublishGithubComments.value || !preview) {
+    if (disposed || confirming || !canManage.value || !task || publishingComments.value || !canPublishGithubComments.value || !preview) {
       return;
     }
 
+    const taskId = task.id;
+    const commit = task.commit;
+    const currentTask = () => !disposed && selectedTask.value?.id === taskId && selectedTask.value.commit === commit;
+    confirming = true;
     try {
       const warningText = writebackCheck.value && writebackCheck.value.status !== "ready"
         ? `\n\n提示：${writebackCheck.value.messages.join(" ")}`
@@ -47,10 +55,15 @@ export const useReviewDetailGithubCommentPublishConfirm = ({
       );
     } catch {
       return;
+    } finally {
+      confirming = false;
     }
 
-    const taskId = task.id;
+    if (!currentTask() || !canManage.value || !canPublishGithubComments.value || publishingComments.value
+      || githubCommentPreview.value !== preview || preview.taskId !== taskId) return;
+
     await publishGithubCommentsForTask(taskId, async () => {
+      if (!currentTask()) return;
       await Promise.all([
         loadGithubCommentPreview(taskId),
         loadGithubCommentPublicationHistory(taskId)

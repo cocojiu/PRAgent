@@ -77,8 +77,9 @@ export const fetchReviewStatus = (id: number, options?: ApiRequestOptions) =>
 
 export const fetchGithubCommentPreview = (
   id: number,
-  params?: { page?: number; pageSize?: number; commentableOnly?: boolean }
-) => apiRequest("fetchGithubCommentPreview", { id, ...params });
+  params?: { page?: number; pageSize?: number; commentableOnly?: boolean },
+  options?: ApiRequestOptions
+) => apiRequest("fetchGithubCommentPreview", { id, ...params }, options);
 
 export const fetchGithubCommentPublicationHistory = (
   id: number,
