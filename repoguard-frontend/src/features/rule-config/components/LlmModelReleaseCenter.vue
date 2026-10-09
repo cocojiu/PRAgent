@@ -24,8 +24,19 @@
       :closable="false"
     />
 
-    <template v-if="center">
-      <div class="release-center-metric-grid">
+    <el-alert
+      v-for="notice in readNotices"
+      :key="notice.key"
+      class="page-alert"
+      :type="notice.type"
+      :title="notice.title"
+      :description="notice.description"
+      :closable="false"
+      show-icon
+    />
+
+    <template v-if="center || reports.length || moduleStates.runtimeMetrics.lastSuccessAt || moduleStates.audits.lastSuccessAt">
+      <div v-if="center" class="release-center-metric-grid">
         <div>
           <span>当前配置</span>
           <strong>{{ center.configuredProvider || "未配置" }} / {{ center.configuredModel || "未配置" }}</strong>
@@ -49,6 +60,7 @@
       </div>
 
       <el-alert
+        v-if="center"
         class="release-center-recommendation"
         type="info"
         :title="`建议：${center.recommendedAction}`"
@@ -64,7 +76,7 @@
             <el-form-item label="服务端评估报告">
               <el-select
                 v-model="selectedReportId"
-                :disabled="!canManage || !reports.length"
+                :disabled="!canManage || !releaseDataReady || !reports.length"
                 placeholder="选择报告"
                 class="release-report-select"
               >
@@ -81,10 +93,10 @@
               <el-input-number v-model="canaryTraffic" :min="1" :max="100" :disabled="!canManage" />
             </el-form-item>
             <el-form-item>
-              <el-button type="primary" :disabled="!canManage || !selectedReport || selectedReport.status !== 'COMPLETED'" :loading="action === 'shadow'" @click="registerShadow">
+              <el-button type="primary" :disabled="!canManage || !releaseDataReady || !selectedReport || selectedReport.status !== 'COMPLETED'" :loading="action === 'shadow'" @click="registerShadow">
                 注册 Shadow
               </el-button>
-              <el-button type="success" :disabled="!canManage || !selectedReport || selectedReport.status !== 'COMPLETED'" :loading="action.startsWith('promote-')" @click="promote()">
+              <el-button type="success" :disabled="!canManage || !releaseDataReady || !selectedReport || selectedReport.status !== 'COMPLETED'" :loading="action.startsWith('promote-')" @click="promote()">
                 发布 Canary
               </el-button>
             </el-form-item>
@@ -103,7 +115,7 @@
         </el-collapse-item>
       </el-collapse>
 
-      <el-table :data="center.releases" class="rg-table release-table" size="small" row-key="id" aria-label="模型发布记录">
+      <el-table v-if="center" :data="center.releases" class="rg-table release-table" size="small" row-key="id" aria-label="模型发布记录">
         <el-table-column label="版本" min-width="205">
           <template #default="{ row }">
             <div class="release-version-cell">
@@ -129,7 +141,7 @@
               size="small"
               type="success"
               plain
-              :disabled="!canManage || !row.evaluationReportId"
+              :disabled="!canManage || !releaseDataReady || !row.evaluationReportId"
               :loading="action === `promote-${row.releaseKey}`"
               @click="promote(row)"
             >{{ row.state === "CANARY" ? "更新流量" : "发布 Canary" }}</el-button>
@@ -147,10 +159,10 @@
         <template #empty><el-empty description="暂无模型发布记录" /></template>
       </el-table>
 
-      <div class="release-center-subheading">
+      <div v-if="center" class="release-center-subheading">
         <div><strong>最近质量趋势</strong><span>按当前窗口汇总，不替代评估报告准入证据</span></div>
       </div>
-      <el-table :data="center.modelComparison" class="rg-table release-comparison-table" size="small" aria-label="模型质量趋势">
+      <el-table v-if="center" :data="center.modelComparison" class="rg-table release-comparison-table" size="small" aria-label="模型质量趋势">
         <el-table-column prop="model" label="模型" min-width="180" />
         <el-table-column prop="taskCount" label="任务数" width="90" />
         <el-table-column prop="averageDuration" label="平均耗时" width="110" />
@@ -258,12 +270,12 @@
         </el-collapse-item>
       </el-collapse>
     </template>
-    <el-empty v-else-if="!loading && !errorMessage" description="暂无模型发布中心数据" />
+    <el-empty v-else-if="!loading && !errorMessage && !readNotices.length" description="暂无模型发布中心数据" />
   </section>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { ElMessageBox } from "element-plus/es/components/message-box/index.mjs";
 import { canManage } from "@/stores/authState";
 import type { LlmModelBudget } from "@/types";
@@ -282,6 +294,8 @@ const {
   center,
   errorMessage,
   loading,
+  moduleStates,
+  releaseDataReady,
   load,
   loadAudits,
   promote,
@@ -298,6 +312,18 @@ const {
 } = useLlmModelReleaseCenter();
 const advancedOpen = ref<string[]>([]);
 const auditOpen = ref<string[]>([]);
+const readNotices = computed(() => ([
+  { key: "center", label: "发布状态" }, { key: "reports", label: "评估报告" },
+  { key: "runtimeMetrics", label: "运行指标" }, { key: "audits", label: "发布审计" }
+] as const).flatMap(({ key, label }) => {
+  const state = moduleStates[key];
+  if (!state.error && !(state.loading && state.lastSuccessAt)) return [];
+  return [{ key, type: state.error ? "warning" as const : "info" as const,
+    title: `${label}：${state.error || "正在刷新"}`,
+    description: state.lastSuccessAt
+      ? `当前显示上次成功数据：${state.lastSuccessLabel}，${state.lastSuccessAt}`
+      : "尚无成功查询结果。" }];
+}));
 
 const requestRollback = async (releaseId: number) => {
   try {

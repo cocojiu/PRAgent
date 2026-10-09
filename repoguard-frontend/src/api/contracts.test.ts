@@ -18,6 +18,9 @@ import {
   exportLlmEvaluationReport,
   fetchLlmEvaluationReport,
   fetchLlmEvaluationReports,
+  fetchLlmModelReleaseCenter,
+  fetchLlmModelReleaseRuntimeMetrics,
+  fetchLlmModelReleaseAudits,
   transitionLlmEvaluationReportLifecycle
 } from "./config";
 import {
@@ -41,6 +44,22 @@ const okResponse = (data: unknown) =>
   });
 
 describe("apiRequest", () => {
+  it.each([
+    { name: "release center", read: (signal: AbortSignal) => fetchLlmModelReleaseCenter(7, { signal }) },
+    { name: "runtime metrics", read: (signal: AbortSignal) => fetchLlmModelReleaseRuntimeMetrics({ days: 7 }, { signal }) },
+    { name: "release audits", read: (signal: AbortSignal) => fetchLlmModelReleaseAudits({ page: 2 }, { signal }) }
+  ])("cancels the underlying $name read through its API wrapper", async ({ read }) => {
+    const fetchMock = vi.fn((_url: string, options: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      options.signal!.addEventListener("abort", () => reject(new DOMException("cancelled", "AbortError")), { once: true });
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const controller = new AbortController();
+    const pending = read(controller.signal);
+    const rejection = expect(pending).rejects.toThrow();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    controller.abort(); await rejection;
+    expect(fetchMock.mock.calls[0]![1].signal!.aborted).toBe(true);
+  });
   it("binds SARIF setup and credential requests to task, attempt and selected tenant without storing credentials", async () => {
     const binding = { taskId: 9, attemptId: 17, commitSha: "a".repeat(40), recentUploads: [] };
     const credential = { ...binding, credential: "contract-only-credential", expiresAt: 1800000000 };

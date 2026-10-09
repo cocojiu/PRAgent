@@ -129,12 +129,13 @@ export const fetchReviewCalibrationQueue = (
   options: { limit?: number; includeIgnored?: boolean } = {}
 ) => apiRequest("fetchReviewCalibrationQueue", { ruleId, ...options });
 
-export const fetchLlmModelReleaseCenter = (trendDays = 30) =>
-  apiRequest("fetchLlmModelReleaseCenter", { trendDays });
+export const fetchLlmModelReleaseCenter = (trendDays = 30, requestOptions?: ApiRequestOptions) =>
+  apiRequest("fetchLlmModelReleaseCenter", { trendDays }, requestOptions);
 
 export const fetchLlmModelReleaseRuntimeMetrics = (
-  options: { releaseKey?: string; days?: number; limit?: number } = {}
-) => apiRequest("fetchLlmModelReleaseRuntimeMetrics", options);
+  options: { releaseKey?: string; days?: number; limit?: number } = {},
+  requestOptions?: ApiRequestOptions
+) => apiRequest("fetchLlmModelReleaseRuntimeMetrics", options, requestOptions);
 
 export const fetchLlmModelReleaseDrift = () => apiRequest("fetchLlmModelReleaseDrift", undefined);
 
@@ -152,8 +153,8 @@ export type LlmModelReleaseAuditQuery = {
   pageSize?: number;
 };
 
-export const fetchLlmModelReleaseAudits = (options: LlmModelReleaseAuditQuery = {}) =>
-  apiRequest("fetchLlmModelReleaseAudits", options);
+export const fetchLlmModelReleaseAudits = (options: LlmModelReleaseAuditQuery = {}, requestOptions?: ApiRequestOptions) =>
+  apiRequest("fetchLlmModelReleaseAudits", options, requestOptions);
 
 export const verifyLlmModelReleaseAudit = (auditId: number) =>
   apiRequest("verifyLlmModelReleaseAudit", { auditId });

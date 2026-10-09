@@ -1,3 +1,4 @@
+import { effectScope } from "vue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   exportLlmModelReleaseAudits,
@@ -87,9 +88,9 @@ describe("useLlmModelReleaseCenter", () => {
     await state.registerShadow();
     await state.promote();
 
-    expect(loadCenter).toHaveBeenCalledWith(30);
-    expect(loadRuntimeMetrics).toHaveBeenCalledWith({ days: 30, limit: 168 });
-    expect(loadAudits).toHaveBeenCalledWith(expect.objectContaining({ page: 1, pageSize: 20 }));
+    expect(loadCenter).toHaveBeenCalledWith(30, { signal: expect.any(AbortSignal) });
+    expect(loadRuntimeMetrics).toHaveBeenCalledWith({ days: 30, limit: 168 }, { signal: expect.any(AbortSignal) });
+    expect(loadAudits).toHaveBeenCalledWith(expect.objectContaining({ page: 1, pageSize: 20 }), { signal: expect.any(AbortSignal) });
     expect(registerShadow).toHaveBeenCalledWith(expect.objectContaining({ releaseKey: "release-next", trafficPercent: 0 }));
     expect(promote).toHaveBeenCalledWith(expect.objectContaining({ releaseKey: "release-next", trafficPercent: 10 }));
     expect(state.errorMessage.value).toBe("");
@@ -128,12 +129,116 @@ describe("useLlmModelReleaseCenter", () => {
     await state.verifyAudit(91);
     const exported = await state.exportAudits("csv");
 
-    expect(loadAudits).toHaveBeenCalledWith(expect.objectContaining({ page: 2, pageSize: 20 }));
+    expect(loadAudits).toHaveBeenCalledWith(expect.objectContaining({ page: 2, pageSize: 20 }), { signal: expect.any(AbortSignal) });
     expect(verifyAudit).toHaveBeenCalledWith(91);
     expect(exportAudits).toHaveBeenCalledWith(expect.objectContaining({ format: "csv" }));
     expect(exported?.format).toBe("csv");
   });
+
+  it("keeps successful release and runtime reads when the report query fails", async () => {
+    loadReports.mockRejectedValueOnce(new Error("reports unavailable"));
+    const state = useLlmModelReleaseCenter();
+    await state.load();
+    expect(state.center.value).toEqual(center());
+    expect(state.reports.value).toEqual([]);
+    expect(state.moduleStates.reports.error).toBe("reports unavailable");
+    expect(state.moduleStates.center.error).toBe("");
+    expect(state.moduleStates.runtimeMetrics.lastSuccessAt).not.toBe("");
+  });
+
+  it("keeps the most recently requested audit page when old responses arrive late", async () => {
+    const first = deferred<Awaited<ReturnType<typeof fetchLlmModelReleaseAudits>>>();
+    const second = deferred<Awaited<ReturnType<typeof fetchLlmModelReleaseAudits>>>();
+    loadAudits.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const state = useLlmModelReleaseCenter();
+    const older = state.loadAudits(1);
+    const newer = state.loadAudits(2);
+    second.resolve({ items: [], total: 41, hasMore: false }); await newer;
+    first.resolve({ items: [], total: 40, hasMore: true }); await older;
+    expect(state.auditPage.value).toBe(2);
+    expect(state.auditTotal.value).toBe(41);
+  });
+
+  it.each(["center", "reports", "runtimeMetrics", "audits"] as const)(
+    "retains other successful modules and marks old %s data after an isolated refresh failure", async key => {
+      const state = useLlmModelReleaseCenter();
+      await state.load();
+      const previousTime = state.moduleStates[key].lastSuccessAt;
+      const requests = { center: loadCenter, reports: loadReports, runtimeMetrics: loadRuntimeMetrics, audits: loadAudits };
+      requests[key].mockRejectedValueOnce(new Error(`${key} unavailable`));
+      state.trendDays.value = 7;
+      await state.load();
+      expect(state.center.value).not.toBeNull();
+      expect(state.reports.value).toEqual([report()]);
+      expect(state.moduleStates[key]).toMatchObject({ error: `${key} unavailable`, lastSuccessAt: previousTime, loading: false });
+      for (const other of Object.keys(requests).filter(other => other !== key)) {
+        expect(state.moduleStates[other as keyof typeof requests].error).toBe("");
+      }
+    }
+  );
+
+  it("does not promote or register shadow using reports left stale by a failed refresh", async () => {
+    const state = useLlmModelReleaseCenter();
+    await state.load(); state.releaseKey.value = "next";
+    loadReports.mockRejectedValueOnce(new Error("reports unavailable")); await state.load();
+    await state.registerShadow(); await state.promote();
+    expect(registerShadow).not.toHaveBeenCalled(); expect(promote).not.toHaveBeenCalled();
+    expect(state.errorMessage.value).toContain("刷新发布状态和评估报告");
+  });
+
+  it("keeps a newer audit request loading while an older cancelled request rejects", async () => {
+    const first = deferred<Awaited<ReturnType<typeof fetchLlmModelReleaseAudits>>>();
+    const second = deferred<Awaited<ReturnType<typeof fetchLlmModelReleaseAudits>>>();
+    loadAudits.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const state = useLlmModelReleaseCenter();
+    const older = state.loadAudits(1); const newer = state.loadAudits(2);
+    expect(loadAudits.mock.calls[0]![1]!.signal!.aborted).toBe(true);
+    first.reject(new Error("old failure")); await older;
+    expect(state.auditLoading.value).toBe(true); expect(state.moduleStates.audits.error).toBe("");
+    second.resolve({ items: [], total: 41, hasMore: false }); await newer;
+    expect(state.auditLoading.value).toBe(false);
+  });
+
+  it("invalidates an in-flight audit when its filters change without a refresh", async () => {
+    const pending = deferred<Awaited<ReturnType<typeof fetchLlmModelReleaseAudits>>>();
+    loadAudits.mockReturnValueOnce(pending.promise);
+    const state = useLlmModelReleaseCenter(); const request = state.loadAudits(1);
+    state.auditOperator.value = "new-operator";
+    expect(loadAudits.mock.calls[0]![1]!.signal!.aborted).toBe(true);
+    pending.resolve({ items: [], total: 40, hasMore: true }); await request;
+    expect(state.auditTotal.value).toBe(0);
+    expect(state.moduleStates.audits.error).toContain("筛选条件已变更");
+  });
+
+  it("cancels all reads at scope disposal and ignores late responses", async () => {
+    const pending = deferred<LlmModelReleaseCenter>();
+    loadCenter.mockReturnValueOnce(pending.promise);
+    const scope = effectScope(); const state = scope.run(useLlmModelReleaseCenter)!;
+    const request = state.load(); scope.stop();
+    expect(loadCenter.mock.calls[0]![1]!.signal!.aborted).toBe(true);
+    pending.resolve(center()); await request;
+    expect(state.center.value).toBeNull(); expect(state.loading.value).toBe(false);
+    await state.load(); expect(loadCenter).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the latest trend window when a slower previous refresh finishes", async () => {
+    const old = deferred<LlmModelReleaseCenter>();
+    loadCenter.mockReturnValueOnce(old.promise);
+    const state = useLlmModelReleaseCenter(); const first = state.load();
+    state.trendDays.value = 7;
+    loadCenter.mockResolvedValueOnce({ ...center(), configuredModel: "latest-model" });
+    await state.load(); old.resolve({ ...center(), configuredModel: "old-model" }); await first;
+    expect(state.center.value?.configuredModel).toBe("latest-model");
+    expect(state.moduleStates.center.lastSuccessLabel).toBe("7 天窗口");
+  });
 });
+
+const deferred = <T>() => {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+};
 
 const report = (): LlmEvaluationReport => ({
   id: 77,
