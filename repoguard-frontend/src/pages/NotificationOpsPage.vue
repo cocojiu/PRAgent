@@ -41,6 +41,8 @@
               </div>
 
               <article class="notification-table-card">
+                <el-alert v-if="eventsError" :title="eventsError" type="error" :closable="false" />
+                <p v-if="eventsNeedsRefresh" role="status">当前列表尚未确认最新状态，请刷新查询。</p>
                 <div class="panel-heading notification-table-head">
                   <div>
                     <h2>最近通知事件</h2>
@@ -92,7 +94,7 @@
                   </el-table-column>
                   <el-table-column label="操作" width="126" fixed="right">
                     <template #default="{ row }">
-                      <el-button v-if="canRetryNotificationEvent(row.status)" link type="primary" :loading="retryingEventId === row.id" @click="retryEvent(row.id)">
+                      <el-button v-if="canRetryNotificationEvent(row.status)" link type="primary" :loading="retryingEventId === row.id" :disabled="!canRetryEvent(row.id)" @click="retryEvent(row.id)">
                         重试
                       </el-button>
                       <el-button v-else link type="primary" @click="activeTab = 'events'">详情</el-button>
@@ -162,6 +164,8 @@
             :filter="eventFilter"
             :loading="eventsLoading"
             :retrying-event-id="retryingEventId"
+            :error="eventsError"
+            :needs-refresh="eventsNeedsRefresh"
             @refresh="loadNotificationEvents"
             @retry="retryEvent"
           />
@@ -172,6 +176,8 @@
             :deliveries="notificationDeliveries"
             :filter="deliveryFilter"
             :loading="deliveriesLoading"
+            :error="deliveriesError"
+            :needs-refresh="deliveriesNeedsRefresh"
             @refresh="loadNotificationDeliveries"
           />
         </el-tab-pane>
@@ -272,6 +278,11 @@ const {
   deliveryFilter,
   eventFilter,
   eventsLoading,
+  eventsError,
+  deliveriesError,
+  eventsNeedsRefresh,
+  deliveriesNeedsRefresh,
+  canRetryEvent,
   notificationDeliveries,
   notificationEvents,
   notificationEventTotal,
@@ -280,7 +291,7 @@ const {
   loadNotificationEvents,
   refreshNotificationData,
   retryEvent
-} = useNotificationOpsRecords({ loadNotificationBindings });
+} = useNotificationOpsRecords({ canManage, loadNotificationBindings });
 const {
   notificationForm,
   loadSystemSettings,

@@ -276,14 +276,14 @@ export const deleteNotificationBinding = (id: number) =>
 export const testNotificationBinding = (id: number) =>
   apiRequest("testNotificationBinding", { id });
 
-export const fetchNotificationEvents = (params: { page?: number; pageSize?: number; status?: string; taskId?: number } = {}) =>
-  apiRequest("fetchNotificationEvents", params);
+export const fetchNotificationEvents = (params: { page?: number; pageSize?: number; status?: string; taskId?: number } = {}, options?: ApiRequestOptions) =>
+  apiRequest("fetchNotificationEvents", params, options);
 
 export const retryNotificationEvent = (id: number) =>
   apiRequest("retryNotificationEvent", { id });
 
-export const fetchNotificationDeliveries = (params: { page?: number; pageSize?: number; status?: string; taskId?: number } = {}) =>
-  apiRequest("fetchNotificationDeliveries", params);
+export const fetchNotificationDeliveries = (params: { page?: number; pageSize?: number; status?: string; taskId?: number } = {}, options?: ApiRequestOptions) =>
+  apiRequest("fetchNotificationDeliveries", params, options);
 
 export const fetchGithubFeedback = (limit = 20, options?: ApiRequestOptions) => apiRequest("fetchGithubFeedback", { limit }, options);
 export const retryGithubFeedback = (id: number) => apiRequest("retryGithubFeedback", { id });
