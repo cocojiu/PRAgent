@@ -4,8 +4,14 @@
     <p>查看最近一次执行记录。此处不执行备份、恢复或清理操作。</p>
     <el-button :loading="loading" @click="load">刷新备份记录</el-button>
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
+    <el-alert
+      v-if="retained"
+      type="warning"
+      :closable="false"
+      :title="`当前显示上次查询结果（${formatDateTime(status?.checkedAt)}），尚未确认最新状态。`"
+    />
     <template v-if="status">
-      <p role="status">{{ statusLabel }}</p>
+      <p role="status">{{ retained ? '上次查询结果：' : '' }}{{ statusLabel }}</p>
       <el-descriptions :column="1" border>
         <el-descriptions-item label="查询时间">{{ formatDateTime(status.checkedAt) }}</el-descriptions-item>
         <el-descriptions-item label="开始时间">{{ status.startedAt ? formatDateTime(status.startedAt) : '—' }}</el-descriptions-item>
@@ -32,6 +38,7 @@ import { getErrorMessage } from "@/utils/errors";
 const status = ref<BackupStatus | null>(null);
 const loading = ref(false);
 const error = ref("");
+const retained = ref(false);
 let request: AbortController | undefined;
 let disposed = false;
 const labels: Record<string, string> = {
@@ -53,10 +60,13 @@ const load = async () => {
   request = current;
   loading.value = true;
   error.value = "";
-  status.value = null;
+  retained.value = status.value !== null;
   try {
     const result = await fetchBackupStatus({ signal: current.signal });
-    if (!disposed && request === current) status.value = result;
+    if (!disposed && request === current) {
+      status.value = result;
+      retained.value = false;
+    }
   } catch (reason) {
     if (!disposed && request === current) error.value = getErrorMessage(reason, "备份记录查询失败");
   } finally {
