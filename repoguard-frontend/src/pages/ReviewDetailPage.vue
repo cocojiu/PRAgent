@@ -529,6 +529,7 @@ const retryTooltip = computed(() => {
 });
 const { confirmRetryReview, retryingTask } = useReviewDetailRetry({
   canManage,
+  getTaskId: () => Number(route.params.id),
   canRetryTask,
   clearGithubCommentState,
   failureReason,
