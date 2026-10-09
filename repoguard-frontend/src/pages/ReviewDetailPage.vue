@@ -594,6 +594,8 @@ const writebackCheckStatusClass = computed(() => {
 });
 
 const { submittingHumanReview, submitHumanReviewDecision } = useReviewDetailHumanReview({
+  canManage,
+  getTaskId: () => Number(route.params.id),
   canSubmitHumanReview,
   humanReviewActionText,
   refreshDetail: () => loadDetail({ silent: true, resetPublishResult: true, force: true }),
