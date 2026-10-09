@@ -1,4 +1,4 @@
-import { computed, reactive, ref } from "vue";
+import { computed, getCurrentScope, onScopeDispose, reactive, ref, watch } from "vue";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import {
   createNotificationBinding,
@@ -8,7 +8,8 @@ import {
   updateNotificationBinding,
   updateNotificationBindingStatus
 } from "@/api/config";
-import { canManage } from "@/stores/authState";
+import { canManage, currentUser } from "@/stores/authState";
+import { activeTenant } from "@/stores/tenantContext";
 import type { NotificationBinding, NotificationBindingRequest } from "@/types";
 import { getErrorMessage } from "@/utils/errors";
 
@@ -46,15 +47,28 @@ export const useNotificationBindings = () => {
   const bindingPageSize = ref(20);
   const bindingTotal = ref(0);
   const bindingsLoading = ref(false);
+  const bindingLoadError = ref("");
+  const bindingsNeedRefresh = ref(true);
   const bindingDialogVisible = ref(false);
   const savingBinding = ref(false);
   const testingBindingId = ref<number>();
   const editingBindingId = ref<number>();
   const bindingForm = reactive<NotificationBindingRequest>(defaultBindingForm());
-
-  const bindingPageCount = computed(() =>
-    Math.max(1, Math.ceil(bindingTotal.value / bindingPageSize.value))
-  );
+  let disposed = false;
+  let contextRevision = 0;
+  let readController: AbortController | undefined;
+  const bindingsCurrent = computed(() => !disposed && canManage.value && !bindingsLoading.value
+    && !bindingsNeedRefresh.value && !bindingLoadError.value);
+  const invalidateBindings = (clear = true) => {
+    readController?.abort(); readController = undefined;
+    bindingsLoading.value = false; bindingsNeedRefresh.value = true;
+    if (clear) { notificationBindings.value = []; bindingTotal.value = 0; bindingLoadError.value = ""; }
+  };
+  watch([bindingPage, bindingPageSize], () => invalidateBindings(), { flush: "sync" });
+  watch([canManage, activeTenant, () => currentUser.value?.id], () => {
+    contextRevision += 1; invalidateBindings();
+  }, { flush: "sync" });
+  if (getCurrentScope()) onScopeDispose(() => { disposed = true; contextRevision += 1; invalidateBindings(); });
 
   const upsertBinding = (binding: NotificationBinding) => {
     const index = notificationBindings.value.findIndex((item) => item.id === binding.id);
@@ -65,23 +79,32 @@ export const useNotificationBindings = () => {
     notificationBindings.value = [binding, ...notificationBindings.value];
   };
 
-  const loadNotificationBindings = async () => {
+  const loadNotificationBindings = async (): Promise<boolean> => {
+    if (disposed || !canManage.value) return false;
+    invalidateBindings(false); bindingLoadError.value = "";
+    const controller = new AbortController(); readController = controller;
+    const version = contextRevision;
+    const page = bindingPage.value; const pageSize = bindingPageSize.value;
+    const current = () => !disposed && canManage.value && version === contextRevision
+      && readController === controller && !controller.signal.aborted;
     bindingsLoading.value = true;
     try {
-      const result = await fetchNotificationBindings({
-        page: bindingPage.value,
-        pageSize: bindingPageSize.value
-      });
+      const result = await fetchNotificationBindings({ page, pageSize }, { signal: controller.signal });
+      if (!current()) return false;
+      const lastPage = Math.max(1, Math.ceil(result.total / pageSize));
+      if (page > lastPage) {
+        bindingPage.value = lastPage;
+        return await loadNotificationBindings();
+      }
       notificationBindings.value = result.items;
       bindingTotal.value = result.total;
-      if (bindingPage.value > bindingPageCount.value) {
-        bindingPage.value = bindingPageCount.value;
-        await loadNotificationBindings();
-      }
+      bindingsNeedRefresh.value = false;
+      return true;
     } catch (error) {
-      ElMessage.error(getErrorMessage(error, "渠道绑定加载失败"));
+      if (current()) bindingLoadError.value = getErrorMessage(error, "渠道绑定加载失败");
+      return false;
     } finally {
-      bindingsLoading.value = false;
+      if (current()) bindingsLoading.value = false;
     }
   };
 
@@ -171,6 +194,9 @@ export const useNotificationBindings = () => {
     bindingPageSize,
     bindingTotal,
     bindingsLoading,
+    bindingLoadError,
+    bindingsNeedRefresh,
+    bindingsCurrent,
     bindingDialogVisible,
     savingBinding,
     testingBindingId,

@@ -10,7 +10,7 @@
           <Plus :size="18" />
           新增绑定
         </el-button>
-        <el-button type="primary" plain size="large" :disabled="!enabledNotificationBindings.length" @click="openTestDialog">
+        <el-button type="primary" plain size="large" :disabled="!bindingsCurrent || !enabledNotificationBindings.length" @click="openTestDialog">
           <Send :size="17" />
           测试发送
         </el-button>
@@ -130,17 +130,23 @@
 
         <el-tab-pane label="渠道绑定" name="bindings">
           <article class="task-panel">
+            <el-alert v-if="bindingLoadError" :title="bindingLoadError" type="error" :closable="false" />
+            <p v-if="bindingsNeedRefresh" role="status">当前渠道列表尚未确认最新状态，请刷新查询。</p>
             <div class="panel-heading">
               <div>
                 <h2>渠道绑定</h2>
                 <p>按仓库绑定钉钉或企业微信群机器人，审查结果和评论回写会异步发送。</p>
               </div>
-              <el-button type="primary" :disabled="!canManage" @click="openBindingDialog()">新增绑定</el-button>
+              <div class="notification-actions">
+                <el-button :loading="bindingsLoading" @click="loadNotificationBindings">刷新渠道</el-button>
+                <el-button type="primary" :disabled="!canManage" @click="openBindingDialog()">新增绑定</el-button>
+              </div>
             </div>
             <NotificationBindingTable
               :bindings="notificationBindings"
               :can-manage="canManage"
               :loading="bindingsLoading"
+              :actions-disabled="!bindingsCurrent"
               :testing-binding-id="testingBindingId"
               action-layout="group"
               table-class="rg-table task-table"
@@ -266,6 +272,9 @@ const {
   bindingPageSize,
   bindingTotal,
   bindingsLoading,
+  bindingLoadError,
+  bindingsNeedRefresh,
+  bindingsCurrent,
   bindingDialogVisible,
   savingBinding,
   testingBindingId,
@@ -298,7 +307,7 @@ const {
   loadNotificationEvents,
   refreshNotificationData,
   retryEvent
-} = useNotificationOpsRecords({ canManage, loadNotificationBindings });
+} = useNotificationOpsRecords({ canManage, loadNotificationBindings: async () => { await loadNotificationBindings(); } });
 const {
   notificationForm,
   savingSettings,

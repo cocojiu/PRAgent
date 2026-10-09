@@ -30,6 +30,7 @@ import {
   fetchGithubChecksSetup,
   fetchGithubFeedback,
   fetchNotificationEvents,
+  fetchNotificationBindings,
   fetchNotificationDeliveries,
   fetchSystemSettings,
   transitionLlmEvaluationReportLifecycle
@@ -65,6 +66,7 @@ describe("apiRequest", () => {
     { name: "GitHub Checks setup", read: (signal: AbortSignal) => fetchGithubChecksSetup("octo", "repo", { signal }) },
     { name: "GitHub feedback", read: (signal: AbortSignal) => fetchGithubFeedback(20, { signal }) },
     { name: "notification events", read: (signal: AbortSignal) => fetchNotificationEvents({ page: 2 }, { signal }) },
+    { name: "notification bindings", read: (signal: AbortSignal) => fetchNotificationBindings({ page: 2 }, { signal }) },
     { name: "notification deliveries", read: (signal: AbortSignal) => fetchNotificationDeliveries({ page: 2 }, { signal }) },
     { name: "system settings", read: (signal: AbortSignal) => fetchSystemSettings({ signal }) },
     { name: "release center", read: (signal: AbortSignal) => fetchLlmModelReleaseCenter(7, { signal }) },

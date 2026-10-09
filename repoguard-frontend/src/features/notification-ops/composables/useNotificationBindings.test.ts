@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { effectScope, type EffectScope } from "vue";
 import { currentUser } from "@/stores/authState";
 import { useNotificationBindings } from "./useNotificationBindings";
 import type { NotificationBinding } from "@/types";
@@ -14,7 +15,8 @@ const configApi = vi.hoisted(() => ({
 
 const messages = vi.hoisted(() => ({
   error: vi.fn(),
-  success: vi.fn()
+  success: vi.fn(),
+  warning: vi.fn()
 }));
 
 vi.mock("@/api/config", () => configApi);
@@ -23,7 +25,14 @@ vi.mock("element-plus/es/components/message/index.mjs", () => ({
 }));
 
 describe("useNotificationBindings", () => {
+  const scopes: EffectScope[] = [];
+  const setup = () => { const scope = effectScope(); scopes.push(scope); return scope.run(useNotificationBindings)!; };
+  beforeEach(() => {
+    vi.resetAllMocks();
+    currentUser.value = { id: 1, username: "admin", email: "admin@example.test", role: "ADMIN", status: "ACTIVE" };
+  });
   afterEach(() => {
+    scopes.splice(0).forEach(scope => scope.stop());
     vi.clearAllMocks();
     currentUser.value = undefined;
   });
@@ -34,13 +43,13 @@ describe("useNotificationBindings", () => {
       total: 41
     });
 
-    const bindings = useNotificationBindings();
+    const bindings = setup();
     await bindings.loadNotificationBindings();
 
     expect(configApi.fetchNotificationBindings).toHaveBeenCalledWith({
       page: 1,
       pageSize: 20
-    });
+    }, { signal: expect.any(AbortSignal) });
     expect(configApi.fetchNotificationBindings).not.toHaveBeenCalledWith(expect.objectContaining({ pageSize: 100 }));
     expect(bindings.notificationBindings.value).toHaveLength(1);
     expect(bindings.bindingTotal.value).toBe(41);
@@ -61,7 +70,7 @@ describe("useNotificationBindings", () => {
         total: 41
       });
 
-    const bindings = useNotificationBindings();
+    const bindings = setup();
     await bindings.loadNotificationBindings();
     await bindings.changeBindingPage(2);
     await bindings.changeBindingPageSize(10);
@@ -69,11 +78,11 @@ describe("useNotificationBindings", () => {
     expect(configApi.fetchNotificationBindings).toHaveBeenNthCalledWith(2, {
       page: 2,
       pageSize: 20
-    });
+    }, { signal: expect.any(AbortSignal) });
     expect(configApi.fetchNotificationBindings).toHaveBeenNthCalledWith(3, {
       page: 1,
       pageSize: 10
-    });
+    }, { signal: expect.any(AbortSignal) });
   });
 
   it("returns to the first page after creating a binding", async () => {
@@ -95,7 +104,7 @@ describe("useNotificationBindings", () => {
       });
     configApi.createNotificationBinding.mockResolvedValue(binding(42));
 
-    const bindings = useNotificationBindings();
+    const bindings = setup();
     await bindings.changeBindingPage(2);
     await bindings.saveBinding();
 
@@ -103,7 +112,7 @@ describe("useNotificationBindings", () => {
     expect(configApi.fetchNotificationBindings).toHaveBeenLastCalledWith({
       page: 1,
       pageSize: 20
-    });
+    }, { signal: expect.any(AbortSignal) });
   });
 });
 

@@ -50,6 +50,14 @@ beforeEach(() => {
 afterEach(() => { app?.unmount(); app = undefined; host.remove(); currentUser.value = undefined; });
 
 describe("notification operations page", () => {
+  it("shows a current binding query failure and offers a cancellable refresh", async () => {
+    api.bindings.mockRejectedValueOnce(new Error("bindings offline")); await mount();
+    expect(host.textContent).toContain("bindings offline"); expect(host.textContent).toContain("当前渠道列表尚未确认最新状态");
+    expect(button("测试发送").disabled).toBe(true); button("刷新渠道").click(); await flush();
+    expect(host.textContent).not.toContain("bindings offline"); expect(api.bindings).toHaveBeenCalledTimes(2);
+    expect(api.bindings.mock.calls[1]![1].signal).toBeInstanceOf(AbortSignal);
+  });
+
   it("retains a switch edited during an automatic save and offers a manual save of the new draft", async () => {
     await mount(); const pending = deferred<ReturnType<typeof settings>>(); api.update.mockReturnValueOnce(pending.promise);
     switches()[0]!.click(); await flush(); switches()[2]!.click(); await flush(); expect(api.update).toHaveBeenCalledTimes(1);

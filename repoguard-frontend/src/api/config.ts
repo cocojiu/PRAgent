@@ -258,8 +258,8 @@ export type NotificationBindingPageQuery = {
   provider?: string;
 };
 
-export const fetchNotificationBindings = (query: NotificationBindingPageQuery = {}) =>
-  apiRequest("fetchNotificationBindings", query);
+export const fetchNotificationBindings = (query: NotificationBindingPageQuery = {}, options?: ApiRequestOptions) =>
+  apiRequest("fetchNotificationBindings", query, options);
 
 export const createNotificationBinding = (payload: NotificationBindingRequest) =>
   apiRequest("createNotificationBinding", payload);
