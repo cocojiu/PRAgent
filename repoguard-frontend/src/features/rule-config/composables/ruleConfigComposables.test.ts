@@ -70,7 +70,7 @@ describe("rule configuration composables", () => {
     expect(state.filteredRules.value.map(rule => rule.id)).toEqual(["RG-YAML-001"]);
   });
 
-  it("refreshes a conflicting rule edit and adopts the latest policy version", async () => {
+  it("keeps a conflicting rule draft until an explicit version refresh", async () => {
     const originalRule = reviewRule({ policyVersion: 3, name: "旧名称" });
     const rules = ref([originalRule]);
     const reloadRules = vi.fn(async () => {
@@ -89,9 +89,14 @@ describe("rule configuration composables", () => {
       expect.objectContaining({ id: "RG-AUTH-001", name: "本地编辑" })
     );
     expect(reloadRules).toHaveBeenCalledOnce();
-    expect(state.editingPolicyVersion.value).toBe(4);
-    expect(state.ruleForm.name).toBe("并发更新后的名称");
+    expect(state.editingPolicyVersion.value).toBe(3);
+    expect(state.ruleForm.name).toBe("  本地编辑  ");
+    expect(state.ruleVersionChanged.value).toBe(true);
+    expect(state.canSaveRule.value).toBe(false);
     expect(messages.error).toHaveBeenCalledWith("策略版本冲突");
+    await state.refreshEditingRule();
+    expect(state.editingPolicyVersion.value).toBe(4);
+    expect(state.ruleForm.name).toBe("  本地编辑  ");
   });
 
   it("uses the active snapshot for strategy updates and resynchronizes after conflicts", async () => {

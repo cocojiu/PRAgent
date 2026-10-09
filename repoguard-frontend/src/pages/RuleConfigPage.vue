@@ -206,9 +206,14 @@
     </section>
 
     <el-dialog v-model="dialogVisible" :title="editingRuleId ? '编辑规则' : '新增声明式规则'" width="560px">
+      <el-alert v-if="ruleSaveError" type="error" :title="ruleSaveError" :closable="false" show-icon />
+      <el-alert v-if="ruleRefreshError" type="warning" :title="ruleRefreshError" :closable="false" show-icon />
+      <el-alert v-if="ruleSaveNotice" type="info" :title="ruleSaveNotice" :closable="false" show-icon />
+      <el-alert v-if="ruleVersionChanged" type="warning" title="规则版本已变化，请刷新版本并核对草稿后保存。" :closable="false" show-icon />
+      <p v-if="ruleHasUnsavedChanges">{{ saving ? '正在保存本次提交，后续修改仍需手动保存。' : '当前有未保存的修改。' }}</p>
       <el-form label-position="top" class="rule-form">
         <el-form-item label="规则 ID">
-          <el-input v-model="ruleForm.id" :disabled="Boolean(editingRuleId)" placeholder="例如 RG-JAVA-004" />
+          <el-input v-model="ruleForm.id" :disabled="Boolean(editingRuleId) || saving" placeholder="例如 RG-JAVA-004" />
         </el-form-item>
         <el-form-item label="规则名称">
           <el-input v-model="ruleForm.name" placeholder="请输入规则名称" />
@@ -272,8 +277,9 @@
         </el-form-item>
       </el-form>
       <template #footer>
+        <el-button :disabled="saving || !canManage || !ruleForm.id.trim()" :loading="refreshingRule" @click="refreshEditingRule">刷新版本并保留草稿</el-button>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :disabled="!canManage || !rulesCurrent" :loading="saving" @click="saveRule">保存</el-button>
+        <el-button type="primary" :disabled="!canSaveRule" :loading="saving" @click="saveRule">保存</el-button>
       </template>
     </el-dialog>
 
@@ -383,7 +389,9 @@ const {
   statusFilter,
   strategyPolicy,
   topRuleDocs,
-  loadRules
+  loadRules,
+  cancelRulesRead,
+  invalidateRules
 } = useReviewRuleCatalog();
 const reloadRules = async () => { await loadRules(); };
 
@@ -392,12 +400,20 @@ const {
   editingRuleId,
   ruleForm,
   saving,
+  canSaveRule,
+  ruleHasUnsavedChanges,
+  ruleVersionChanged,
+  ruleSaveError,
+  ruleSaveNotice,
+  ruleRefreshError,
+  refreshingRule,
+  refreshEditingRule,
   statusSavingId,
   openCreateDialog,
   openEditDialog,
   saveRule,
   toggleRule
-} = useReviewRuleEditor({ canManage, reloadRules, rules });
+} = useReviewRuleEditor({ canManage, reloadRules: loadRules, rules, rulesCurrent, cancelRulesRead, invalidateRules });
 
 const {
   strategySaving,
