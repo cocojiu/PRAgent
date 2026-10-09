@@ -34,6 +34,7 @@
         :item="item"
         :icon="serviceIcons[item.id] ?? Hexagon"
         :form-state="formState[item.id]"
+        :has-unsaved-changes="unsavedChanges[item.id]"
         :visible-secrets="visibleSecrets"
         :can-manage="canManage"
         :saving="savingId === item.id"
@@ -89,7 +90,7 @@ import {
   useIntegrationFormState
 } from "@/features/integrations";
 
-const { formState, integrationItems, visibleSecrets, applyIntegrationPatch } = useIntegrationFormState();
+const { formState, integrationItems, visibleSecrets, applyIntegrationPatch, captureForm, captureSavedForm, unsavedChanges } = useIntegrationFormState();
 const testingConnections = reactive<Record<string, boolean>>({});
 
 const githubPayload = () => buildGithubPayload(formState);
@@ -130,6 +131,8 @@ const { testConnection } = useIntegrationConnectionTest({
 });
 
 const { githubConfig, loadErrorMessage, loading, savingId, reviewPolicyConfig, loadConfig, saveConfig } = useIntegrationConfigPersistence({
+  captureForm,
+  captureSavedForm,
   applyGithubConfig,
   applyReviewPolicyConfig,
   applyServiceConfig,

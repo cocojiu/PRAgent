@@ -78,6 +78,7 @@
           测试连接
         </el-button>
       </div>
+      <p v-if="hasUnsavedChanges" role="status">有未保存的修改。</p>
     </aside>
   </article>
 </template>
@@ -88,6 +89,7 @@ import type { Component } from "vue";
 import type { IntegrationConfig } from "@/types";
 
 const props = defineProps<{
+  hasUnsavedChanges?: boolean;
   item: IntegrationConfig;
   icon: Component;
   formState: Record<string, string>;

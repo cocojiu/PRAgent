@@ -13,22 +13,22 @@ import {
 } from "./integrationConfigMappers";
 
 type BuildIntegrationConfigApplyActionsOptions = {
-  applyIntegrationPatch: (id: string, patch: Partial<IntegrationConfig>) => void;
+  applyIntegrationPatch: (id: string, patch: Partial<IntegrationConfig>, baseline?: Readonly<Record<string, string>>) => void;
 };
 
 export const buildIntegrationConfigApplyActions = ({
   applyIntegrationPatch
 }: BuildIntegrationConfigApplyActionsOptions) => {
-  const applyGithubConfig = (config: GithubIntegrationConfig) => {
-    applyIntegrationPatch("github", buildGithubIntegrationPatch(config));
+  const applyGithubConfig = (config: GithubIntegrationConfig, baseline?: Readonly<Record<string, string>>) => {
+    applyIntegrationPatch("github", buildGithubIntegrationPatch(config), baseline);
   };
 
-  const applyServiceConfig = (id: "mysql" | "rabbitmq", config: ServiceIntegrationConfig) => {
-    applyIntegrationPatch(id, buildServiceIntegrationPatch(id, config));
+  const applyServiceConfig = (id: "mysql" | "rabbitmq", config: ServiceIntegrationConfig, baseline?: Readonly<Record<string, string>>) => {
+    applyIntegrationPatch(id, buildServiceIntegrationPatch(id, config), baseline);
   };
 
-  const applyReviewPolicyConfig = (config: ReviewPolicyConfig) => {
-    applyIntegrationPatch("spring-ai", buildReviewPolicyIntegrationPatch(config));
+  const applyReviewPolicyConfig = (config: ReviewPolicyConfig, baseline?: Readonly<Record<string, string>>) => {
+    applyIntegrationPatch("spring-ai", buildReviewPolicyIntegrationPatch(config), baseline);
   };
 
   const applyConnectionTestResult = (id: string, result: ConnectionTestResult) => {

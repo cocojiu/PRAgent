@@ -11,7 +11,7 @@ import { fetchUsers, fetchUserOperationAudits } from "./users";
 import { fetchReviewAssignmentOptions, confirmReviewMemberAssignment } from "./reviewAssignment";
 import { fetchCodeownersRecommendations, acceptCodeownersRecommendation } from "./codeowners";
 import { fetchCiSarifSetup, issueCiSarifCredential } from "./ciSarif";
-import { fetchReviews, fetchReviewListSummary, fetchReviewRepositories } from "./reviews";
+import { fetchGithubCommentPreview, fetchReviews, fetchReviewListSummary, fetchReviewRepositories } from "./reviews";
 import { clearAuthToken, saveAuthToken } from "./authSession";
 import {
   compareLlmEvaluationReports,
@@ -22,6 +22,11 @@ import {
   fetchLlmModelReleaseCenter,
   fetchLlmModelReleaseRuntimeMetrics,
   fetchLlmModelReleaseAudits,
+  fetchGithubIntegrationConfig,
+  fetchMysqlIntegrationConfig,
+  fetchRabbitMqIntegrationConfig,
+  fetchReviewPolicyConfig,
+  fetchBackupStatus,
   transitionLlmEvaluationReportLifecycle
 } from "./config";
 import {
@@ -46,6 +51,12 @@ const okResponse = (data: unknown) =>
 
 describe("apiRequest", () => {
   it.each([
+    { name: "comment preview", read: (signal: AbortSignal) => fetchGithubCommentPreview(7, { page: 2 }, { signal }) },
+    { name: "GitHub integration", read: (signal: AbortSignal) => fetchGithubIntegrationConfig({ signal }) },
+    { name: "MySQL integration", read: (signal: AbortSignal) => fetchMysqlIntegrationConfig({ signal }) },
+    { name: "RabbitMQ integration", read: (signal: AbortSignal) => fetchRabbitMqIntegrationConfig({ signal }) },
+    { name: "review policy", read: (signal: AbortSignal) => fetchReviewPolicyConfig({ signal }) },
+    { name: "backup status", read: (signal: AbortSignal) => fetchBackupStatus({ signal }) },
     { name: "release center", read: (signal: AbortSignal) => fetchLlmModelReleaseCenter(7, { signal }) },
     { name: "runtime metrics", read: (signal: AbortSignal) => fetchLlmModelReleaseRuntimeMetrics({ days: 7 }, { signal }) },
     { name: "release audits", read: (signal: AbortSignal) => fetchLlmModelReleaseAudits({ page: 2 }, { signal }) },

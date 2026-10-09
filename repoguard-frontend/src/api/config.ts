@@ -34,8 +34,8 @@ export type DataRetentionCleanupAuditQuery = {
 export const fetchBackupStatus = (options?: ApiRequestOptions) =>
   apiRequest("fetchBackupStatus", undefined, options);
 
-export const fetchGithubIntegrationConfig = () =>
-  apiRequest("fetchGithubIntegrationConfig", undefined);
+export const fetchGithubIntegrationConfig = (options?: ApiRequestOptions) =>
+  apiRequest("fetchGithubIntegrationConfig", undefined, options);
 
 export const updateGithubIntegrationConfig = (payload: GithubIntegrationConfigRequest) =>
   apiRequest("updateGithubIntegrationConfig", payload);
@@ -49,19 +49,19 @@ export const previewGithubChecks = (payload: GithubChecksPreviewRequest) =>
 export const updateGithubChecksPolicy = (payload: GithubChecksPolicyRequest) =>
   apiRequest("updateGithubChecksPolicy", payload);
 
-export const fetchMysqlIntegrationConfig = () =>
-  apiRequest("fetchMysqlIntegrationConfig", undefined);
+export const fetchMysqlIntegrationConfig = (options?: ApiRequestOptions) =>
+  apiRequest("fetchMysqlIntegrationConfig", undefined, options);
 
 export const updateMysqlIntegrationConfig = (payload: ServiceIntegrationConfigRequest) =>
   apiRequest("updateMysqlIntegrationConfig", payload);
 
-export const fetchRabbitMqIntegrationConfig = () =>
-  apiRequest("fetchRabbitMqIntegrationConfig", undefined);
+export const fetchRabbitMqIntegrationConfig = (options?: ApiRequestOptions) =>
+  apiRequest("fetchRabbitMqIntegrationConfig", undefined, options);
 
 export const updateRabbitMqIntegrationConfig = (payload: ServiceIntegrationConfigRequest) =>
   apiRequest("updateRabbitMqIntegrationConfig", payload);
 
-export const fetchReviewPolicyConfig = () => apiRequest("fetchReviewPolicyConfig", undefined);
+export const fetchReviewPolicyConfig = (options?: ApiRequestOptions) => apiRequest("fetchReviewPolicyConfig", undefined, options);
 
 export const updateReviewPolicyConfig = (payload: ReviewPolicyConfigRequest) =>
   apiRequest("updateReviewPolicyConfig", payload);
