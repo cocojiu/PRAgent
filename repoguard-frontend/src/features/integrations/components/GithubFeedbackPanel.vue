@@ -3,6 +3,9 @@
     <h2>GitHub 评论反馈</h2>
     <p>在已发布的行评论下回复 /repoguard false-positive 原因 或 /repoguard ignore 原因。仅接受白名单仓库内有写权限的用户，误报只创建抑制提案。</p>
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
+    <el-alert v-if="retryError" :title="retryError" type="error" :closable="false" />
+    <p v-if="retryMessage" role="status">{{ retryMessage }}</p>
+    <p v-if="stale">当前显示上次查询结果，尚未确认最新状态；刷新成功后才能重试。</p>
     <p v-if="diagnostics">{{ diagnostics.enabled ? "反馈处理已启用" : "反馈处理未启用，请先完成 Webhook 事件订阅、签名和仓库白名单配置" }}</p>
     <el-button :loading="loading" @click="load">刷新反馈状态</el-button>
     <el-table :data="diagnostics?.events ?? []" row-key="id" aria-label="GitHub 反馈事件">
@@ -14,7 +17,7 @@
       <el-table-column prop="attempts" label="重试次数" width="90" />
       <el-table-column label="操作" width="100">
         <template #default="{ row }">
-          <el-button v-if="diagnostics?.enabled && row.status === 'FAILED'" :loading="retrying === row.id" @click="retry(row.id)">重试</el-button>
+          <el-button v-if="diagnostics?.enabled && row.status === 'FAILED'" :loading="retrying === row.id" :disabled="!canRetry(row.id)" @click="retry(row.id)">重试</el-button>
         </template>
       </el-table-column>
       <template #empty><el-empty description="暂无反馈事件" /></template>
@@ -24,27 +27,10 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
-import { fetchGithubFeedback, retryGithubFeedback } from "@/api/config";
-import type { GithubFeedbackDiagnostics } from "@/types";
-import { getErrorMessage } from "@/utils/errors";
+import { onMounted } from "vue";
+import { canManage } from "@/stores/authState";
+import { useGithubFeedback } from "../composables/useGithubFeedback";
 
-const diagnostics = ref<GithubFeedbackDiagnostics | null>(null);
-const error = ref("");
-const loading = ref(false);
-const retrying = ref<number | null>(null);
-const load = async () => {
-  loading.value = true;
-  error.value = "";
-  try { diagnostics.value = await fetchGithubFeedback(); }
-  catch (reason) { error.value = getErrorMessage(reason, "反馈状态加载失败"); }
-  finally { loading.value = false; }
-};
-const retry = async (id: number) => {
-  retrying.value = id;
-  try { await retryGithubFeedback(id); await load(); }
-  catch (reason) { error.value = getErrorMessage(reason, "反馈重试失败"); }
-  finally { retrying.value = null; }
-};
+const { diagnostics, error, retryError, retryMessage, loading, retrying, stale, load, retry, canRetry } = useGithubFeedback({ canManage });
 onMounted(load);
 </script>

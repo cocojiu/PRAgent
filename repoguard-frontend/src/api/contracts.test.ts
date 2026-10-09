@@ -28,6 +28,7 @@ import {
   fetchReviewPolicyConfig,
   fetchBackupStatus,
   fetchGithubChecksSetup,
+  fetchGithubFeedback,
   transitionLlmEvaluationReportLifecycle
 } from "./config";
 import {
@@ -59,6 +60,7 @@ describe("apiRequest", () => {
     { name: "review policy", read: (signal: AbortSignal) => fetchReviewPolicyConfig({ signal }) },
     { name: "backup status", read: (signal: AbortSignal) => fetchBackupStatus({ signal }) },
     { name: "GitHub Checks setup", read: (signal: AbortSignal) => fetchGithubChecksSetup("octo", "repo", { signal }) },
+    { name: "GitHub feedback", read: (signal: AbortSignal) => fetchGithubFeedback(20, { signal }) },
     { name: "release center", read: (signal: AbortSignal) => fetchLlmModelReleaseCenter(7, { signal }) },
     { name: "runtime metrics", read: (signal: AbortSignal) => fetchLlmModelReleaseRuntimeMetrics({ days: 7 }, { signal }) },
     { name: "release audits", read: (signal: AbortSignal) => fetchLlmModelReleaseAudits({ page: 2 }, { signal }) },
