@@ -367,16 +367,17 @@ const submitCreateUser = async () => {
       password: createForm.password,
       confirmPassword: createForm.confirmPassword
     });
-    usersPage.value = 1;
-    await loadUsers();
-    await loadAudits();
-    createDialogVisible.value = false;
-    ElMessage.success("用户已创建");
   } catch (error) {
     ElMessage.error(getErrorMessage(error, "用户创建失败"));
+    return;
   } finally {
     creatingUser.value = false;
   }
+  createDialogVisible.value = false;
+  resetCreateForm();
+  usersPage.value = 1;
+  ElMessage.success("用户已创建");
+  await Promise.all([loadUsersWithMessage(), loadAudits()]);
 };
 
 const resetCreateForm = () => {
