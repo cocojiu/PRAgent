@@ -40,8 +40,8 @@ export const fetchGithubIntegrationConfig = (options?: ApiRequestOptions) =>
 export const updateGithubIntegrationConfig = (payload: GithubIntegrationConfigRequest) =>
   apiRequest("updateGithubIntegrationConfig", payload);
 
-export const fetchGithubChecksSetup = (organization: string, repository: string) =>
-  apiRequest("fetchGithubChecksSetup", { organization, repository });
+export const fetchGithubChecksSetup = (organization: string, repository: string, options?: ApiRequestOptions) =>
+  apiRequest("fetchGithubChecksSetup", { organization, repository }, options);
 
 export const previewGithubChecks = (payload: GithubChecksPreviewRequest) =>
   apiRequest("previewGithubChecks", payload);

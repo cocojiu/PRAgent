@@ -27,6 +27,7 @@ import {
   fetchRabbitMqIntegrationConfig,
   fetchReviewPolicyConfig,
   fetchBackupStatus,
+  fetchGithubChecksSetup,
   transitionLlmEvaluationReportLifecycle
 } from "./config";
 import {
@@ -57,6 +58,7 @@ describe("apiRequest", () => {
     { name: "RabbitMQ integration", read: (signal: AbortSignal) => fetchRabbitMqIntegrationConfig({ signal }) },
     { name: "review policy", read: (signal: AbortSignal) => fetchReviewPolicyConfig({ signal }) },
     { name: "backup status", read: (signal: AbortSignal) => fetchBackupStatus({ signal }) },
+    { name: "GitHub Checks setup", read: (signal: AbortSignal) => fetchGithubChecksSetup("octo", "repo", { signal }) },
     { name: "release center", read: (signal: AbortSignal) => fetchLlmModelReleaseCenter(7, { signal }) },
     { name: "runtime metrics", read: (signal: AbortSignal) => fetchLlmModelReleaseRuntimeMetrics({ days: 7 }, { signal }) },
     { name: "release audits", read: (signal: AbortSignal) => fetchLlmModelReleaseAudits({ page: 2 }, { signal }) },
