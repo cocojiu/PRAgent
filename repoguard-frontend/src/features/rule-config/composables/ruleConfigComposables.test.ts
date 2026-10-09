@@ -57,7 +57,7 @@ describe("rule configuration composables", () => {
       ],
       strategyPolicy: strategyPolicy()
     });
-    const state = useReviewRuleCatalog();
+    const state = useReviewRuleCatalog({ canRead: ref(true) });
 
     await state.loadRules();
 

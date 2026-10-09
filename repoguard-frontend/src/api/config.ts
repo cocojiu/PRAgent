@@ -122,7 +122,7 @@ export const pauseSecretReEncryptionJob = (jobId: number) =>
 export const resumeSecretReEncryptionJob = (jobId: number) =>
   apiRequest("resumeSecretReEncryptionJob", { jobId });
 
-export const fetchReviewRules = () => apiRequest("fetchReviewRules", undefined);
+export const fetchReviewRules = (options?: ApiRequestOptions) => apiRequest("fetchReviewRules", undefined, options);
 
 export const fetchReviewCalibrationQueue = (
   ruleId: string,

@@ -7,11 +7,20 @@
       </div>
       <div class="page-heading-actions">
         <el-tag type="info" size="large">内置规则 + 安全声明式规则</el-tag>
-        <el-button type="primary" :disabled="!canManage" @click="openCreateDialog">新增声明式规则</el-button>
+        <el-button :loading="loading" @click="loadRules">刷新规则列表</el-button>
+        <el-button type="primary" :disabled="!canManage || !rulesCurrent" @click="openCreateDialog">新增声明式规则</el-button>
       </div>
     </div>
 
     <el-alert v-if="errorMessage" class="page-alert" type="error" :title="errorMessage" show-icon :closable="false" />
+    <el-alert
+      v-if="rulesNeedRefresh && (rules.length || strategyPolicy)"
+      class="page-alert"
+      type="warning"
+      title="以下为上次读取的规则与策略，当前状态尚未确认，请刷新后再操作。"
+      show-icon
+      :closable="false"
+    />
 
     <MetricGrid :metrics="ruleMetricItems" :resolve-icon="getMetricIcon" />
 
@@ -29,7 +38,7 @@
           </el-select>
           <el-button
             type="primary"
-            :disabled="!canManage || strategyTargetMode === strategyPolicy.enforcementMode"
+            :disabled="!canManage || !rulesCurrent || strategyTargetMode === strategyPolicy.enforcementMode"
             :loading="strategySaving"
             @click="saveStrategyEnforcement"
           >应用模式</el-button>
@@ -111,7 +120,7 @@
                 v-model="row.status"
                 active-value="enabled"
                 inactive-value="disabled"
-                :disabled="!canManage"
+                :disabled="!canManage || !rulesCurrent"
                 :loading="statusSavingId === row.id"
                 @change="toggleRule(row, $event)"
               />
@@ -139,7 +148,7 @@
           </el-table-column>
           <el-table-column label="操作" width="180" fixed="right">
             <template #default="{ row }">
-              <el-button size="small" type="primary" plain :disabled="!canManage" @click="openEditDialog(row)">编辑</el-button>
+              <el-button size="small" type="primary" plain :disabled="!canManage || !rulesCurrent" @click="openEditDialog(row)">编辑</el-button>
               <el-button size="small" @click="openRuleVersions(row)">历史</el-button>
             </template>
           </el-table-column>
@@ -264,7 +273,7 @@
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :disabled="!canManage" :loading="saving" @click="saveRule">保存</el-button>
+        <el-button type="primary" :disabled="!canManage || !rulesCurrent" :loading="saving" @click="saveRule">保存</el-button>
       </template>
     </el-dialog>
 
@@ -291,7 +300,7 @@
               size="small"
               type="primary"
               plain
-              :disabled="!canManage"
+              :disabled="!canManage || !rulesCurrent"
               :loading="rollbackSavingId === `rule-${row.policyVersion}`"
               @click="rollbackRuleVersion(row.policyVersion)"
             >回滚</el-button>
@@ -327,7 +336,7 @@
               size="small"
               type="primary"
               plain
-              :disabled="!canManage"
+              :disabled="!canManage || !rulesCurrent"
               :loading="rollbackSavingId === `strategy-${row.snapshotId}`"
               @click="rollbackStrategyVersion(row.snapshotId)"
             >回滚</el-button>
@@ -368,12 +377,15 @@ const {
   metrics,
   qualityGroups,
   rules,
+  rulesCurrent,
+  rulesNeedRefresh,
   severityFilter,
   statusFilter,
   strategyPolicy,
   topRuleDocs,
   loadRules
 } = useReviewRuleCatalog();
+const reloadRules = async () => { await loadRules(); };
 
 const {
   dialogVisible,
@@ -385,13 +397,13 @@ const {
   openEditDialog,
   saveRule,
   toggleRule
-} = useReviewRuleEditor({ canManage, reloadRules: loadRules, rules });
+} = useReviewRuleEditor({ canManage, reloadRules, rules });
 
 const {
   strategySaving,
   strategyTargetMode,
   saveStrategyEnforcement
-} = useReviewStrategyGovernance({ canManage, reloadRules: loadRules, strategyPolicy });
+} = useReviewStrategyGovernance({ canManage, reloadRules, strategyPolicy });
 
 const {
   rollbackSavingId,
@@ -412,7 +424,7 @@ const {
   openStrategyVersions,
   rollbackRuleVersion,
   rollbackStrategyVersion
-} = useReviewPolicyHistory({ canManage, reloadRules: loadRules, rules, strategyPolicy });
+} = useReviewPolicyHistory({ canManage, reloadRules, rules, strategyPolicy });
 
 const metricIconMap = {
   blue: ListChecks,
