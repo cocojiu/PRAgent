@@ -40,7 +40,10 @@ beforeEach(async () => {
   currentUser.value = { id: 1, username: "admin", email: "admin@example.test", role: "ADMIN", status: "ACTIVE" };
   host = document.createElement("div"); document.body.append(host);
   app = createApp(UserManagementPage);
-  app.directive("loading", () => {});
+  app.directive("loading", {
+    mounted: (element, binding) => { element.dataset.loading = String(binding.value); },
+    updated: (element, binding) => { element.dataset.loading = String(binding.value); }
+  });
   app.component("ElInput", defineComponent({
     props: { modelValue: { type: String, default: "" } }, emits: ["update:modelValue"],
     setup: (props, { attrs, emit }) => () => h("input", { ...attrs, value: props.modelValue,
@@ -53,12 +56,17 @@ beforeEach(async () => {
   for (const name of ["ElForm", "ElFormItem"]) {
     app.component(name, defineComponent({ setup: (_, { slots }) => () => h("div", slots.default?.()) }));
   }
-  for (const name of ["ElSelect", "ElOption", "ElTable", "ElTableColumn", "ElEmpty", "ElPagination"]) {
+  app.component("ElTable", defineComponent({ props: { data: { type: Array, default: () => [] } },
+    setup: props => () => h("div", JSON.stringify(props.data)) }));
+  app.component("ElPagination", defineComponent({ props: { currentPage: { type: Number, default: 1 } },
+    emits: ["current-change"], setup: (props, { emit }) => () =>
+      h("button", { onClick: () => emit("current-change", props.currentPage + 1) }, "下一页") }));
+  for (const name of ["ElSelect", "ElOption", "ElTableColumn", "ElEmpty"]) {
     app.component(name, defineComponent({ setup: () => () => null }));
   }
   app.mount(host); await flush();
 });
-afterEach(() => { app?.unmount(); app = null; host.remove(); currentUser.value = undefined; });
+afterEach(() => { app?.unmount(); app = null; host.remove(); currentUser.value = undefined; vi.useRealTimers(); });
 
 it("confirms creation and closes the form even when the following user-list refresh fails", async () => {
   await fillCreateForm();
@@ -105,3 +113,55 @@ it("keeps a confirmed creation when the audit refresh fails", async () => {
   expect(messages.error).toHaveBeenCalledWith("audit unavailable");
   expect(host.querySelector('[role="dialog"]')).toBeNull();
 });
+
+it("aborts the stale user read as soon as search changes and waits for the debounce before querying again", async () => {
+  vi.useFakeTimers();
+  const old = deferred<typeof emptyPage>();
+  api.users.mockReturnValueOnce(old.promise);
+  button("刷新").click(); await flush();
+  const signal = api.users.mock.calls[1]![1].signal as AbortSignal;
+  const field = input("搜索用户名或邮箱"); field.value = "new"; field.dispatchEvent(new Event("input"));
+  await flush();
+  expect(signal.aborted).toBe(true); expect(api.users).toHaveBeenCalledTimes(2);
+  await vi.advanceTimersByTimeAsync(350); await flush();
+  expect(api.users).toHaveBeenLastCalledWith(expect.objectContaining({ keyword: "new", page: 1 }), { signal: expect.any(AbortSignal) });
+  old.reject(new Error("stale user error")); await flush();
+  expect(messages.error).not.toHaveBeenCalled();
+});
+
+it("keeps audit loading for a newer page when an older cancelled read fails", async () => {
+  const old = deferred<typeof emptyPage>(); const latest = deferred<typeof emptyPage>();
+  api.audits.mockReturnValueOnce(old.promise).mockReturnValueOnce(latest.promise);
+  button("刷新记录").click(); await flush();
+  [...host.querySelectorAll("button")].filter(node => node.textContent === "下一页")[1]!.click(); await flush();
+  expect(api.audits.mock.calls[1]![1].signal.aborted).toBe(true);
+  old.reject(new Error("stale audit error")); await flush();
+  expect(host.querySelector<HTMLElement>('[aria-label="用户操作审计列表"]')!.dataset.loading).toBe("true");
+  expect(messages.error).not.toHaveBeenCalled();
+  latest.resolve(emptyPage); await flush();
+  expect(host.querySelector<HTMLElement>('[aria-label="用户操作审计列表"]')!.dataset.loading).toBe("false");
+});
+
+it("aborts both reads on unmount and does not show stale errors", async () => {
+  const users = deferred<typeof emptyPage>(); const audits = deferred<typeof emptyPage>();
+  api.users.mockReturnValueOnce(users.promise); api.audits.mockReturnValueOnce(audits.promise);
+  button("刷新").click(); await flush();
+  const signals = [api.users.mock.calls[1]![1].signal, api.audits.mock.calls[1]![1].signal];
+  app!.unmount(); app = null;
+  expect(signals.every((signal: AbortSignal) => signal.aborted)).toBe(true);
+  users.reject(new Error("unmounted user read")); audits.reject(new Error("unmounted audit read")); await flush();
+  expect(messages.error).not.toHaveBeenCalled();
+});
+
+it("shows a user-list pagination failure and releases its loading state", async () => {
+  api.users.mockRejectedValueOnce(new Error("page unavailable"));
+  button("下一页").click(); await flush();
+  expect(messages.error).toHaveBeenCalledWith("page unavailable");
+  expect(host.querySelector<HTMLElement>('[aria-label="用户管理列表"]')!.dataset.loading).toBe("false");
+});
+
+const deferred = <T>() => {
+  let resolve!: (value: T) => void; let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+};

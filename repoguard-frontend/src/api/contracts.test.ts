@@ -7,6 +7,7 @@ const frontendPerformance = vi.hoisted(() => ({
 vi.mock("@/observability/frontendPerformanceBuffer", () => frontendPerformance);
 
 import { apiRequest } from "./contracts";
+import { fetchUsers, fetchUserOperationAudits } from "./users";
 import { fetchReviewAssignmentOptions, confirmReviewMemberAssignment } from "./reviewAssignment";
 import { fetchCodeownersRecommendations, acceptCodeownersRecommendation } from "./codeowners";
 import { fetchCiSarifSetup, issueCiSarifCredential } from "./ciSarif";
@@ -47,7 +48,9 @@ describe("apiRequest", () => {
   it.each([
     { name: "release center", read: (signal: AbortSignal) => fetchLlmModelReleaseCenter(7, { signal }) },
     { name: "runtime metrics", read: (signal: AbortSignal) => fetchLlmModelReleaseRuntimeMetrics({ days: 7 }, { signal }) },
-    { name: "release audits", read: (signal: AbortSignal) => fetchLlmModelReleaseAudits({ page: 2 }, { signal }) }
+    { name: "release audits", read: (signal: AbortSignal) => fetchLlmModelReleaseAudits({ page: 2 }, { signal }) },
+    { name: "user list", read: (signal: AbortSignal) => fetchUsers({ page: 2 }, { signal }) },
+    { name: "user audits", read: (signal: AbortSignal) => fetchUserOperationAudits({ page: 2 }, { signal }) }
   ])("cancels the underlying $name read through its API wrapper", async ({ read }) => {
     const fetchMock = vi.fn((_url: string, options: RequestInit) => new Promise<Response>((_resolve, reject) => {
       options.signal!.addEventListener("abort", () => reject(new DOMException("cancelled", "AbortError")), { once: true });

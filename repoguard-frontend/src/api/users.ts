@@ -1,4 +1,5 @@
 import { apiRequest } from "@/api/contracts";
+import type { ApiRequestOptions } from "@/api/contracts";
 
 export type UserRole =
   | "ADMIN"
@@ -54,10 +55,10 @@ export type UserPageQuery = {
   keyword?: string;
 };
 
-export const fetchUsers = (query: UserPageQuery = {}) => apiRequest("fetchUsers", query);
+export const fetchUsers = (query: UserPageQuery = {}, options?: ApiRequestOptions) => apiRequest("fetchUsers", query, options);
 
-export const fetchUserOperationAudits = (query: UserPageQuery = {}) =>
-  apiRequest("fetchUserOperationAudits", query);
+export const fetchUserOperationAudits = (query: UserPageQuery = {}, options?: ApiRequestOptions) =>
+  apiRequest("fetchUserOperationAudits", query, options);
 
 export const createUser = (payload: UserCreateRequest) => apiRequest("createUser", payload);
 
