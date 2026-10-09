@@ -29,7 +29,7 @@
 
     <section class="integration-list">
       <IntegrationCard
-        v-for="item in integrationItems"
+        v-for="item in displayedIntegrations"
         :key="item.id"
         :item="item"
         :icon="serviceIcons[item.id] ?? Hexagon"
@@ -58,7 +58,7 @@
 <script setup lang="ts">
 import "@/features/integrations/integrations.css";
 import GithubFeedbackPanel from "@/features/integrations/components/GithubFeedbackPanel.vue";
-import { onMounted, reactive } from "vue";
+import { computed, onMounted, reactive } from "vue";
 import { Hexagon } from "@lucide/vue";
 import { canManage } from "@/stores/authState";
 import {
@@ -120,7 +120,12 @@ const { applyConnectionTestResult, applyGithubConfig, applyReviewPolicyConfig, a
     applyIntegrationPatch
   });
 
-const { testConnection } = useIntegrationConnectionTest({
+const connectionPayloads: Record<string, () => object> = {
+  github: githubPayload, mysql: mysqlPayload, rabbitmq: rabbitMqPayload, "spring-ai": springAiPayload
+};
+const { testConnection, displayConnection } = useIntegrationConnectionTest({
+  canManage,
+  captureConfig: (id) => ({ ...connectionPayloads[id]!() }),
   applyConnectionTestResult: (id, result) => applyConnectionTestResult(id, result),
   hasIntegration: (id) => integrationItems.value.some((integration) => integration.id === id),
   testActions: buildIntegrationConnectionTestActions({
@@ -129,6 +134,9 @@ const { testConnection } = useIntegrationConnectionTest({
   }),
   testingConnections
 });
+
+const displayedIntegrations = computed(() => integrationItems.value.map((item) =>
+  displayConnection(item, unsavedChanges.value[item.id])));
 
 const { githubConfig, loadErrorMessage, loading, savingId, reviewPolicyConfig, loadConfig, saveConfig } = useIntegrationConfigPersistence({
   captureForm,

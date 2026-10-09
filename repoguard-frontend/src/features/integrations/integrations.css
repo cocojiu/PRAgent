@@ -95,7 +95,8 @@
   border: 1px solid #bbf7d0;
 }
 
-.integration-status.missing_secret {
+.integration-status.missing_secret,
+.integration-status.pending {
   color: #d97706;
   background: #fff7ed;
   border: 1px solid #fed7aa;
@@ -148,7 +149,8 @@
   background: #effaf3;
 }
 
-.connection-message.missing_secret {
+.connection-message.missing_secret,
+.connection-message.pending {
   color: #b45309;
   background: #fff7ed;
 }
