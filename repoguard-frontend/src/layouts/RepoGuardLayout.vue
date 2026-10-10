@@ -162,6 +162,7 @@
         <RouterView />
       </section>
     </main>
+    <UserProfileDialog v-if="profileDialogVisible" v-model="profileDialogVisible" />
     <ChangePasswordDialog
       v-if="changePasswordDialogVisible"
       v-model="changePasswordDialogVisible"
@@ -199,6 +200,8 @@ import { APP_VERSION } from "@/config/appVersion";
 import { enterpriseEditionEnabled } from "@/config/edition";
 import type { NotificationItem } from "@/types";
 
+const UserProfileDialog = defineAsyncComponent(() => import("@/features/auth/components/UserProfileDialog.vue"));
+const profileDialogVisible = ref(false);
 const ChangePasswordDialog = defineAsyncComponent(
   () => import("@/features/auth/components/ChangePasswordDialog.vue")
 );
@@ -322,10 +325,10 @@ const handleUserCommand = async (command: string) => {
     return;
   }
   if (command === "profile") {
-    ElMessage.info(currentUser.value?.email || "个人资料功能暂未开放");
+    profileDialogVisible.value = true;
     return;
   }
-  ElMessage.info("个人资料功能暂未开放");
+
 };
 
 const handleUserMenuCommand = (command: string) => {
