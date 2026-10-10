@@ -6,11 +6,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.BindException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.NoHandlerFoundException;
@@ -38,25 +41,21 @@ public class GlobalExceptionHandler {
             case CONFLICT -> HttpStatus.CONFLICT;
             default -> HttpStatus.BAD_REQUEST;
         };
-        return ResponseEntity.status(status).contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-            .body(ApiResponse.error(exception.getErrorCode(), exception.getMessage()));
+        return error(status, exception.getErrorCode(), exception.getMessage());
     }
 
-    @ExceptionHandler({
-        BindException.class,
-        ConstraintViolationException.class,
-        HttpMessageNotReadableException.class,
-        MethodArgumentNotValidException.class
-    })
+    @ExceptionHandler({BindException.class, ConstraintViolationException.class,
+        HttpMessageNotReadableException.class, MethodArgumentNotValidException.class,
+        MethodArgumentTypeMismatchException.class})
     public ResponseEntity<ApiResponse<Void>> handleValidationException(Exception exception) {
-        return ResponseEntity.badRequest()
-            .body(ApiResponse.error(ErrorCode.BAD_REQUEST, VALIDATION_ERROR_MESSAGE));
+        return error(HttpStatus.BAD_REQUEST, ErrorCode.BAD_REQUEST, VALIDATION_ERROR_MESSAGE);
     }
 
-    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
-    public ResponseEntity<ApiResponse<Void>> handleUnsupportedMediaType(HttpMediaTypeNotSupportedException exception) {
-        return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
-            .body(ApiResponse.error(ErrorCode.BAD_REQUEST, UNSUPPORTED_MEDIA_TYPE_MESSAGE));
+    @ExceptionHandler({HttpMediaTypeNotSupportedException.class, HttpMediaTypeNotAcceptableException.class})
+    public ResponseEntity<ApiResponse<Void>> handleMediaTypeException(Exception exception) {
+        boolean unsupported = exception instanceof HttpMediaTypeNotSupportedException;
+        return error(unsupported ? HttpStatus.UNSUPPORTED_MEDIA_TYPE : HttpStatus.NOT_ACCEPTABLE,
+            ErrorCode.BAD_REQUEST, unsupported ? UNSUPPORTED_MEDIA_TYPE_MESSAGE : "Requested response type is not supported");
     }
 
     @ExceptionHandler(Exception.class)
@@ -64,14 +63,18 @@ public class GlobalExceptionHandler {
         String errorId = UUID.randomUUID().toString();
         logUnhandledException(errorId, exception);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+            .contentType(MediaType.APPLICATION_JSON)
             .header(ERROR_ID_HEADER, errorId)
             .body(ApiResponse.error(ErrorCode.INTERNAL_ERROR, INTERNAL_ERROR_MESSAGE));
     }
 
     @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class})
     public ResponseEntity<ApiResponse<Void>> handleResourceNotFound(Exception exception) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-            .body(ApiResponse.error(ErrorCode.RESOURCE_NOT_FOUND, "Requested resource not found"));
+        return error(HttpStatus.NOT_FOUND, ErrorCode.RESOURCE_NOT_FOUND, "Requested resource not found");
+    }
+
+    private ResponseEntity<ApiResponse<Void>> error(HttpStatus status, ErrorCode code, String message) {
+        return ResponseEntity.status(status).contentType(MediaType.APPLICATION_JSON).body(ApiResponse.error(code, message));
     }
 
     private void logUnhandledException(String errorId, Exception exception) {
@@ -80,12 +83,8 @@ public class GlobalExceptionHandler {
         try {
             LOGGER.error(
                 "Unhandled application exception traceId={} errorId={} type={} message={} location={}",
-                traceId(),
-                errorId,
-                exception.getClass().getName(),
-                sanitizeLogMessage(exception.getMessage()),
-                topStackLocation(exception),
-                exception
+                traceId(), errorId, exception.getClass().getName(),
+                sanitizeLogMessage(exception.getMessage()), topStackLocation(exception), exception
             );
         } finally {
             restoreErrorId(previousErrorId);

@@ -63,6 +63,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.context.support.AnnotationConfigWebApplicationContext;
 import org.springframework.web.servlet.DispatcherServlet;
+import org.springframework.validation.beanvalidation.MethodValidationPostProcessor;
 import org.springframework.web.servlet.HandlerInterceptor;
 import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
@@ -106,6 +107,8 @@ class ReviewProgressTransportIntegrationTest {
         context = new AnnotationConfigWebApplicationContext();
         context.register(Fixture.class);
         context.setServletContext(servletContext.getServletContext());
+        // Create fixture mocks in the test loader; Mockito caches must not retain a stopped Tomcat loader.
+        context.refresh();
         var servlet = Tomcat.addServlet(servletContext, "progress", new DispatcherServlet(context));
         servlet.setLoadOnStartup(1);
         servlet.setAsyncSupported(true);
@@ -118,6 +121,7 @@ class ReviewProgressTransportIntegrationTest {
         URI endpoint = URI.create("http://127.0.0.1:" + tomcat.getConnector().getLocalPort() + "/api/v1/reviews/9/events");
         try (HttpClient client = client(null)) {
             assertThat(statusCode(client, endpoint, null)).isEqualTo(401);
+            verifyRejectedInputs(client, endpoint);
             Stream stream = subscribe(client, endpoint, 1);
             assertThat(stream.response().headers().firstValue("Cache-Control")).contains("no-store");
             assertThat(stream.response().headers().firstValue("X-Accel-Buffering")).contains("no");
@@ -188,6 +192,7 @@ class ReviewProgressTransportIntegrationTest {
                 } catch (Exception e) { return false; }
             }, 15);
             assertThat(statusCode(client, endpoint, null)).isEqualTo(401);
+            verifyRejectedInputs(client, endpoint);
             for (int user = 1; user <= 8; user++) {
                 for (int connection = 0; connection < 2; connection++) {
                     Stream stream = subscribe(client, endpoint, user);
@@ -213,6 +218,35 @@ class ReviewProgressTransportIntegrationTest {
             recovered.reader().close(); open.clear();
             await(() -> active() == 0 && scheduler().getQueue().isEmpty(), 20);
         }
+    }
+
+    private void verifyRejectedInputs(HttpClient client, URI endpoint) throws Exception {
+        for (String cursor : List.of("-1", "not-a-number", "9223372036854775808")) {
+            var request = HttpRequest.newBuilder(endpoint).timeout(Duration.ofSeconds(8))
+                .header("Authorization", "Bearer " + TOKENS.get(1))
+                .header("Accept", "text/event-stream").header("Last-Event-ID", cursor).GET().build();
+            assertSafeError(client, request, 400);
+        }
+        for (String id : List.of("0", "not-a-number")) {
+            assertSafeError(client, request(endpoint.resolve("/api/v1/reviews/" + id + "/events"), 1), 400);
+        }
+        var incompatible = HttpRequest.newBuilder(endpoint).timeout(Duration.ofSeconds(8))
+            .header("Authorization", "Bearer " + TOKENS.get(1)).header("Accept", "application/json").GET().build();
+        assertSafeError(client, incompatible, 406);
+        assertThat(active()).isZero();
+        assertThat(scheduler().getQueue()).isEmpty();
+    }
+
+    private static void assertSafeError(HttpClient client, HttpRequest request, int expectedStatus) throws Exception {
+        var response = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        assertThat(response.statusCode()).isEqualTo(expectedStatus);
+        assertThat(response.headers().firstValue("Content-Type").orElse("")).startsWith("application/json");
+        assertThat(response.headers().firstValue(GlobalExceptionHandler.ERROR_ID_HEADER)).isEmpty();
+        var body = JSON.readTree(response.body());
+        assertThat(body.path("success").asBoolean()).isFalse();
+        assertThat(body.path("code").asText()).isEqualTo("BAD_REQUEST");
+        assertThat(body.path("message").asText()).isIn("Request validation failed", "Requested response type is not supported");
+        assertThat(response.body()).doesNotContain("not-a-number", "9223372036854775808", "ConstraintViolation", "Exception", "Bearer");
     }
 
     private void reportProxyFailure() {
@@ -350,6 +384,11 @@ class ReviewProgressTransportIntegrationTest {
 
     @TestConfiguration @EnableWebMvc
     static class Fixture implements WebMvcConfigurer {
+        @Bean static MethodValidationPostProcessor methodValidation() {
+            var validation = new MethodValidationPostProcessor();
+            validation.setProxyTargetClass(true);
+            return validation;
+        }
         @Bean ReviewProgressStreamService streams() {
             ReviewTaskMapper tasks = mock(ReviewTaskMapper.class);
             ReviewTimelineMapper timelines = mock(ReviewTimelineMapper.class);
