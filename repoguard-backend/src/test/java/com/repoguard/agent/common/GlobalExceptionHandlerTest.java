@@ -2,10 +2,13 @@ package com.repoguard.agent.common;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import jakarta.validation.ConstraintViolationException;
+import java.util.Set;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
@@ -14,10 +17,13 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
@@ -57,6 +63,44 @@ class GlobalExceptionHandlerTest {
             logger.detachAppender(appender);
             appender.stop();
         }
+    }
+
+    @Test
+    void streamErrorsUseSafeJsonAndPreserveClientAndServerStatusCodes() throws Exception {
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new MissingResourceController())
+            .setControllerAdvice(new GlobalExceptionHandler()).build();
+        mvc.perform(get("/validation-failure").accept(MediaType.TEXT_EVENT_STREAM))
+            .andExpect(status().isBadRequest())
+            .andExpect(header().string("Content-Type", MediaType.APPLICATION_JSON_VALUE))
+            .andExpect(jsonPath("$.code").value("BAD_REQUEST"))
+            .andExpect(jsonPath("$.message").value("Request validation failed"))
+            .andExpect(header().doesNotExist(GlobalExceptionHandler.ERROR_ID_HEADER));
+        mvc.perform(get("/type-failure").accept(MediaType.TEXT_EVENT_STREAM).header("Last-Event-ID", "private-invalid-cursor"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("Request validation failed"));
+        mvc.perform(get("/validation-failure").accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isNotAcceptable())
+            .andExpect(header().string("Content-Type", MediaType.APPLICATION_JSON_VALUE))
+            .andExpect(jsonPath("$.code").value("BAD_REQUEST"))
+            .andExpect(jsonPath("$.message").value("Requested response type is not supported"))
+            .andExpect(header().doesNotExist(GlobalExceptionHandler.ERROR_ID_HEADER));
+        mvc.perform(post("/json-only").accept(MediaType.TEXT_EVENT_STREAM).contentType(MediaType.TEXT_PLAIN)
+                .content("private-unsupported-payload"))
+            .andExpect(status().isUnsupportedMediaType())
+            .andExpect(header().string("Content-Type", MediaType.APPLICATION_JSON_VALUE))
+            .andExpect(jsonPath("$.code").value("BAD_REQUEST"))
+            .andExpect(jsonPath("$.message").value("Content type is not supported"))
+            .andExpect(header().doesNotExist(GlobalExceptionHandler.ERROR_ID_HEADER));
+        mvc.perform(get("/application-failure").accept(MediaType.TEXT_EVENT_STREAM))
+            .andExpect(status().isInternalServerError())
+            .andExpect(header().string("Content-Type", MediaType.APPLICATION_JSON_VALUE))
+            .andExpect(jsonPath("$.code").value("INTERNAL_ERROR"))
+            .andExpect(jsonPath("$.message").value("系统内部异常，请联系管理员。"))
+            .andExpect(header().exists(GlobalExceptionHandler.ERROR_ID_HEADER));
+        mvc.perform(get("/api/session/properties").accept(MediaType.TEXT_EVENT_STREAM))
+            .andExpect(status().isNotFound())
+            .andExpect(header().string("Content-Type", MediaType.APPLICATION_JSON_VALUE))
+            .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
     }
 
     @Test
@@ -167,6 +211,17 @@ class GlobalExceptionHandlerTest {
         void missingStaticResource() throws NoResourceFoundException {
             throw new NoResourceFoundException(HttpMethod.GET, "/api/session/properties", "api/session/properties");
         }
+
+        @GetMapping(value = "/validation-failure", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+        void validationFailure() {
+            throw new ConstraintViolationException("private-validation-detail", Set.of());
+        }
+
+        @GetMapping(value = "/type-failure", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+        void typeFailure(@RequestHeader("Last-Event-ID") Long cursor) {}
+
+        @PostMapping(value = "/json-only", consumes = MediaType.APPLICATION_JSON_VALUE)
+        void jsonOnly() {}
 
         @GetMapping("/application-failure")
         void applicationFailure() {
