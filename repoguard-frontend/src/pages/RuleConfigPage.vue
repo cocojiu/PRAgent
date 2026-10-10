@@ -7,11 +7,21 @@
       </div>
       <div class="page-heading-actions">
         <el-tag type="info" size="large">内置规则 + 安全声明式规则</el-tag>
-        <el-button type="primary" :disabled="!canManage" @click="openCreateDialog">新增声明式规则</el-button>
+        <el-button :loading="loading" @click="loadRules">刷新规则列表</el-button>
+        <el-button type="primary" :disabled="!canManage || !rulesCurrent" @click="openCreateDialog">新增声明式规则</el-button>
       </div>
     </div>
 
     <el-alert v-if="errorMessage" class="page-alert" type="error" :title="errorMessage" show-icon :closable="false" />
+    <el-alert v-for="(error, id) in ruleOperationErrors" :key="id" class="page-alert" type="error" :title="`${id}：${error}`" show-icon :closable="false" />
+    <el-alert
+      v-if="rulesNeedRefresh && (rules.length || strategyPolicy)"
+      class="page-alert"
+      type="warning"
+      title="以下为上次读取的规则与策略，当前状态尚未确认，请刷新后再操作。"
+      show-icon
+      :closable="false"
+    />
 
     <MetricGrid :metrics="ruleMetricItems" :resolve-icon="getMetricIcon" />
 
@@ -29,13 +39,17 @@
           </el-select>
           <el-button
             type="primary"
-            :disabled="!canManage || strategyTargetMode === strategyPolicy.enforcementMode"
+            :disabled="!canSaveStrategy"
             :loading="strategySaving"
             @click="saveStrategyEnforcement"
           >应用模式</el-button>
           <el-button @click="openStrategyVersions">版本历史</el-button>
         </div>
       </div>
+      <el-alert v-if="strategySaveError" class="page-alert" type="error" :title="strategySaveError" :closable="false" show-icon />
+      <el-alert v-if="strategyRefreshError" class="page-alert" type="warning" :title="strategyRefreshError" :closable="false" show-icon />
+      <el-alert v-if="strategySaveNotice" class="page-alert" type="info" :title="strategySaveNotice" :closable="false" show-icon />
+      <p v-if="strategyHasUnsavedChanges">{{ strategySaving ? '正在处理策略变更，后续选择仍需手动应用。' : '当前选择尚未保存。' }}</p>
       <div class="policy-version-grid">
         <div><span>策略快照</span><strong>#{{ strategyPolicy.snapshotId }}</strong></div>
         <div><span>Prompt</span><strong>{{ strategyPolicy.promptVersion }}</strong></div>
@@ -108,11 +122,11 @@
           <el-table-column label="启用状态" width="120">
             <template #default="{ row }">
               <el-switch
-                v-model="row.status"
+                :model-value="row.status"
                 active-value="enabled"
                 inactive-value="disabled"
-                :disabled="!canManage"
-                :loading="statusSavingId === row.id"
+                :disabled="!canChangeRule(row.id)"
+                :loading="busyRuleIds.includes(row.id)"
                 @change="toggleRule(row, $event)"
               />
             </template>
@@ -139,7 +153,7 @@
           </el-table-column>
           <el-table-column label="操作" width="180" fixed="right">
             <template #default="{ row }">
-              <el-button size="small" type="primary" plain :disabled="!canManage" @click="openEditDialog(row)">编辑</el-button>
+              <el-button size="small" type="primary" plain :disabled="!canChangeRule(row.id)" @click="openEditDialog(row)">编辑</el-button>
               <el-button size="small" @click="openRuleVersions(row)">历史</el-button>
             </template>
           </el-table-column>
@@ -197,9 +211,14 @@
     </section>
 
     <el-dialog v-model="dialogVisible" :title="editingRuleId ? '编辑规则' : '新增声明式规则'" width="560px">
+      <el-alert v-if="ruleSaveError" type="error" :title="ruleSaveError" :closable="false" show-icon />
+      <el-alert v-if="ruleRefreshError" type="warning" :title="ruleRefreshError" :closable="false" show-icon />
+      <el-alert v-if="ruleSaveNotice" type="info" :title="ruleSaveNotice" :closable="false" show-icon />
+      <el-alert v-if="ruleVersionChanged" type="warning" title="规则版本已变化，请刷新版本并核对草稿后保存。" :closable="false" show-icon />
+      <p v-if="ruleHasUnsavedChanges">{{ saving ? '正在保存本次提交，后续修改仍需手动保存。' : '当前有未保存的修改。' }}</p>
       <el-form label-position="top" class="rule-form">
         <el-form-item label="规则 ID">
-          <el-input v-model="ruleForm.id" :disabled="Boolean(editingRuleId)" placeholder="例如 RG-JAVA-004" />
+          <el-input v-model="ruleForm.id" :disabled="Boolean(editingRuleId) || saving" placeholder="例如 RG-JAVA-004" />
         </el-form-item>
         <el-form-item label="规则名称">
           <el-input v-model="ruleForm.name" placeholder="请输入规则名称" />
@@ -263,8 +282,9 @@
         </el-form-item>
       </el-form>
       <template #footer>
+        <el-button :disabled="!canRefreshRule" :loading="refreshingRule" @click="refreshEditingRule">刷新版本并保留草稿</el-button>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :disabled="!canManage" :loading="saving" @click="saveRule">保存</el-button>
+        <el-button type="primary" :disabled="!canSaveRule" :loading="saving" @click="saveRule">保存</el-button>
       </template>
     </el-dialog>
 
@@ -274,6 +294,11 @@
       width="920px"
       @closed="cancelRuleHistoryRequest"
     >
+      <el-alert v-if="ruleRollbackError" type="error" :title="ruleRollbackError" :closable="false" show-icon />
+      <el-alert v-if="ruleHistoryError" type="error" :title="ruleHistoryError" :closable="false" show-icon />
+      <el-alert v-if="ruleRollbackNotice" type="info" :title="ruleRollbackNotice" :closable="false" show-icon />
+      <p v-if="!ruleHistoryCurrent && ruleVersions.length">以下为上次读取的历史，当前版本尚未确认。</p>
+      <el-button :loading="ruleHistoryLoading" @click="refreshRuleVersions">刷新规则历史</el-button>
       <el-table v-loading="ruleHistoryLoading" :data="ruleVersions" class="rg-table" size="small">
         <el-table-column prop="policyVersion" label="策略版本" width="100" />
         <el-table-column prop="configVersion" label="配置版本" width="100" />
@@ -291,7 +316,7 @@
               size="small"
               type="primary"
               plain
-              :disabled="!canManage"
+              :disabled="!canRollbackRule(row.policyVersion)"
               :loading="rollbackSavingId === `rule-${row.policyVersion}`"
               @click="rollbackRuleVersion(row.policyVersion)"
             >回滚</el-button>
@@ -309,6 +334,11 @@
       width="980px"
       @closed="cancelStrategyHistoryRequest"
     >
+      <el-alert v-if="strategyRollbackError" type="error" :title="strategyRollbackError" :closable="false" show-icon />
+      <el-alert v-if="strategyHistoryError" type="error" :title="strategyHistoryError" :closable="false" show-icon />
+      <el-alert v-if="strategyRollbackNotice" type="info" :title="strategyRollbackNotice" :closable="false" show-icon />
+      <p v-if="!strategyHistoryCurrent && strategyVersions.length">以下为上次读取的历史，当前快照尚未确认。</p>
+      <el-button :loading="strategyHistoryLoading" @click="refreshStrategyVersions">刷新策略历史</el-button>
       <el-table v-loading="strategyHistoryLoading" :data="strategyVersions" class="rg-table" size="small">
         <el-table-column prop="snapshotId" label="快照" width="80" />
         <el-table-column prop="strategyVersion" label="策略版本" width="100" />
@@ -327,7 +357,7 @@
               size="small"
               type="primary"
               plain
-              :disabled="!canManage"
+              :disabled="!canRollbackStrategy(row.snapshotId)"
               :loading="rollbackSavingId === `strategy-${row.snapshotId}`"
               @click="rollbackStrategyVersion(row.snapshotId)"
             >回滚</el-button>
@@ -352,6 +382,7 @@ import ReviewCalibrationQueueCard from "@/features/rule-config/components/Review
 import LlmEvaluationWorkbench from "@/features/rule-config/components/LlmEvaluationWorkbench.vue";
 import LlmModelReleaseCenter from "@/features/rule-config/components/LlmModelReleaseCenter.vue";
 import RepositoryPolicyPanel from "@/features/rule-config/components/RepositoryPolicyPanel.vue";
+import { createReviewConfigurationOperationLocks } from "@/features/rule-config/reviewConfigurationOperationLocks";
 import { useReviewPolicyHistory } from "@/features/rule-config/composables/useReviewPolicyHistory";
 import { useReviewRuleCatalog } from "@/features/rule-config/composables/useReviewRuleCatalog";
 import { useReviewRuleEditor } from "@/features/rule-config/composables/useReviewRuleEditor";
@@ -368,33 +399,56 @@ const {
   metrics,
   qualityGroups,
   rules,
+  rulesCurrent,
+  rulesNeedRefresh,
   severityFilter,
   statusFilter,
   strategyPolicy,
   topRuleDocs,
-  loadRules
+  loadRules,
+  cancelRulesRead,
+  invalidateRules
 } = useReviewRuleCatalog();
+const operationLocks = createReviewConfigurationOperationLocks();
 
 const {
   dialogVisible,
   editingRuleId,
   ruleForm,
   saving,
-  statusSavingId,
+  canSaveRule,
+  ruleHasUnsavedChanges,
+  ruleVersionChanged,
+  ruleSaveError,
+  ruleSaveNotice,
+  ruleRefreshError,
+  refreshingRule,
+  refreshEditingRule,
+  busyRuleIds,
+  canChangeRule,
+  canRefreshRule,
+  ruleOperationErrors,
   openCreateDialog,
   openEditDialog,
   saveRule,
   toggleRule
-} = useReviewRuleEditor({ canManage, reloadRules: loadRules, rules });
+} = useReviewRuleEditor({ canManage, reloadRules: loadRules, rules, rulesCurrent, cancelRulesRead, invalidateRules, operationLocks });
 
 const {
   strategySaving,
   strategyTargetMode,
+  canSaveStrategy,
+  strategyHasUnsavedChanges,
+  strategySaveError,
+  strategyRefreshError,
+  strategySaveNotice,
   saveStrategyEnforcement
-} = useReviewStrategyGovernance({ canManage, reloadRules: loadRules, strategyPolicy });
+} = useReviewStrategyGovernance({ canManage, reloadRules: loadRules, strategyPolicy, rulesCurrent, cancelRulesRead, invalidateRules, operationLocks });
 
 const {
   rollbackSavingId,
+  ruleHistoryCurrent, strategyHistoryCurrent, ruleHistoryError, strategyHistoryError, ruleRollbackNotice, strategyRollbackNotice, ruleRollbackError, strategyRollbackError,
+  canRollbackRule, canRollbackStrategy, refreshRuleVersions, refreshStrategyVersions,
   ruleHistoryHasMore,
   ruleHistoryLoading,
   ruleVersionDialogVisible,
@@ -412,7 +466,7 @@ const {
   openStrategyVersions,
   rollbackRuleVersion,
   rollbackStrategyVersion
-} = useReviewPolicyHistory({ canManage, reloadRules: loadRules, rules, strategyPolicy });
+} = useReviewPolicyHistory({ canManage, reloadRules: loadRules, rules, strategyPolicy, rulesCurrent, cancelRulesRead, invalidateRules, operationLocks });
 
 const metricIconMap = {
   blue: ListChecks,

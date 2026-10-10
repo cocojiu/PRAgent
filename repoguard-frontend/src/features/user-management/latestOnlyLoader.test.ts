@@ -51,6 +51,43 @@ describe("latest-only loader", () => {
     await expect(loading).resolves.toBe(false);
     expect(apply).not.toHaveBeenCalled();
   });
+
+  it("aborts the previous read and keeps loading until the newest read finishes", async () => {
+    const loader = createLatestOnlyLoader<string>(vi.fn());
+    const first = deferred<string>(); const second = deferred<string>();
+    let oldSignal!: AbortSignal;
+    const older = loader.load(signal => { oldSignal = signal; return first.promise; });
+    const newer = loader.load(() => second.promise);
+    expect(oldSignal.aborted).toBe(true);
+    expect(loader.loading.value).toBe(true);
+    first.reject(new Error("old error")); await older;
+    expect(loader.loading.value).toBe(true);
+    second.resolve("latest"); await newer;
+    expect(loader.loading.value).toBe(false);
+  });
+
+  it("aborts a pending read on cancellation without applying it later", async () => {
+    const apply = vi.fn(); const loader = createLatestOnlyLoader<string>(apply);
+    const pending = deferred<string>(); let signal!: AbortSignal;
+    const request = loader.load(value => { signal = value; return pending.promise; });
+    loader.cancel();
+    expect(signal.aborted).toBe(true); expect(loader.loading.value).toBe(false);
+    pending.resolve("late"); await request;
+    expect(apply).not.toHaveBeenCalled();
+  });
+
+  it("reports the current read failure and releases its loading state", async () => {
+    const loader = createLatestOnlyLoader<string>(vi.fn());
+    await expect(loader.load(() => Promise.reject(new Error("current failure")))).rejects.toThrow("current failure");
+    expect(loader.loading.value).toBe(false);
+  });
+
+  it("does not start another read after disposal", async () => {
+    const loader = createLatestOnlyLoader<string>(vi.fn()); const request = vi.fn();
+    loader.dispose();
+    await expect(loader.load(request)).resolves.toBe(false);
+    expect(request).not.toHaveBeenCalled();
+  });
 });
 
 const deferred = <T>() => {

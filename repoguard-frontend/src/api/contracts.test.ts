@@ -7,10 +7,11 @@ const frontendPerformance = vi.hoisted(() => ({
 vi.mock("@/observability/frontendPerformanceBuffer", () => frontendPerformance);
 
 import { apiRequest } from "./contracts";
+import { fetchUsers, fetchUserOperationAudits } from "./users";
 import { fetchReviewAssignmentOptions, confirmReviewMemberAssignment } from "./reviewAssignment";
 import { fetchCodeownersRecommendations, acceptCodeownersRecommendation } from "./codeowners";
 import { fetchCiSarifSetup, issueCiSarifCredential } from "./ciSarif";
-import { fetchReviews, fetchReviewListSummary, fetchReviewRepositories } from "./reviews";
+import { fetchGithubCommentPreview, fetchReviews, fetchReviewListSummary, fetchReviewRepositories } from "./reviews";
 import { clearAuthToken, saveAuthToken } from "./authSession";
 import {
   compareLlmEvaluationReports,
@@ -18,6 +19,21 @@ import {
   exportLlmEvaluationReport,
   fetchLlmEvaluationReport,
   fetchLlmEvaluationReports,
+  fetchLlmModelReleaseCenter,
+  fetchLlmModelReleaseRuntimeMetrics,
+  fetchLlmModelReleaseAudits,
+  fetchGithubIntegrationConfig,
+  fetchMysqlIntegrationConfig,
+  fetchRabbitMqIntegrationConfig,
+  fetchReviewPolicyConfig,
+  fetchReviewRules,
+  fetchBackupStatus,
+  fetchGithubChecksSetup,
+  fetchGithubFeedback,
+  fetchNotificationEvents,
+  fetchNotificationBindings,
+  fetchNotificationDeliveries,
+  fetchSystemSettings,
   transitionLlmEvaluationReportLifecycle
 } from "./config";
 import {
@@ -41,6 +57,37 @@ const okResponse = (data: unknown) =>
   });
 
 describe("apiRequest", () => {
+  it.each([
+    { name: "comment preview", read: (signal: AbortSignal) => fetchGithubCommentPreview(7, { page: 2 }, { signal }) },
+    { name: "GitHub integration", read: (signal: AbortSignal) => fetchGithubIntegrationConfig({ signal }) },
+    { name: "MySQL integration", read: (signal: AbortSignal) => fetchMysqlIntegrationConfig({ signal }) },
+    { name: "RabbitMQ integration", read: (signal: AbortSignal) => fetchRabbitMqIntegrationConfig({ signal }) },
+    { name: "review policy", read: (signal: AbortSignal) => fetchReviewPolicyConfig({ signal }) },
+    { name: "review rules", read: (signal: AbortSignal) => fetchReviewRules({ signal }) },
+    { name: "backup status", read: (signal: AbortSignal) => fetchBackupStatus({ signal }) },
+    { name: "GitHub Checks setup", read: (signal: AbortSignal) => fetchGithubChecksSetup("octo", "repo", { signal }) },
+    { name: "GitHub feedback", read: (signal: AbortSignal) => fetchGithubFeedback(20, { signal }) },
+    { name: "notification events", read: (signal: AbortSignal) => fetchNotificationEvents({ page: 2 }, { signal }) },
+    { name: "notification bindings", read: (signal: AbortSignal) => fetchNotificationBindings({ page: 2 }, { signal }) },
+    { name: "notification deliveries", read: (signal: AbortSignal) => fetchNotificationDeliveries({ page: 2 }, { signal }) },
+    { name: "system settings", read: (signal: AbortSignal) => fetchSystemSettings({ signal }) },
+    { name: "release center", read: (signal: AbortSignal) => fetchLlmModelReleaseCenter(7, { signal }) },
+    { name: "runtime metrics", read: (signal: AbortSignal) => fetchLlmModelReleaseRuntimeMetrics({ days: 7 }, { signal }) },
+    { name: "release audits", read: (signal: AbortSignal) => fetchLlmModelReleaseAudits({ page: 2 }, { signal }) },
+    { name: "user list", read: (signal: AbortSignal) => fetchUsers({ page: 2 }, { signal }) },
+    { name: "user audits", read: (signal: AbortSignal) => fetchUserOperationAudits({ page: 2 }, { signal }) }
+  ])("cancels the underlying $name read through its API wrapper", async ({ read }) => {
+    const fetchMock = vi.fn((_url: string, options: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      options.signal!.addEventListener("abort", () => reject(new DOMException("cancelled", "AbortError")), { once: true });
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const controller = new AbortController();
+    const pending = read(controller.signal);
+    const rejection = expect(pending).rejects.toThrow();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    controller.abort(); await rejection;
+    expect(fetchMock.mock.calls[0]![1].signal!.aborted).toBe(true);
+  });
   it("binds SARIF setup and credential requests to task, attempt and selected tenant without storing credentials", async () => {
     const binding = { taskId: 9, attemptId: 17, commitSha: "a".repeat(40), recentUploads: [] };
     const credential = { ...binding, credential: "contract-only-credential", expiresAt: 1800000000 };
@@ -231,7 +278,9 @@ describe("apiRequest", () => {
   it.each([
     { name: "review list", load: (signal: AbortSignal) => fetchReviews({ page: 1, pageSize: 8 }, { signal }) },
     { name: "review summary", load: (signal: AbortSignal) => fetchReviewListSummary({}, { signal }) },
-    { name: "repository options", load: (signal: AbortSignal) => fetchReviewRepositories({ signal }) }
+    { name: "repository options", load: (signal: AbortSignal) => fetchReviewRepositories({ signal }) },
+    { name: "notification center", load: (signal: AbortSignal) => fetchNotifications({ signal }) },
+    { name: "notification read keys", load: (signal: AbortSignal) => fetchNotificationReadKeys({ signal }) }
   ])("forwards cancellation to fetch through the $name wrapper", async ({ load }) => {
     let signal: AbortSignal | undefined;
     vi.stubGlobal("fetch", vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {

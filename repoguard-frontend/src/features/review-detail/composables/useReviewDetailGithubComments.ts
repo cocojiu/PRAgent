@@ -46,6 +46,8 @@ export const useReviewDetailGithubComments = () => {
   let publishPollAttempts = 0;
   let activePublishBatchId: number | null = null;
   let historyController: AbortController | null = null;
+  let previewController: AbortController | null = null;
+  let commentTaskId: number | null = null;
   let historyTaskId: number | null = null;
   let disposed = false;
   let stateVersion = 0;
@@ -77,29 +79,45 @@ export const useReviewDetailGithubComments = () => {
   const isTerminalPublishStatus = (status?: string) =>
     Boolean(status && GITHUB_COMMENT_PUBLISH_TERMINAL_STATUSES.has(status));
 
+  const useTaskContext = (id: number) => {
+    if (commentTaskId !== null && commentTaskId !== id) clearGithubCommentState();
+    commentTaskId = id;
+  };
+
   const loadGithubCommentPreview = async (id: number, options: GithubCommentPreviewLoadOptions = {}) => {
+    if (disposed) return;
+    useTaskContext(id);
+    previewController?.abort();
+    const controller = new AbortController();
+    previewController = controller;
+    const current = () => !disposed && commentTaskId === id && previewController === controller && !controller.signal.aborted;
     previewError.value = "";
     previewLoading.value = true;
     const page = options.page ?? previewPage.value;
     const commentableOnly = options.commentableOnly ?? previewCommentableOnly.value;
     try {
-      githubCommentPreview.value = await fetchGithubCommentPreview(id, {
+      const preview = await fetchGithubCommentPreview(id, {
         page,
         pageSize: previewPageSize,
         commentableOnly
-      });
-      previewPage.value = githubCommentPreview.value.page;
-      previewCommentableOnly.value = githubCommentPreview.value.commentableOnly;
+      }, { signal: controller.signal });
+      if (!current()) return;
+      if (preview.taskId !== id) throw new Error("评论预览响应不符合当前任务");
+      githubCommentPreview.value = preview;
+      previewPage.value = preview.page;
+      previewCommentableOnly.value = preview.commentableOnly;
     } catch (error) {
+      if (!current()) return;
       githubCommentPreview.value = null;
       previewError.value = getErrorMessage(error, "请求失败");
     } finally {
-      previewLoading.value = false;
+      if (current()) previewLoading.value = false;
     }
   };
 
   const readPublicationBatches = async (id: number, options: GithubCommentHistoryLoadOptions, showLoading: boolean) => {
     if (disposed) return null;
+    useTaskContext(id);
     if (historyTaskId !== null && historyTaskId !== id) {
       clearGithubCommentPreviewAndHistory();
     }
@@ -207,6 +225,10 @@ export const useReviewDetailGithubComments = () => {
 
   const clearGithubCommentPreviewAndHistory = () => {
     stateVersion += 1;
+    previewController?.abort();
+    previewController = null;
+    commentTaskId = null;
+    previewLoading.value = false;
     stopGithubCommentPublishPolling();
     publishingComments.value = false;
     clearHistoryItems();

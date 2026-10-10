@@ -1,4 +1,5 @@
-import { computed, ref } from "vue";
+import { computed, getCurrentScope, onScopeDispose, reactive, ref, watch } from "vue";
+import type { ApiRequestOptions } from "@/api/contracts";
 import {
   fetchLlmEvaluationReports,
   fetchLlmModelReleaseAudits,
@@ -21,6 +22,11 @@ import type {
   LlmModelReleaseRequest
 } from "@/types";
 import { getErrorMessage } from "@/utils/errors";
+import { formatDateTime } from "@/utils/dateTime";
+
+const readKeys = ["center", "reports", "runtimeMetrics", "audits"] as const;
+type ReadKey = typeof readKeys[number];
+type ReadState = { loading: boolean; error: string; lastSuccessAt: string; lastSuccessLabel: string };
 
 export const buildLlmModelReleaseRequest = (
   report: LlmEvaluationReport,
@@ -59,7 +65,10 @@ export const useLlmModelReleaseCenter = () => {
   const audits = ref<LlmModelReleaseAudit[]>([]);
   const auditTotal = ref(0);
   const auditPage = ref(1);
-  const auditLoading = ref(false);
+  const moduleStates = reactive(Object.fromEntries(readKeys.map(key => [key, {
+    loading: false, error: "", lastSuccessAt: "", lastSuccessLabel: ""
+  }])) as Record<ReadKey, ReadState>);
+  const auditLoading = computed(() => moduleStates.audits.loading);
   const auditOperation = ref("");
   const auditFilterAction = ref("");
   const auditOperator = ref("");
@@ -68,59 +77,80 @@ export const useLlmModelReleaseCenter = () => {
   const trendDays = ref(30);
   const releaseKey = ref("");
   const canaryTraffic = ref(10);
-  const loading = ref(false);
+  const loading = computed(() => readKeys.some(key => moduleStates[key].loading));
   const action = ref("");
   const errorMessage = ref("");
-  let requestEpoch = 0;
+  let disposed = false;
+  const controllers: Partial<Record<ReadKey, AbortController>> = {};
 
   const selectedReport = computed(() =>
     reports.value.find((report) => report.id === selectedReportId.value) ?? null
   );
+  const releaseDataReady = computed(() => !disposed && center.value !== null
+    && [moduleStates.center, moduleStates.reports].every(state =>
+      !state.loading && !state.error && Boolean(state.lastSuccessAt)));
 
-  const load = async () => {
-    const epoch = ++requestEpoch;
-    loading.value = true;
-    errorMessage.value = "";
+  const cancelRead = (key: ReadKey) => {
+    controllers[key]?.abort();
+    delete controllers[key];
+    moduleStates[key].loading = false;
+  };
+  const loadRead = async <T>(key: ReadKey, request: (options: ApiRequestOptions) => Promise<T>,
+    apply: (value: T) => void, fallback: string, label: string) => {
+    if (disposed) return;
+    cancelRead(key);
+    const controller = new AbortController();
+    controllers[key] = controller;
+    const current = () => !disposed && controllers[key] === controller && !controller.signal.aborted;
+    const state = moduleStates[key];
+    state.loading = true;
+    state.error = "";
     try {
-      const [nextCenter, nextReports, nextRuntimeMetrics] = await Promise.all([
-        fetchLlmModelReleaseCenter(trendDays.value),
-        fetchLlmEvaluationReports(50),
-        fetchLlmModelReleaseRuntimeMetrics({ days: trendDays.value, limit: 168 }),
-        loadAudits(1)
-      ]);
-      if (epoch !== requestEpoch) return;
-      center.value = nextCenter;
-      reports.value = nextReports;
-      runtimeMetrics.value = nextRuntimeMetrics;
-      if (!nextReports.some((report) => report.id === selectedReportId.value)) {
-        selectedReportId.value = nextReports[0]?.id;
-      }
+      const value = await request({ signal: controller.signal });
+      if (!current()) return;
+      apply(value);
+      state.lastSuccessAt = formatDateTime(new Date());
+      state.lastSuccessLabel = label;
     } catch (error) {
-      if (epoch === requestEpoch) errorMessage.value = getErrorMessage(error, "模型发布中心加载失败");
+      if (current()) state.error = getErrorMessage(error, fallback);
     } finally {
-      if (epoch === requestEpoch) loading.value = false;
+      if (current()) { state.loading = false; delete controllers[key]; }
     }
   };
 
-  const loadAudits = async (page = auditPage.value) => {
-    auditLoading.value = true;
-    try {
-      const result = await fetchLlmModelReleaseAudits({
-        releaseKey: releaseKey.value.trim() || undefined,
-        operator: auditOperator.value.trim() || undefined,
-        action: auditFilterAction.value || undefined,
-        page,
-        pageSize: 20
-      });
+  const load = async () => {
+    if (disposed) return;
+    const days = trendDays.value;
+    errorMessage.value = "";
+    await Promise.all([
+      loadRead("center", options => fetchLlmModelReleaseCenter(days, options),
+        value => { center.value = value; }, "模型发布状态加载失败", `${days} 天窗口`),
+      loadRead("reports", options => fetchLlmEvaluationReports(50, options), value => {
+        reports.value = value;
+        if (!value.some(report => report.id === selectedReportId.value)) selectedReportId.value = value[0]?.id;
+      }, "评估报告加载失败", "最近 50 份报告"),
+      loadRead("runtimeMetrics", options => fetchLlmModelReleaseRuntimeMetrics({ days, limit: 168 }, options),
+        value => { runtimeMetrics.value = value; }, "发布运行指标加载失败", `${days} 天窗口`),
+      loadAudits(1)
+    ]);
+  };
+
+  const loadAudits = (page = auditPage.value) => {
+    const query = { releaseKey: releaseKey.value.trim() || undefined, operator: auditOperator.value.trim() || undefined,
+      action: auditFilterAction.value || undefined, page, pageSize: 20 };
+    return loadRead("audits", options => fetchLlmModelReleaseAudits(query, options), result => {
       audits.value = result.items;
       auditTotal.value = result.total;
       auditPage.value = page;
-    } catch (error) {
-      errorMessage.value = getErrorMessage(error, "发布审计加载失败");
-    } finally {
-      auditLoading.value = false;
-    }
+    }, "发布审计加载失败", `${query.releaseKey || "全部版本"} / ${query.operator || "全部操作者"} / ${query.action || "全部动作"} / 第 ${page} 页`);
   };
+  watch([releaseKey, auditOperator, auditFilterAction], () => {
+    if (disposed) return;
+    cancelRead("audits");
+    moduleStates.audits.error = "筛选条件已变更，请刷新审计";
+  }, { flush: "sync" });
+  const dispose = () => { disposed = true; readKeys.forEach(cancelRead); };
+  if (getCurrentScope()) onScopeDispose(dispose);
 
   const verifyAudit = async (auditId: number) => {
     auditOperation.value = `verify-${auditId}`;
@@ -177,6 +207,10 @@ export const useLlmModelReleaseCenter = () => {
       errorMessage.value = "小样本验收报告不能用于模型发布";
       return;
     }
+    if (!releaseDataReady.value) {
+      errorMessage.value = "请刷新发布状态和评估报告后再操作";
+      return;
+    }
     await runAction("shadow", () =>
       registerLlmModelShadowRelease(buildLlmModelReleaseRequest(report, releaseKey.value, 0))
     );
@@ -193,6 +227,10 @@ export const useLlmModelReleaseCenter = () => {
     }
     if (report.status !== "COMPLETED") {
       errorMessage.value = "小样本验收报告不能用于模型发布";
+      return;
+    }
+    if (!releaseDataReady.value) {
+      errorMessage.value = "请刷新发布状态和评估报告后再操作";
       return;
     }
     const trafficPercent = release?.state === "CANARY"
@@ -245,6 +283,9 @@ export const useLlmModelReleaseCenter = () => {
     center,
     errorMessage,
     loading,
+    moduleStates,
+    releaseDataReady,
+    dispose,
     load,
     loadAudits,
     promote,

@@ -1,5 +1,5 @@
 <template>
-  <div v-loading="loading" class="users-page">
+  <div class="users-page">
     <div class="page-heading page-heading-row">
       <div>
         <h1>用户管理</h1>
@@ -31,7 +31,7 @@
         </el-input>
       </div>
 
-      <el-table :data="users" class="rg-table task-table" size="large" aria-label="用户管理列表">
+      <el-table v-loading="usersLoading" :data="users" class="rg-table task-table" size="large" aria-label="用户管理列表">
         <el-table-column label="账号" min-width="220">
           <template #default="{ row }">
             <div class="user-account-cell">
@@ -117,7 +117,7 @@
         <el-button :icon="History" :loading="auditLoading" @click="loadAudits">刷新记录</el-button>
       </div>
 
-      <el-table :data="audits" class="rg-table task-table" size="large" aria-label="用户操作审计列表">
+      <el-table v-loading="auditLoading" :data="audits" class="rg-table task-table" size="large" aria-label="用户操作审计列表">
         <el-table-column label="时间" min-width="160">
           <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
         </el-table-column>
@@ -205,8 +205,6 @@ import { canManage, currentUser } from "@/stores/authState";
 import { getErrorMessage } from "@/utils/errors";
 import { formatDateTime } from "@/utils/dateTime";
 
-const loading = ref(false);
-const auditLoading = ref(false);
 const keyword = ref("");
 const roleFilter = ref<UserRole | "">("");
 const statusFilter = ref<UserStatus | "">("");
@@ -222,6 +220,7 @@ const savingIds = ref<Set<number>>(new Set());
 const createDialogVisible = ref(false);
 const creatingUser = ref(false);
 let userFilterDebounceTimer: ReturnType<typeof setTimeout> | undefined;
+let disposed = false;
 const createForm = reactive<UserCreateRequest>({
   username: "",
   email: "",
@@ -259,13 +258,13 @@ const latestUsersLoader = createLatestOnlyLoader<Awaited<ReturnType<typeof fetch
   usersTotal.value = page.total;
 });
 
-const loadUsers = () => latestUsersLoader.load(() => fetchUsers({
+const loadUsers = () => latestUsersLoader.load(signal => fetchUsers({
     page: usersPage.value,
     pageSize: usersPageSize.value,
     role: roleFilter.value,
     status: statusFilter.value,
     keyword: keyword.value.trim() || undefined
-  }));
+  }, { signal }));
 
 const loadUsersWithMessage = async () => {
   try {
@@ -279,31 +278,22 @@ const latestAuditsLoader = createLatestOnlyLoader<Awaited<ReturnType<typeof fetc
   audits.value = page.items;
   auditTotal.value = page.total;
 });
+const usersLoading = latestUsersLoader.loading;
+const auditLoading = latestAuditsLoader.loading;
+const loading = computed(() => usersLoading.value || auditLoading.value);
 
 const loadAudits = async () => {
-  auditLoading.value = true;
   try {
-    await latestAuditsLoader.load(() => fetchUserOperationAudits({
+    await latestAuditsLoader.load(signal => fetchUserOperationAudits({
       page: auditPage.value,
       pageSize: auditPageSize.value
-    }));
+    }, { signal }));
   } catch (error) {
-    ElMessage.error(getErrorMessage(error, "用户管理操作失败"));
-  } finally {
-    auditLoading.value = false;
+    ElMessage.error(getErrorMessage(error, "操作记录加载失败"));
   }
 };
 
-const loadAll = async () => {
-  loading.value = true;
-  try {
-    await Promise.all([loadUsers(), loadAudits()]);
-  } catch (error) {
-    ElMessage.error(getErrorMessage(error, "用户管理操作失败"));
-  } finally {
-    loading.value = false;
-  }
-};
+const loadAll = () => Promise.all([loadUsersWithMessage(), loadAudits()]);
 
 const isSaving = (id: number) => savingIds.value.has(id);
 
@@ -319,13 +309,13 @@ const setSaving = (id: number, saving: boolean) => {
 
 const changeUsersPage = async (page: number) => {
   usersPage.value = page;
-  await loadUsers();
+  await loadUsersWithMessage();
 };
 
 const changeUsersPageSize = async (pageSize: number) => {
   usersPageSize.value = pageSize;
   usersPage.value = 1;
-  await loadUsers();
+  await loadUsersWithMessage();
 };
 
 const changeAuditPage = async (page: number) => {
@@ -367,16 +357,18 @@ const submitCreateUser = async () => {
       password: createForm.password,
       confirmPassword: createForm.confirmPassword
     });
-    usersPage.value = 1;
-    await loadUsers();
-    await loadAudits();
-    createDialogVisible.value = false;
-    ElMessage.success("用户已创建");
   } catch (error) {
     ElMessage.error(getErrorMessage(error, "用户创建失败"));
+    return;
   } finally {
     creatingUser.value = false;
   }
+  if (disposed) return;
+  createDialogVisible.value = false;
+  resetCreateForm();
+  usersPage.value = 1;
+  ElMessage.success("用户已创建");
+  await Promise.all([loadUsersWithMessage(), loadAudits()]);
 };
 
 const resetCreateForm = () => {
@@ -388,11 +380,11 @@ const resetCreateForm = () => {
 
 const changeRole = async (user: ManagedUser) => {
   if (isSaving(user.id)) {
-    await loadUsers();
+    await loadUsersWithMessage();
     return;
   }
   if (!canManage.value) {
-    await loadUsers();
+    await loadUsersWithMessage();
     return;
   }
   const nextRole = user.role;
@@ -404,7 +396,7 @@ const changeRole = async (user: ManagedUser) => {
     ElMessage.success("用户角色已更新");
   } catch (error) {
     ElMessage.error(getErrorMessage(error, "用户管理操作失败"));
-    await loadUsers();
+    await loadUsersWithMessage();
   } finally {
     setSaving(user.id, false);
   }
@@ -468,6 +460,7 @@ watch([roleFilter, statusFilter], () => {
 });
 
 watch(keyword, () => {
+  latestUsersLoader.cancel();
   usersPage.value = 1;
   if (userFilterDebounceTimer) {
     clearTimeout(userFilterDebounceTimer);
@@ -475,14 +468,15 @@ watch(keyword, () => {
   userFilterDebounceTimer = setTimeout(() => {
     void loadUsersWithMessage();
   }, 350);
-});
+}, { flush: "sync" });
 
 onUnmounted(() => {
+  disposed = true;
   if (userFilterDebounceTimer) {
     clearTimeout(userFilterDebounceTimer);
   }
-  latestUsersLoader.cancel();
-  latestAuditsLoader.cancel();
+  latestUsersLoader.dispose();
+  latestAuditsLoader.dispose();
 });
 
 onMounted(loadAll);

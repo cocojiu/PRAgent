@@ -1,5 +1,8 @@
 <template>
   <el-dialog v-model="visibleModel" :title="editingBindingId ? '编辑消息通知绑定' : '新增消息通知绑定'" width="640px">
+    <el-alert v-if="saveError" :title="saveError" type="error" :closable="false" />
+    <p v-if="saving" role="status">正在保存本次提交；等待期间的新编辑会保留。</p>
+    <p v-else-if="hasUnsavedChanges" role="status">有未保存的修改，请再次保存。</p>
     <el-form label-width="120px">
       <el-form-item label="名称">
         <el-input v-model="form.name" />
@@ -37,7 +40,7 @@
     </el-form>
     <template #footer>
       <el-button @click="visibleModel = false">取消</el-button>
-      <el-button type="primary" :loading="saving" :disabled="!canManage" @click="emit('save')">保存</el-button>
+      <el-button type="primary" :loading="saving" :disabled="!canManage || !canSave" @click="emit('save')">保存</el-button>
     </template>
   </el-dialog>
 </template>
@@ -52,6 +55,9 @@ const props = defineProps<{
   form: NotificationBindingRequest;
   saving: boolean;
   visible: boolean;
+  canSave: boolean;
+  hasUnsavedChanges: boolean;
+  saveError: string;
 }>();
 
 const emit = defineEmits<{

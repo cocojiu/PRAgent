@@ -1,4 +1,4 @@
-export type IntegrationStatus = "connected" | "missing_secret" | "failed";
+export type IntegrationStatus = "connected" | "missing_secret" | "failed" | "pending";
 export type SecretStatus = "missing" | "configured" | "key_mismatch" | "decrypt_failed";
 
 export interface IntegrationField {

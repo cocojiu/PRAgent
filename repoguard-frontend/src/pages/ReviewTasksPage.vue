@@ -157,6 +157,9 @@ const { creatingTask, createReviewFromSelectedPullRequest } = useReviewTaskCreat
 
 const { retryingTaskId, retryTask } = useReviewTaskRetry({
   canManage,
+  getTask: id => reviewTasks.value.find(task => task.id === id),
+  getContextKey: () => JSON.stringify([currentPage.value, pageSize.value, repoFilter.value, statusFilter.value,
+    riskFilter.value, sourceFilter.value, keyword.value]),
   onRetried: loadTasks
 });
 

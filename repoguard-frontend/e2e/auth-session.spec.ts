@@ -30,6 +30,9 @@ const fulfillJson = (route: Route, data: unknown, headers?: Record<string, strin
 
 const installSeedApi = async (page: Page, role: SeedRole = "ADMIN") => {
   let failNextCurrentUser = false;
+  let failNextProfileRead = false;
+  let currentUserReads = 0;
+  let nonGetRequests = 0;
   let refreshCount = 0;
   let refreshCsrfHeader = "";
   let logoutCsrfHeader = "";
@@ -37,6 +40,7 @@ const installSeedApi = async (page: Page, role: SeedRole = "ADMIN") => {
   await page.route("**/api/**", async route => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
+    if (request.method() !== "GET") nonGetRequests += 1;
 
     if (path === "/api/v1/auth/login") {
       await fulfillJson(route, {
@@ -52,6 +56,12 @@ const installSeedApi = async (page: Page, role: SeedRole = "ADMIN") => {
     }
 
     if (path === "/api/v1/auth/me") {
+      currentUserReads += 1;
+      if (failNextProfileRead) {
+        failNextProfileRead = false;
+        await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ success: false, code: "UNAVAILABLE", message: "资料暂时不可用" }) });
+        return;
+      }
       if (failNextCurrentUser) {
         failNextCurrentUser = false;
         await route.fulfill({ status: 401, contentType: "application/json", body: "{}" });
@@ -95,6 +105,9 @@ const installSeedApi = async (page: Page, role: SeedRole = "ADMIN") => {
   });
 
   return {
+    failProfileReadOnce: () => { failNextProfileRead = true; },
+    currentUserReads: () => currentUserReads,
+    nonGetRequests: () => nonGetRequests,
     expireCurrentUserOnce: () => {
       failNextCurrentUser = true;
     },
@@ -170,3 +183,23 @@ test("real browser denies a non-management user the management deep link", async
   await expect(page.getByText("总览", { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("link", { name: "用户管理" })).toHaveCount(0);
 });
+
+for (const role of ["ADMIN", "REVIEWER"] as const) {
+  test(`real browser opens a read-only profile and retries failed reads for ${role}`, async ({ page }) => {
+    const seed = await installSeedApi(page, role); await loginFromDeepLink(page, role);
+    const writesBefore = seed.nonGetRequests(); const readsBefore = seed.currentUserReads();
+    await page.locator("button.user").click(); await page.getByRole("menuitem", { name: "个人资料" }).click();
+    const dialog = page.getByRole("dialog", { name: "个人资料" }); await expect(dialog).toBeVisible();
+    await expect(dialog.getByText(`${role.toLowerCase()}@example.test`, { exact: true })).toBeVisible();
+    await expect.poll(seed.currentUserReads).toBeGreaterThan(readsBefore); await expect(dialog.getByRole("status")).toHaveCount(0);
+    await expect(dialog.locator("input,textarea,select")).toHaveCount(0);
+    seed.failProfileReadOnce(); await dialog.getByRole("button", { name: "刷新资料" }).click();
+    await expect(dialog.getByText("个人资料读取失败，请重试刷新。", { exact: true })).toBeVisible();
+    await expect(dialog.getByText(/当前状态尚未确认/)).toBeVisible();
+    await expect(dialog.getByText("资料暂时不可用", { exact: true })).toHaveCount(0);
+    await dialog.getByRole("button", { name: "刷新资料" }).click(); await expect(dialog.getByText("个人资料读取失败，请重试刷新。", { exact: true })).toHaveCount(0);
+    await expect(dialog.getByText(/当前状态尚未确认/)).toHaveCount(0); expect(seed.nonGetRequests()).toBe(writesBefore);
+    await dialog.getByRole("button", { name: "关闭", exact: true }).click(); await expect(dialog).not.toBeVisible();
+    await expect(page.locator("button.user")).toContainText(userFor(role).username);
+  });
+}

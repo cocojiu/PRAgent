@@ -34,14 +34,14 @@ export type DataRetentionCleanupAuditQuery = {
 export const fetchBackupStatus = (options?: ApiRequestOptions) =>
   apiRequest("fetchBackupStatus", undefined, options);
 
-export const fetchGithubIntegrationConfig = () =>
-  apiRequest("fetchGithubIntegrationConfig", undefined);
+export const fetchGithubIntegrationConfig = (options?: ApiRequestOptions) =>
+  apiRequest("fetchGithubIntegrationConfig", undefined, options);
 
 export const updateGithubIntegrationConfig = (payload: GithubIntegrationConfigRequest) =>
   apiRequest("updateGithubIntegrationConfig", payload);
 
-export const fetchGithubChecksSetup = (organization: string, repository: string) =>
-  apiRequest("fetchGithubChecksSetup", { organization, repository });
+export const fetchGithubChecksSetup = (organization: string, repository: string, options?: ApiRequestOptions) =>
+  apiRequest("fetchGithubChecksSetup", { organization, repository }, options);
 
 export const previewGithubChecks = (payload: GithubChecksPreviewRequest) =>
   apiRequest("previewGithubChecks", payload);
@@ -49,19 +49,19 @@ export const previewGithubChecks = (payload: GithubChecksPreviewRequest) =>
 export const updateGithubChecksPolicy = (payload: GithubChecksPolicyRequest) =>
   apiRequest("updateGithubChecksPolicy", payload);
 
-export const fetchMysqlIntegrationConfig = () =>
-  apiRequest("fetchMysqlIntegrationConfig", undefined);
+export const fetchMysqlIntegrationConfig = (options?: ApiRequestOptions) =>
+  apiRequest("fetchMysqlIntegrationConfig", undefined, options);
 
 export const updateMysqlIntegrationConfig = (payload: ServiceIntegrationConfigRequest) =>
   apiRequest("updateMysqlIntegrationConfig", payload);
 
-export const fetchRabbitMqIntegrationConfig = () =>
-  apiRequest("fetchRabbitMqIntegrationConfig", undefined);
+export const fetchRabbitMqIntegrationConfig = (options?: ApiRequestOptions) =>
+  apiRequest("fetchRabbitMqIntegrationConfig", undefined, options);
 
 export const updateRabbitMqIntegrationConfig = (payload: ServiceIntegrationConfigRequest) =>
   apiRequest("updateRabbitMqIntegrationConfig", payload);
 
-export const fetchReviewPolicyConfig = () => apiRequest("fetchReviewPolicyConfig", undefined);
+export const fetchReviewPolicyConfig = (options?: ApiRequestOptions) => apiRequest("fetchReviewPolicyConfig", undefined, options);
 
 export const updateReviewPolicyConfig = (payload: ReviewPolicyConfigRequest) =>
   apiRequest("updateReviewPolicyConfig", payload);
@@ -87,7 +87,7 @@ export const activateRepositorySuppression = (id: number, reason?: string) =>
 export const revokeRepositorySuppression = (id: number, reason?: string) =>
   apiRequest("revokeRepositorySuppression", { id, reason });
 
-export const fetchSystemSettings = () => apiRequest("fetchSystemSettings", undefined);
+export const fetchSystemSettings = (options?: ApiRequestOptions) => apiRequest("fetchSystemSettings", undefined, options);
 
 export const updateSystemSettings = (payload: SystemSettingsRequest) =>
   apiRequest("updateSystemSettings", payload);
@@ -122,19 +122,20 @@ export const pauseSecretReEncryptionJob = (jobId: number) =>
 export const resumeSecretReEncryptionJob = (jobId: number) =>
   apiRequest("resumeSecretReEncryptionJob", { jobId });
 
-export const fetchReviewRules = () => apiRequest("fetchReviewRules", undefined);
+export const fetchReviewRules = (options?: ApiRequestOptions) => apiRequest("fetchReviewRules", undefined, options);
 
 export const fetchReviewCalibrationQueue = (
   ruleId: string,
   options: { limit?: number; includeIgnored?: boolean } = {}
 ) => apiRequest("fetchReviewCalibrationQueue", { ruleId, ...options });
 
-export const fetchLlmModelReleaseCenter = (trendDays = 30) =>
-  apiRequest("fetchLlmModelReleaseCenter", { trendDays });
+export const fetchLlmModelReleaseCenter = (trendDays = 30, requestOptions?: ApiRequestOptions) =>
+  apiRequest("fetchLlmModelReleaseCenter", { trendDays }, requestOptions);
 
 export const fetchLlmModelReleaseRuntimeMetrics = (
-  options: { releaseKey?: string; days?: number; limit?: number } = {}
-) => apiRequest("fetchLlmModelReleaseRuntimeMetrics", options);
+  options: { releaseKey?: string; days?: number; limit?: number } = {},
+  requestOptions?: ApiRequestOptions
+) => apiRequest("fetchLlmModelReleaseRuntimeMetrics", options, requestOptions);
 
 export const fetchLlmModelReleaseDrift = () => apiRequest("fetchLlmModelReleaseDrift", undefined);
 
@@ -152,8 +153,8 @@ export type LlmModelReleaseAuditQuery = {
   pageSize?: number;
 };
 
-export const fetchLlmModelReleaseAudits = (options: LlmModelReleaseAuditQuery = {}) =>
-  apiRequest("fetchLlmModelReleaseAudits", options);
+export const fetchLlmModelReleaseAudits = (options: LlmModelReleaseAuditQuery = {}, requestOptions?: ApiRequestOptions) =>
+  apiRequest("fetchLlmModelReleaseAudits", options, requestOptions);
 
 export const verifyLlmModelReleaseAudit = (auditId: number) =>
   apiRequest("verifyLlmModelReleaseAudit", { auditId });
@@ -257,8 +258,8 @@ export type NotificationBindingPageQuery = {
   provider?: string;
 };
 
-export const fetchNotificationBindings = (query: NotificationBindingPageQuery = {}) =>
-  apiRequest("fetchNotificationBindings", query);
+export const fetchNotificationBindings = (query: NotificationBindingPageQuery = {}, options?: ApiRequestOptions) =>
+  apiRequest("fetchNotificationBindings", query, options);
 
 export const createNotificationBinding = (payload: NotificationBindingRequest) =>
   apiRequest("createNotificationBinding", payload);
@@ -275,16 +276,16 @@ export const deleteNotificationBinding = (id: number) =>
 export const testNotificationBinding = (id: number) =>
   apiRequest("testNotificationBinding", { id });
 
-export const fetchNotificationEvents = (params: { page?: number; pageSize?: number; status?: string; taskId?: number } = {}) =>
-  apiRequest("fetchNotificationEvents", params);
+export const fetchNotificationEvents = (params: { page?: number; pageSize?: number; status?: string; taskId?: number } = {}, options?: ApiRequestOptions) =>
+  apiRequest("fetchNotificationEvents", params, options);
 
 export const retryNotificationEvent = (id: number) =>
   apiRequest("retryNotificationEvent", { id });
 
-export const fetchNotificationDeliveries = (params: { page?: number; pageSize?: number; status?: string; taskId?: number } = {}) =>
-  apiRequest("fetchNotificationDeliveries", params);
+export const fetchNotificationDeliveries = (params: { page?: number; pageSize?: number; status?: string; taskId?: number } = {}, options?: ApiRequestOptions) =>
+  apiRequest("fetchNotificationDeliveries", params, options);
 
-export const fetchGithubFeedback = (limit = 20) => apiRequest("fetchGithubFeedback", { limit });
+export const fetchGithubFeedback = (limit = 20, options?: ApiRequestOptions) => apiRequest("fetchGithubFeedback", { limit }, options);
 export const retryGithubFeedback = (id: number) => apiRequest("retryGithubFeedback", { id });
 
 export const fetchFeedbackSummary = () => apiRequest("fetchFeedbackSummary", undefined);

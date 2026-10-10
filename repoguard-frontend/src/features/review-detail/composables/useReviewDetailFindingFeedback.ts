@@ -1,4 +1,4 @@
-import { ref } from "vue";
+import { getCurrentScope, onScopeDispose, ref, watch } from "vue";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import { ElMessageBox } from "element-plus/es/components/message-box/index.mjs";
 import { updateFindingFeedback } from "@/api/reviews";
@@ -25,6 +25,18 @@ export const useReviewDetailFindingFeedback = ({
   selectedTask
 }: UseReviewDetailFindingFeedbackOptions) => {
   const feedbackSavingId = ref<number | null>(null);
+  let requestSequence = 0;
+  let disposed = false;
+  const cancelFindingFeedback = () => {
+    requestSequence += 1;
+    feedbackSavingId.value = null;
+  };
+  watch([() => selectedTask.value?.id, () => selectedTask.value?.commit, () => selectedTask.value?.archived, () => canManage.value],
+    cancelFindingFeedback, { flush: "sync" });
+  if (getCurrentScope()) onScopeDispose(() => {
+    disposed = true;
+    cancelFindingFeedback();
+  });
 
   const applyFindingFeedback = (response: FindingFeedbackResponse) => {
     if (!selectedTask.value) {
@@ -47,10 +59,15 @@ export const useReviewDetailFindingFeedback = ({
   };
 
   const submitFindingFeedback = async (findingId: number, status: FindingFeedbackStatus) => {
-    if (!selectedTask.value || !canManage.value || feedbackSavingId.value) {
+    if (disposed || !selectedTask.value || selectedTask.value.archived || !canManage.value || feedbackSavingId.value !== null) {
       return;
     }
     const taskId = selectedTask.value.id;
+    const commit = selectedTask.value.commit;
+    const sequence = ++requestSequence;
+    const current = () => !disposed && sequence === requestSequence && selectedTask.value?.id === taskId
+      && selectedTask.value.commit === commit && !selectedTask.value.archived && canManage.value;
+    feedbackSavingId.value = findingId;
     try {
       const promptResult = await ElMessageBox.prompt(
         "请输入判定备注",
@@ -68,29 +85,39 @@ export const useReviewDetailFindingFeedback = ({
           }
         }
       );
-      feedbackSavingId.value = findingId;
+      if (!current() || !selectedTask.value?.findings.some(finding => finding.id === findingId)) return;
       const response = await updateFindingFeedback(taskId, findingId, {
         status,
         note: promptResult.value?.trim()
       });
+      if (!current()) return;
+      if (response.taskId !== taskId || response.findingId !== findingId) {
+        ElMessage.warning("判定已提交，返回结果与当前条目不一致，请刷新确认");
+        return;
+      }
       applyFindingFeedback(response);
       resetGithubCommentPublishResult();
-      if (isTerminalTask.value) {
-        await loadGithubCommentPreview(taskId);
-      }
       ElMessage.success(findingFeedbackPromptTitle(status));
+      if (isTerminalTask.value) {
+        try {
+          await loadGithubCommentPreview(taskId);
+        } catch (error) {
+          if (current()) ElMessage.warning(`判定已提交，评论预览刷新失败：${getErrorMessage(error)}`);
+        }
+      }
     } catch (error) {
-      if (error === "cancel" || error === "close") {
+      if (!current() || error === "cancel" || error === "close") {
         return;
       }
       ElMessage.error(getErrorMessage(error, "判定提交失败"));
     } finally {
-      feedbackSavingId.value = null;
+      if (sequence === requestSequence) feedbackSavingId.value = null;
     }
   };
 
   return {
     feedbackSavingId,
+    cancelFindingFeedback,
     submitFindingFeedback
   };
 };

@@ -68,29 +68,42 @@
                   <strong>消息通知</strong>
                   <small v-if="notificationCenter?.generatedAt">更新于 {{ formatDateTime(notificationCenter.generatedAt) }}</small>
                 </div>
-                <button type="button" :disabled="!unreadCount" @click.stop="markAllRead">全部已读</button>
+                <button type="button" :disabled="!notificationCurrent || bulkSaving || (!unreadCount && !unsyncedCount)" @click.stop="markAllRead">全部已读</button>
               </div>
+              <button type="button" :disabled="loadingNotifications" @click="refreshNotifications">刷新通知与已读记录</button>
+              <p v-if="!notificationCurrent && notifications.length" class="notification-state">以下为上次读取的通知，请刷新确认后再操作。</p>
+              <p v-if="readKeysError" class="notification-state notification-state--error">{{ readKeysError }}</p>
+              <p v-if="storageError" class="notification-state notification-state--error">{{ storageError }}</p>
+              <p v-if="bulkNotice" class="notification-state">{{ bulkNotice }}</p>
               <div v-if="loadingNotifications" class="notification-state">正在加载通知...</div>
               <div v-else-if="notificationError" class="notification-state notification-state--error">
                 <span>{{ notificationError }}</span>
-                <button type="button" @click="loadNotifications({ force: true })">重试</button>
+                <button type="button" @click="refreshNotifications">重试</button>
               </div>
               <div v-else-if="!notifications.length" class="notification-state">暂无待处理通知</div>
               <div v-else class="notification-list">
-                <button
-                  v-for="item in notifications"
-                  :key="item.id"
-                  type="button"
-                  :class="['notification-item', { read: isNotificationRead(item.id) }]"
-                  @click="openNotification(item)"
-                >
-                  <span :class="`notification-dot ${item.level}`"></span>
-                  <span>
-                    <b>{{ item.title }}</b>
-                    <em>{{ item.description }}</em>
-                    <small>{{ item.time }}</small>
-                  </span>
-                </button>
+                <div v-for="item in notifications" :key="item.id">
+                  <button
+                    type="button"
+                    :class="['notification-item', { read: isNotificationRead(item.id) }]"
+                    :disabled="!notificationCurrent"
+                    @click="openNotification(item)"
+                  >
+                    <span :class="`notification-dot ${item.level}`"></span>
+                    <span>
+                      <b>{{ item.title }}</b>
+                      <em>{{ item.description }}</em>
+                      <small>{{ item.time }}</small>
+                      <small v-if="pendingReadIds.has(item.id)">已读状态正在同步</small>
+                      <small v-else-if="isNotificationRead(item.id) && !isReadConfirmed(item.id)">本地已读，服务端未确认</small>
+                      <small v-if="readSyncErrors[item.id]">{{ readSyncErrors[item.id] }}</small>
+                    </span>
+                  </button>
+                  <button
+                    v-if="isNotificationRead(item.id) && !isReadConfirmed(item.id)" type="button"
+                    :disabled="!notificationCurrent || pendingReadIds.has(item.id) || bulkSaving" @click.stop="markNotificationRead(item.id)"
+                  >重试已读同步</button>
+                </div>
               </div>
               <RouterLink class="notification-more" to="/repoguard/tasks" @click="notificationPanelOpen = false">
                 查看全部审查任务 →
@@ -149,6 +162,7 @@
         <RouterView />
       </section>
     </main>
+    <UserProfileDialog v-if="profileDialogVisible" v-model="profileDialogVisible" />
     <ChangePasswordDialog
       v-if="changePasswordDialogVisible"
       v-model="changePasswordDialogVisible"
@@ -178,19 +192,16 @@ import {
 } from "@lucide/vue";
 import { logout } from "@/api/auth";
 import { hasAuthToken } from "@/api/client";
-import {
-  fetchNotificationReadKeys,
-  fetchNotifications,
-  markNotificationRead as markNotificationReadOnServer
-} from "@/api/notifications";
 import { createPageAwarePoller } from "@/composables/pageAwarePoller";
-import { pruneReadNotificationIds } from "@/layouts/notificationReadState";
+import { useNotificationCenter } from "@/layouts/useNotificationCenter";
 import { canAccessRouteMeta } from "@/router/accessPolicy";
 import { canManage, currentUser, loadCurrentUser, resetCurrentUser } from "@/stores/authState";
 import { APP_VERSION } from "@/config/appVersion";
 import { enterpriseEditionEnabled } from "@/config/edition";
-import type { NotificationCenter, NotificationItem } from "@/types";
+import type { NotificationItem } from "@/types";
 
+const UserProfileDialog = defineAsyncComponent(() => import("@/features/auth/components/UserProfileDialog.vue"));
+const profileDialogVisible = ref(false);
 const ChangePasswordDialog = defineAsyncComponent(
   () => import("@/features/auth/components/ChangePasswordDialog.vue")
 );
@@ -203,11 +214,9 @@ const router = useRouter();
 const changePasswordDialogVisible = ref(false);
 const notificationPanelOpen = ref(false);
 const userMenuOpen = ref(false);
-const notificationCenter = ref<NotificationCenter>();
-const loadingNotifications = ref(false);
-const notificationError = ref("");
-const readNotificationIds = ref<Set<string>>(new Set());
-const NOTIFICATION_READ_KEY = "repoguard-read-notifications";
+const { notificationCenter, notifications, loadingNotifications, notificationCurrent, notificationError, readKeysError, storageError,
+  readSyncErrors, bulkNotice, pendingReadIds, bulkSaving, unreadCount, unsyncedCount, isNotificationRead, isReadConfirmed,
+  currentNotification, loadNotifications, refreshNotifications, markNotificationRead, markAllRead } = useNotificationCenter();
 const NOTIFICATION_POLL_INTERVAL_MS = 90000;
 let notificationWarmupTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -231,36 +240,9 @@ const canOpenPath = (path: string) => canAccessRouteMeta(router.resolve(path).me
 });
 const visibleNavItems = computed(() => navItems.filter((item) => canOpenPath(item.path)));
 const currentTitle = computed(() => String(route.meta.title || "RepoGuard Agent"));
-const notifications = computed(() => notificationCenter.value?.items ?? []);
-const unreadCount = computed(() => notifications.value.filter((item) => !isNotificationRead(item.id)).length);
 const unreadBadgeText = computed(() => (unreadCount.value > 99 ? "99+" : String(unreadCount.value)));
 const currentUserName = computed(() => currentUser.value?.username || "管理员");
 const currentUserInitial = computed(() => (currentUserName.value.trim().charAt(0) || "A").toUpperCase());
-
-const loadReadNotificationIds = () => {
-  try {
-    const storedValue = window.localStorage.getItem(NOTIFICATION_READ_KEY);
-    const ids = storedValue ? (JSON.parse(storedValue) as string[]) : [];
-    readNotificationIds.value = new Set(ids);
-  } catch {
-    readNotificationIds.value = new Set();
-  }
-};
-
-const persistReadNotificationIds = () => {
-  window.localStorage.setItem(NOTIFICATION_READ_KEY, JSON.stringify([...readNotificationIds.value]));
-};
-
-const markNotificationRead = (id: string) => {
-  if (readNotificationIds.value.has(id)) {
-    return;
-  }
-  readNotificationIds.value = new Set([...readNotificationIds.value, id]);
-  persistReadNotificationIds();
-  void markNotificationReadOnServer({ notificationKey: id }).catch(() => undefined);
-};
-
-const isNotificationRead = (id: string) => readNotificationIds.value.has(id);
 
 const refreshCurrentUser = async () => {
   if (currentUser.value) {
@@ -273,71 +255,22 @@ const refreshCurrentUser = async () => {
   }
 };
 
-const loadNotifications = async (options: { force?: boolean } = {}) => {
-  if (!enterpriseEditionEnabled || loadingNotifications.value || (notificationCenter.value && !options.force)) {
-    return;
-  }
-  loadingNotifications.value = true;
-  notificationError.value = "";
-  try {
-    const center = await fetchNotifications();
-    notificationCenter.value = center;
-    pruneReadNotifications(center.items);
-  } catch (error) {
-    notificationError.value = error instanceof Error ? error.message : "通知加载失败";
-  } finally {
-    loadingNotifications.value = false;
-  }
-};
-
-const loadServerReadNotificationIds = async () => {
-  if (!enterpriseEditionEnabled || !hasAuthToken()) {
-    return;
-  }
-  try {
-    const serverIds = await fetchNotificationReadKeys();
-    readNotificationIds.value = new Set([...readNotificationIds.value, ...serverIds]);
-    persistReadNotificationIds();
-  } catch {
-    // Local state remains the offline fallback when the read-state endpoint is unavailable.
-  }
-};
-
-const pruneReadNotifications = (items: NotificationItem[]) => {
-  const pruned = pruneReadNotificationIds(readNotificationIds.value, items.map((item) => item.id));
-  if (pruned.size === readNotificationIds.value.size) {
-    return;
-  }
-  readNotificationIds.value = pruned;
-  persistReadNotificationIds();
-};
-
 const notificationPoller = createPageAwarePoller({
   intervalMs: () => NOTIFICATION_POLL_INTERVAL_MS,
   isEnabled: () => enterpriseEditionEnabled,
-  poll: () => loadNotifications({ force: true })
+  poll: async () => { await loadNotifications({ force: true }); }
 });
 
-const markAllRead = () => {
-  if (!notifications.value.length) {
-    return;
-  }
-  readNotificationIds.value = new Set([...readNotificationIds.value, ...notifications.value.map((item) => item.id)]);
-  persistReadNotificationIds();
-  notifications.value.forEach((item) => {
-    void markNotificationReadOnServer({ notificationKey: item.id }).catch(() => undefined);
-  });
-  ElMessage.success("已将当前通知标记为已读");
-};
-
 const openNotification = (item: NotificationItem) => {
+  const selected = currentNotification(item.id);
+  if (!selected) return;
   notificationPanelOpen.value = false;
-  markNotificationRead(item.id);
-  if (item.targetPath) {
-    router.push(item.targetPath);
+  void markNotificationRead(selected.id);
+  if (selected.targetPath) {
+    router.push(selected.targetPath);
     return;
   }
-  ElMessage.info(item.title);
+  ElMessage.info(selected.title);
 };
 
 const closeTopActionMenus = () => {
@@ -392,10 +325,10 @@ const handleUserCommand = async (command: string) => {
     return;
   }
   if (command === "profile") {
-    ElMessage.info(currentUser.value?.email || "个人资料功能暂未开放");
+    profileDialogVisible.value = true;
     return;
   }
-  ElMessage.info("个人资料功能暂未开放");
+
 };
 
 const handleUserMenuCommand = (command: string) => {
@@ -414,8 +347,6 @@ onMounted(() => {
   document.addEventListener("keydown", handleDocumentKeydown);
   void refreshCurrentUser();
   if (enterpriseEditionEnabled) {
-    loadReadNotificationIds();
-    void loadServerReadNotificationIds();
     notificationWarmupTimer = setTimeout(() => {
       notificationWarmupTimer = undefined;
       void loadNotifications();

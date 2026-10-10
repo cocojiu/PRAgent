@@ -19,7 +19,7 @@
     <div class="github-checks-wizard__target">
       <el-input v-model="organization" placeholder="组织，例如 cocojiu" aria-label="GitHub 组织" />
       <el-input v-model="repository" placeholder="仓库，例如 PRAgent" aria-label="GitHub 仓库" />
-      <el-button type="primary" plain :loading="loading" :disabled="!canManage" @click="load">
+      <el-button type="primary" plain :loading="loading" :disabled="!canManage || previewing || saving || confirming" @click="load">
         运行权限自检
       </el-button>
     </div>
@@ -56,11 +56,11 @@
       <div class="github-checks-wizard__preview">
         <div class="github-checks-wizard__preview-actions">
           <el-input-number v-model="pullRequestNumber" :min="1" placeholder="测试 PR" aria-label="测试 PR 编号" />
-          <el-button type="primary" plain :loading="previewing" :disabled="!canManage || !pullRequestNumber" @click="preview">
+          <el-button type="primary" plain :loading="previewing" :disabled="!canManage || !pullRequestNumber || loading || saving || confirming || !!errorMessage" @click="preview">
             创建 neutral 预览 Check
           </el-button>
         </div>
-        <div class="github-checks-wizard__preview-grid">
+        <div v-if="previewMatchesTarget" class="github-checks-wizard__preview-grid">
           <span>desired/applied：{{ status.preview.desiredVersion }} / {{ status.preview.appliedVersion }}</span>
           <span>阶段：{{ status.preview.desiredStage }} / {{ status.preview.appliedStage ?? "未应用" }}</span>
           <span>重试：{{ status.preview.retryAttempts }}</span>
@@ -68,13 +68,14 @@
           <span>conclusion：{{ status.preview.conclusion ?? "未执行" }}</span>
           <span>{{ status.preview.message }}</span>
         </div>
+        <p v-else>当前 PR 尚未取得预览结果。</p>
       </div>
 
       <div class="github-checks-wizard__actions">
         <el-button
           type="success"
-          :loading="saving"
-          :disabled="!canManage || !status.ready || status.repositoryCheckRunEnabled"
+          :loading="saving || confirming"
+          :disabled="!canEnable"
           @click="confirmEnable"
         >
           确认启用本仓库 Check
@@ -82,8 +83,8 @@
         <el-button
           type="danger"
           plain
-          :loading="saving"
-          :disabled="!canManage || !status.repositoryCheckRunEnabled"
+          :loading="saving || confirming"
+          :disabled="!canDisable"
           @click="confirmDisable"
         >
           停用 RepoGuard Check
@@ -116,9 +117,13 @@ const {
   previewing,
   saving,
   errorMessage,
+  confirming,
+  canEnable,
+  canDisable,
+  previewMatchesTarget,
   load,
   preview,
-  setEnabled
+  confirmPolicyChange
 } = useGithubChecksSetup({ canManage });
 
 watch(
@@ -131,22 +136,20 @@ watch(
 );
 
 const confirmEnable = async () => {
-  await ElMessageBox.confirm(
+  const saved = await confirmPolicyChange(true, () => ElMessageBox.confirm(
     "仅会启用该仓库后续的 RepoGuard Check Run，不会修改 GitHub branch protection；是否继续？",
     "确认启用",
     { type: "warning", confirmButtonText: "确认启用", cancelButtonText: "取消" }
-  );
-  await setEnabled(true);
-  if (!errorMessage.value) ElMessage.success("已启用该仓库的 RepoGuard Check Run");
+  ));
+  if (saved) ElMessage.success("已启用该仓库的 RepoGuard Check Run");
 };
 
 const confirmDisable = async () => {
-  await ElMessageBox.confirm(
+  const saved = await confirmPolicyChange(false, () => ElMessageBox.confirm(
     "停用只影响后续 Check Run，历史任务和 GitHub 历史状态会保留；是否继续？",
     "确认停用",
     { type: "warning", confirmButtonText: "确认停用", cancelButtonText: "取消" }
-  );
-  await setEnabled(false);
-  if (!errorMessage.value) ElMessage.success("已停用该仓库的 RepoGuard Check Run");
+  ));
+  if (saved) ElMessage.success("已停用该仓库的 RepoGuard Check Run");
 };
 </script>

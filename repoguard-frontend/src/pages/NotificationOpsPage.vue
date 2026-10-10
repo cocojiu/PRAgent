@@ -10,7 +10,7 @@
           <Plus :size="18" />
           新增绑定
         </el-button>
-        <el-button type="primary" plain size="large" :disabled="!enabledNotificationBindings.length" @click="openTestDialog">
+        <el-button type="primary" plain size="large" :disabled="!bindingsCurrent || !enabledNotificationBindings.length" @click="openTestDialog">
           <Send :size="17" />
           测试发送
         </el-button>
@@ -24,7 +24,14 @@
             <NotificationSettingsPanel
               :can-manage="canManage"
               :form="notificationForm"
+              :saving="savingSettings"
+              :loading="settingsLoading"
+              :can-save="canSaveSettings"
+              :has-unsaved-changes="hasUnsavedChanges"
+              :load-error-message="loadErrorMessage"
+              :save-error-message="saveErrorMessage"
               @save="saveNotificationSettings"
+              @reload="loadSystemSettings"
             />
 
             <div class="notification-main-area">
@@ -41,6 +48,8 @@
               </div>
 
               <article class="notification-table-card">
+                <el-alert v-if="eventsError" :title="eventsError" type="error" :closable="false" />
+                <p v-if="eventsNeedsRefresh" role="status">当前列表尚未确认最新状态，请刷新查询。</p>
                 <div class="panel-heading notification-table-head">
                   <div>
                     <h2>最近通知事件</h2>
@@ -92,7 +101,7 @@
                   </el-table-column>
                   <el-table-column label="操作" width="126" fixed="right">
                     <template #default="{ row }">
-                      <el-button v-if="canRetryNotificationEvent(row.status)" link type="primary" :loading="retryingEventId === row.id" @click="retryEvent(row.id)">
+                      <el-button v-if="canRetryNotificationEvent(row.status)" link type="primary" :loading="retryingEventId === row.id" :disabled="!canRetryEvent(row.id)" @click="retryEvent(row.id)">
                         重试
                       </el-button>
                       <el-button v-else link type="primary" @click="activeTab = 'events'">详情</el-button>
@@ -121,18 +130,25 @@
 
         <el-tab-pane label="渠道绑定" name="bindings">
           <article class="task-panel">
+            <el-alert v-if="bindingLoadError" :title="bindingLoadError" type="error" :closable="false" />
+            <p v-if="bindingsNeedRefresh" role="status">当前渠道列表尚未确认最新状态，请刷新查询。</p>
             <div class="panel-heading">
               <div>
                 <h2>渠道绑定</h2>
                 <p>按仓库绑定钉钉或企业微信群机器人，审查结果和评论回写会异步发送。</p>
               </div>
-              <el-button type="primary" :disabled="!canManage" @click="openBindingDialog()">新增绑定</el-button>
+              <div class="notification-actions">
+                <el-button :loading="bindingsLoading" @click="loadNotificationBindings">刷新渠道</el-button>
+                <el-button type="primary" :disabled="!canManage" @click="openBindingDialog()">新增绑定</el-button>
+              </div>
             </div>
             <NotificationBindingTable
               :bindings="notificationBindings"
               :can-manage="canManage"
               :loading="bindingsLoading"
+              :actions-disabled="!bindingsCurrent"
               :testing-binding-id="testingBindingId"
+              :busy-binding-ids="busyBindingIds"
               action-layout="group"
               table-class="rg-table task-table"
               size="large"
@@ -162,6 +178,8 @@
             :filter="eventFilter"
             :loading="eventsLoading"
             :retrying-event-id="retryingEventId"
+            :error="eventsError"
+            :needs-refresh="eventsNeedsRefresh"
             @refresh="loadNotificationEvents"
             @retry="retryEvent"
           />
@@ -172,6 +190,8 @@
             :deliveries="notificationDeliveries"
             :filter="deliveryFilter"
             :loading="deliveriesLoading"
+            :error="deliveriesError"
+            :needs-refresh="deliveriesNeedsRefresh"
             @refresh="loadNotificationDeliveries"
           />
         </el-tab-pane>
@@ -184,10 +204,17 @@
       :editing-binding-id="editingBindingId"
       :form="bindingForm"
       :saving="savingBinding"
+      :can-save="bindingCanSave"
+      :has-unsaved-changes="bindingHasUnsavedChanges"
+      :save-error="bindingSaveError"
       @save="saveBinding"
     />
 
     <el-dialog v-model="testDialogVisible" title="测试发送" width="520px">
+      <el-alert v-if="testErrorMessage" :title="testErrorMessage" type="error" :closable="false" />
+      <el-alert v-if="testInfoMessage" :title="testInfoMessage" type="info" :closable="false" />
+      <p v-if="!bindingsCurrent" role="status">当前渠道列表尚未确认最新状态，请先刷新渠道。</p>
+      <el-button v-if="!bindingsCurrent" :loading="bindingsLoading" @click="loadNotificationBindings">刷新渠道列表</el-button>
       <el-form label-width="96px">
         <el-form-item label="通知渠道">
           <el-select v-model="selectedTestBindingId" placeholder="请选择要测试的渠道绑定">
@@ -205,7 +232,7 @@
       </el-form>
       <template #footer>
         <el-button @click="testDialogVisible = false">取消</el-button>
-        <el-button type="primary" :disabled="!selectedTestBindingId" :loading="testingBindingId === selectedTestBindingId" @click="runSelectedBindingTest">
+        <el-button type="primary" :disabled="!canRunSelectedBindingTest" :loading="sendingTest" @click="runSelectedBindingTest">
           发送测试
         </el-button>
       </template>
@@ -253,15 +280,23 @@ const {
   bindingPageSize,
   bindingTotal,
   bindingsLoading,
+  bindingLoadError,
+  bindingsNeedRefresh,
+  bindingsCurrent,
   bindingDialogVisible,
   savingBinding,
   testingBindingId,
+  busyBindingIds,
   editingBindingId,
   bindingForm,
+  bindingCanSave,
+  bindingHasUnsavedChanges,
+  bindingSaveError,
   loadNotificationBindings,
   openBindingDialog,
   saveBinding,
   runBindingTest,
+  canTestBinding,
   toggleBinding,
   removeBinding,
   changeBindingPage,
@@ -272,6 +307,11 @@ const {
   deliveryFilter,
   eventFilter,
   eventsLoading,
+  eventsError,
+  deliveriesError,
+  eventsNeedsRefresh,
+  deliveriesNeedsRefresh,
+  canRetryEvent,
   notificationDeliveries,
   notificationEvents,
   notificationEventTotal,
@@ -280,9 +320,15 @@ const {
   loadNotificationEvents,
   refreshNotificationData,
   retryEvent
-} = useNotificationOpsRecords({ loadNotificationBindings });
+} = useNotificationOpsRecords({ canManage, loadNotificationBindings: async () => { await loadNotificationBindings(); } });
 const {
   notificationForm,
+  savingSettings,
+  settingsLoading,
+  canSaveSettings,
+  hasUnsavedChanges,
+  loadErrorMessage,
+  saveErrorMessage,
   loadSystemSettings,
   saveNotificationSettings
 } = useNotificationOpsSettings({ canManage });
@@ -290,10 +336,16 @@ const {
   enabledNotificationBindings,
   selectedTestBindingId,
   testDialogVisible,
+  sendingTest,
+  testErrorMessage,
+  testInfoMessage,
+  canRunSelectedBindingTest,
   openTestDialog,
   runSelectedBindingTest
 } = useNotificationOpsTestDialog({
   notificationBindings,
+  canManage,
+  canTestBinding,
   runBindingTest
 });
 

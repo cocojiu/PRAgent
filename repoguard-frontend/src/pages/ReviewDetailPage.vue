@@ -413,6 +413,9 @@ const canPublishGithubComments = computed(() =>
     canManage.value
       && !isArchivedTask.value
       && !isSupersededTask.value
+      && !previewLoading.value
+      && !previewError.value
+      && githubCommentPreview.value?.taskId === Number(route.params.id)
       && githubCommentPreview.value?.commentableCount
       && writebackCheck.value?.tokenConfigured !== false
       && isHumanReviewPublishAllowed.value
@@ -526,6 +529,7 @@ const retryTooltip = computed(() => {
 });
 const { confirmRetryReview, retryingTask } = useReviewDetailRetry({
   canManage,
+  getTaskId: () => Number(route.params.id),
   canRetryTask,
   clearGithubCommentState,
   failureReason,
@@ -591,6 +595,8 @@ const writebackCheckStatusClass = computed(() => {
 });
 
 const { submittingHumanReview, submitHumanReviewDecision } = useReviewDetailHumanReview({
+  canManage,
+  getTaskId: () => Number(route.params.id),
   canSubmitHumanReview,
   humanReviewActionText,
   refreshDetail: () => loadDetail({ silent: true, resetPublishResult: true, force: true }),
@@ -638,8 +644,8 @@ const changeGithubCommentHistoryItemsPage = async (batchId: number, direction: "
   if (Number.isFinite(id) && canLoadGithubComments.value) await changeHistoryItemsPage(id, batchId, direction);
 };
 
-const { feedbackSavingId, submitFindingFeedback } = useReviewDetailFindingFeedback({
-  canManage,
+const { feedbackSavingId, submitFindingFeedback, cancelFindingFeedback } = useReviewDetailFindingFeedback({
+  canManage: canManageHotTask,
   findingFeedbackPromptTitle,
   isTerminalTask,
   loadGithubCommentPreview: refreshLoadedGithubCommentPreview,
@@ -692,6 +698,8 @@ const loadGithubCommentData = async () => {
 watch(
   () => route.params.id,
   () => {
+    cancelFindingFeedback();
+    clearGithubCommentState();
     stopGithubCommentPublishPolling();
     stopPolling();
     resetDetailSections();
@@ -704,6 +712,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  cancelFindingFeedback();
   cancelPendingRequests();
   resetDetailSections();
   stopGithubCommentPublishPolling();

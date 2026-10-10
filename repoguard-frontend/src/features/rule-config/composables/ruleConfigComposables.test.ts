@@ -57,7 +57,7 @@ describe("rule configuration composables", () => {
       ],
       strategyPolicy: strategyPolicy()
     });
-    const state = useReviewRuleCatalog();
+    const state = useReviewRuleCatalog({ canRead: ref(true) });
 
     await state.loadRules();
 
@@ -70,7 +70,7 @@ describe("rule configuration composables", () => {
     expect(state.filteredRules.value.map(rule => rule.id)).toEqual(["RG-YAML-001"]);
   });
 
-  it("refreshes a conflicting rule edit and adopts the latest policy version", async () => {
+  it("keeps a conflicting rule draft until an explicit version refresh", async () => {
     const originalRule = reviewRule({ policyVersion: 3, name: "旧名称" });
     const rules = ref([originalRule]);
     const reloadRules = vi.fn(async () => {
@@ -89,12 +89,17 @@ describe("rule configuration composables", () => {
       expect.objectContaining({ id: "RG-AUTH-001", name: "本地编辑" })
     );
     expect(reloadRules).toHaveBeenCalledOnce();
-    expect(state.editingPolicyVersion.value).toBe(4);
-    expect(state.ruleForm.name).toBe("并发更新后的名称");
+    expect(state.editingPolicyVersion.value).toBe(3);
+    expect(state.ruleForm.name).toBe("  本地编辑  ");
+    expect(state.ruleVersionChanged.value).toBe(true);
+    expect(state.canSaveRule.value).toBe(false);
     expect(messages.error).toHaveBeenCalledWith("策略版本冲突");
+    await state.refreshEditingRule();
+    expect(state.editingPolicyVersion.value).toBe(4);
+    expect(state.ruleForm.name).toBe("  本地编辑  ");
   });
 
-  it("uses the active snapshot for strategy updates and resynchronizes after conflicts", async () => {
+  it("uses the active snapshot and preserves the desired mode after conflicts", async () => {
     const policy = ref<ReviewStrategyPolicy | null>(strategyPolicy({ snapshotId: 9, enforcementMode: "observe" }));
     const reloadRules = vi.fn(async () => {
       policy.value = strategyPolicy({ snapshotId: 10, enforcementMode: "comment" });
@@ -114,7 +119,8 @@ describe("rule configuration composables", () => {
       expectedSnapshotId: 9
     });
     expect(policy.value?.snapshotId).toBe(10);
-    expect(state.strategyTargetMode.value).toBe("comment");
+    expect(state.strategyTargetMode.value).toBe("block");
+    expect(state.strategyHasUnsavedChanges.value).toBe(true);
     expect(messages.error).toHaveBeenCalledWith("快照版本冲突");
   });
 
@@ -122,20 +128,21 @@ describe("rule configuration composables", () => {
     const rules = ref([reviewRule({ policyVersion: 7 })]);
     const policy = ref<ReviewStrategyPolicy | null>(strategyPolicy({ snapshotId: 11 }));
     const reloadRules = vi.fn(async () => undefined);
-    api.fetchReviewRuleVersions.mockResolvedValue({ items: [], hasMore: false });
-    api.fetchReviewStrategyVersions.mockResolvedValue({ items: [], hasMore: false });
+    api.fetchReviewRuleVersions.mockResolvedValue({ items: [{ ...reviewRule(), policyVersion: 4, changeType: "UPDATE", createdAt: "2026-08-10T00:00:00Z", active: false }], hasMore: false });
+    api.fetchReviewStrategyVersions.mockResolvedValue({ items: [strategyPolicy({ snapshotId: 6, active: false })], hasMore: false });
     api.rollbackReviewRule.mockResolvedValue(reviewRule({ policyVersion: 8 }));
     api.rollbackReviewStrategy.mockResolvedValue(strategyPolicy({ snapshotId: 12 }));
     const state = mountHistory({ rules, policy, reloadRules });
 
     await state.openRuleVersions(rules.value[0]!);
     await state.rollbackRuleVersion(4);
+    await state.openStrategyVersions();
     await state.rollbackStrategyVersion(6);
 
     expect(api.rollbackReviewRule).toHaveBeenCalledWith("RG-AUTH-001", 4, 7);
     expect(api.rollbackReviewStrategy).toHaveBeenCalledWith(6, 11);
     expect(api.fetchReviewRuleVersions).toHaveBeenCalledTimes(2);
-    expect(api.fetchReviewStrategyVersions).toHaveBeenCalledOnce();
+    expect(api.fetchReviewStrategyVersions).toHaveBeenCalledTimes(2);
     expect(reloadRules).toHaveBeenCalledTimes(2);
   });
 

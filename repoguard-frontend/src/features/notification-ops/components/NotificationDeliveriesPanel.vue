@@ -1,5 +1,7 @@
 <template>
   <article class="task-panel">
+    <el-alert v-if="error" :title="error" type="error" :closable="false" />
+    <p v-if="needsRefresh" role="status">{{ deliveries.length ? "当前显示上次查询结果，尚未确认最新状态。" : "当前筛选尚未完成查询，请刷新。" }}</p>
     <div class="filter-bar notification-filter-bar">
       <el-select v-model="filter.status" placeholder="全部状态" clearable>
         <el-option label="SUCCESS" value="SUCCESS" />
@@ -55,6 +57,8 @@ defineProps<{
   deliveries: NotificationDelivery[];
   filter: NotificationRecordFilter;
   loading: boolean;
+  error?: string;
+  needsRefresh?: boolean;
 }>();
 
 defineEmits<{
