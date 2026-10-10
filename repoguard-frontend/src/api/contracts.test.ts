@@ -278,7 +278,9 @@ describe("apiRequest", () => {
   it.each([
     { name: "review list", load: (signal: AbortSignal) => fetchReviews({ page: 1, pageSize: 8 }, { signal }) },
     { name: "review summary", load: (signal: AbortSignal) => fetchReviewListSummary({}, { signal }) },
-    { name: "repository options", load: (signal: AbortSignal) => fetchReviewRepositories({ signal }) }
+    { name: "repository options", load: (signal: AbortSignal) => fetchReviewRepositories({ signal }) },
+    { name: "notification center", load: (signal: AbortSignal) => fetchNotifications({ signal }) },
+    { name: "notification read keys", load: (signal: AbortSignal) => fetchNotificationReadKeys({ signal }) }
   ])("forwards cancellation to fetch through the $name wrapper", async ({ load }) => {
     let signal: AbortSignal | undefined;
     vi.stubGlobal("fetch", vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {

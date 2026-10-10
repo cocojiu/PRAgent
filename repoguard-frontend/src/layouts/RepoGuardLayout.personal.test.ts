@@ -1,0 +1,21 @@
+import { createApp, nextTick, type App } from "vue";
+import { createMemoryHistory, createRouter } from "vue-router";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { currentUser } from "@/stores/authState";
+import { clearAuthToken, saveAuthToken } from "@/api/client";
+import Layout from "./RepoGuardLayout.vue";
+const api = vi.hoisted(() => ({ fetchNotifications: vi.fn(), fetchNotificationReadKeys: vi.fn(), markNotificationRead: vi.fn() }));
+vi.mock("@/api/notifications", () => api);
+vi.mock("@/config/edition", () => ({ enterpriseEditionEnabled: false }));
+let app: App | undefined; let host: HTMLDivElement;
+beforeEach(() => { vi.useFakeTimers(); vi.resetAllMocks(); saveAuthToken("test-access", false);
+  currentUser.value = { id: 1, username: "admin", email: "admin@example.test", role: "ADMIN", status: "ACTIVE" };
+  host = document.createElement("div"); document.body.append(host); });
+afterEach(() => { app?.unmount(); host.remove(); clearAuthToken(); currentUser.value = undefined; vi.useRealTimers(); });
+it("keeps the notification menu and all notification requests disabled in the personal layout", async () => {
+  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: "/:pathMatch(.*)*", component: { render: () => null } }] });
+  await router.push("/repoguard/overview"); await router.isReady(); app = createApp(Layout); app.use(router); app.mount(host); await nextTick();
+  await vi.advanceTimersByTimeAsync(180000);
+  expect(host.querySelector('[aria-label="查看通知"]')).toBeNull(); expect(host.querySelector('#notification-panel')).toBeNull();
+  expect(api.fetchNotifications).not.toHaveBeenCalled(); expect(api.fetchNotificationReadKeys).not.toHaveBeenCalled(); expect(api.markNotificationRead).not.toHaveBeenCalled();
+});
