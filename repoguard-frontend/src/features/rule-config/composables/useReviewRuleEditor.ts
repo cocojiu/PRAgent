@@ -10,7 +10,10 @@ import { getErrorMessage } from "@/utils/errors";
 import { currentUser } from "@/stores/authState";
 import { activeTenant } from "@/stores/tenantContext";
 
+import { createReviewConfigurationOperationLocks, type ReviewConfigurationOperationLocks } from "@/features/rule-config/reviewConfigurationOperationLocks";
+
 type ReviewRuleEditorOptions = {
+  operationLocks?: ReviewConfigurationOperationLocks;
   canManage: Readonly<Ref<boolean>>;
   reloadRules: () => Promise<boolean | void>;
   rules: Ref<ReviewRuleConfig[]>;
@@ -38,9 +41,9 @@ const createEmptyRuleForm = (): ReviewRuleConfigRequest => ({
 });
 
 export const useReviewRuleEditor = ({ canManage, reloadRules, rules, rulesCurrent = ref(true),
-  cancelRulesRead = () => undefined, invalidateRules = () => undefined }: ReviewRuleEditorOptions) => {
+  cancelRulesRead = () => undefined, invalidateRules = () => undefined, operationLocks = createReviewConfigurationOperationLocks() }: ReviewRuleEditorOptions) => {
   const saving = ref(false);
-  const pendingRuleIds = ref(new Set<string>());
+  const pendingRuleIds = operationLocks.ruleIds;
   const pendingStatusIds = ref(new Set<string>());
   const statusSavingId = computed(() => [...pendingStatusIds.value][0] ?? "");
   const busyRuleIds = computed(() => [...pendingRuleIds.value]);
@@ -80,7 +83,7 @@ export const useReviewRuleEditor = ({ canManage, reloadRules, rules, rulesCurren
   const canRefreshRule = computed(() => !disposed && canManage.value && dialogVisible.value && !saving.value && !refreshingRule.value
     && !!ruleForm.id.trim() && !pendingRuleIds.value.has(editingRuleId.value || ruleForm.id.trim().toUpperCase()));
   const finishRuleOperation = (id: string, version: number, context: string) => {
-    pendingRuleIds.value.delete(id); pendingStatusIds.value.delete(id);
+    pendingStatusIds.value.delete(id);
     if (!disposed && version !== contextRevision && context === contextIdentity()) invalidateRules();
   };
 
@@ -218,8 +221,9 @@ export const useReviewRuleEditor = ({ canManage, reloadRules, rules, rulesCurren
     const contextCurrent = () => !disposed && canManage.value && version === contextRevision;
     const current = () => contextCurrent() && dialogVisible.value && editor === editorRevision;
     if (id && payload.id !== id) { ruleSaveError.value = "规则 ID 与编辑目标不一致，请重新打开编辑。"; return; }
+    const release = operationLocks.tryRule(payload.id);
+    if (!release) return;
     saving.value = true; ruleSaveError.value = ""; ruleSaveNotice.value = ""; ruleRefreshError.value = ""; cancelRulesRead();
-    pendingRuleIds.value.add(payload.id);
     try {
       let saved: ReviewRuleConfig;
       try {
@@ -251,7 +255,7 @@ export const useReviewRuleEditor = ({ canManage, reloadRules, rules, rulesCurren
       } else if (accepted && !ruleHasUnsavedChanges.value) dialogVisible.value = false;
     } finally {
       saving.value = false;
-      finishRuleOperation(payload.id, version, context);
+      release(); finishRuleOperation(payload.id, version, context);
     }
   };
 
@@ -262,7 +266,9 @@ export const useReviewRuleEditor = ({ canManage, reloadRules, rules, rulesCurren
     const id = latest.id; const name = latest.name; const expectedPolicyVersion = latest.policyVersion;
     const nextStatus: RuleStatus = value; const version = contextRevision; const context = contextIdentity();
     const current = () => !disposed && canManage.value && version === contextRevision;
-    pendingRuleIds.value.add(id); pendingStatusIds.value.add(id); delete ruleOperationErrors.value[id]; cancelRulesRead();
+    const release = operationLocks.tryRule(id);
+    if (!release) return;
+    pendingStatusIds.value.add(id); delete ruleOperationErrors.value[id]; cancelRulesRead();
     try {
       const updated = await updateReviewRuleStatus(id, {
         status: nextStatus,
@@ -282,7 +288,7 @@ export const useReviewRuleEditor = ({ canManage, reloadRules, rules, rulesCurren
         ElMessage.error(ruleOperationErrors.value[id]); await readFreshRules();
       }
     } finally {
-      finishRuleOperation(id, version, context);
+      release(); finishRuleOperation(id, version, context);
     }
   };
 

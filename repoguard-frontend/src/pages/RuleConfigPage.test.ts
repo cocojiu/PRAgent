@@ -5,13 +5,13 @@ import type { ReviewRuleConfig, ReviewRuleConfigRequest, ReviewRulesResponse, Re
 import Page from "./RuleConfigPage.vue";
 
 /* eslint-disable vue/one-component-per-file -- UI stubs exercise the real rule catalog, editor and strategy composables together. */
-const api = vi.hoisted(() => ({ read: vi.fn(), create: vi.fn(), update: vi.fn(), status: vi.fn(), strategy: vi.fn() }));
+const api = vi.hoisted(() => ({ read: vi.fn(), create: vi.fn(), update: vi.fn(), status: vi.fn(), strategy: vi.fn(), ruleHistory: vi.fn(), strategyHistory: vi.fn(), ruleRollback: vi.fn(), strategyRollback: vi.fn() }));
 const messages = vi.hoisted(() => ({ success: vi.fn(), warning: vi.fn(), error: vi.fn() }));
 vi.mock("element-plus/es/components/message/index.mjs", () => ({ ElMessage: messages }));
 vi.mock("@/api/config", () => ({
   fetchReviewRules: api.read, createReviewRule: api.create, updateReviewRule: api.update,
   updateReviewRuleStatus: api.status, updateReviewStrategyEnforcement: api.strategy,
-  fetchReviewRuleVersions: vi.fn(), fetchReviewStrategyVersions: vi.fn(), rollbackReviewRule: vi.fn(), rollbackReviewStrategy: vi.fn()
+  fetchReviewRuleVersions: api.ruleHistory, fetchReviewStrategyVersions: api.strategyHistory, rollbackReviewRule: api.ruleRollback, rollbackReviewStrategy: api.strategyRollback
 }));
 vi.mock("@/features/rule-config/components/RepositoryPolicyPanel.vue", () => ({ default: { render: () => null } }));
 vi.mock("@/features/rule-config/components/ReviewCalibrationQueueCard.vue", () => ({ default: { render: () => null } }));
@@ -84,11 +84,44 @@ beforeEach(() => {
   api.strategy.mockImplementation(async ({ enforcementMode, expectedSnapshotId }) => {
     server.strategyPolicy = policy({ enforcementMode, snapshotId: expectedSnapshotId + 1 }); return server.strategyPolicy;
   });
+  api.ruleHistory.mockResolvedValue({ items: [{ ...rule(), policyVersion: 2, active: false, changeType: "UPDATE", createdAt: "2026-10-01T00:00:00Z" }], hasMore: false });
+  api.strategyHistory.mockResolvedValue({ items: [policy({ snapshotId: 6, active: false })], hasMore: false });
+  api.ruleRollback.mockImplementation(async (id: string, _target: number, expected: number) => persist(rule({ id, policyVersion: expected + 1 })));
   host = document.createElement("div"); document.body.append(host);
 });
 afterEach(() => { app?.unmount(); app = undefined; host.remove(); currentUser.value = undefined; });
 
 describe("rule configuration page operation wiring", () => {
+  it("locks rule controls during rollback and shows acknowledged writes separately from failed history reads", async () => {
+    await mount(); button("历史", row("RG-A")).click(); await flush();
+    const history = host.querySelector('[role="dialog"][aria-label="RG-A 策略版本历史"]')!;
+    const write = deferred<ReviewRuleConfig>(); api.ruleRollback.mockReturnValueOnce(write.promise);
+    button("回滚", history).click(); await flush();
+    expect(button("回滚", history).disabled).toBe(true); expect(button("编辑", row("RG-A")).disabled).toBe(true);
+    expect(row("RG-A").querySelector<HTMLInputElement>("input")!.disabled).toBe(true); expect(button("编辑", row("RG-B")).disabled).toBe(false);
+    api.ruleHistory.mockRejectedValueOnce(new Error("history unavailable")); write.resolve(persist(rule({ policyVersion: 4 }))); await flush();
+    expect(history.textContent).toContain("回滚已生成"); expect(history.textContent).toContain("history unavailable");
+    expect(button("回滚", history).disabled).toBe(true); expect(api.ruleRollback).toHaveBeenCalledWith("RG-A", 2, 3);
+    button("刷新规则历史", history).click(); await flush(); expect(history.textContent).not.toContain("history unavailable");
+    expect(button("回滚", history).disabled).toBe(false); expect(api.ruleRollback).toHaveBeenCalledTimes(1);
+  });
+  it("does not apply rule rollback notices to a newly opened target", async () => {
+    await mount(); button("历史", row("RG-A")).click(); await flush(); const write = deferred<ReviewRuleConfig>(); api.ruleRollback.mockReturnValueOnce(write.promise);
+    button("回滚", host.querySelector('[aria-label="RG-A 策略版本历史"]')!).click(); await flush();
+    button("历史", row("RG-B")).click(); await flush(); write.resolve(persist(rule({ policyVersion: 4 }))); await flush();
+    const history = host.querySelector('[aria-label="RG-B 策略版本历史"]')!;
+    expect(history.textContent).not.toContain("回滚已生成"); expect(messages.success).not.toHaveBeenCalled();
+    expect(api.ruleHistory.mock.calls.map(call => call[0])).toEqual(["RG-A", "RG-B"]);
+  });
+  it("excludes strategy application during a rollback and preserves a later choice", async () => {
+    await mount(); button("版本历史").click(); await flush(); const write = deferred<ReviewStrategyPolicy>(); api.strategyRollback.mockReturnValueOnce(write.promise);
+    button("回滚", host.querySelector('[aria-label="审查策略版本历史"]')!).click(); await flush();
+    await input(modeSelect(), "block"); expect(button("应用模式").disabled).toBe(true); expect(host.textContent).toContain("正在处理策略变更");
+    server.strategyPolicy = policy({ snapshotId: 10, enforcementMode: "comment" }); write.resolve(server.strategyPolicy); await flush();
+    expect(modeSelect().value).toBe("block"); expect(button("应用模式").disabled).toBe(false); expect(api.strategy).not.toHaveBeenCalled();
+    expect(api.strategyRollback).toHaveBeenCalledWith(6, 9);
+  });
+
   it("marks retained rows unconfirmed and disables writes until an explicit successful refresh", async () => {
     await mount(); await input(modeSelect(), "comment"); api.read.mockRejectedValueOnce(new Error("catalog offline"));
     button("刷新规则列表").click(); await flush();

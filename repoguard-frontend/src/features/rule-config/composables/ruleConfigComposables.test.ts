@@ -128,20 +128,21 @@ describe("rule configuration composables", () => {
     const rules = ref([reviewRule({ policyVersion: 7 })]);
     const policy = ref<ReviewStrategyPolicy | null>(strategyPolicy({ snapshotId: 11 }));
     const reloadRules = vi.fn(async () => undefined);
-    api.fetchReviewRuleVersions.mockResolvedValue({ items: [], hasMore: false });
-    api.fetchReviewStrategyVersions.mockResolvedValue({ items: [], hasMore: false });
+    api.fetchReviewRuleVersions.mockResolvedValue({ items: [{ ...reviewRule(), policyVersion: 4, changeType: "UPDATE", createdAt: "2026-08-10T00:00:00Z", active: false }], hasMore: false });
+    api.fetchReviewStrategyVersions.mockResolvedValue({ items: [strategyPolicy({ snapshotId: 6, active: false })], hasMore: false });
     api.rollbackReviewRule.mockResolvedValue(reviewRule({ policyVersion: 8 }));
     api.rollbackReviewStrategy.mockResolvedValue(strategyPolicy({ snapshotId: 12 }));
     const state = mountHistory({ rules, policy, reloadRules });
 
     await state.openRuleVersions(rules.value[0]!);
     await state.rollbackRuleVersion(4);
+    await state.openStrategyVersions();
     await state.rollbackStrategyVersion(6);
 
     expect(api.rollbackReviewRule).toHaveBeenCalledWith("RG-AUTH-001", 4, 7);
     expect(api.rollbackReviewStrategy).toHaveBeenCalledWith(6, 11);
     expect(api.fetchReviewRuleVersions).toHaveBeenCalledTimes(2);
-    expect(api.fetchReviewStrategyVersions).toHaveBeenCalledOnce();
+    expect(api.fetchReviewStrategyVersions).toHaveBeenCalledTimes(2);
     expect(reloadRules).toHaveBeenCalledTimes(2);
   });
 

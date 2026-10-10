@@ -6,7 +6,10 @@ import { getErrorMessage } from "@/utils/errors";
 import { currentUser } from "@/stores/authState";
 import { activeTenant } from "@/stores/tenantContext";
 
+import { createReviewConfigurationOperationLocks, type ReviewConfigurationOperationLocks } from "@/features/rule-config/reviewConfigurationOperationLocks";
+
 type ReviewStrategyGovernanceOptions = {
+  operationLocks?: ReviewConfigurationOperationLocks;
   canManage: Readonly<Ref<boolean>>;
   reloadRules: () => Promise<boolean | void>;
   strategyPolicy: Ref<ReviewStrategyPolicy | null>;
@@ -21,10 +24,11 @@ export const useReviewStrategyGovernance = ({
   strategyPolicy,
   rulesCurrent = ref(true),
   cancelRulesRead = () => undefined,
-  invalidateRules = () => undefined
+  invalidateRules = () => undefined,
+  operationLocks = createReviewConfigurationOperationLocks()
 }: ReviewStrategyGovernanceOptions) => {
   const strategyTargetMode = ref<EnforcementMode>("observe");
-  const strategySaving = ref(false);
+  const strategySaving = operationLocks.strategyBusy;
   const strategySaveError = ref("");
   const strategyRefreshError = ref("");
   const strategySaveNotice = ref("");
@@ -70,7 +74,9 @@ export const useReviewStrategyGovernance = ({
     const submitted = strategyTargetMode.value; const expectedSnapshotId = strategyPolicy.value!.snapshotId;
     const version = revision; const context = contextIdentity();
     const current = () => !disposed && canManage.value && version === revision;
-    strategySaving.value = true; strategySaveError.value = ""; strategyRefreshError.value = ""; strategySaveNotice.value = "";
+    const release = operationLocks.tryStrategy();
+    if (!release) return;
+    strategySaveError.value = ""; strategyRefreshError.value = ""; strategySaveNotice.value = "";
     cancelRulesRead();
     try {
       let saved: ReviewStrategyPolicy;
@@ -104,7 +110,7 @@ export const useReviewStrategyGovernance = ({
       const refreshed = await readFreshRules();
       if (current() && !refreshed) strategyRefreshError.value = acknowledged ? "本次模式已保存，规则与策略尚未刷新成功。" : "规则与策略尚未刷新成功，请刷新确认。";
     } finally {
-      strategySaving.value = false;
+      release();
       if (!disposed && version !== revision && context === contextIdentity()) invalidateRules();
     }
   };
