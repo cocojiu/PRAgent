@@ -162,6 +162,8 @@ class ProductionConfigurationContractTest {
             "REPOGUARD_API_INSTANCE_COUNT",
             "REPOGUARD_AUTH_REGISTRATION_ENABLED",
             "REPOGUARD_REVIEW_PROGRESS_STREAM_ENABLED",
+            "REPOGUARD_PREFLIGHT_ENABLED",
+            "REPOGUARD_PREFLIGHT_LLM_ENABLED",
             "SPRING_DATASOURCE_HIKARI_MAXIMUMPOOLSIZE",
             "SPRING_DATASOURCE_HIKARI_MINIMUMIDLE"
         );
@@ -178,7 +180,16 @@ class ProductionConfigurationContractTest {
             "${REPOGUARD_REVIEW_PROGRESS_STREAM_ENABLED:-false}"
         );
         assertThat(workerEnvironment)
-            .containsEntry("REPOGUARD_REVIEW_PROGRESS_STREAM_ENABLED", false);
+            .containsEntry("REPOGUARD_REVIEW_PROGRESS_STREAM_ENABLED", false)
+            .containsEntry("REPOGUARD_PREFLIGHT_ENABLED", false)
+            .containsEntry("REPOGUARD_PREFLIGHT_LLM_ENABLED", false);
+        String template = read(root.resolve(".env.prod.example"));
+        for (String key : List.of("REPOGUARD_PREFLIGHT_ENABLED", "REPOGUARD_PREFLIGHT_LLM_ENABLED")) {
+            assertThat(backendEnvironment.get(key))
+                .as("API-only preflight mapping for %s", key)
+                .isEqualTo("${" + key + ":-false}");
+            assertThat(template).contains(key + "=false");
+        }
         for (String key : backendEnvironment.keySet()) {
             if (!serviceSpecificKeys.contains(key)) {
                 assertThat(workerEnvironment.get(key))
