@@ -120,6 +120,8 @@ POST /api/v1/message-queue/tasks/{taskId}/requeue query=[] body=- bodyRequired=f
 POST /api/v1/notification-events/{id}/retry query=[] body=- bodyRequired=false
 POST /api/v1/notifications/read query=[] body=NotificationReadRequest bodyRequired=true
 POST /api/v1/observability/frontend/performance query=[] body=FrontendPerformanceReportRequest bodyRequired=true
+POST /api/v1/preflight/credentials query=[] body=CredentialRequest bodyRequired=true
+POST /api/v1/preflight/preview query=[] body=byte[] bodyRequired=true
 POST /api/v1/review-workflow/bot/{provider}/commands query=[] body=ReviewBotCommandRequest bodyRequired=true
 POST /api/v1/review-workflow/escalations query=[] body=- bodyRequired=false
 POST /api/v1/review-workflow/tasks/{taskId}/assignment/confirm query=[] body=ReviewMemberAssignmentRequest bodyRequired=true

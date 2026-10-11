@@ -161,6 +161,12 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         );
     }
 
+    /** Uses active server settings and quality gates without persisting a release assignment. */
+    public ReviewResult reviewForPreflight(ReviewTask task, PullRequestDiff diff, ReviewDeadline deadline,
+        ReviewPolicySettings settings, LlmEvaluationBudget budget) {
+        return reviewWithSettings(task, diff, deadline, settings, new LlmEvaluationReviewCaller(this, promptBuilder, budget));
+    }
+
     private ReviewPolicySettings evaluationSettings(ReviewTask task, String provider, String model) {
         ReviewPolicySettings configured = reviewPolicyProvider.getSettings();
         if (repositoryPolicyRuntime != null) {

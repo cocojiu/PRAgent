@@ -7,7 +7,7 @@
     "externalDatabaseSupported": true,
     "publishedMigrationPolicy": "IMMUTABLE",
     "newInstallationStrategy": "VALIDATED_SCHEMA_SNAPSHOT_THEN_BASELINE",
-    "candidateVersion": 103,
+    "candidateVersion": 104,
     "requiredEvidence": [
       "empty database migration to the candidate version",
       "schema structure diff against the supported production shape",
@@ -399,6 +399,18 @@
       "nMinusOneCompatible": true,
       "interruptedRecovery": "keep both payload-purge flags disabled; inspect Flyway, columns and indexes before a reviewed retry",
       "rollbackStrategy": "disable payload purge and roll back application while retaining additive fields; restore validated backup to recover purged payloads"
+    },
+    {
+      "version": 104,
+      "file": "V104__isolated_online_preflight.sql",
+      "phase": "EXPAND",
+      "estimatedRows": "new isolated preview table only; existing reviews and findings remain unchanged; rolling daily admission bounds",
+      "lockType": "new-table DDL with brief metadata locks on tenant and user foreign-key references",
+      "maxDurationSeconds": 300,
+      "maxDiskMegabytes": 256,
+      "nMinusOneCompatible": true,
+      "interruptedRecovery": "keep preflight disabled; inspect Flyway and the complete new table before a reviewed retry",
+      "rollbackStrategy": "disable preflight and roll back application while retaining the independent additive preview table"
     }
   ]
 }

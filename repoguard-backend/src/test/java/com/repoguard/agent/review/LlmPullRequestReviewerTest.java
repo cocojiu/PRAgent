@@ -420,8 +420,9 @@ class LlmPullRequestReviewerTest {
         }
     }
 
-    @Test
-    void evaluationBudgetBlocksStructuredOutputFallbackBeforeSecondHttpRequest() throws Exception {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void evaluationAndPreflightBudgetsBlockStructuredOutputFallbackBeforeSecondHttpRequest(boolean preflight) throws Exception {
         ReviewPolicyProvider reviewPolicyProvider = org.mockito.Mockito.mock(ReviewPolicyProvider.class);
         RuleBasedPullRequestReviewer ruleBasedReviewer = org.mockito.Mockito.mock(RuleBasedPullRequestReviewer.class);
         AtomicInteger requests = new AtomicInteger();
@@ -470,20 +471,53 @@ class LlmPullRequestReviewerTest {
                 ReviewResult.completed("INFO", List.of())
             );
 
-            assertThatThrownBy(() -> reviewer(reviewPolicyProvider, ruleBasedReviewer, null, null)
-                .reviewForEvaluation(
-                    task,
-                    diff,
-                    ReviewDeadline.unlimited(),
-                    "openai",
-                    "gpt-test",
-                    budget
-                ))
-                .isInstanceOf(LlmEvaluationBudget.BudgetExceededException.class);
+            var runner = reviewer(reviewPolicyProvider, ruleBasedReviewer, null, null);
+            assertThatThrownBy(() -> {
+                if (preflight) runner.reviewForPreflight(task, diff, ReviewDeadline.unlimited(), settings, budget);
+                else runner.reviewForEvaluation(task, diff, ReviewDeadline.unlimited(), "openai", "gpt-test", budget);
+            }).isInstanceOf(LlmEvaluationBudget.BudgetExceededException.class);
             assertThat(requests).hasValue(1);
         } finally {
             server.stop(0);
         }
+    }
+
+    @Test
+    void preflightUsesActualLocalProviderAndSkipsFormalReleaseRouting() throws Exception {
+        var provider = org.mockito.Mockito.mock(ReviewPolicyProvider.class);
+        var rules = org.mockito.Mockito.mock(RuleBasedPullRequestReviewer.class);
+        AtomicInteger calls = new AtomicInteger();
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/chat/completions", exchange -> {
+            calls.incrementAndGet();
+            byte[] body = """
+                {"choices":[{"message":{"content":"{\\"riskLevel\\":\\"LOW\\",\\"findings\\":[]}"}}],
+                 "usage":{"prompt_tokens":321,"completion_tokens":45,"total_tokens":366}}
+                """.getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body); exchange.close();
+        });
+        server.start();
+        try {
+            var settings = llmSettings(99, 700, 4, 450, "http://127.0.0.1:" + server.getAddress().getPort());
+            var diff = new PullRequestDiff("fixture", "repo", 0, List.of(file("Example.java", 1, 0)));
+            when(rules.review(any(PullRequestDiff.class), any(ReviewDeadline.class)))
+                .thenReturn(ReviewResult.completed("INFO", List.of()));
+            var releases = org.mockito.Mockito.mock(com.repoguard.agent.review.quality.LlmModelReleaseService.class);
+            var runner = reviewer(provider, rules, null, null);
+            var releaseField = LlmPullRequestReviewer.class.getDeclaredField("modelReleaseService");
+            releaseField.setAccessible(true); releaseField.set(runner, releases);
+            var budget = new LlmEvaluationBudget(32_000, new BigDecimal("0.10"));
+            var result = runner.reviewForPreflight(new ReviewTask(), diff, ReviewDeadline.unlimited(), settings, budget);
+            assertThat(result.llmStatus()).isEqualTo("COMPLETED");
+            assertThat(result.llmParseStatus()).isEqualTo("parsed");
+            assertThat(result.llmTotalTokens()).isEqualTo(366);
+            assertThat(budget.accountedTokens()).isEqualTo(366);
+            assertThat(budget.accountedCost()).isLessThanOrEqualTo(new BigDecimal("0.10"));
+            assertThat(calls).hasValue(1);
+            org.mockito.Mockito.verifyNoInteractions(provider, releases);
+        } finally { server.stop(0); }
     }
 
     @SuppressWarnings("unchecked")

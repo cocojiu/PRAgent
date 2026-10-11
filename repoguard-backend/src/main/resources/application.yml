@@ -140,11 +140,14 @@ repoguard:
       budget-ms: ${REPOGUARD_REVIEW_PIPELINE_BUDGET_MS:480000}
       max-total-chunks: ${REPOGUARD_REVIEW_PIPELINE_MAX_TOTAL_CHUNKS:64}
       max-in-flight-chunks: ${REPOGUARD_REVIEW_PIPELINE_MAX_IN_FLIGHT_CHUNKS:2}
+  preflight:
+    enabled: ${REPOGUARD_PREFLIGHT_ENABLED:false}
+    llm-enabled: ${REPOGUARD_PREFLIGHT_LLM_ENABLED:false}
   schema:
     # Roles that do not own Flyway migrations refuse to start below this version.
     # Keep in sync with the highest version under db/migration; the production
     # readiness check enforces the match.
-    expected-version: ${REPOGUARD_SCHEMA_EXPECTED_VERSION:103}
+    expected-version: ${REPOGUARD_SCHEMA_EXPECTED_VERSION:104}
   tenancy:
     enabled: ${REPOGUARD_TENANCY_ENABLED:false}
     header-name: ${REPOGUARD_TENANCY_HEADER_NAME:X-RepoGuard-Tenant}

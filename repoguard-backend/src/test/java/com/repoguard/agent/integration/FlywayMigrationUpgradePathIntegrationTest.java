@@ -20,7 +20,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
  * Exercises the supported rolling-upgrade path against a real MySQL instance.
  *
  * <p>The test is opt-in because local unit-test runs do not provision a database. CI enables it
- * with an isolated database and verifies the V76 expand state through the V103 retention metadata.
+ * with an isolated database and verifies the V76 expand state through the V104 isolated preflight state.
  */
 @EnabledIfEnvironmentVariable(named = "REPOGUARD_RUN_INTEGRATION_TESTS", matches = "true")
 class FlywayMigrationUpgradePathIntegrationTest {
@@ -342,6 +342,21 @@ class FlywayMigrationUpgradePathIntegrationTest {
                 assertThat(compositeUniqueIndexExists(connection, "github_feedback_event", "uk_feedback_delivery", 2)).isTrue();
                 assertThat(compositeUniqueIndexExists(connection, "github_feedback_event", "uk_feedback_comment", 4)).isTrue();
                 assertThat(compositeUniqueIndexExists(connection, "llm_evaluation_run", "uk_llm_evaluation_run_tenant_key", 2)).isTrue();
+            }
+            migrateTo(url, username, password, "104");
+            try (Connection connection = open(url, username, password)) {
+                assertThat(latestSuccessfulMigration(connection)).isEqualTo("104");
+                assertThat(columnExists(connection, "preflight_preview", "response_ciphertext")).isTrue();
+                assertThat(columnExists(connection, "preflight_preview", "credential_nonce")).isTrue();
+                assertThat(indexColumnNames(connection, "preflight_preview", "PRIMARY"))
+                    .isEqualTo("tenant_id,user_id,request_sha256");
+                assertThat(indexColumnNames(connection, "preflight_preview", "uk_preflight_credential"))
+                    .isEqualTo("credential_nonce");
+                try (PreparedStatement preview = connection.prepareStatement("select count(*) from preflight_preview");
+                     ResultSet rows = preview.executeQuery()) {
+                    assertThat(rows.next()).isTrue();
+                    assertThat(rows.getLong(1)).isZero();
+                }
             }
         } finally {
             cleanup(url, username, password, tenantId, taskId, attemptId);
