@@ -11,6 +11,8 @@ def matches(pattern, path):
     parts = path.split('/')
     if not rooted:
         tokens.insert(0, '**')
+    if pattern.rstrip('/').endswith('/**'):
+        tokens.append('*')  # A trailing /** requires at least one descendant.
     # A literal final component may name a directory as well as a file.
     descend = directory or not any(char in tokens[-1] for char in '*?')
 
@@ -39,9 +41,9 @@ def recommend(content, paths, source):
                 or any(not re.fullmatch(r'@[\w-]+(?:/[\w-]+)?|[^\s@]+@[^\s@]+\.[^\s@]+', o, re.ASCII) for o in owners)):
             warnings.append({'line': number, 'reason': 'unsupported_pattern_or_identity'})
             continue
-        rules.append((pattern, owners, number))
+        rules.append((pattern, list(dict.fromkeys(owners)), number))
     totals = {}
-    for path in paths:
+    for path in dict.fromkeys(paths):
         matched = None
         for pattern, owners, number in rules:
             if matches(pattern, path):
