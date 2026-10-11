@@ -35,6 +35,7 @@ public class MybatisPlusConfig {
         "notification_delivery_log",
         "notification_event",
         "notification_read_state",
+        "preflight_preview",
         "review_execution_attempt",
         "review_finding",
         "review_policy_config",

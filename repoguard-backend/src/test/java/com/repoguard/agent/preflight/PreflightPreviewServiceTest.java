@@ -169,6 +169,17 @@ class PreflightPreviewServiceTest {
         verify(store).fail(eq(grant), anyString());
     }
 
+    @Test void expiredPolicyReadDoesNotStartModelCall() {
+        when(policies.preview("fixture", "repo", null)).thenAnswer(_ -> {
+            Thread.sleep(30_100);
+            return policy;
+        });
+        assertThatThrownBy(() -> call(payload(true)))
+            .isInstanceOf(com.repoguard.agent.review.ReviewBudgetExceededException.class);
+        verifyNoInteractions(rules, llm);
+        verify(store).fail(eq(grant), anyString());
+    }
+
     @Test void responseProjectionMasksCredentialsAndDropsEvidence() throws Exception {
         var finding = new ReviewFindingResult("MEDIUM", "RULE", "FIXED_SLEEP", "src/Example.java", 1,
             "password='private-fixture'", "", "80", "raw private-fixture", "", "", false,

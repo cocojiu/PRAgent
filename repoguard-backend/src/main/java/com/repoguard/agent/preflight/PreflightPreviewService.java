@@ -104,12 +104,13 @@ public class PreflightPreviewService {
             if (cached != null) return json.readValue(cached,
                 new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() { });
             try {
+                ReviewDeadline deadline = ReviewDeadline.startingNow(Duration.ofSeconds(30));
                 var snapshot = Map.copyOf(ruleProvider.getRulesById());
                 var policy = policies.preview(diff.owner(), diff.repository(), null);
                 // Local HEAD is untrusted/unpushed. Only the protected server/base policy participates.
                 if (!policy.warnings().isEmpty() || policy.rules().isEmpty())
                     throw new BusinessException(ErrorCode.CONFLICT, "Verified repository policy unavailable");
-                ReviewDeadline deadline = ReviewDeadline.startingNow(Duration.ofSeconds(30));
+                deadline.requireRemaining("preflight_policy");
                 ReviewResult result;
                 LlmEvaluationBudget budget = null;
                 if (useLlm) {
