@@ -17,7 +17,8 @@ final class AuthTokenAccessPolicy {
         new PublicEndpoint("POST", "/api/v1/auth/refresh-token/reset", "Refresh token reset"),
         new PublicEndpoint("POST", "/api/v1/auth/logout", "Refresh token logout"),
         new PublicEndpoint("POST", "/api/v1/github/webhooks", "GitHub webhook ingress"),
-        new PublicEndpoint("POST", "/api/v1/scanners/sarif/ci/tasks/{taskId}/upload", "Short-lived CI SARIF upload")
+        new PublicEndpoint("POST", "/api/v1/scanners/sarif/ci/tasks/{taskId}/upload", "Short-lived CI SARIF upload"),
+        new PublicEndpoint("POST", "/api/v1/preflight/preview", "Repository-scoped preflight credential")
     );
 
     private AuthTokenAccessPolicy() {

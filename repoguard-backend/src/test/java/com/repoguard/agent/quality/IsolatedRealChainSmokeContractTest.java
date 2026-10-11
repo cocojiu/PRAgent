@@ -172,7 +172,7 @@ class IsolatedRealChainSmokeContractTest {
             .contains("name: Run backend production readiness slice")
             .contains("run: ./scripts/production-readiness-check.ps1 -Mode quick")
             .contains("run: ./mvnw -B verify")
-            .contains("run: ./mvnw -B -Dtest=ProductionRuntimeContextIntegrationTest test")
+            .contains("run: ./mvnw -B -Dtest=ProductionRuntimeContextIntegrationTest,PreflightPreviewMysqlIntegrationTest,PreflightTransportIntegrationTest test")
             .doesNotContain("run: mvn ");
         assertThat(wrapper)
             .contains("distributionUrl=https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.16/apache-maven-3.9.16-bin.zip")

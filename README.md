@@ -227,6 +227,22 @@ CLI 启动独立的 Java 主类，复用服务端14个内置规则检测器及�
 
 CODEOWNERS 只从指定基础分支读取，按 `.github/CODEOWNERS`、根目录、`docs/CODEOWNERS` 顺序选第一个文件。支持大小写敏感路径、`*`、`?`、`**`、目录规则、后匹配覆盖及空所有者清除；不支持的转义/否定/字符组规则会给出行号提示。文件最多128 KiB、2000行；解析问题仅影响推荐，不阻止规则预审。输出最多3个按覆盖文件数排列的外部身份及每条路径的匹配依据、未覆盖列表，不验证 GitHub 写权限或映射租户成员，不自动分派。语义依据：[GitHub CODEOWNERS 文档](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners)。
 
+### 在线 Diff 预审
+
+在线模式上传本地 diff，由服务端使用当前仓库基础策略和平台规则执行预审；无需本地 Java。API 默认关闭，通过 `REPOGUARD_PREFLIGHT_ENABLED=true` 显式开启，要求 Schema V104、可用加密密钥和调度角色。个人版只接受已配置仓库；企业版要求活动租户及仓库绑定。它不创建正式审查任务、不分配模型版本、不发送评论或 Check Run，结果不计入质量准入和绩效统计。
+
+已登录用户向 `POST /api/v1/preflight/credentials` 提交 `{"repository":"owner/repo","llmAllowed":false}`，获得最多600秒、绑定用户会话、租户和仓库的专用凭据。该凭据只允许预审，不允许访问普通业务 API；账号停用、会话版本变化或成员权限撤销后立即失效。凭据必须经私有输入传入 CLI，不放入命令行、环境变量、Git 或报告：
+
+~~~text
+python scripts/repoguard-review.py --repo <仓库目录> --base origin/main --api-url https://<API域名> --repository owner/repo --preflight-token-stdin --format json
+~~~
+
+向标准输入提供一行短期凭据后关闭输入流。自动化可使用操作系统管道传入私有内存中的凭据；普通登录令牌、管理员 API Key 和 CI 上传令牌不会被接受。仅允许具有有效证书的 HTTPS origin；禁止重定向和 HTTP 重试，完整传输最多45秒。请求最多200个文件、3 MiB，响应最多2 MiB；在线模式不接受本地策略或完整工作区上下文，范围缺口直接失败。
+
+默认只扫描规则。模型预审还要求 `REPOGUARD_PREFLIGHT_LLM_ENABLED=true`、管理员签发 `llmAllowed=true` 的凭据、CLI 显式指定 `--llm`，以及完整的服务端模型配置和已知非负价格。原质量门禁继续生效；每次共享硬预算最多32,000 token 和0.10配置价格单位，仓库更低的成本上限优先。每租户滚动24小时最多20次新请求，其中模型请求最多5次；跨节点依靠数据库事务串行准入，节点内最多一个执行中请求。
+
+每个凭据只接受一个新载荷，正文 SHA256 是幂等键。相同用户、租户和正文在摘要有效期内返回加密缓存；执行中、失败或摘要过期时拒绝重做，避免不确定结果重复计费。服务端不保存原始 diff，只保存经过字段投影和脱敏的加密摘要（15分钟）以及去重元数据（24小时），由有租约的后台任务限量清理。报告包含请求和策略版本指纹；规则配置在执行期间变化时失败。预审结果只证明本次上传范围，不能代替正式 PR 审查或模型真实效果验收。
+
 ### 在线 CODEOWNERS 复核推荐
 
 该入口仅装配于 `enterprise-experimental` API，默认关闭。开启前应具备真实仓库的合法读取权限、至少 30 次可追溯的人工分派或领取记录，以及可计算的接受率和 SLA 数据。设置 `REPOGUARD_CODEOWNERS_ROUTING_ENABLED=true` 与 `REPOGUARD_CODEOWNERS_MAPPING_FILE`；映射文件必须是 API 进程可读的绝对规范路径、普通文件，不能经过符号链接，内容不超过 256 KiB。映射由运维配置，HTTP 调用者不能上传映射或自授所有者权限。

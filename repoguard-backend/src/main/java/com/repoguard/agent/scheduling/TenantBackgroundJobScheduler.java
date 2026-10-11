@@ -25,6 +25,8 @@ import org.springframework.stereotype.Component;
 public class TenantBackgroundJobScheduler {
 
     private final TenantScheduledTaskRunner tenantRunner;
+    private com.repoguard.agent.preflight.PreflightPreviewStore preflight;
+    private boolean preflightEnabled;
     private final DashboardDailySnapshotRecoveryWorker dashboardSnapshots;
     private final ReviewTaskRecoveryCompensator reviewRecovery;
     private final ReviewAttemptRetentionWorker reviewAttemptRetention;
@@ -207,6 +209,18 @@ public class TenantBackgroundJobScheduler {
     @Scheduled(cron = "${repoguard.review.quality-baseline-reconciliation-cron:0 20 3 * * *}")
     public void reconcileQualityBaseline() {
         run("review_quality_baseline_reconciliation", qualityBaseline::reconcileSnapshot);
+    }
+
+    @Autowired
+    public void configurePreflightCleanup(com.repoguard.agent.preflight.PreflightPreviewStore store,
+        @org.springframework.beans.factory.annotation.Value("${repoguard.preflight.enabled:false}") boolean enabled) {
+        this.preflight = store; this.preflightEnabled = enabled;
+    }
+
+    @Scheduled(fixedDelay = 60000)
+    public void retainPreflightPreviews() {
+        if (preflightEnabled && preflight != null)
+            tenantRunner.runGlobal("preflight_preview_retention", preflight::cleanupExpired);
     }
 
     private void run(String operation, Runnable task) {

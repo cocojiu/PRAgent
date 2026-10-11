@@ -98,7 +98,11 @@ public class RuleBasedPullRequestReviewer {
 
     public ReviewResult review(PullRequestDiff diff, ReviewDeadline deadline) {
         Map<String, ReviewRuleSettings> loadedRules = ruleSettings.get();
-        Map<String, ReviewRuleSettings> configuredRules = loadedRules == null ? Map.of() : loadedRules;
+        return review(diff, deadline, loadedRules == null ? Map.of() : loadedRules);
+    }
+
+    /** Uses one immutable rule snapshot supplied by an isolated preflight run. */
+    public ReviewResult review(PullRequestDiff diff, ReviewDeadline deadline, Map<String, ReviewRuleSettings> configuredRules) {
         List<RuleMatch> matches = new ArrayList<>();
         List<PullRequestChangedFile> files = diff.files() == null ? List.of() : diff.files();
         boolean budgetExhausted = false;

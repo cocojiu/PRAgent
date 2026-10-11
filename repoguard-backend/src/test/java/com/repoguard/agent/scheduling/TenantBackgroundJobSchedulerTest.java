@@ -147,12 +147,28 @@ class TenantBackgroundJobSchedulerTest {
     }
 
     @Test
-    void ownsExactlyThirteenScheduledMethods() {
+    void preflightCleanupRequiresExplicitOptInAndGlobalLeaseRouting() {
+        var store = mock(com.repoguard.agent.preflight.PreflightPreviewStore.class);
+        scheduler.retainPreflightPreviews();
+        org.mockito.Mockito.verifyNoInteractions(store, tenantRunner);
+        scheduler.configurePreflightCleanup(store, false);
+        scheduler.retainPreflightPreviews();
+        org.mockito.Mockito.verifyNoInteractions(store, tenantRunner);
+        scheduler.configurePreflightCleanup(store, true);
+        scheduler.retainPreflightPreviews();
+        var callback = org.mockito.ArgumentCaptor.forClass(Runnable.class);
+        verify(tenantRunner).runGlobal(org.mockito.ArgumentMatchers.eq("preflight_preview_retention"), callback.capture());
+        callback.getValue().run();
+        verify(store).cleanupExpired();
+    }
+
+    @Test
+    void ownsExactlyFourteenScheduledMethods() {
         long scheduledMethods = Stream.of(TenantBackgroundJobScheduler.class.getDeclaredMethods())
             .filter(method -> method.isAnnotationPresent(Scheduled.class))
             .count();
 
-        assertThat(scheduledMethods).isEqualTo(13L);
+        assertThat(scheduledMethods).isEqualTo(14L);
     }
 
     @Test
@@ -177,7 +193,7 @@ class TenantBackgroundJobSchedulerTest {
                 "DatabaseRateLimitCleanupWorker.java",
                 "TenantBackgroundJobScheduler.java"
             );
-        assertThat(annotationCount).isEqualTo(17L);
+        assertThat(annotationCount).isEqualTo(18L);
     }
 
     private boolean containsScheduledAnnotation(Path path) {

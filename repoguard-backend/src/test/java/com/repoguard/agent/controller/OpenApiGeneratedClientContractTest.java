@@ -25,6 +25,8 @@ class OpenApiGeneratedClientContractTest {
     private static final Set<String> SERVER_ONLY_ENDPOINTS = Set.of(
         "GET /api/v1/config/data-retention/payload-preview",
         "POST /api/v1/auth/refresh",
+        "POST /api/v1/preflight/credentials",
+        "POST /api/v1/preflight/preview",
         "GET /api/v1/enterprise/tenants",
         "GET /api/v1/enterprise/tenants/{tenantKey}",
         "GET /api/v1/enterprise/tenants/{tenantKey}/quota",

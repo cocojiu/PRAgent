@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Offline Git diff review using RepoGuard's Java detectors; no API, model, or GitHub writes."""
+"""Git diff preflight; offline by default, with an optional scoped HTTPS preview."""
 import argparse
 import difflib
 import hashlib
@@ -13,6 +13,7 @@ import threading
 from urllib.parse import quote
 from local_codeowners import recommend
 from local_review_content import ContentError, read_worktree
+from local_preflight_transport import TransportError, credential_from_stdin, origin_url
 
 LIMIT = 2 * 1024 * 1024
 
@@ -221,7 +222,8 @@ def sarif(report):
         'tool': {'driver': {'name': 'RepoGuard Local Preflight', 'semanticVersion': '0.1.0'}},
         'invocations': [{'executionSuccessful': report['scanComplete']}],
         'properties': {k: report[k] for k in ('scope', 'policySource', 'productionPolicyVerified', 'gaps', 'codeowners',
-                                             'untrackedFilesIncluded', 'fullFileContextRequested', 'fullFileContextLoaded', 'files')},
+                                             'untrackedFilesIncluded', 'fullFileContextRequested', 'fullFileContextLoaded', 'files',
+                                             'policyFingerprint', 'requestSha256', 'llmExecuted', 'onlineTransport') if k in report},
         'results': results}]}
 
 
@@ -232,7 +234,11 @@ def main():
     parser.add_argument('--staged', action='store_true', help='Compare merge base to index; otherwise compare tracked working tree')
     parser.add_argument('--include-untracked', action='store_true', help='Also review non-ignored untracked regular files (working-tree mode only)')
     parser.add_argument('--full-context', action='store_true', help='Load bounded full files from the same index or working-tree snapshot; never upload them')
-    parser.add_argument('--backend-jar', type=Path, required=True)
+    parser.add_argument('--backend-jar', type=Path)
+    parser.add_argument('--api-url', help='Opt-in HTTPS origin for an enabled scoped preflight service')
+    parser.add_argument('--repository', help='Authorized owner/repository for online preflight')
+    parser.add_argument('--preflight-token-stdin', action='store_true', help='Read only a short-lived scoped preflight credential from private stdin')
+    parser.add_argument('--llm', action='store_true', help='Explicitly request budgeted model preview; requires server opt-in and quality gates')
     parser.add_argument('--java', default='java')
     parser.add_argument('--policy', type=Path, help='Explicit local JSON array of built-in ReviewRuleSettings; never fetched automatically')
     parser.add_argument('--format', choices=['text', 'json', 'sarif'], default='text')
@@ -241,6 +247,14 @@ def main():
     args = parser.parse_args()
     if args.staged and args.include_untracked:
         parser.error('--include-untracked cannot be combined with --staged')
+    if args.api_url:
+        origin_url(args.api_url)
+        if not args.repository or not re.fullmatch(r'[A-Za-z0-9_-]{1,39}/[A-Za-z0-9_.-]{1,100}', args.repository):
+            parser.error('Online preflight requires --repository owner/repository')
+        if not args.preflight_token_stdin or args.full_context or args.policy:
+            parser.error('Online preflight requires private token stdin; local policy and full context stay offline')
+    elif not args.backend_jar or args.repository or args.preflight_token_stdin or args.llm:
+        parser.error('Offline preflight requires --backend-jar; online options require --api-url')
     repo = Path(git(args.repo, 'rev-parse', '--show-toplevel').decode().strip()).resolve()
     base, ancestor, head, files, gaps = collect(repo, args.base, args.staged, args.include_untracked, args.full_context)
     request = {'files': files}
@@ -251,12 +265,34 @@ def main():
     payload = json.dumps(request, ensure_ascii=False).encode('utf-8')
     if len(payload) > 3 * 1024 * 1024:
         raise PreflightError('encoded_payload_budget_exceeded')
-    jar = args.backend_jar.resolve(strict=True)
-    raw = command([args.java, '-Xmx192m', '-Dfile.encoding=UTF-8',
-                   '-Dloader.main=com.repoguard.agent.review.LocalReviewCommand', '-cp', str(jar),
-                   'org.springframework.boot.loader.launch.PropertiesLauncher'], repo,
-                  limit=8 * 1024 * 1024, data=payload, timeout=45)
-    report = json.loads(raw)
+    if args.api_url:
+        if gaps:
+            raise PreflightError('online_diff_scope_incomplete')
+        token = credential_from_stdin(sys.stdin)
+        online_request = {'repository': args.repository, 'baseSha': base, 'mergeBaseSha': ancestor,
+                          'headSha': head, 'llmRequested': args.llm, 'files': files}
+        payload = json.dumps(online_request, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
+        if len(payload) > 3 * 1024 * 1024:
+            raise PreflightError('encoded_payload_budget_exceeded')
+        import base64
+        private_input = json.dumps({'origin': args.api_url, 'credential': token,
+                                    'payloadBase64': base64.b64encode(payload).decode('ascii')}).encode('utf-8')
+        del token
+        raw = command([sys.executable, '-B', '-X', 'utf8', str(Path(__file__).with_name('local_preflight_transport.py'))],
+                      repo, limit=2 * 1024 * 1024, data=private_input, timeout=45)
+        del private_input
+        response = json.loads(raw)
+        if response.get('error'):
+            raise TransportError(response['error'])
+        report = response['report']
+        report['onlineTransport'] = response['transport']
+    else:
+        jar = args.backend_jar.resolve(strict=True)
+        raw = command([args.java, '-Xmx192m', '-Dfile.encoding=UTF-8',
+                       '-Dloader.main=com.repoguard.agent.review.LocalReviewCommand', '-cp', str(jar),
+                       'org.springframework.boot.loader.launch.PropertiesLauncher'], repo,
+                      limit=8 * 1024 * 1024, data=payload, timeout=45)
+        report = json.loads(raw)
     report.update(baseSha=base, mergeBaseSha=ancestor, headSha=head, diffSha256=hashlib.sha256(payload).hexdigest(),
                   changedFiles=len(files), untrackedFilesIncluded=args.include_untracked,
                   fullFileContextRequested=args.full_context,
@@ -265,8 +301,11 @@ def main():
                   gaps=gaps, codeowners=owners(repo, base, files))
     report['scanComplete'] = report['scanComplete'] and not gaps
     if args.format == 'text':
-        text = f"Offline diff review: {len(files)} files, {len(report['findings'])} findings\n"
-        text += f"Scope: local diff; no LLM; production policy not verified; untracked included={args.include_untracked}; full context requested={args.full_context}.\n"
+        text = f"{'Online' if args.api_url else 'Offline'} diff review: {len(files)} files, {len(report['findings'])} findings\n"
+        if args.api_url:
+            text += f"Scope: server preflight; production policy verified={report['productionPolicyVerified']}; LLM executed={report['llmExecuted']}.\n"
+        else:
+            text += f"Scope: local diff; no LLM; production policy not verified; untracked included={args.include_untracked}; full context requested={args.full_context}.\n"
         text += '\n'.join(f"{f['severity']} {f['ruleId']} {f['filePath']}:{f.get('lineNumber') or 1} {f['message']}"
                           for f in report['findings'])
         text += '\nCODEOWNERS: ' + json.dumps(report['codeowners'], ensure_ascii=False) + '\n'
@@ -305,6 +344,6 @@ if __name__ == '__main__':
             'changed_file_list_changed_during_collection': 'The changed-file list changed during collection. Retry with a stable worktree.',
             'unmerged_or_unsupported_git_status': 'Resolve merge conflicts before running preflight.'
         }
-        code = str(error) if isinstance(error, (PreflightError, ContentError)) else type(error).__name__
+        code = str(error) if isinstance(error, (PreflightError, ContentError, TransportError)) else type(error).__name__
         print('Preflight failed: ' + messages.get(code, code), file=sys.stderr)
         sys.exit(2)

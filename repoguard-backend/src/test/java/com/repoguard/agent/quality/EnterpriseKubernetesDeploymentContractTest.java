@@ -317,7 +317,7 @@ class EnterpriseKubernetesDeploymentContractTest {
     private Path repositoryRoot() {
         Path current = Path.of("").toAbsolutePath();
         while (current != null) {
-            if (Files.isDirectory(current.resolve(".git"))
+            if (Files.exists(current.resolve(".git"))
                 && Files.isDirectory(current.resolve("deploy/kubernetes"))) {
                 return current;
             }

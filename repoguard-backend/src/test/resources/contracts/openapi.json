@@ -6093,6 +6093,115 @@
         }
       }
     },
+    "/api/v1/preflight/credentials" : {
+      "post" : {
+        "tags" : [ "Preflight" ],
+        "operationId" : "preflightControllerIssue",
+        "x-controller-operation" : "PreflightController#issue",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "CredentialRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CredentialRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "Issue",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "object",
+                      "x-java-type" : "Issue"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/preflight/preview" : {
+      "post" : {
+        "tags" : [ "Preflight" ],
+        "operationId" : "preflightControllerPreview",
+        "x-controller-operation" : "PreflightController#preview",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "byte[]",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "string",
+                "format" : "binary"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "Map<String,Object>",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "object",
+                      "x-java-type" : "Map<String,Object>"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/review-workflow/bot/{provider}/commands" : {
       "post" : {
         "tags" : [ "ReviewWorkflow" ],

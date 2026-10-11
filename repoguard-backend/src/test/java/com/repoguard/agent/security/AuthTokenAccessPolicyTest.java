@@ -23,7 +23,8 @@ class AuthTokenAccessPolicyTest {
                 "POST /api/v1/auth/refresh-token/reset",
                 "POST /api/v1/auth/logout",
                 "POST /api/v1/github/webhooks",
-                "POST /api/v1/scanners/sarif/ci/tasks/{taskId}/upload"
+                "POST /api/v1/scanners/sarif/ci/tasks/{taskId}/upload",
+                "POST /api/v1/preflight/preview"
             );
     }
 
