@@ -130,10 +130,25 @@ class PreflightTransportIntegrationTest {
             Path file = repo.resolve("Example.java"); Files.writeString(file, "class Example {}\n");
             run(repo, Map.of(), "git", "add", "Example.java"); run(repo, Map.of(), "git", "commit", "--quiet", "-m", "fixture");
             Files.writeString(file, "class Example { void waitForIt() throws Exception { Thread.sleep(1); } }\n");
+            String head = run(repo, Map.of(), "git", "rev-parse", "HEAD").strip();
+            String patch = run(repo, Map.of(), "git", "diff", "--no-ext-diff", "--no-textconv",
+                "--find-renames=50%", "-l200", "--unified=3", head, "--", "Example.java");
             var direct = ENGINE.review(new PullRequestDiff("fixture", "repo", 0, List.of(
-                new PullRequestChangedFile("Example.java", "modified", 1, 1, "@@ -1 +1 @@\n-old\n+Thread.sleep(1);\n"))));
-            assertThat(direct.findings().size()).as("Actual engine fixture baseline").isEqualTo(1);
-            var first = cli(repo, origin, shortToken);
+                new PullRequestChangedFile("Example.java", "modified", 1, 1, patch))));
+            assertThat(direct.findings().size()).as("Actual same-diff engine baseline").isEqualTo(1);
+            clearInvocations(ENGINE);
+            var payload = JSON.createObjectNode();
+            payload.put("repository", "fixture/repo"); payload.put("baseSha", head);
+            payload.put("mergeBaseSha", head); payload.put("headSha", head); payload.put("llmRequested", false);
+            payload.putArray("files").addObject().put("filename", "Example.java").put("status", "modified").put("patch", patch);
+            byte[] body = JSON.writeValueAsBytes(payload);
+            String digest = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(body));
+            var preview = HttpRequest.newBuilder(origin.resolve("/api/v1/preflight/preview"))
+                .header("Authorization", "Bearer " + shortToken).header("Content-Type", "application/json")
+                .header("Idempotency-Key", digest).POST(HttpRequest.BodyPublishers.ofByteArray(body)).build();
+            assertThat(client.send(preview, HttpResponse.BodyHandlers.discarding()).statusCode()).isEqualTo(200);
+            // The completed body was not retained. A fresh CLI credential must recover the same persisted result.
+            var first = cli(repo, origin, mint(client, origin, access));
             assertThat(first.path("changedFiles").asInt()).as("Actual CLI tracked diff collection").isEqualTo(1);
             assertThat(first.path("scope").asText()).isEqualTo("ONLINE_PREFLIGHT");
             assertThat(first.path("productionPolicyVerified").asBoolean()).isTrue();
@@ -141,7 +156,14 @@ class PreflightTransportIntegrationTest {
             assertThat(first.path("llmExecuted").asBoolean()).isFalse();
             assertThat(first.path("findings").size()).isEqualTo(1);
             assertThat(first.path("findings").get(0).path("ruleId").asText()).isEqualTo("RG-JAVA-003");
-            assertThat(cli(repo, origin, mint(client, origin, access)).path("requestSha256")).isEqualTo(first.path("requestSha256"));
+            assertThat(first.path("requestSha256").asText()).isEqualTo(digest);
+            var replay = client.send(preview, HttpResponse.BodyHandlers.ofString());
+            assertThat(replay.statusCode()).isEqualTo(200);
+            var server = JSON.readTree(replay.body()).path("data");
+            assertThat(first.path("findings")).as("Actual preview and CLI finding fingerprints").isEqualTo(server.path("findings"));
+            assertThat(first.path("policyFingerprint")).as("Actual preview and CLI policy identity").isEqualTo(server.path("policyFingerprint"));
+            assertThat(cli(repo, origin, mint(client, origin, access)).path("findings")).isEqualTo(first.path("findings"));
+            verify(ENGINE, times(1)).review(any(PullRequestDiff.class), any(ReviewDeadline.class), anyMap());
             assertThat(jdbc.queryForObject("select count(*) from preflight_preview where user_id=?", Long.class, user.getId())).isEqualTo(1);
             var ordinary = HttpRequest.newBuilder(origin.resolve("/api/v1/preflight/preview"))
                 .header("Authorization", "Bearer " + access).header("Content-Type", "application/json")
@@ -191,14 +213,19 @@ class PreflightTransportIntegrationTest {
         } finally { if (child.isAlive()) child.destroyForcibly(); }
     }
 
-    private void run(Path directory, Map<String, String> environment, String... command) throws Exception {
-        var process = new ProcessBuilder(command).directory(directory.toFile()).redirectErrorStream(true);
+    private String run(Path directory, Map<String, String> environment, String... command) throws Exception {
+        var process = new ProcessBuilder(command).directory(directory.toFile()).redirectErrorStream(false);
         process.environment().putAll(environment);
+        process.environment().putAll(Map.of("GIT_CONFIG_NOSYSTEM", "1",
+            "GIT_CONFIG_GLOBAL", System.getProperty("os.name").startsWith("Windows") ? "NUL" : "/dev/null"));
+        process.environment().remove("GIT_DIR"); process.environment().remove("GIT_WORK_TREE");
         Path log = temporary.resolve(UUID.randomUUID() + ".txt"); process.redirectOutput(log.toFile());
+        process.redirectError(temporary.resolve(UUID.randomUUID() + ".txt").toFile());
         var child = process.start();
         try {
             assertThat(child.waitFor(20, TimeUnit.SECONDS)).isTrue();
             assertThat(child.exitValue()).as("Isolated fixture command exit").isZero();
+            return command[0].equals("git") ? Files.readString(log, StandardCharsets.UTF_8) : "";
         } finally { if (child.isAlive()) child.destroyForcibly(); }
     }
 
@@ -234,6 +261,7 @@ class PreflightTransportIntegrationTest {
             var registry = new ReviewRuleRegistry(List.of(new FixedSleepRule(new RuleMatchFactory())), List.of());
             var rules = new RuleBasedPullRequestReviewer(provider, registry, new FindingPolicyResolver(), new ReviewFindingFactory(),
                 new ReviewFindingSemanticDeduplicator(), new ServerRiskAggregator());
+            rules = spy(rules);
             ENGINE = rules;
             var evaluator = new RepositoryPolicyEvaluationService(new ServerRiskAggregator());
             var policies = mock(RepositoryPolicyRuntime.class);
