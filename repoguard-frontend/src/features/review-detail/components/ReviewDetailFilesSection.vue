@@ -108,7 +108,7 @@ import {
 } from "../reviewDetailRenderBudget";
 import type { ChangedFileViewModel, MissingTestViewModel } from "@/types";
 
-type ChangedFileWithFindingCount = ChangedFileViewModel & { findingCount: number };
+type ChangedFileWithFindingCount = ChangedFileViewModel & { findingCount?: number };
 
 const props = defineProps<{
   archived: boolean;

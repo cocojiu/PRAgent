@@ -10102,6 +10102,10 @@
           "deletions" : {
             "type" : "integer",
             "format" : "int32"
+          },
+          "findingCount" : {
+            "type" : "integer",
+            "format" : "int64"
           }
         }
       },
