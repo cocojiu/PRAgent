@@ -1,6 +1,7 @@
 # name|owner|trigger|lifecycle
 repoguard-review.py|Offline developer preflight|Operator local invocation|Retire when an equivalent offline CLI preserves diff boundaries and side-effect isolation.
 local_preflight_transport.py|Scoped developer preview transport|repoguard-review.py online child process|Retire with the online preview after equivalent TLS, credential and budget checks.
+local_preflight_output.py|Developer preflight output and report safety|repoguard-review.py import|Retire with the CLI after equivalent terminal-safe formatting, exclusive atomic publication and controlled diagnostics.
 local_review_content.py|Bounded local snapshot reads|repoguard-review.py import|Retire with the local preflight or equivalent verified regular-file reads.
 local_codeowners.py|Offline ownership recommendations|repoguard-review.py import|Retire with the local preflight or replace after equivalent base-branch matching checks.
 scheduled-mysql-backup.py|Server-local encrypted MySQL snapshots|repoguard-mysql-backup.timer or operator pull|Retire after replacement scheduling, verified retention and offline catch-up are rehearsed.
