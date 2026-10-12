@@ -1,4 +1,4 @@
-import { ref, type Ref } from "vue";
+import { ref, watch, type Ref } from "vue";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import {
   fetchReviewChangedFiles,
@@ -33,7 +33,8 @@ const createPagedSectionState = () => ({
   loaded: ref(false),
   loading: ref(false),
   page: ref(1),
-  requestSequence: 0
+  requestSequence: 0,
+  controller: undefined as AbortController | undefined
 });
 
 export const useReviewDetailSectionLoaders = ({
@@ -47,9 +48,12 @@ export const useReviewDetailSectionLoaders = ({
   const timelineLoaded = ref(false);
   const timelineLoading = ref(false);
   let timelineRequestSequence = 0;
+  let timelineController: AbortController | undefined;
 
   const resetPagedSection = (state: PagedSectionState) => {
     state.requestSequence += 1;
+    state.controller?.abort();
+    state.controller = undefined;
     state.page.value = 1;
     state.loaded.value = false;
     state.loading.value = false;
@@ -61,6 +65,8 @@ export const useReviewDetailSectionLoaders = ({
     resetPagedSection(changedFiles);
     resetPagedSection(missingTests);
     timelineRequestSequence += 1;
+    timelineController?.abort();
+    timelineController = undefined;
     timelineLoaded.value = false;
     timelineLoading.value = false;
   };
@@ -77,14 +83,15 @@ export const useReviewDetailSectionLoaders = ({
   }: {
     applyResult: (task: ReviewTaskDetail, items: T[], total: number) => ReviewTaskDetail;
     clearArchived: (task: ReviewTaskDetail) => ReviewTaskDetail;
-    fetchPage: (taskId: number) => Promise<{ items: T[]; total: number }>;
+    fetchPage: (taskId: number, signal: AbortSignal) => Promise<{ items: T[]; total: number }>;
     page: number;
     state: PagedSectionState;
   }) => {
     const task = selectedTask.value;
-    if (!task || state.loading.value) {
+    if (!task) {
       return;
     }
+    state.controller?.abort();
     if (isArchivedTask.value) {
       selectedTask.value = clearArchived(task);
       state.page.value = page;
@@ -94,9 +101,11 @@ export const useReviewDetailSectionLoaders = ({
 
     const taskId = task.id;
     const sequence = ++state.requestSequence;
+    const controller = new AbortController();
+    state.controller = controller;
     state.loading.value = true;
     try {
-      const result = await fetchPage(taskId);
+      const result = await fetchPage(taskId, controller.signal);
       if (!isCurrentPagedRequest(state, sequence, taskId) || !selectedTask.value) {
         return;
       }
@@ -104,12 +113,13 @@ export const useReviewDetailSectionLoaders = ({
       state.page.value = page;
       state.loaded.value = true;
     } catch (error) {
-      if (isCurrentPagedRequest(state, sequence, taskId)) {
+      if (!controller.signal.aborted && isCurrentPagedRequest(state, sequence, taskId)) {
         ElMessage.error(getErrorMessage(error, "请求失败"));
       }
     } finally {
       if (state.requestSequence === sequence) {
         state.loading.value = false;
+        state.controller = undefined;
       }
     }
   };
@@ -118,7 +128,7 @@ export const useReviewDetailSectionLoaders = ({
     loadPagedSection<ReviewFindingViewModel>({
       applyResult: (task, items, total) => ({ ...task, findings: items, findingTotal: total }),
       clearArchived: (task) => ({ ...task, findings: [] }),
-      fetchPage: async (taskId) => {
+      fetchPage: async (taskId, signal) => {
         const params: { page: number; pageSize: number; source?: string } = {
           page,
           pageSize: DETAIL_SECTION_PAGE_SIZE
@@ -126,7 +136,7 @@ export const useReviewDetailSectionLoaders = ({
         if (findingsSource.value) {
           params.source = findingsSource.value;
         }
-        const result = await fetchReviewFindings(taskId, params);
+        const result = await fetchReviewFindings(taskId, params, { signal });
         return { items: result.items.map(toReviewFindingViewModel), total: result.total };
       },
       page,
@@ -137,8 +147,8 @@ export const useReviewDetailSectionLoaders = ({
     loadPagedSection<ChangedFileViewModel>({
       applyResult: (task, items, total) => ({ ...task, changedFiles: items, changedFileTotal: total }),
       clearArchived: (task) => ({ ...task, changedFiles: [] }),
-      fetchPage: async (taskId) => {
-        const result = await fetchReviewChangedFiles(taskId, { page, pageSize: DETAIL_SECTION_PAGE_SIZE });
+      fetchPage: async (taskId, signal) => {
+        const result = await fetchReviewChangedFiles(taskId, { page, pageSize: DETAIL_SECTION_PAGE_SIZE }, { signal });
         return { items: result.items.map(toChangedFileViewModel), total: result.total };
       },
       page,
@@ -149,8 +159,8 @@ export const useReviewDetailSectionLoaders = ({
     loadPagedSection<MissingTestViewModel>({
       applyResult: (task, items, total) => ({ ...task, missingTests: items, missingTestTotal: total }),
       clearArchived: (task) => ({ ...task, missingTests: [] }),
-      fetchPage: async (taskId) => {
-        const result = await fetchReviewMissingTests(taskId, { page, pageSize: DETAIL_SECTION_PAGE_SIZE });
+      fetchPage: async (taskId, signal) => {
+        const result = await fetchReviewMissingTests(taskId, { page, pageSize: DETAIL_SECTION_PAGE_SIZE }, { signal });
         return { items: result.items.map(toMissingTestViewModel), total: result.total };
       },
       page,
@@ -164,9 +174,11 @@ export const useReviewDetailSectionLoaders = ({
     }
     const taskId = task.id;
     const sequence = ++timelineRequestSequence;
+    const controller = new AbortController();
+    timelineController = controller;
     timelineLoading.value = true;
     try {
-      const timeline = (await fetchReviewTimeline(taskId, { limit: DETAIL_SECTION_PAGE_SIZE }))
+      const timeline = (await fetchReviewTimeline(taskId, { limit: DETAIL_SECTION_PAGE_SIZE }, { signal: controller.signal }))
         .map(toTimelineItemViewModel);
       if (timelineRequestSequence !== sequence || selectedTask.value?.id !== taskId) {
         return;
@@ -174,15 +186,18 @@ export const useReviewDetailSectionLoaders = ({
       selectedTask.value = { ...selectedTask.value, timeline };
       timelineLoaded.value = true;
     } catch (error) {
-      if (timelineRequestSequence === sequence && selectedTask.value?.id === taskId) {
+      if (!controller.signal.aborted && timelineRequestSequence === sequence && selectedTask.value?.id === taskId) {
         ElMessage.warning(getErrorMessage(error, "时间线加载失败"));
       }
     } finally {
       if (timelineRequestSequence === sequence) {
         timelineLoading.value = false;
+        timelineController = undefined;
       }
     }
   };
+
+  watch(() => selectedTask.value?.id, resetDetailSections, { flush: "sync" });
 
   return {
     changedFilesLoaded: changedFiles.loaded,
