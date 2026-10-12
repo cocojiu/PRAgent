@@ -223,7 +223,7 @@ python scripts/repoguard-review.py --repo <仓库目录> --base origin/main --in
 
 CLI 启动独立的 Java 主类，复用服务端14个内置规则检测器及结果去重逻辑，不启动 Spring 应用、数据库、MQ 或模型调用。默认策略是显式标记的离线 OBSERVE 基线（MEDIUM 严重级别、80置信度），不等同生产仓库策略。可用 `--policy <JSON文件>` 提供本地 `ReviewRuleSettings` 数组，要求内置规则 ID、检测器版本和配置版本有效；不支持声明式规则、不自动下载生产配置，输出始终标明生产策略未验证。
 
-支持终端摘要、JSON、SARIF；报告不包含原始 diff 或凭据。默认发现问题仍退出0，`--fail-on MEDIUM` 等参数显式开启本地严重级别门禁后命中退出1；执行失败或范围不完整退出2。`--output` 只创建新文件，不覆盖已有报告。预审不创建正式任务、不发布评论或 Check Run，不进入质量准入样本或绩效统计。
+支持终端摘要、JSON、SARIF；报告不包含原始 diff 或凭据。默认发现问题仍退出0，`--fail-on MEDIUM` 等参数显式开启本地严重级别门禁后命中退出1；执行失败或范围不完整退出2。`--output` 在目标目录写入并同步完整临时文件后原子发布，不覆盖已有报告；并发写入同一路径时只有一个发布者成功。目标文件已存在时，在扫描或上传前拒绝执行。文本报告将终端及双向控制字符显示为转义文本；JSON/SARIF 使用 ASCII 转义，解析后保留原始字段值。执行错误仅输出受控错误码和处理建议；JSON/SARIF 模式在 stderr 输出 JSON 诊断，成功报告仍写入 stdout 或指定文件。在线错误区分凭据拒绝、权限、限额、版本冲突、服务不可用和 TLS 验证失败，保持不自动重试、不转发凭据及 HTTPS 验证。预审不创建正式任务、不发布评论或 Check Run，不进入质量准入样本或绩效统计。
 
 CODEOWNERS 只从指定基础分支读取，按 `.github/CODEOWNERS`、根目录、`docs/CODEOWNERS` 顺序选第一个文件。支持大小写敏感路径、`*`、`?`、`**`、目录规则、后匹配覆盖及空所有者清除；不支持的转义/否定/字符组规则会给出行号提示。文件最多128 KiB、2000行；解析问题仅影响推荐，不阻止规则预审。输出最多3个按覆盖文件数排列的外部身份及每条路径的匹配依据、未覆盖列表，不验证 GitHub 写权限或映射租户成员，不自动分派。语义依据：[GitHub CODEOWNERS 文档](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners)。
 

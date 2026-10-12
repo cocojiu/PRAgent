@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Git diff preflight; offline by default, with an optional scoped HTTPS preview."""
-import argparse
 import difflib
 import hashlib
 import json
@@ -14,6 +13,8 @@ from urllib.parse import quote
 from local_codeowners import recommend
 from local_review_content import ContentError, read_worktree
 from local_preflight_transport import TransportError, credential_from_stdin, origin_url
+from local_preflight_output import (DiagnosticArgumentParser, ReportOutputError, emit_diagnostic,
+                                    publish_report, terminal_text, validate_report_destination)
 
 LIMIT = 2 * 1024 * 1024
 
@@ -228,7 +229,7 @@ def sarif(report):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = DiagnosticArgumentParser(prog='repoguard-review.py', description=__doc__)
     parser.add_argument('--repo', type=Path, default=Path.cwd())
     parser.add_argument('--base', default='origin/main')
     parser.add_argument('--staged', action='store_true', help='Compare merge base to index; otherwise compare tracked working tree')
@@ -245,6 +246,8 @@ def main():
     parser.add_argument('--output', type=Path, help='Create a new report; refuses to overwrite existing files')
     parser.add_argument('--fail-on', choices=['INFO', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'], help='Opt-in local severity gate')
     args = parser.parse_args()
+    if args.output:
+        validate_report_destination(args.output)
     if args.staged and args.include_untracked:
         parser.error('--include-untracked cannot be combined with --staged')
     if args.api_url:
@@ -306,15 +309,14 @@ def main():
             text += f"Scope: server preflight; production policy verified={report['productionPolicyVerified']}; LLM executed={report['llmExecuted']}.\n"
         else:
             text += f"Scope: local diff; no LLM; production policy not verified; untracked included={args.include_untracked}; full context requested={args.full_context}.\n"
-        text += '\n'.join(f"{f['severity']} {f['ruleId']} {f['filePath']}:{f.get('lineNumber') or 1} {f['message']}"
+        text += '\n'.join(terminal_text(f"{f['severity']} {f['ruleId']} {f['filePath']}:{f.get('lineNumber') or 1} {f['message']}")
                           for f in report['findings'])
-        text += '\nCODEOWNERS: ' + json.dumps(report['codeowners'], ensure_ascii=False) + '\n'
+        text += '\nCODEOWNERS: ' + json.dumps(report['codeowners'], ensure_ascii=True) + '\n'
         text += 'Scan complete within requested scope: ' + str(report['scanComplete']) + '\n'
     else:
-        text = json.dumps(sarif(report) if args.format == 'sarif' else report, ensure_ascii=False, indent=2) + '\n'
+        text = json.dumps(sarif(report) if args.format == 'sarif' else report, ensure_ascii=True, indent=2) + '\n'
     if args.output:
-        with args.output.open('x', encoding='utf-8') as stream:
-            stream.write(text)
+        publish_report(args.output, text)
     else:
         sys.stdout.reconfigure(encoding='utf-8')
         print(text, end='')
@@ -329,21 +331,10 @@ def main():
 if __name__ == '__main__':
     try:
         sys.exit(main())
+    except KeyboardInterrupt:
+        emit_diagnostic('preflight_interrupted')
+        sys.exit(2)
     except Exception as error:
-        # Subprocess/parser exceptions can contain code or configuration; print only controlled diagnostics.
-        messages = {
-            'base_revision_unavailable': 'Base revision is unavailable locally. Fetch it separately or choose an existing commit.',
-            'merge_base_unavailable': 'No local merge base is available. Check the base branch and shallow history.',
-            'changed_file_budget_exceeded': 'More than 200 changed files. Review a smaller change set.',
-            'total_diff_budget_exceeded': 'Combined diff/context exceeds 2 MiB. Reduce scope or omit --full-context.',
-            'file_content_budget_exceeded': 'A file or patch exceeds 256 KiB. Reduce the input size.',
-            'command_output_budget_exceeded': 'A local command exceeded its output budget. Reduce the input size.',
-            'local_command_timeout': 'A local command timed out. Check Git/Java availability and reduce scope.',
-            'local_command_failed': 'A local command failed. Verify Git access, the backend JAR version and policy input.',
-            'diff_changed_during_collection': 'Files changed while collecting the snapshot. Save changes and retry.',
-            'changed_file_list_changed_during_collection': 'The changed-file list changed during collection. Retry with a stable worktree.',
-            'unmerged_or_unsupported_git_status': 'Resolve merge conflicts before running preflight.'
-        }
-        code = str(error) if isinstance(error, (PreflightError, ContentError, TransportError)) else type(error).__name__
-        print('Preflight failed: ' + messages.get(code, code), file=sys.stderr)
+        code = str(error) if isinstance(error, (PreflightError, ContentError, TransportError, ReportOutputError)) else 'preflight_unexpected_failure'
+        emit_diagnostic(code)
         sys.exit(2)
