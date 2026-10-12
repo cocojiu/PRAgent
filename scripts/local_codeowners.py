@@ -1,29 +1,37 @@
 """Bounded offline CODEOWNERS recommendations; external identities are never treated as tenant users."""
-from functools import lru_cache
 import fnmatch
 import re
 
 
-def matches(pattern, path):
+def prepare_pattern(pattern):
     rooted = pattern.startswith('/') or '/' in pattern.rstrip('/')
     directory = pattern.endswith('/')
     tokens = pattern.strip('/').split('/')
-    parts = path.split('/')
     if not rooted:
         tokens.insert(0, '**')
     if pattern.rstrip('/').endswith('/**'):
         tokens.append('*')  # A trailing /** requires at least one descendant.
-    # A literal final component may name a directory as well as a file.
     descend = directory or not any(char in tokens[-1] for char in '*?')
+    return directory, descend, tuple((token, re.compile(fnmatch.translate(token))
+        if token != '**' and any(char in token for char in '*?[') else None) for token in tokens)
 
-    @lru_cache(maxsize=8192)
-    def visit(i, j):
-        if i == len(tokens):
-            return (not directory and j == len(parts)) or (descend and j < len(parts))
-        if tokens[i] == '**':
-            return visit(i + 1, j) or (j < len(parts) and visit(i, j + 1))
-        return j < len(parts) and fnmatch.fnmatchcase(parts[j], tokens[i]) and visit(i + 1, j + 1)
-    return visit(0, 0)
+
+def match_prepared(prepared, parts):
+    directory, descend, tokens = prepared
+    reachable = {0}
+    for token, matcher in tokens:
+        if token == '**':
+            reachable = set(range(min(reachable), len(parts) + 1))
+        else:
+            reachable = {index + 1 for index in reachable if index < len(parts)
+                and (matcher.fullmatch(parts[index]) is not None if matcher else token == parts[index])}
+        if not reachable:
+            return False
+    return (not directory and len(parts) in reachable) or (descend and min(reachable) < len(parts))
+
+
+def matches(pattern, path):
+    return match_prepared(prepare_pattern(pattern), path.split('/'))
 
 
 def recommend(content, paths, source):
@@ -41,13 +49,15 @@ def recommend(content, paths, source):
                 or any(not re.fullmatch(r'@[\w-]+(?:/[\w-]+)?|[^\s@]+@[^\s@]+\.[^\s@]+', o, re.ASCII) for o in owners)):
             warnings.append({'line': number, 'reason': 'unsupported_pattern_or_identity'})
             continue
-        rules.append((pattern, list(dict.fromkeys(owners)), number))
+        rules.append((pattern, list(dict.fromkeys(owners)), number, prepare_pattern(pattern)))
     totals = {}
     for path in dict.fromkeys(paths):
         matched = None
-        for pattern, owners, number in rules:
-            if matches(pattern, path):
+        parts = path.split('/')
+        for pattern, owners, number, prepared in reversed(rules):
+            if match_prepared(prepared, parts):
                 matched = {'path': path, 'pattern': pattern, 'line': number, 'owners': owners}
+                break
         row = matched or {'path': path, 'owners': []}
         result.append(row)
         for owner in row['owners']:
