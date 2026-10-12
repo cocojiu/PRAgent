@@ -12,6 +12,7 @@ import threading
 from urllib.parse import quote
 from local_codeowners import recommend
 from local_review_content import ContentError, read_worktree
+from local_review_diff import DiffError, parse_batch
 from local_preflight_transport import TransportError, credential_from_stdin, origin_url
 from local_preflight_output import (DiagnosticArgumentParser, ReportOutputError, emit_diagnostic,
                                     publish_report, terminal_text, validate_report_destination)
@@ -69,7 +70,7 @@ def command(args, cwd, limit=LIMIT, data=None, timeout=30):
 
 
 def git(repo, *args, limit=LIMIT):
-    return command(['git', '-c', 'core.fsmonitor=false', '-c', 'protocol.allow=never', '--literal-pathspecs', *args], repo, limit)
+    return command(['git', '-c', 'core.fsmonitor=false', '-c', 'core.quotePath=true', '-c', 'protocol.allow=never', '--literal-pathspecs', *args], repo, limit)
 
 
 def safe_path(path):
@@ -93,7 +94,9 @@ def collect(repo, base, staged, include_untracked=False, full_context=False):
     except PreflightError:
         raise PreflightError('merge_base_unavailable') from None
     options = ['--cached'] if staged else []
-    diff_args = ['diff', '--no-ext-diff', '--no-textconv', '--find-renames=50%', '-l200']
+    diff_args = ['diff', '--no-ext-diff', '--no-textconv', '--find-renames=50%', '-l200',
+                 '--no-color', '--no-relative', '--src-prefix=a/', '--dst-prefix=b/', '--line-prefix=',
+                 '--output-indicator-new=+', '--output-indicator-old=-', '--output-indicator-context= ']
     listing = git(repo, *diff_args, '--name-status', '-z', *options, ancestor, '--')
     fields = listing.decode('utf-8', 'strict').rstrip('\0').split('\0') if listing else []
     entries, index = [], 0
@@ -112,7 +115,11 @@ def collect(repo, base, staged, include_untracked=False, full_context=False):
             entries.append(('UNTRACKED', safe_path(path), None))
     if len(entries) > 200:
         raise PreflightError('changed_file_budget_exceeded')
-    files, gaps, size, snapshots, patches = [], [], 0, {}, {}
+    files, gaps, size, snapshots = [], [], 0, {}
+    tracked = [e for e in entries if e[0] != 'UNTRACKED']
+    batch_args = [*diff_args, '--raw', '-z', '--patch', '--unified=3', *options, ancestor, '--']
+    batch = git(repo, *batch_args, limit=LIMIT + 512 * 1024) if tracked else b''
+    patches = iter(parse_batch(batch, tracked))
 
     def content_at(path):
         if staged:
@@ -144,10 +151,7 @@ def collect(repo, base, staged, include_untracked=False, full_context=False):
             patch = ''.join(difflib.unified_diff([], content.splitlines(keepends=True),
                             fromfile='/dev/null', tofile='b/' + path)) if content is not None else ''
         else:
-            paths = [old_path, path] if old_path else [path]
-            patch = git(repo, *diff_args, '--unified=3', *options,
-                        ancestor, '--', *paths, limit=256 * 1024).decode('utf-8', 'strict')
-            patches[path] = (paths, patch)
+            patch = next(patches)
         if len(patch.encode('utf-8')) > 256 * 1024:
             raise PreflightError('file_content_budget_exceeded')
         size += len(patch.encode('utf-8'))
@@ -178,9 +182,8 @@ def collect(repo, base, staged, include_untracked=False, full_context=False):
         if path in snapshots:
             item['contentSha256'] = snapshots[path]
         files.append(item)
-    for paths, original in patches.values():
-        if git(repo, *diff_args, '--unified=3', *options, ancestor, '--', *paths, limit=256 * 1024).decode('utf-8', 'strict') != original:
-            raise PreflightError('diff_changed_during_collection')
+    if tracked and git(repo, *batch_args, limit=LIMIT + 512 * 1024) != batch:
+        raise PreflightError('diff_changed_during_collection')
     for path, expected in snapshots.items():
         if hashlib.sha256(content_at(path)).hexdigest() != expected:
             raise PreflightError('diff_changed_during_collection')
@@ -224,7 +227,8 @@ def sarif(report):
         'invocations': [{'executionSuccessful': report['scanComplete']}],
         'properties': {k: report[k] for k in ('scope', 'policySource', 'productionPolicyVerified', 'gaps', 'codeowners',
                                              'untrackedFilesIncluded', 'fullFileContextRequested', 'fullFileContextLoaded', 'files',
-                                             'policyFingerprint', 'requestSha256', 'llmExecuted', 'onlineTransport') if k in report},
+                                             'policyFingerprint', 'requestSha256', 'llmExecuted', 'onlineTransport',
+                                             'executionSkipped', 'skipReason') if k in report},
         'results': results}]}
 
 
@@ -268,7 +272,12 @@ def main():
     payload = json.dumps(request, ensure_ascii=False).encode('utf-8')
     if len(payload) > 3 * 1024 * 1024:
         raise PreflightError('encoded_payload_budget_exceeded')
-    if args.api_url:
+    if not files and not args.policy:
+        report = {'scope': 'LOCAL_NO_CHANGES', 'policySource': 'NOT_EVALUATED',
+                  'productionPolicyVerified': False, 'llmExecuted': False,
+                  'scanComplete': True, 'findings': [], 'executionSkipped': True,
+                  'skipReason': 'NO_CHANGES'}
+    elif args.api_url:
         if gaps:
             raise PreflightError('online_diff_scope_incomplete')
         token = credential_from_stdin(sys.stdin)
@@ -305,7 +314,9 @@ def main():
     report['scanComplete'] = report['scanComplete'] and not gaps
     if args.format == 'text':
         text = f"{'Online' if args.api_url else 'Offline'} diff review: {len(files)} files, {len(report['findings'])} findings\n"
-        if args.api_url:
+        if report.get('executionSkipped'):
+            text += 'Scope: requested local diff has no changes; execution skipped; production policy not verified.\n'
+        elif args.api_url:
             text += f"Scope: server preflight; production policy verified={report['productionPolicyVerified']}; LLM executed={report['llmExecuted']}.\n"
         else:
             text += f"Scope: local diff; no LLM; production policy not verified; untracked included={args.include_untracked}; full context requested={args.full_context}.\n"
@@ -335,6 +346,6 @@ if __name__ == '__main__':
         emit_diagnostic('preflight_interrupted')
         sys.exit(2)
     except Exception as error:
-        code = str(error) if isinstance(error, (PreflightError, ContentError, TransportError, ReportOutputError)) else 'preflight_unexpected_failure'
+        code = str(error) if isinstance(error, (PreflightError, ContentError, DiffError, TransportError, ReportOutputError)) else 'preflight_unexpected_failure'
         emit_diagnostic(code)
         sys.exit(2)

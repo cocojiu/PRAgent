@@ -191,9 +191,36 @@ class LocalPreflightCliOutputTest {
         assertThat(requests.get()).isZero();
     }
 
+    @ParameterizedTest @ValueSource(strings = {"text", "json", "sarif"})
+    void cleanScopeFinishesWithOpenCredentialInputAndNoHttpsRequest(String format) throws Exception {
+        Files.writeString(repository.resolve("Example.java"), "class Example {}\n");
+        var child = start(format, List.of("--llm", "--fail-on", "INFO"), false);
+        Result result;
+        try {
+            assertThat(child.process().waitFor(5, TimeUnit.SECONDS)).as("Empty diff must not read open credential stdin").isTrue();
+            result = finish(child);
+        } finally { if (child.process().isAlive()) child.process().destroyForcibly(); }
+        assertThat(result.code()).isZero();
+        assertThat(result.error()).isEmpty();
+        assertThat(requests.get()).isZero();
+        if (format.equals("text")) {
+            assertThat(result.out()).contains("execution skipped", "production policy not verified");
+        } else {
+            var report = JSON.readTree(result.out());
+            var properties = format.equals("json") ? report : report.path("runs").get(0).path("properties");
+            assertThat(properties.path("scope").asText()).isEqualTo("LOCAL_NO_CHANGES");
+            assertThat(properties.path("executionSkipped").asBoolean()).isTrue();
+            assertThat(properties.path("productionPolicyVerified").asBoolean()).isFalse();
+            assertThat(properties.path("llmExecuted").asBoolean()).isFalse();
+            assertThat(properties.has("onlineTransport")).isFalse();
+        }
+    }
+
     private Result cli(String format, List<String> extra) throws Exception { return finish(start(format, extra)); }
 
-    private Child start(String format, List<String> extra) throws Exception {
+    private Child start(String format, List<String> extra) throws Exception { return start(format, extra, true); }
+
+    private Child start(String format, List<String> extra, boolean provideCredential) throws Exception {
         Path cli = Path.of("..", "scripts", "repoguard-review.py").toAbsolutePath().normalize();
         String python = System.getenv().getOrDefault("REPOGUARD_PREFLIGHT_PYTHON", windows() ? "python" : "python3");
         var command = new ArrayList<>(List.of(python, "-B", "-X", "utf8", cli.toString(),
@@ -208,8 +235,10 @@ class LocalPreflightCliOutputTest {
         builder.environment().putAll(Map.of("SSL_CERT_FILE", certificates.resolve("fixture.pem").toString(),
             "NO_PROXY", "localhost,127.0.0.1", "no_proxy", "localhost,127.0.0.1"));
         var process = builder.start();
-        try (var input = process.getOutputStream()) { input.write((CREDENTIAL + "\n").getBytes(StandardCharsets.UTF_8)); }
-        catch (java.io.IOException closed) { if (process.isAlive()) throw closed; }
+        if (provideCredential) {
+            try (var input = process.getOutputStream()) { input.write((CREDENTIAL + "\n").getBytes(StandardCharsets.UTF_8)); }
+            catch (java.io.IOException closed) { if (process.isAlive()) throw closed; }
+        }
         return new Child(process, out, error);
     }
 
