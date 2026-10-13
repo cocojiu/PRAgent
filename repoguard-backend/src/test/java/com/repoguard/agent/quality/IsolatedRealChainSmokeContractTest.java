@@ -134,7 +134,7 @@ class IsolatedRealChainSmokeContractTest {
             .contains("smoke_exit_status=")
             .contains("policy_probe_exit_status=")
             .contains("smoke_output_log")
-            .contains("actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a")
+            .contains("actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9")
             .contains("real-chain-observe-${{ github.run_id }}-${{ github.run_attempt }}")
             .contains("if-no-files-found: warn")
             .contains("github.run_id")
