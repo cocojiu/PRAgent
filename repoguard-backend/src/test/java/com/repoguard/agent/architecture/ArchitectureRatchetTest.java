@@ -42,7 +42,19 @@ class ArchitectureRatchetTest {
             + "([A-Za-z_$][A-Za-z0-9_$]*)"
     );
     private static final Pattern IMPLEMENTED_INTERFACE = Pattern.compile(
-        "\\bimplements\\s+([A-Za-z_$][A-Za-z0-9_$]*)"
+        "\\b(?:implements|extends)\\s+"
+            + "([A-Za-z_$][A-Za-z0-9_$]*(?:\\s*,\\s*[A-Za-z_$][A-Za-z0-9_$]*)*)"
+    );
+    private static final Pattern TYPE_DECLARATION = Pattern.compile(
+        "\\b(?:class|interface)\\s+([A-Za-z_$][A-Za-z0-9_$]*)"
+    );
+    private static final Pattern IMPORT_DECLARATION = Pattern.compile(
+        "(?m)^\\s*import\\s+(?:static\\s+)?[^;]+;\\s*$"
+    );
+    private static final Pattern FRAMEWORK_ENTRY_POINT = Pattern.compile(
+        "@(Scheduled|RabbitListener|EventListener|Intercepts)\\b"
+            + "|\\bextends\\s+OncePerRequestFilter\\b"
+            + "|\\bimplements\\s+(?:FlywayConfigurationCustomizer|InitializingBean)\\b"
     );
     private static final Pattern LEGACY_CONFIGURATION = Pattern.compile(
         "\\\"(app\\.runtime\\.(?:api|worker)\\.enabled|REPOGUARD_(?:API|WORKER)_ENABLED)\\\""
@@ -156,8 +168,9 @@ class ArchitectureRatchetTest {
     @Test
     void productionInterfacesAndDtosDoNotAccumulateUnreferencedDuplicates() throws IOException {
         Properties properties = loadProperties();
-        List<String> unreferencedBeans = unreferencedBeanNames();
-        List<String> unreferencedInterfaces = unreferencedInterfaceNames();
+        List<SourceText> sources = productionSourceTexts();
+        List<String> unreferencedBeans = unreferencedBeanNames(sources);
+        List<String> unreferencedInterfaces = unreferencedInterfaceNames(sources);
         List<String> duplicateDtoNames = duplicateDtoNames();
 
         assertThat(unreferencedBeans)
@@ -169,6 +182,70 @@ class ArchitectureRatchetTest {
         assertThat(duplicateDtoNames)
             .as("duplicate production DTO simple names")
             .hasSizeLessThanOrEqualTo(Integer.parseInt(properties.getProperty("maxDuplicateDtoNameCount", "0")));
+    }
+
+    @Test
+    void beanAndInterfaceAuditRequiresARealCallerInsteadOfCountingDeclarations() {
+        List<SourceText> sources = List.of(
+            source("Orphan.java", """
+                @Component
+                class Orphan {
+                    Orphan() {
+                    }
+                }
+                """),
+            source("OrphanPort.java", "interface OrphanPort {}"),
+            source("OrphanPortAdapter.java", """
+                @Component
+                class OrphanPortAdapter implements OrphanPort {
+                    OrphanPortAdapter() {
+                    }
+                }
+                """),
+            source("Direct.java", """
+                @Component
+                class Direct {
+                    Direct() {
+                    }
+                }
+                """),
+            source("DirectCaller.java", """
+                import example.Direct;
+                class DirectCaller {
+                    DirectCaller(Direct direct) {
+                    }
+                }
+                """),
+            source("Channel.java", "interface Channel {}"),
+            source("BaseChannel.java", "abstract class BaseChannel implements Channel {}"),
+            source("ChannelAdapter.java", """
+                @Component
+                class ChannelAdapter extends BaseChannel {
+                    ChannelAdapter() {
+                    }
+                }
+                """),
+            source("ChannelRegistry.java", """
+                import java.util.List;
+                class ChannelRegistry {
+                    ChannelRegistry(List<Channel> channels) {
+                    }
+                }
+                """),
+            source("ScheduledWorker.java", """
+                @Component
+                class ScheduledWorker {
+                    @Scheduled
+                    void run() {
+                    }
+                }
+                """)
+        );
+
+        assertThat(unreferencedBeanNames(sources))
+            .containsExactly("Orphan", "OrphanPortAdapter");
+        assertThat(unreferencedInterfaceNames(sources))
+            .containsExactly("OrphanPort");
     }
 
     @Test
@@ -241,25 +318,20 @@ class ArchitectureRatchetTest {
         return variables;
     }
 
-    private static List<String> unreferencedBeanNames() throws IOException {
-        List<String> sourceTexts = productionSources().stream()
-            .map(ArchitectureRatchetTest::read)
-            .toList();
+    private static List<String> unreferencedBeanNames(List<SourceText> sources) {
         Set<String> names = new LinkedHashSet<>();
-        for (String sourceText : sourceTexts) {
-            Matcher annotation = COMPONENT_ANNOTATION.matcher(sourceText);
+        for (SourceText source : sources) {
+            Matcher annotation = COMPONENT_ANNOTATION.matcher(source.text());
             while (annotation.find()) {
-                Matcher declaration = CLASS_DECLARATION.matcher(sourceText);
-                declaration.region(annotation.end(), Math.min(sourceText.length(), annotation.end() + 1000));
+                Matcher declaration = CLASS_DECLARATION.matcher(source.text());
+                declaration.region(annotation.end(), Math.min(source.text().length(), annotation.end() + 1000));
                 if (!declaration.find()) {
                     continue;
                 }
                 String name = declaration.group(1);
-                Pattern reference = Pattern.compile("\\b" + Pattern.quote(name) + "\\b");
-                long references = sourceTexts.stream()
-                    .mapToLong(text -> reference.matcher(text).results().count())
-                    .sum();
-                if (references <= 1 && !referencedThroughInterface(sourceText, sourceTexts)) {
+                if (!hasReferenceOutsideDeclaration(name, source, sources)
+                    && !referencedThroughInterface(source, sources, new LinkedHashSet<>())
+                    && !FRAMEWORK_ENTRY_POINT.matcher(source.text()).find()) {
                     names.add(name);
                 }
             }
@@ -267,16 +339,26 @@ class ArchitectureRatchetTest {
         return names.stream().sorted().toList();
     }
 
-    private static boolean referencedThroughInterface(String sourceText, List<String> sourceTexts) {
-        Matcher implemented = IMPLEMENTED_INTERFACE.matcher(sourceText);
+    private static boolean referencedThroughInterface(
+        SourceText source,
+        List<SourceText> sources,
+        Set<String> visitedTypes
+    ) {
+        Matcher implemented = IMPLEMENTED_INTERFACE.matcher(source.text());
         while (implemented.find()) {
-            String name = implemented.group(1);
-            Pattern reference = Pattern.compile("\\b" + Pattern.quote(name) + "\\b");
-            long references = sourceTexts.stream()
-                .mapToLong(text -> reference.matcher(text).results().count())
-                .sum();
-            if (references > 1) {
-                return true;
+            for (String name : implemented.group(1).split(",")) {
+                String typeName = name.trim();
+                if (!visitedTypes.add(typeName)) {
+                    continue;
+                }
+                SourceText declaration = declaringSource(typeName, sources);
+                if (declaration == null) {
+                    continue;
+                }
+                if (hasDispatchedReference(typeName, declaration, sources)
+                    || referencedThroughInterface(declaration, sources, visitedTypes)) {
+                    return true;
+                }
             }
         }
         return false;
@@ -305,25 +387,89 @@ class ArchitectureRatchetTest {
         return jobs;
     }
 
-    private static List<String> unreferencedInterfaceNames() throws IOException {
-        List<String> sourceTexts = productionSources().stream()
-            .map(path -> read(path))
-            .toList();
+    private static List<String> unreferencedInterfaceNames(List<SourceText> sources) {
         List<String> names = new java.util.ArrayList<>();
-        for (String sourceText : sourceTexts) {
-            Matcher declaration = INTERFACE_DECLARATION.matcher(sourceText);
+        for (SourceText source : sources) {
+            Matcher declaration = INTERFACE_DECLARATION.matcher(source.text());
             while (declaration.find()) {
                 String name = declaration.group(1);
-                Pattern reference = Pattern.compile("\\b" + Pattern.quote(name) + "\\b");
-                long references = sourceTexts.stream()
-                    .mapToLong(text -> reference.matcher(text).results().count())
-                    .sum();
-                if (references <= 1) {
+                if (!hasSemanticReference(name, source, sources)) {
                     names.add(name);
                 }
             }
         }
         return names.stream().distinct().sorted().toList();
+    }
+
+    private static List<SourceText> productionSourceTexts() throws IOException {
+        return productionSources().stream()
+            .map(path -> source(path.toString(), read(path)))
+            .toList();
+    }
+
+    private static boolean hasReferenceOutsideDeclaration(
+        String typeName,
+        SourceText declaration,
+        List<SourceText> sources
+    ) {
+        Pattern reference = Pattern.compile("\\b" + Pattern.quote(typeName) + "\\b");
+        return sources.stream()
+            .filter(source -> !source.path().equals(declaration.path()))
+            .map(SourceText::semanticText)
+            .anyMatch(text -> reference.matcher(text).find());
+    }
+
+    private static boolean hasDispatchedReference(
+        String typeName,
+        SourceText declaration,
+        List<SourceText> sources
+    ) {
+        return declaresInterface(typeName, declaration)
+            ? hasSemanticReference(typeName, declaration, sources)
+            : hasReferenceOutsideDeclaration(typeName, declaration, sources);
+    }
+
+    private static boolean hasSemanticReference(
+        String typeName,
+        SourceText declaration,
+        List<SourceText> sources
+    ) {
+        Pattern reference = Pattern.compile("\\b" + Pattern.quote(typeName) + "\\b");
+        Pattern ownDeclaration = Pattern.compile(
+            "\\b(?:class|interface)\\s+" + Pattern.quote(typeName) + "\\b"
+        );
+        return sources.stream()
+            .map(source -> {
+                String text = source.semanticText();
+                return source.path().equals(declaration.path())
+                    ? ownDeclaration.matcher(text).replaceAll("")
+                    : text;
+            })
+            .anyMatch(text -> reference.matcher(text).find());
+    }
+
+    private static boolean declaresInterface(String typeName, SourceText source) {
+        return Pattern.compile("\\binterface\\s+" + Pattern.quote(typeName) + "\\b")
+            .matcher(source.text())
+            .find();
+    }
+
+    private static SourceText declaringSource(String typeName, List<SourceText> sources) {
+        for (SourceText source : sources) {
+            Matcher declaration = TYPE_DECLARATION.matcher(source.text());
+            while (declaration.find()) {
+                if (typeName.equals(declaration.group(1))) {
+                    return source;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static SourceText source(String path, String text) {
+        String semanticText = IMPORT_DECLARATION.matcher(text).replaceAll("");
+        semanticText = IMPLEMENTED_INTERFACE.matcher(semanticText).replaceAll("");
+        return new SourceText(path, text, semanticText);
     }
 
     private static List<String> duplicateDtoNames() throws IOException {
@@ -436,5 +582,8 @@ class ArchitectureRatchetTest {
     }
 
     private record SourceSize(String path, int lines) {
+    }
+
+    private record SourceText(String path, String text, String semanticText) {
     }
 }

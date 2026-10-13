@@ -233,6 +233,8 @@ describe("apiRequest", () => {
       temperature: 0.2,
       ruleVersion: "rules-1",
       codeRevision: "0123456789abcdef0123456789abcdef01234567",
+      verifierVersion: "high-risk-verifier-v1",
+      aggregationVersion: "server-risk-v2",
       observations: [],
       minimumSamples: 1
     };
