@@ -102,6 +102,28 @@ class ReviewQueryOptimizationMysqlIntegrationTest {
     }
 
     @Test
+    void findingCountsAndFileFiltersKeepCaseAndAccentsDistinct() {
+        long uppercase = file(tenant, task, attempt, "src/A.java");
+        long lowercase = file(tenant, task, attempt, "src/a.java");
+        long accented = file(tenant, task, attempt, "src/résumé.java");
+        long plain = file(tenant, task, attempt, "src/resume.java");
+        finding(tenant, task, attempt, "FINDING", 1);
+        insert("insert into review_finding(tenant_id,task_id,attempt_id,category,file_path,current_attempt) values(?,?,?,'FINDING',?,1)",
+            tenant, task, attempt, "src/résumé.java");
+        var mapper = session.getMapper(ChangedFileMapper.class);
+        try (TenantContext.Scope _ = TenantContext.withTenant(tenant)) {
+            assertThat(mapper.selectFindingCountsForFiles(task, List.of(uppercase, lowercase, accented, plain)))
+                .containsExactlyInAnyOrder(new ChangedFileMapper.FileFindingCount(uppercase, 1L),
+                    new ChangedFileMapper.FileFindingCount(lowercase, 0L), new ChangedFileMapper.FileFindingCount(accented, 1L),
+                    new ChangedFileMapper.FileFindingCount(plain, 0L));
+            assertThat(mapper.selectChangedFilesWithFindings(new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(1, 20), task).getRecords())
+                .extracting(com.repoguard.agent.entity.ChangedFile::getId).containsExactly(uppercase, accented);
+            assertThat(mapper.selectChangedFilesWithoutFindings(new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(1, 20), task).getRecords())
+                .extracting(com.repoguard.agent.entity.ChangedFile::getId).containsExactly(lowercase, plain);
+        }
+    }
+
+    @Test
     void batchExportMetadataIsTaskAndTenantScopedAndOnlyProjectsToolIdentity() {
         long first = batch(tenant, task, attempt, "1");
         long second = batch(tenant, task, attempt, "2");

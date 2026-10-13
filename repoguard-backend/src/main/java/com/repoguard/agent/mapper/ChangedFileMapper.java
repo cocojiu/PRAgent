@@ -18,7 +18,7 @@ public interface ChangedFileMapper extends BaseMapper<ChangedFile> {
           on finding.task_id = file.task_id
          and finding.current_attempt = 1
          and finding.category = 'FINDING'
-         and finding.file_path = file.file_path
+         and cast(finding.file_path as binary) = cast(file.file_path as binary)
         where file.task_id = #{taskId}
           and file.current_attempt = 1
           and file.id in
@@ -64,7 +64,7 @@ public interface ChangedFileMapper extends BaseMapper<ChangedFile> {
               where finding.task_id = file.task_id
                 and finding.current_attempt = 1
                 and finding.category = 'FINDING'
-                and finding.file_path = file.file_path
+                and cast(finding.file_path as binary) = cast(file.file_path as binary)
           )
         order by file.id asc
         </script>
@@ -83,7 +83,7 @@ public interface ChangedFileMapper extends BaseMapper<ChangedFile> {
               where finding.task_id = file.task_id
                 and finding.current_attempt = 1
                 and finding.category = 'FINDING'
-                and finding.file_path = file.file_path
+                and cast(finding.file_path as binary) = cast(file.file_path as binary)
           )
         order by file.id asc
         </script>
