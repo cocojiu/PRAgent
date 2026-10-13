@@ -1,5 +1,6 @@
 package com.repoguard.agent.external;
 
+import jakarta.annotation.PostConstruct;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -8,6 +9,11 @@ import org.springframework.stereotype.Component;
 @Component
 @ConfigurationProperties(prefix = "app.security.outbound")
 public class OutboundEndpointProperties {
+
+    @PostConstruct
+    void validateTransportConfiguration() {
+        ExternalHttpRequestFactory.validateConfiguredProxy();
+    }
 
     private List<String> githubAllowedHosts = new ArrayList<>(List.of("api.github.com"));
     private List<String> gitlabAllowedHosts = new ArrayList<>(List.of("gitlab.com"));

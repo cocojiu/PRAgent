@@ -213,10 +213,13 @@ class ProductionConfigurationContractTest {
             )
         );
         Set<String> mappedKeys = new LinkedHashSet<>();
+        // The explicit gateway is immutable process configuration consumed before HTTP clients start.
+        String transportConfiguration = read(root.resolve(
+            "repoguard-backend/src/main/java/com/repoguard/agent/external/ExternalHttpRequestFactory.java"));
         mappedKeys.addAll(repoguardKeys(backendEnvironment));
         mappedKeys.addAll(repoguardKeys(workerEnvironment));
         assertThat(mappedKeys)
-            .allSatisfy(key -> assertThat(application + runtimeContract)
+            .allSatisfy(key -> assertThat(application + runtimeContract + transportConfiguration)
                 .as("application consumer for Compose key %s", key)
                 .contains(key));
     }
