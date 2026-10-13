@@ -56,7 +56,7 @@ class LlmChunkReviewResultAggregatorTest {
                 new LlmCallResult("{}", 130, 35, 165),
                 new LlmVerificationSummary(1, 1, 0, 0)
             ),
-            LlmChunkReviewOutcome.fallback(fallbackReview)
+            LlmChunkReviewOutcome.fallback(fallbackReview, "llm_timeout")
         );
 
         ReviewResult result = aggregator.aggregate(settings(), fullDiff, chunks, outcomes);
@@ -66,6 +66,7 @@ class LlmChunkReviewResultAggregatorTest {
             .extracting(ReviewFindingResult::source)
             .containsExactly("LLM", "RULE");
         assertThat(result.llmParseStatus()).isEqualTo(LlmParseStatus.PARTIAL_FALLBACK.code());
+        assertThat(result.statusDetail()).isEqualTo("llmFailureCategories=llm_timeout");
         assertThat(result.llmPromptSummary()).contains(
             "chunked=true",
             "chunks=2",

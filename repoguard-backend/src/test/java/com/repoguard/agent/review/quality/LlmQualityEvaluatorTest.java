@@ -67,6 +67,32 @@ class LlmQualityEvaluatorTest {
     }
 
     @Test
+    void transportFallbackIsReportedSeparatelyFromJsonParseFailure() {
+        LlmEvaluationObservation transportFailure = new LlmEvaluationObservation(
+            "timeout", "security", false, "NONE", false, "NONE", true, "", false,
+            90_000, 0, BigDecimal.ZERO, null, false, null, null, null, 0, 0, 0,
+            LlmEvaluationObservation.EvaluationSplit.UNSPECIFIED, "", LlmEvaluationSampleContext.unknown(),
+            "llm_timeout"
+        );
+        List<LlmEvaluationObservation> observations = new ArrayList<>();
+        observations.add(transportFailure);
+        for (int index = 0; index < 19; index++) {
+            observations.add(sample(
+                "clean-" + index, false, "NONE", false, "NONE", true, "", true
+            ));
+        }
+
+        LlmEvaluationReport report = LlmQualityEvaluator.evaluate(version, observations, 20);
+
+        assertThat(report.parseFailureRate()).isZero();
+        assertThat(report.metrics().parseFailures()).isZero();
+        assertThat(report.metrics().transportFailures()).isEqualTo(1);
+        assertThat(report.metrics().transportFailureRate()).isEqualByComparingTo("0.0500");
+        assertThat(report.blockers()).doesNotContain("PARSE_FAILURE_RATE_ABOVE_5");
+        assertThat(report.blockers()).doesNotContain("TRANSPORT_FAILURE_RATE_ABOVE_5");
+    }
+
+    @Test
     void operationalMetricsExposeCommentOutcomesPercentilesAndContributions() {
         LlmEvaluationReport report = LlmQualityEvaluator.evaluate(version, List.of(
             observation("first", 100, true, true, true, null, 2, 1, 1),

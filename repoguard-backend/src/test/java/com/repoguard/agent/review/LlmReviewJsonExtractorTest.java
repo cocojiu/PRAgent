@@ -41,6 +41,15 @@ class LlmReviewJsonExtractorTest {
     }
 
     @Test
+    void acceptsBomAndUppercaseJsonFence() {
+        String json = extractor.extractJsonObject(
+            "\uFEFF```JSON\n{\"riskLevel\":\"INFO\",\"findings\":[]}\n```"
+        );
+
+        assertThat(json).isEqualTo("{\"riskLevel\":\"INFO\",\"findings\":[]}");
+    }
+
+    @Test
     void rejectsMissingOrIncompleteJson() {
         assertThatThrownBy(() -> extractor.extractJsonObject("plain text"))
             .isInstanceOf(IllegalArgumentException.class)

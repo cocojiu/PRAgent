@@ -54,6 +54,17 @@ class ExternalHttpRequestFactoryTest {
     }
 
     @Test
+    void capsConnectTimeoutWithoutReducingReadTimeout() throws ReflectiveOperationException {
+        Object factory = ExternalHttpRequestFactory.cappedConnectTimeoutSeconds(90, 60, 10);
+        Object shortFactory = ExternalHttpRequestFactory.cappedConnectTimeoutSeconds(5, 60, 10);
+
+        assertThat(durationField(factory, "readTimeout")).isEqualTo(Duration.ofSeconds(90));
+        assertThat(client(factory).connectTimeout()).contains(Duration.ofSeconds(10));
+        assertThat(durationField(shortFactory, "readTimeout")).isEqualTo(Duration.ofSeconds(5));
+        assertThat(client(shortFactory).connectTimeout()).contains(Duration.ofSeconds(5));
+    }
+
+    @Test
     void explicitProxyReceivesTheRequestAndRedirectsNeverReachTheOrigin() throws Exception {
         AtomicInteger originRequests = new AtomicInteger();
         AtomicInteger gatewayRequests = new AtomicInteger();

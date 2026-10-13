@@ -3,6 +3,7 @@ package com.repoguard.agent.external;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.net.SocketTimeoutException;
+import java.net.http.HttpTimeoutException;
 import java.util.concurrent.TimeoutException;
 import org.junit.jupiter.api.Test;
 
@@ -75,6 +76,13 @@ class ExternalFailureSignalsTest {
         RuntimeException failure = new RuntimeException("request failed", new SocketTimeoutException("read timed out"));
 
         assertThat(ExternalFailureSignals.hasTimeoutSignal(failure, "", false)).isTrue();
+    }
+
+    @Test
+    void detectsJdkHttpTimeoutEvenWhenMessageOnlySaysRequestCancelled() {
+        RuntimeException failure = new RuntimeException("get", new HttpTimeoutException("Request cancelled"));
+
+        assertThat(ExternalFailureSignals.hasTimeoutSignal(failure, "get", false)).isTrue();
     }
 
     @Test

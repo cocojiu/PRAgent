@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.repoguard.agent.external.ExternalCallException;
 import org.junit.jupiter.api.Test;
 
 class LlmChatCompletionResponseExtractorTest {
@@ -45,6 +46,15 @@ class LlmChatCompletionResponseExtractorTest {
     }
 
     @Test
+    void extractSerializesStructuredContentObject() throws Exception {
+        LlmChatCompletionResponse response = extractor.extract("""
+            {"choices":[{"message":{"content":{"riskLevel":"INFO","findings":[]}}}]}
+            """);
+
+        assertThat(response.content()).isEqualTo("{\"riskLevel\":\"INFO\",\"findings\":[]}");
+    }
+
+    @Test
     void extractSupportsLegacyTextAndOutputFields() throws Exception {
         assertThat(extractor.extract("{\"choices\":[{\"text\":\"legacy\"}]}").content()).isEqualTo("legacy");
         assertThat(extractor.extract("{\"output_text\":\"output\"}").content()).isEqualTo("output");
@@ -55,6 +65,13 @@ class LlmChatCompletionResponseExtractorTest {
     void extractRejectsEmptyResponse() {
         assertThatThrownBy(() -> extractor.extract((String) null))
             .isInstanceOf(Exception.class);
+    }
+
+    @Test
+    void extractClassifiesTokenLimitedResponseAsTruncated() {
+        assertThatThrownBy(() -> extractor.extract("{\"choices\":[{\"finish_reason\":\"length\"}]}"))
+            .isInstanceOf(ExternalCallException.class)
+            .hasMessageContaining("category=llm_response_truncated");
     }
 
     @Test

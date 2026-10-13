@@ -13,10 +13,12 @@ import io.github.resilience4j.retry.Retry;
 import io.github.resilience4j.retry.RetryConfig;
 import io.github.resilience4j.retry.event.RetryOnRetryEvent;
 import java.nio.charset.StandardCharsets;
+import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestClientResponseException;
+import org.springframework.web.client.ResourceAccessException;
 
 class ExternalCallResilienceTest {
 
@@ -131,6 +133,70 @@ class ExternalCallResilienceTest {
         assertThat(attempts).hasValue(1);
         org.mockito.Mockito.verify(retryMetricsRecorder, org.mockito.Mockito.never())
             .record(org.mockito.Mockito.any(), org.mockito.Mockito.any());
+    }
+
+    @Test
+    void circuitBreakerCountsRetryExhaustionAsOneLogicalFailure() {
+        CircuitBreaker llmCircuitBreaker = CircuitBreaker.of(
+            "llm-logical-call-test",
+            CircuitBreakerConfig.custom()
+                .slidingWindowSize(10)
+                .minimumNumberOfCalls(10)
+                .failureRateThreshold(50)
+                .build()
+        );
+        ExternalCallResilience resilience = new ExternalCallResilience(
+            circuitBreaker("github-test"),
+            retry("github-test"),
+            rateLimiter("github-test"),
+            llmCircuitBreaker,
+            Retry.of("llm-retry-test", RetryConfig.custom().maxAttempts(3).waitDuration(Duration.ZERO).build()),
+            rateLimiter("llm-test"),
+            Bulkhead.of("llm-test", BulkheadConfig.custom().maxConcurrentCalls(1).build())
+        );
+        AtomicInteger attempts = new AtomicInteger();
+
+        assertThatThrownBy(() -> resilience.llm("chat_completions", () -> {
+            attempts.incrementAndGet();
+            throw responseException(503, "Service Unavailable");
+        })).isInstanceOf(RestClientResponseException.class);
+
+        assertThat(attempts).hasValue(3);
+        assertThat(llmCircuitBreaker.getMetrics().getNumberOfFailedCalls()).isEqualTo(1);
+    }
+
+    @Test
+    void configuredLlmRetryRetriesDashScopeJdkHttpTimeout() {
+        ExternalCallResilience resilience = configuredResilience(2);
+        AtomicInteger attempts = new AtomicInteger();
+
+        String result = resilience.llm("chat_completions", () -> {
+            if (attempts.incrementAndGet() == 1) {
+                throw new ResourceAccessException("get", new HttpTimeoutException("Request cancelled"));
+            }
+            return "ok";
+        });
+
+        assertThat(result).isEqualTo("ok");
+        assertThat(attempts).hasValue(2);
+    }
+
+    @Test
+    void configuredCircuitBreakerIgnoresNonRetryableLlmRequestFailure() {
+        ExternalCallResilienceProperties properties = new ExternalCallResilienceProperties();
+        properties.getLlm().setRetryWaitMillis(0);
+        ExternalCallResilience resilience = new ExternalCallResilienceConfig()
+            .externalCallResilience(properties, retryMetricsRecorder);
+        AtomicInteger attempts = new AtomicInteger();
+
+        for (int index = 0; index < 10; index++) {
+            assertThatThrownBy(() -> resilience.llm("chat_completions", () -> {
+                attempts.incrementAndGet();
+                throw responseException(422, "Invalid request");
+            })).isInstanceOf(RestClientResponseException.class);
+        }
+
+        assertThat(attempts).hasValue(10);
     }
 
     private ExternalCallResilience resilience(CircuitBreaker githubCircuitBreaker, CircuitBreaker llmCircuitBreaker) {

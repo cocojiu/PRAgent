@@ -293,6 +293,8 @@ const report = (): LlmEvaluationReport => ({
   temperature: 0.1,
   ruleVersion: "rule-v1",
   codeRevision: "code-v1",
+  verifierVersion: "high-risk-verifier-v1",
+  aggregationVersion: "server-risk-v2",
   expectedFindings: 10,
   predictedFindings: 10,
   truePositives: 10,
