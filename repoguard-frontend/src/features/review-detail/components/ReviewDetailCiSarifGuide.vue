@@ -32,10 +32,10 @@
           <template v-else><pre class="sarif-snippet" tabindex="0" aria-label="不含凭据的 CI 上传片段">{{ snippet }}</pre><el-button :disabled="!snippet" @click="copySnippet">复制上传片段</el-button></template>
 
           <h3>3. 在上传前获取短期凭证</h3>
-          <p>有效期 {{ Math.floor(setup.credentialTtlSeconds / 60) }} 分钟。请在报告生成后、上传前获取，将其注入 CI secret <code>REPOGUARD_CI_CREDENTIAL</code>。上传结束后删除该临时 secret；本向导不会写入 CI 配置。</p>
+          <p>有效期 {{ Math.floor((setup?.credentialTtlSeconds ?? 0) / 60) }} 分钟。请在报告生成后、上传前获取，将其注入 CI secret <code>REPOGUARD_CI_CREDENTIAL</code>。上传结束后删除该临时 secret；本向导不会写入 CI 配置。</p>
           <p>首次验收可下载报告，在对应 commit 下运行通用 Shell 片段；CI 方式请单独启动上传作业并读取已有报告。长时间扫描请先完成再获取凭证，不能将此短期凭证用于长期定时运行。</p>
           <div class="sarif-actions">
-            <el-button type="primary" :disabled="!setup.attemptId || loading" :loading="issuing" @click="issue">生成短期上传凭证</el-button>
+            <el-button type="primary" :disabled="!setup?.attemptId || loading" :loading="issuing" @click="issue">生成短期上传凭证</el-button>
             <el-button :disabled="!credential || now >= expiresAt" @click="copyCredential">复制凭证</el-button>
           </div>
           <p v-if="expiresAt" role="status">{{ now >= expiresAt ? '凭证已过期，请重新生成。' : `到期时间：${formatDateTime(new Date(expiresAt).toISOString())}` }}{{ copiedCredential ? ' 已复制；页面中的凭证已清除。' : '' }}</p>
@@ -43,7 +43,7 @@
 
           <h3>最近上传记录</h3>
           <p class="sarif-muted">当前 attempt 和 commit 最近 20 条成功上传记录。失败请求不会形成成功批次，请根据 CI 响应排查。</p>
-          <el-table v-if="setup.recentUploads.length" :data="setup.recentUploads" size="small">
+          <el-table v-if="setup?.recentUploads.length" :data="setup?.recentUploads ?? []" size="small">
             <el-table-column prop="toolName" label="扫描器" min-width="130" />
             <el-table-column prop="toolVersion" label="版本" width="90" />
             <el-table-column prop="scanRunId" label="Scan ID" min-width="150" />
