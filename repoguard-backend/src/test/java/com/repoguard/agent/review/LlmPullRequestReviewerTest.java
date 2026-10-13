@@ -176,7 +176,7 @@ class LlmPullRequestReviewerTest {
         PullRequestDiff diff = new PullRequestDiff("repo-guard-demo", "spring-boot-demo", 512, List.of());
 
         when(reviewPolicyProvider.getSettings()).thenReturn(settings);
-        when(resilience.llm(eq("chat_completions"), any())).thenThrow(new ExternalCallException(
+        when(resilience.llm(eq("chat_completions"), any(), any(), any(), any())).thenThrow(new ExternalCallException(
             "LLM",
             "llm_circuit_open",
             false,
@@ -732,8 +732,8 @@ class LlmPullRequestReviewerTest {
 
     private static ExternalCallResilience passthroughResilience() {
         ExternalCallResilience resilience = org.mockito.Mockito.mock(ExternalCallResilience.class);
-        when(resilience.llm(any(), any())).thenAnswer(invocation -> {
-            java.util.function.Supplier<?> supplier = invocation.getArgument(1);
+        when(resilience.llm(any(), any(), any(), any(), any())).thenAnswer(invocation -> {
+            java.util.function.Supplier<?> supplier = invocation.getArgument(4);
             return supplier.get();
         });
         return resilience;
@@ -912,6 +912,12 @@ class LlmPullRequestReviewerTest {
             PullRequestDiff diff,
             LlmReviewContext context
         ) {
+            return callLlm(settings, task, diff);
+        }
+
+        @Override
+        public LlmCallResult callLlm(ReviewPolicySettings settings, ReviewTask task, PullRequestDiff diff,
+            LlmReviewContext context, java.util.function.LongSupplier remaining) {
             return callLlm(settings, task, diff);
         }
     }

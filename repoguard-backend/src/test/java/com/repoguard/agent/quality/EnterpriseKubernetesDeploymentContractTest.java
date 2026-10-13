@@ -18,6 +18,55 @@ class EnterpriseKubernetesDeploymentContractTest {
     private static final int BACKEND_UID_GID = 10001;
 
     @Test
+    void optInGatewayOverlayReplacesPublicAccessWhileRetainingInfrastructurePeers() throws IOException {
+        Path root = repositoryRoot();
+        Map<String, Object> overlay = new Yaml().load(Files.readString(
+            root.resolve("deploy/kubernetes/egress-proxy/kustomization.yaml")));
+        assertThat(stringList(overlay.get("resources"))).containsExactly("..");
+        var patches = list(overlay.get("patches")).stream().map(this::map).toList();
+        assertThat(patches).hasSize(3);
+        assertThat(patches.stream().filter(p -> p.containsKey("target"))
+            .map(p -> map(p.get("target")).get("name"))).containsExactly(
+                "repoguard-allow-api-egress", "repoguard-allow-worker-egress");
+        List<Map<String, Object>> peerPatch = list(new Yaml().load(Files.readString(
+            root.resolve("deploy/kubernetes/egress-proxy/gateway-peer.yaml")))).stream().map(this::map).toList();
+        assertThat(peerPatch.getFirst()).containsEntry("op", "test")
+            .containsEntry("path", "/spec/egress/2/to/0/ipBlock/cidr").containsEntry("value", "0.0.0.0/0");
+        for (String name : List.of("repoguard-allow-api-egress", "repoguard-allow-worker-egress")) {
+            List<Map<String, Object>> original = egressRules(networkPolicySpec(resources(), name));
+            assertThat(original).hasSize(3);
+            Map<String, Object> publicPeer = map(list(original.get(2).get("to")).getFirst());
+            assertThat(map(publicPeer.get("ipBlock"))).containsEntry("cidr", peerPatch.getFirst().get("value"));
+            assertThat(list(original.get(0).get("ports"))).contains(map(Map.of("protocol", "TCP", "port", 3306)));
+        }
+        Map<String, Object> gateway = map(list(peerPatch.get(1).get("value")).getFirst());
+        assertThat(gateway).containsOnlyKeys("namespaceSelector", "podSelector");
+        for (String selector : gateway.keySet()) assertThat(map(map(gateway.get(selector)).get("matchLabels")))
+            .containsEntry("networking.repoguard.io/egress-gateway", "true");
+        assertThat(map(list(peerPatch.get(2).get("value")).getFirst()))
+            .containsEntry("protocol", "TCP").containsEntry("port", 3128);
+    }
+
+    @Test
+    void optInComposeGatewayKeepsSendersOnTheInternalNetworkOnly() throws IOException {
+        Map<String, Object> overlay = new Yaml().load(Files.readString(repositoryRoot().resolve("docker-compose.egress.yml")));
+        Map<String, Object> networks = map(overlay.get("networks"));
+        assertThat(map(networks.get("default"))).containsEntry("internal", true);
+        Map<String, Object> services = map(overlay.get("services"));
+        for (String sender : List.of("backend", "backend-worker")) {
+            Map<String, Object> service = map(services.get(sender));
+            assertThat(stringList(service.get("networks"))).containsExactly("default");
+            assertThat(map(service.get("environment"))).containsEntry("REPOGUARD_OUTBOUND_HTTP_PROXY", "http://egress-gateway:3128");
+        }
+        Map<String, Object> gateway = map(services.get("egress-gateway"));
+        assertThat(gateway).doesNotContainKeys("ports", "privileged", "network_mode");
+        assertThat(map(gateway.get("networks"))).containsOnlyKeys("default", "edge");
+        assertThat(map(map(gateway.get("networks")).get("edge"))).containsEntry("gw_priority", 1);
+        assertThat(gateway.get("image").toString()).contains("REPOGUARD_EGRESS_PROXY_IMAGE:?");
+        assertThat(gateway.get("user").toString()).contains("REPOGUARD_EGRESS_PROXY_UID_GID:?");
+    }
+
+    @Test
     void enterpriseWorkloadsAreReplicatedPinnedAndLeastPrivilege() throws IOException {
         List<Map<String, Object>> resources = resources();
 

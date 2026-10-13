@@ -54,10 +54,7 @@ import type {
   LlmModelReleaseCenter,
   LlmModelReleaseDrift,
   LlmModelReleaseDriftRepair,
-  LlmModelReleaseDriftRepairRequest,
   LlmModelReleaseMetric,
-  LlmModelReleaseRequest,
-  LlmModelRollbackRequest,
   ManagedUser,
   ManualReviewRequest,
   ManualReviewResponse,
@@ -123,6 +120,12 @@ import type {
   ReviewTaskSummary,
   TimelineItem,
 } from "@/api/generated/reviewDetailTypes";
+
+import type {
+  LlmModelReleaseDriftRepairRequest,
+  LlmModelReleaseRequest,
+  LlmModelRollbackRequest,
+} from "@/api/generated/modelQualityTypes";
 
 export type GeneratedOpenApiOperationMap = {
   "backupStatusControllerStatus": {
@@ -588,6 +591,13 @@ export type GeneratedOpenApiOperationMap = {
     response: LlmModelReleaseDriftRepair;
   };
   "reviewCalibrationControllerRollbackModelRelease": {
+    method: "POST";
+    pathParams: { releaseId: number };
+    query: never;
+    body: LlmModelRollbackRequest;
+    response: LlmModelRelease;
+  };
+  "reviewCalibrationControllerSafetyRevokeModelRelease": {
     method: "POST";
     pathParams: { releaseId: number };
     query: never;
@@ -1595,6 +1605,14 @@ export const generatedOpenApiOperations = {
   "reviewCalibrationControllerRollbackModelRelease": {
     method: "POST",
     path: "/api/v1/config/review-calibration/release-center/{releaseId}/rollback",
+    pathParamNames: ["releaseId"],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "reviewCalibrationControllerSafetyRevokeModelRelease": {
+    method: "POST",
+    path: "/api/v1/config/review-calibration/release-center/{releaseId}/safety-revoke",
     pathParamNames: ["releaseId"],
     queryParamNames: [],
     hasRequestBody: true,

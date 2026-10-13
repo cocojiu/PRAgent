@@ -24,7 +24,7 @@ import java.util.Locale;
 final class LlmModelReleaseAuditService {
     private static final int MAX_EXPORT_ROWS = 1_000;
     private static final List<String> ACTIONS = List.of(
-        "REGISTER_SHADOW", "PROMOTE", "REPLACE_ACTIVE", "ROLLBACK", "AUTO_ROLLBACK");
+        "REGISTER_SHADOW", "PROMOTE", "REPLACE_ACTIVE", "ROLLBACK", "AUTO_ROLLBACK", "SAFETY_REVOKE");
 
     private final LlmModelReleaseRepository releaseRepository;
     private final ObjectMapper objectMapper;

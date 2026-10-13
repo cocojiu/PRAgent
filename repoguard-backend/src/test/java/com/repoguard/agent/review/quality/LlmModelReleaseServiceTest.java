@@ -302,7 +302,7 @@ class LlmModelReleaseServiceTest {
     void routeDisablesLlmWhenMonthlyTokenBudgetIsExhausted() {
         when(jdbcTemplate.queryForList(contains("monthly_llm_token_budget"), any(Object[].class)))
             .thenReturn(List.of(Map.of("monthly_llm_token_budget", 100L, "monthly_llm_cost_budget", BigDecimal.ZERO)));
-        when(jdbcTemplate.queryForList(contains("coalesce(sum(llm_total_tokens)"), any(Object[].class)))
+        when(jdbcTemplate.queryForList(contains("from llm_usage_month"), any(Object[].class)))
             .thenReturn(List.of(Map.of("token_used", 100L, "cost_used", BigDecimal.ZERO)));
 
         ReviewPolicySettings routed = service.route(settings("gpt-configured"), task(1L));
@@ -349,6 +349,37 @@ class LlmModelReleaseServiceTest {
     }
 
     @Test
+    void safetyRevokedAssignmentKeepsItsEvidenceAndFallsBackToRulesWithoutRebinding() {
+        LlmModelReleaseDto revoked = revokedRelease();
+        when(repository.findByReleaseKey(42L, revoked.releaseKey())).thenReturn(revoked);
+        when(repository.findAll(42L)).thenReturn(List.of(revoked, release(20L, "ACTIVE", 100, "safe-other", true)));
+        ReviewTask task = task(19L);
+        task.setLlmReleaseKey(revoked.releaseKey());
+
+        assertThat(service.route(settings("openai"), task).llmEnabled()).isFalse();
+        assertThat(task.getLlmReleaseKey()).isEqualTo(revoked.releaseKey());
+    }
+
+    @Test
+    void newTaskFallsBackToRulesWhenTheOnlyActiveReleaseWasSafetyRevoked() {
+        when(repository.findAll(42L)).thenReturn(List.of(revokedRelease()));
+        ReviewTask task = task(19L);
+
+        assertThat(service.route(settings("openai"), task).llmEnabled()).isFalse();
+        assertThat(task.getLlmReleaseKey()).isNull();
+    }
+
+    private LlmModelReleaseDto revokedRelease() {
+        LlmModelReleaseDto base = release(19L, "ACTIVE", 0, "revoked-model", true);
+        return new LlmModelReleaseDto(base.id(), base.releaseKey(), base.provider(), base.modelName(),
+            base.promptVersion(), base.contextVersion(), base.schemaVersion(), base.datasetId(), base.datasetVersion(),
+            base.datasetFingerprint(), base.state(), base.trafficPercent(), base.qualityGatePassed(), base.precisionRate(),
+            base.recallRate(), base.anchorRate(), base.duplicateRate(), base.parseFailureRate(), base.p95LatencyMs(),
+            base.averageCost(), base.totalTokens(), base.blockers(), base.rollbackReason(), base.createdBy(),
+            base.createdAt(), base.updatedAt(), base.evaluationReportId(), true, LocalDateTime.now(), "fixture incident");
+    }
+
+    @Test
     void unsafeCanaryIsAutomaticallyRolledBackBeforeRouting() {
         LlmModelReleaseDto unsafe = release(14L, "CANARY", 30, "gpt-canary", false);
         when(repository.findByState(42L, "CANARY")).thenReturn(List.of(unsafe));
@@ -382,7 +413,7 @@ class LlmModelReleaseServiceTest {
     void centerClampsTrendDaysAndReportsBudgetExhaustion() {
         when(jdbcTemplate.queryForList(contains("monthly_llm_token_budget"), any(Object[].class)))
             .thenReturn(List.of(Map.of("monthly_llm_token_budget", 10L, "monthly_llm_cost_budget", BigDecimal.ZERO)));
-        when(jdbcTemplate.queryForList(contains("coalesce(sum(llm_total_tokens)"), any(Object[].class)))
+        when(jdbcTemplate.queryForList(contains("from llm_usage_month"), any(Object[].class)))
             .thenReturn(List.of(Map.of("token_used", 10L, "cost_used", BigDecimal.ZERO)));
         when(qualityProvider.getLlmQuality(7)).thenReturn(new DashboardLlmQualityResponse(List.of(), List.of(), List.of()));
 

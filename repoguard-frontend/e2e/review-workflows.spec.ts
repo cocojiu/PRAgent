@@ -293,6 +293,13 @@ const installWorkflowSeedApi = async (page: Page) => {
       return;
     }
 
+    if (path === `/api/v1/reviews/${alphaTaskId}/events`) {
+      requireContract(route, "GET");
+      // The opt-in build must retain polling when the server cannot stream.
+      await route.fulfill({ status: 503, contentType: "text/plain", body: "fixture stream unavailable" });
+      return;
+    }
+
     if (path === `/api/v1/reviews/${alphaTaskId}/human-review`) {
       requireContract(route, "POST");
       state.humanReviewPosts += 1;
@@ -583,5 +590,39 @@ test("human approval is single-submit and unlocks GitHub preview and publication
   await page.screenshot({ path: test.info().outputPath("github-history-expanded.png"), fullPage: true });
   await page.getByRole("button", { name: /收起明细/ }).click();
   await expect(page.getByText("第 1 页，共 1 条", { exact: true })).toHaveCount(0);
+  expect(seed.state.contractViolations).toEqual([]);
+});
+
+test("SSE progress refreshes the terminal review without putting credentials in URLs", async ({ page }) => {
+  test.skip(process.env.VITE_REVIEW_PROGRESS_STREAM !== "true", "requires the opt-in SSE build");
+  const seed = await installWorkflowSeedApi(page);
+  seed.setAlphaDetail({ status: "pending" });
+  let streamed = 0;
+  let refreshAfterEvent = 0;
+  await page.route(`**/api/v1/reviews/${alphaTaskId}/events`, async route => {
+    const request = route.request();
+    expect(new URL(request.url()).search).toBe("");
+    const headers = await request.allHeaders();
+    expect(headers.accept).toContain("text/event-stream");
+    expect(headers["x-trace-id"]).toBeTruthy();
+    // A full page navigation uses the cookie session; the access token stays in memory.
+    expect(headers.cookie).toContain(`repoguard_csrf_token=${csrfToken}`);
+    streamed += 1;
+    seed.setAlphaDetail({ status: "completed" });
+    await route.fulfill({ status: 200, contentType: "text/event-stream",
+      body: "id: 1\nevent: progress\ndata: {}\n\n" });
+  });
+  await page.route(`**/api/v1/reviews/${alphaTaskId}/status`, async route => {
+    expect(streamed).toBeGreaterThan(0);
+    refreshAfterEvent += 1;
+    await fulfillJson(route, { id: alphaTaskId, status: "completed", riskLevel: "medium",
+      assessmentStatus: "complete", llmStatus: "completed", duration: "12 秒",
+      humanReviewRequired: false, humanReviewStatus: "not_required" });
+  });
+  await login(page);
+  await page.goto(`/repoguard/tasks/${alphaTaskId}`);
+  await expect.poll(() => streamed).toBe(1);
+  await expect.poll(() => refreshAfterEvent).toBe(1);
+  await expect(page.getByText("已完成", { exact: true }).first()).toBeVisible();
   expect(seed.state.contractViolations).toEqual([]);
 });

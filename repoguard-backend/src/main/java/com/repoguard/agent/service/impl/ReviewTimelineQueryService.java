@@ -49,6 +49,17 @@ public class ReviewTimelineQueryService {
         return timelines.stream().collect(Collectors.groupingBy(ReviewTimeline::getTaskId));
     }
 
+    public Map<Long, List<ReviewTimeline>> loadLatestFailures(List<ReviewTask> tasks) {
+        List<Long> ids = tasks.stream().filter(task -> "FAILED".equals(task.getStatus()))
+            .map(ReviewTask::getId).filter(java.util.Objects::nonNull).distinct().toList();
+        if (ids.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<ReviewTimeline> failures = reviewTimelineMapper.selectLatestFailures(ids);
+        return failures == null ? Collections.emptyMap()
+            : failures.stream().collect(Collectors.groupingBy(ReviewTimeline::getTaskId));
+    }
+
     public List<ReviewTimeline> loadByTaskId(Long taskId) {
         List<ReviewTimeline> timelines = reviewTimelineMapper.selectList(
             new LambdaQueryWrapper<ReviewTimeline>()

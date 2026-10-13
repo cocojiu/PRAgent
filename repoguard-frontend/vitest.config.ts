@@ -22,18 +22,24 @@ export default defineConfig({
         "src/stores/**/*.ts",
         "src/router/**/*.ts",
         "src/composables/**/*.ts",
-        "src/features/**/composables/**/*.ts"
+        "src/features/**/composables/**/*.ts",
+        "src/features/review-detail/**/*.ts",
+        "src/utils/**/*.ts",
+        "src/observability/**/*.ts",
+        "src/pages/RuleConfigPage.vue",
+        "src/pages/IntegrationsPage.vue",
+        "src/pages/UserManagementPage.vue",
+        "src/pages/NotificationOpsPage.vue"
       ],
       exclude: [
         "src/**/*.test.ts",
-        "src/api/generatedOpenApi.ts",
-        "src/api/generatedOpenApiModels.ts"
+        "src/api/generated/**"
       ],
       thresholds: {
-        statements: 64,
-        branches: 52,
-        functions: 55,
-        lines: 64
+        statements: 75,
+        branches: 62,
+        functions: 65,
+        lines: 75
       }
     }
   }

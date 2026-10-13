@@ -3,7 +3,7 @@ import { statusReasonText, timelineLabelText } from "../reviewDetailDisplayMappe
 import type { ComputedRef, Ref } from "vue";
 import type { ChangedFileViewModel, ReviewTaskDetail, RiskLevel, TimelineItemViewModel } from "@/types";
 
-export type ChangedFileWithFindingCount = ChangedFileViewModel & { findingCount: number };
+export type ChangedFileWithFindingCount = ChangedFileViewModel & { findingCount?: number };
 
 type UseReviewDetailDerivedCollectionsOptions = {
   failureReason: ComputedRef<string>;
@@ -40,17 +40,10 @@ export const useReviewDetailDerivedCollections = ({
     );
   });
 
-  const findingCountByFile = computed(() =>
-    reviewFindings.value.reduce<Record<string, number>>((counts, finding) => {
-      counts[finding.file] = (counts[finding.file] ?? 0) + 1;
-      return counts;
-    }, {})
-  );
-
   const changedFilesWithFindingCounts = computed<ChangedFileWithFindingCount[]>(() =>
     changedFiles.value.map((file) => ({
       ...file,
-      findingCount: findingCountByFile.value[file.path] ?? 0
+      findingCount: file.findingCount
     }))
   );
 

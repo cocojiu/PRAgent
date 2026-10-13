@@ -117,7 +117,8 @@ class LlmChunkReviewAggregator {
                     settings,
                     context.task(),
                     chunk.diff(),
-                    context.promptContext()
+                    context.promptContext(),
+                    budget::remainingNanos
                 );
                 ReviewResult parsed = qualityScorer.score(
                     reviewResultParser.parse(callResult.content()),

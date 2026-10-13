@@ -38,10 +38,14 @@ class FrontendBrowserQualityContractTest {
             "src/router/**/*.ts",
             "src/composables/**/*.ts",
             "src/features/**/composables/**/*.ts",
-            "statements: 64",
-            "branches: 52",
-            "functions: 55",
-            "lines: 64"
+            "src/api/generated/**",
+            "src/utils/**/*.ts",
+            "src/observability/**/*.ts",
+            "src/pages/RuleConfigPage.vue",
+            "statements: 75",
+            "branches: 62",
+            "functions: 65",
+            "lines: 75"
         );
     }
 
@@ -63,7 +67,7 @@ class FrontendBrowserQualityContractTest {
             "trace: \"on-first-retry\"",
             "screenshot: \"only-on-failure\"",
             "video: \"retain-on-failure\"",
-            "npx vite preview"
+            "node node_modules/vite/bin/vite.js preview"
         );
     }
 

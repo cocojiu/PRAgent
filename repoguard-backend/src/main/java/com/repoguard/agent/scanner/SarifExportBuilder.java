@@ -20,6 +20,7 @@ import org.springframework.util.StringUtils;
 final class SarifExportBuilder {
     private static final String SARIF_VERSION = "2.1.0";
     private static final String SARIF_SCHEMA = "https://json.schemastore.org/sarif-2.1.0.json";
+    private static final int METADATA_BATCH_SIZE = 500;
 
     private SarifExportBuilder() {
     }
@@ -42,10 +43,11 @@ final class SarifExportBuilder {
             throw new BusinessException(ErrorCode.PAYLOAD_TOO_LARGE, "SARIF export exceeds " + maxFindings + " findings");
         }
         Map<String, ExportRun> runs = new LinkedHashMap<>();
-        Map<Long, SarifImportBatchRow> batches = new LinkedHashMap<>();
+        Map<Long, SarifImportBatchRow> batches = loadBatches(taskId, findings, mapper);
         for (ReviewFinding finding : findings == null ? List.<ReviewFinding>of() : findings) {
             String ruleId = text(finding.getRuleId(), "SARIF-" + finding.getId());
-            SarifImportBatchRow batch = sarifBatch(finding, mapper, batches);
+            SarifImportBatchRow batch = "SARIF".equalsIgnoreCase(text(finding.getSource(), ""))
+                ? batches.get(finding.getSourceBatchId()) : null;
             String toolName = batch == null ? "RepoGuard Agent" : text(batch.getToolName(), "unknown");
             String toolVersion = batch == null ? "1" : text(batch.getToolVersion(), "");
             ExportRun run = runs.computeIfAbsent(toolName + "\u0000" + toolVersion,
@@ -88,16 +90,20 @@ final class SarifExportBuilder {
         }
     }
 
-    private static SarifImportBatchRow sarifBatch(ReviewFinding finding, ReviewFindingMapper mapper, Map<Long, SarifImportBatchRow> batches) {
-        if (finding == null || finding.getSourceBatchId() == null
-            || !"SARIF".equalsIgnoreCase(text(finding.getSource(), ""))) {
-            return null;
+    private static Map<Long, SarifImportBatchRow> loadBatches(Long taskId, List<ReviewFinding> findings,
+        ReviewFindingMapper mapper) {
+        List<Long> ids = findings == null ? List.of() : findings.stream()
+            .filter(finding -> "SARIF".equalsIgnoreCase(text(finding.getSource(), "")))
+            .map(ReviewFinding::getSourceBatchId).filter(java.util.Objects::nonNull).distinct().toList();
+        Map<Long, SarifImportBatchRow> batches = new LinkedHashMap<>();
+        for (int start = 0; start < ids.size(); start += METADATA_BATCH_SIZE) {
+            List<SarifImportBatchRow> rows = mapper.selectSarifExportBatches(taskId,
+                ids.subList(start, Math.min(ids.size(), start + METADATA_BATCH_SIZE)));
+            if (rows != null) {
+                rows.forEach(row -> batches.put(row.getId(), row));
+            }
         }
-        Long batchId = finding.getSourceBatchId();
-        if (!batches.containsKey(batchId)) {
-            batches.put(batchId, mapper.selectSarifImportBatchById(batchId));
-        }
-        return batches.get(batchId);
+        return batches;
     }
 
     private static String sarifLevel(String severity) {

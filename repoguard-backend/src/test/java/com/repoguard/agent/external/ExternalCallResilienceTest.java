@@ -141,6 +141,60 @@ class ExternalCallResilienceTest {
         );
     }
 
+    @Test
+    void eachRetryAcquiresAPermitAndLocalRejectionDoesNotRetryAgain() {
+        var properties = new ExternalCallResilienceProperties();
+        properties.getLlm().setRetryMaxAttempts(3);
+        properties.getLlm().setRetryWaitMillis(0);
+        properties.getLlm().setRateLimitForPeriod(1);
+        properties.getLlm().setRateLimitRefreshMillis(60000);
+        properties.getLlm().setRateLimitTimeoutMillis(0);
+        var resilience = new ExternalCallResilienceConfig().externalCallResilience(properties, retryMetricsRecorder);
+        var attempts = new AtomicInteger();
+        assertThatThrownBy(() -> resilience.llm("review", () -> {
+            attempts.incrementAndGet(); throw responseException(503, "fixture unavailable");
+        })).isInstanceOfSatisfying(ExternalCallException.class,
+            denied -> assertThat(denied.getCategory()).isEqualTo("llm_rate_limited"));
+        assertThat(attempts).hasValue(1);
+        org.mockito.Mockito.verify(retryMetricsRecorder, org.mockito.Mockito.times(1)).record(
+            org.mockito.Mockito.any(), org.mockito.Mockito.any());
+    }
+
+    @Test
+    void providerFaultDomainsShareGlobalLimitsButDoNotShareOpenBreakers() {
+        var properties = new ExternalCallResilienceProperties();
+        properties.setLlmMaxEndpointDomains(2);
+        properties.getLlm().setRetryMaxAttempts(1);
+        properties.getLlm().setCircuitBreakerMinimumCalls(1);
+        var resilience = new ExternalCallResilienceConfig().externalCallResilience(properties, retryMetricsRecorder);
+        assertThatThrownBy(() -> resilience.llm("review", "a", "https://a.invalid/v1", () -> Long.MAX_VALUE,
+            () -> { throw responseException(503, "fixture failure"); })).isInstanceOf(RestClientResponseException.class);
+        var attempted = new AtomicInteger();
+        assertThatThrownBy(() -> resilience.llm("review", "a", "https://a.invalid/another-path", () -> Long.MAX_VALUE,
+            () -> attempted.incrementAndGet())).hasMessageContaining("llm_circuit_open");
+        assertThat(attempted).hasValue(0);
+        assertThat(resilience.llm("review", "b", "https://b.invalid/v1", () -> Long.MAX_VALUE, () -> "ok")).isEqualTo("ok");
+        assertThatThrownBy(() -> resilience.llm("review", "c", "https://c.invalid/v1", () -> Long.MAX_VALUE,
+            () -> attempted.incrementAndGet())).hasMessageContaining("endpoint_registry_full");
+        assertThat(resilience.retainedEndpointDomains()).isEqualTo(2);
+        assertThat(attempted).hasValue(0);
+    }
+
+    @Test
+    void expiredBudgetStopsInitialAttemptAndRetryBeforeProviderWork() {
+        var resilience = configuredResilience(3);
+        var remaining = new java.util.concurrent.atomic.AtomicLong(0);
+        var attempted = new AtomicInteger();
+        assertThatThrownBy(() -> resilience.llm("review", "a", "https://a.invalid/v1", remaining::get,
+            () -> attempted.incrementAndGet())).hasMessageContaining("deadline_exhausted");
+        assertThat(attempted).hasValue(0);
+        remaining.set(Long.MAX_VALUE);
+        assertThatThrownBy(() -> resilience.llm("review", "a", "https://a.invalid/v1", remaining::get, () -> {
+            attempted.incrementAndGet(); remaining.set(0); throw responseException(503, "fixture unavailable");
+        })).hasMessageContaining("deadline_exhausted");
+        assertThat(attempted).hasValue(1);
+    }
+
     private ExternalCallResilience resilience(
         CircuitBreaker githubCircuitBreaker,
         CircuitBreaker llmCircuitBreaker,

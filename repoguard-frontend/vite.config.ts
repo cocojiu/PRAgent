@@ -19,6 +19,13 @@ const bundleBudgets = {
   overviewRouteIncrementalRequests: 16
 } as const;
 
+// Cold-route baselines include every static dependency beyond the entry bundle.
+// October baseline: detail 133.4/16.9 KiB + 34 requests, config 154.7/20.0 KiB + 35.
+const routeBudgets = [
+  { name: "detail", page: "ReviewDetailPage", javaScript: 160 * KIB, css: 22 * KIB, requests: 42 },
+  { name: "rule config", page: "RuleConfigPage", javaScript: 185 * KIB, css: 25 * KIB, requests: 42 }
+] as const;
+
 const apiProxy = {
   "/api": {
     target: "http://localhost:8081",
@@ -160,6 +167,34 @@ const bundleBudgetPlugin = (): Plugin => ({
       .sort((left, right) => right.gzipBytes - left.gzipBytes);
     const largestAsyncChunk = asyncJavaScriptChunks[0] ?? { fileName: "none", gzipBytes: 0 };
 
+    const additionalRouteMeasurements = routeBudgets.flatMap((budget) => {
+      const isRouteModule = (moduleId: string | null | undefined) =>
+        moduleId?.replaceAll("\\", "/").endsWith(`/src/pages/${budget.page}.vue`) === true;
+      const routeChunk = chunks.find((chunk) => isRouteModule(chunk.facadeModuleId))
+        ?? chunks.find((chunk) => chunk.moduleIds.some(isRouteModule));
+      if (!routeChunk) this.error(`[bundle-budget] ${budget.name} route chunk was not found.`);
+      const allRouteChunks = new Set<string>();
+      collectStaticChunk(routeChunk.fileName, allRouteChunks);
+      const incrementalChunks = [...allRouteChunks].filter((name) => !initialChunkNames.has(name));
+      const cssNames = new Set<string>();
+      for (const name of allRouteChunks) {
+        const chunk = chunkByFileName.get(name);
+        const metadata = (chunk as typeof chunk & { viteMetadata?: ViteChunkMetadata })?.viteMetadata;
+        metadata?.importedCss?.forEach((css) => { if (!initialCssNames.has(css)) cssNames.add(css); });
+      }
+      return [
+        { label: `${budget.name} route incremental JavaScript gzip`,
+          actual: incrementalChunks.reduce((sum, name) => sum + gzipSize(chunkByFileName.get(name)?.code ?? ""), 0),
+          budget: budget.javaScript, format: formatKiB, contributors: formatJavaScriptContributors(incrementalChunks) },
+        { label: `${budget.name} route incremental CSS gzip`,
+          actual: [...cssNames].reduce((sum, name) => {
+            const asset = bundle[name]; return sum + (asset?.type === "asset" ? gzipSize(asset.source) : 0);
+          }, 0), budget: budget.css, format: formatKiB, contributors: formatCssContributors(cssNames) },
+        { label: `${budget.name} route incremental requests`, actual: incrementalChunks.length + cssNames.size,
+          budget: budget.requests, format: String, contributors: formatRequestContributors(incrementalChunks, cssNames) }
+      ];
+    });
+
     const measurements = [
       {
         label: "initial shared JavaScript gzip",
@@ -214,7 +249,8 @@ const bundleBudgetPlugin = (): Plugin => ({
           overviewRouteIncrementalChunkNames,
           overviewRouteIncrementalCssNames
         )
-      }
+      },
+      ...additionalRouteMeasurements
     ];
     const summary = measurements
       .map(({ label, actual, budget, format }) => `${label}: ${format(actual)} / ${format(budget)}`)
