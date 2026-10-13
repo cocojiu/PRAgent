@@ -56,7 +56,7 @@ RepoGuard Agent 是面向 GitHub Pull Request 的代码审查辅助系统，包�
 ## 环境要求
 
 - JDK：25（Maven Enforcer 会拒绝其他主版本）
-- Maven：3.9.9+（低于 4.0.0）；无需全局安装，仓库内 Wrapper 固定使用 3.9.16
+- Maven：3.9.9+（低于 4.0.0）；无需全局安装，仓库内 Wrapper 固定使用 3.10.0
 - Node.js：建议使用 Node 22，最低要求 `>=20.19.0`
 - Docker / Docker Compose：用于启动 MySQL、RabbitMQ 和本地观测组件
 

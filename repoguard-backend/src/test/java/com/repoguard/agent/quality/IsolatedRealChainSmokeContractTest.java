@@ -155,7 +155,7 @@ class IsolatedRealChainSmokeContractTest {
         assertThat(readme)
             .contains("- Java 25")
             .contains("- JDK：25")
-            .contains("- Maven：3.9.9+（低于 4.0.0）")
+            .contains("- Maven：3.9.9+（低于 4.0.0）；无需全局安装，仓库内 Wrapper 固定使用 3.10.0")
             .doesNotContain("Java 26")
             .doesNotContain("JDK：26");
         assertThat(release)
@@ -175,8 +175,8 @@ class IsolatedRealChainSmokeContractTest {
             .contains("run: ./mvnw -B -Dtest=ProductionRuntimeContextIntegrationTest,PreflightPreviewMysqlIntegrationTest,PreflightTransportIntegrationTest test")
             .doesNotContain("run: mvn ");
         assertThat(wrapper)
-            .contains("distributionUrl=https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.16/apache-maven-3.9.16-bin.zip")
-            .contains("distributionSha256Sum=5af3b743dd8b876b5c45da33b676251e5f1687712644abb4ee519ca56e1d89ce")
+            .contains("distributionUrl=https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.10.0/apache-maven-3.10.0-bin.zip")
+            .contains("distributionSha256Sum=1f6d9909266510f039f59aa0e13dcd2c66da85f043e56276e41f2918f8bddaff")
             .doesNotContain("maven.aliyun.com");
         assertThat(pom)
             .contains("<artifactId>maven-compiler-plugin</artifactId>")
