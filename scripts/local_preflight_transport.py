@@ -128,12 +128,24 @@ def send(private_input):
         failure.close()
         if status in (301, 302, 303, 307, 308):
             raise TransportError('preflight_redirect_refused') from None
-        if status in (401, 403):
-            raise TransportError('preflight_credential_rejected') from None
-        if status == 409:
-            raise TransportError('preflight_version_or_request_conflict') from None
-        raise TransportError('preflight_http_failure') from None
-    except (error.URLError, TimeoutError, OSError):
+        code = {400: 'preflight_request_rejected', 401: 'preflight_credential_rejected',
+                403: 'preflight_permission_denied', 404: 'preflight_service_unavailable',
+                405: 'preflight_service_unavailable', 409: 'preflight_version_or_request_conflict',
+                413: 'preflight_request_budget_exceeded', 415: 'preflight_request_rejected',
+                422: 'preflight_request_rejected', 429: 'preflight_rate_limited',
+                503: 'preflight_service_unavailable'}.get(status)
+        raise TransportError(code or ('preflight_service_failure' if 500 <= status <= 599 else 'preflight_http_failure')) from None
+    except ssl.SSLCertVerificationError:
+        raise TransportError('preflight_tls_verification_failed') from None
+    except TimeoutError:
+        raise TransportError('preflight_connection_timeout') from None
+    except error.URLError as failure:
+        if isinstance(failure.reason, ssl.SSLCertVerificationError):
+            raise TransportError('preflight_tls_verification_failed') from None
+        if isinstance(failure.reason, TimeoutError):
+            raise TransportError('preflight_connection_timeout') from None
+        raise TransportError('preflight_connection_failed') from None
+    except OSError:
         raise TransportError('preflight_connection_failed') from None
     except (ValueError, UnicodeError):
         raise TransportError('invalid_preflight_response') from None
@@ -158,4 +170,4 @@ if __name__ == '__main__':
     except Exception:
         result = {'error': 'invalid_preflight_response'}
     sys.stdout.reconfigure(encoding='utf-8')
-    print(json.dumps(result, ensure_ascii=False))
+    print(json.dumps(result, ensure_ascii=True))
