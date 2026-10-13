@@ -44,7 +44,7 @@ public class ReviewTaskQueryItemLoader {
     }
 
     public Map<Long, List<ReviewTimeline>> loadTimelinesByTaskId(List<ReviewTask> tasks) {
-        return timelineQueryService.loadByTaskId(tasks);
+        return timelineQueryService.loadLatestFailures(tasks);
     }
 
     public List<ReviewTimeline> loadTimelines(Long taskId) {

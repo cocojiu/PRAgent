@@ -9,6 +9,7 @@ import {
   promoteLlmModelRelease,
   registerLlmModelShadowRelease,
   rollbackLlmModelRelease,
+  safetyRevokeLlmModelRelease,
   verifyLlmModelReleaseAudit,
   transitionLlmEvaluationReportLifecycle
 } from "@/api/config";
@@ -25,6 +26,7 @@ vi.mock("@/api/config", () => ({
   promoteLlmModelRelease: vi.fn(),
   registerLlmModelShadowRelease: vi.fn(),
   rollbackLlmModelRelease: vi.fn(),
+  safetyRevokeLlmModelRelease: vi.fn(),
   transitionLlmEvaluationReportLifecycle: vi.fn()
 }));
 
@@ -109,6 +111,33 @@ describe("useLlmModelReleaseCenter", () => {
     await state.load();
     await state.rollback(11, "  incident  ");
     expect(rollback).toHaveBeenCalledWith(11, { reason: "incident" });
+  });
+
+  it("requires a safety reason and uses the separate safety operation", async () => {
+    const state = useLlmModelReleaseCenter();
+    await state.safetyRevoke(11, "  ");
+    expect(safetyRevokeLlmModelRelease).not.toHaveBeenCalled();
+    expect(state.errorMessage.value).toBe("安全撤销必须填写原因");
+    vi.mocked(safetyRevokeLlmModelRelease).mockResolvedValueOnce({} as never);
+    await state.safetyRevoke(11, "  verified incident  ");
+    expect(safetyRevokeLlmModelRelease).toHaveBeenCalledWith(11, { reason: "verified incident" });
+    expect(rollback).not.toHaveBeenCalled();
+    expect(loadCenter).toHaveBeenCalled();
+  });
+
+  it("does not submit a second model mutation while safety revocation is pending", async () => {
+    const response = deferred<Awaited<ReturnType<typeof safetyRevokeLlmModelRelease>>>();
+    vi.mocked(safetyRevokeLlmModelRelease).mockReturnValueOnce(response.promise);
+    const state = useLlmModelReleaseCenter();
+    const first = state.safetyRevoke(11, "incident");
+    await state.safetyRevoke(11, "incident");
+    await state.rollback(11, "conflicting operation");
+    expect(safetyRevokeLlmModelRelease).toHaveBeenCalledTimes(1);
+    expect(rollback).not.toHaveBeenCalled();
+    expect(state.action.value).toBe("safety-revoke-11");
+    response.resolve({} as never);
+    await first;
+    expect(state.action.value).toBe("");
   });
 
   it("submits an idempotent evaluation report lifecycle command", async () => {

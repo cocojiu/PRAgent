@@ -1,0 +1,46 @@
+# Opt-in overlay. Requires an audited Squid image pinned by digest and Linux rehearsal.
+# Render with docker-compose.prod.yml; never apply it to an existing deployment without review.
+services:
+  backend:
+    environment:
+      REPOGUARD_OUTBOUND_HTTP_PROXY: http://egress-gateway:3128
+    networks: [default]
+  backend-worker:
+    environment:
+      REPOGUARD_OUTBOUND_HTTP_PROXY: http://egress-gateway:3128
+    networks: [default]
+  frontend:
+    networks: [default]
+  caddy:
+    networks:
+      default: {}
+      edge:
+        gw_priority: 1
+  egress-gateway:
+    image: ${REPOGUARD_EGRESS_PROXY_IMAGE:?Set an audited Squid image pinned by digest}
+    user: ${REPOGUARD_EGRESS_PROXY_UID_GID:?Set the non-root UID:GID of the audited proxy image}
+    entrypoint: ["/usr/sbin/squid", "-N", "-f", "/etc/squid/squid.conf"]
+    volumes:
+      - ./deploy/egress/squid.conf:/etc/squid/squid.conf:ro
+    networks:
+      default: {}
+      edge:
+        gw_priority: 1
+    cap_drop: [ALL]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m,mode=1777
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
+    cpus: 0.25
+    pids_limit: 64
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+networks:
+  default:
+    internal: true
+  edge:
+    driver: bridge

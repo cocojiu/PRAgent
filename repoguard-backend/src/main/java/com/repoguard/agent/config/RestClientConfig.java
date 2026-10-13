@@ -1,5 +1,6 @@
 package com.repoguard.agent.config;
 
+import com.repoguard.agent.external.ExternalHttpRequestFactory;
 import com.repoguard.agent.observability.W3CTracePropagationInterceptor;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.annotation.Bean;
@@ -13,7 +14,7 @@ public class RestClientConfig {
     @Bean
     @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
     public RestClient.Builder restClientBuilder() {
-        return RestClient.builder()
+        return ExternalHttpRequestFactory.applyConfiguredProxy(RestClient.builder())
             .requestInterceptor(new W3CTracePropagationInterceptor());
     }
 }

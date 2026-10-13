@@ -10,7 +10,20 @@ public record LlmModelReleaseDto(Long id, String releaseKey, String provider, St
     String state, Integer trafficPercent, Boolean qualityGatePassed, BigDecimal precisionRate, BigDecimal recallRate,
     BigDecimal anchorRate, BigDecimal duplicateRate, BigDecimal parseFailureRate, Long p95LatencyMs,
     BigDecimal averageCost, Long totalTokens, List<String> blockers, String rollbackReason, String createdBy,
-    LocalDateTime createdAt, LocalDateTime updatedAt, Long evaluationReportId) {
+    LocalDateTime createdAt, LocalDateTime updatedAt, Long evaluationReportId,
+    boolean safetyRevoked, LocalDateTime safetyRevokedAt, String safetyRevokeReason) {
+
+    public LlmModelReleaseDto(Long id, String releaseKey, String provider, String modelName, String promptVersion,
+        String contextVersion, String schemaVersion, String datasetId, String datasetVersion, String datasetFingerprint,
+        String state, Integer trafficPercent, Boolean qualityGatePassed, BigDecimal precisionRate, BigDecimal recallRate,
+        BigDecimal anchorRate, BigDecimal duplicateRate, BigDecimal parseFailureRate, Long p95LatencyMs,
+        BigDecimal averageCost, Long totalTokens, List<String> blockers, String rollbackReason, String createdBy,
+        LocalDateTime createdAt, LocalDateTime updatedAt, Long evaluationReportId) {
+        this(id, releaseKey, provider, modelName, promptVersion, contextVersion, schemaVersion, datasetId, datasetVersion,
+            datasetFingerprint, state, trafficPercent, qualityGatePassed, precisionRate, recallRate, anchorRate,
+            duplicateRate, parseFailureRate, p95LatencyMs, averageCost, totalTokens, blockers, rollbackReason, createdBy,
+            createdAt, updatedAt, evaluationReportId, false, null, null);
+    }
 
     public LlmModelReleaseDto(Long id, String releaseKey, String provider, String modelName, String promptVersion,
         String contextVersion, String schemaVersion, String datasetId, String datasetVersion, String datasetFingerprint,

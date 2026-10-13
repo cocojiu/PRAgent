@@ -20,6 +20,16 @@ interface LlmReviewCaller {
         return false;
     }
 
+    default LlmCallResult callLlm(ReviewPolicySettings settings, ReviewTask task, PullRequestDiff diff,
+        LlmReviewContext context, java.util.function.LongSupplier remaining) {
+        return callLlm(settings, task, diff, context);
+    }
+
+    default LlmCallResult verifyHighRisk(ReviewPolicySettings settings, ReviewTask task, PullRequestDiff diff,
+        ReviewFindingResult candidate, LlmReviewContext context, java.util.function.LongSupplier remaining) {
+        return verifyHighRisk(settings, task, diff, candidate, context);
+    }
+
     default LlmCallResult verifyHighRisk(
         ReviewPolicySettings settings,
         ReviewTask task,

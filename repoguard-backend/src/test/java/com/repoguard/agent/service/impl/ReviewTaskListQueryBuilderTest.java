@@ -56,6 +56,18 @@ class ReviewTaskListQueryBuilderTest {
     }
 
     @Test
+    void bothListModesProjectOnlyFieldsConsumedByTheListAndLeaveCountQueriesUnprojected() {
+        var query = new ReviewQuery(1, 20, null, null, null, null, null, null);
+        for (var wrapper : java.util.List.of(builder.build(query), builder.buildKeysetPage(query))) {
+            assertThat(wrapper.getSqlSelect()).contains("id", "created_at", "title",
+                "human_review_note", "human_reviewed_at", "assessment_status", "llm_status")
+                .doesNotContain("llm_prompt_summary", "llm_cost_snapshot_json",
+                    "llm_prompt_tokens", "review_claimed_by", "publish_claimed_by");
+        }
+        assertThat(builder.buildCountQuery(query).getSqlSelect()).isNull();
+    }
+
+    @Test
     void pendingQueueUsesCurrentUndecidedStateForRowsCountAndKeyset() {
         var query = new ReviewQuery(1, 20, "owner/repo", " pending_human_review ", "high", null, null, null);
         for (var wrapper : java.util.List.of(builder.build(query), builder.buildCountQuery(query), builder.buildKeysetPage(query))) {

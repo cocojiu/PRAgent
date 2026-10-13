@@ -7,6 +7,10 @@ public record ChangedFileDto(
     String path,
     String changeType,
     Integer additions,
-    Integer deletions
+    Integer deletions,
+    Long findingCount
 ) {
+    public ChangedFileDto(String path, String changeType, Integer additions, Integer deletions) {
+        this(path, changeType, additions, deletions, null);
+    }
 }

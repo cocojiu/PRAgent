@@ -82,6 +82,32 @@ class ReviewTaskDetailDataLoaderTest {
     }
 
     @Test
+    void fileCountsIncludeAllCurrentFindingsAndUseOneBoundedPageQuery() {
+        ChangedFile first = changedFile();
+        first.setId(11L);
+        ChangedFile second = changedFile();
+        second.setId(12L);
+        second.setFilePath("src/NoFindings.java");
+        when(changedFileMapper.selectPage(any(), any())).thenReturn(page(List.of(first, second)));
+        when(changedFileMapper.selectFindingCountsForFiles(521L, List.of(11L, 12L)))
+            .thenReturn(List.of(new ChangedFileMapper.FileFindingCount(11L, 30L),
+                new ChangedFileMapper.FileFindingCount(12L, 0L)));
+
+        var result = loader.loadChangedFilesPage(521L, 1, 20, null);
+
+        assertThat(result.items()).extracting("findingCount").containsExactly(30L, 0L);
+        Mockito.verify(changedFileMapper).selectFindingCountsForFiles(521L, List.of(11L, 12L));
+        Mockito.verifyNoInteractions(reviewFindingMapper);
+    }
+
+    @Test
+    void emptyFilePageDoesNotIssueAnEmptyAggregateQuery() {
+        when(changedFileMapper.selectPage(any(), any())).thenReturn(page(List.<ChangedFile>of()));
+        assertThat(loader.loadChangedFilesPage(521L, 1, 20, null).items()).isEmpty();
+        Mockito.verify(changedFileMapper, Mockito.never()).selectFindingCountsForFiles(any(), any());
+    }
+
+    @Test
     void loadsSummaryWithoutFetchingInitialDetailRows() {
         when(reviewFindingMapper.selectReviewTaskDetailSummary(521L))
             .thenReturn(new ReviewTaskDetailSummary(12L, 30L, 4L, 1L, 2L, 3L, 24L, 0L));

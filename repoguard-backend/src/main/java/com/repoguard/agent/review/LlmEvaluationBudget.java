@@ -97,7 +97,13 @@ public final class LlmEvaluationBudget {
             inputPricePerMillion,
             outputPricePerMillion
         )) {
-            T response = request.get();
+            T response;
+            try {
+                response = request.get();
+            } catch (LlmUsageBudgetLedger.AdmissionDeniedException notSent) {
+                reservation.releaseBeforeSend();
+                throw notSent;
+            }
             reservation.complete(usageExtractor.apply(response), inputPricePerMillion, outputPricePerMillion);
             return response;
         }
@@ -211,6 +217,16 @@ public final class LlmEvaluationBudget {
                 inputPricePerMillion,
                 outputPricePerMillion
             );
+        }
+
+        private void releaseBeforeSend() {
+            if (!completed.compareAndSet(false, true)) {
+                throw new IllegalStateException("evaluation reservation is already completed");
+            }
+            synchronized (budget) {
+                budget.accountedTokens -= reservedTokens;
+                budget.accountedCost = budget.accountedCost.subtract(reservedCost);
+            }
         }
 
         /** Unknown provider usage remains conservatively reserved when a call fails. */
