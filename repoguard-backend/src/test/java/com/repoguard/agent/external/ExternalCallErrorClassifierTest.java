@@ -3,6 +3,7 @@ package com.repoguard.agent.external;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.net.SocketTimeoutException;
+import java.net.http.HttpTimeoutException;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.web.client.ResourceAccessException;
@@ -139,6 +140,20 @@ class ExternalCallErrorClassifierTest {
         ResourceAccessException timeout = new ResourceAccessException(
             "Read timed out",
             new SocketTimeoutException("Read timed out")
+        );
+
+        ExternalCallException classified = ExternalCallErrorClassifier.llm(timeout);
+
+        assertThat(classified.getCategory()).isEqualTo("llm_timeout");
+        assertThat(classified.isRetryable()).isTrue();
+        assertThat(classified.getStatusCode()).isNull();
+    }
+
+    @Test
+    void classifiesDashScopeJdkHttpTimeoutAsRetryable() {
+        ResourceAccessException timeout = new ResourceAccessException(
+            "get",
+            new HttpTimeoutException("Request cancelled")
         );
 
         ExternalCallException classified = ExternalCallErrorClassifier.llm(timeout);

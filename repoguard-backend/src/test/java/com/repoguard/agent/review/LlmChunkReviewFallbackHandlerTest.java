@@ -9,6 +9,7 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.repoguard.agent.observability.RepoGuardMetrics;
+import com.repoguard.agent.external.ExternalCallException;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
@@ -59,6 +60,20 @@ class LlmChunkReviewFallbackHandlerTest {
             logger.detachAppender(appender);
             appender.stop();
         }
+    }
+
+    @Test
+    void distinguishesProviderFailuresFromJsonParseFailures() {
+        LlmChunkReviewFallbackHandler handler = new LlmChunkReviewFallbackHandler(metrics);
+        ExternalCallException timeout = new ExternalCallException(
+            "LLM", "llm_timeout", true, null, "Request cancelled", null
+        );
+        IllegalStateException parseFailure = new IllegalStateException(
+            "Unable to parse LLM review result: invalid JSON"
+        );
+
+        assertThat(handler.category(timeout)).isEqualTo("llm_timeout");
+        assertThat(handler.category(parseFailure)).isEqualTo("llm_parse_failed");
     }
 
     private PullRequestDiffChunk chunk(int index, int total) {

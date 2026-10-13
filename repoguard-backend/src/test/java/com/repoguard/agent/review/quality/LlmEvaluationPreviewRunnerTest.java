@@ -75,6 +75,9 @@ class LlmEvaluationPreviewRunnerTest {
         assertThat(observation.anchorValid()).isTrue();
         assertThat(observation.predictionKey()).isEmpty();
         assertThat(observation.parseSucceeded()).isFalse();
+        assertThat(observation.parseFailed()).isFalse();
+        assertThat(observation.transportFailed()).isTrue();
+        assertThat(observation.failureCategories()).isEqualTo("llm_fallback");
         assertThat(observation.estimatedCost()).isZero();
         assertThat(observation.commentPublishAttempted()).isTrue();
         assertThat(observation.commentIgnored()).isTrue();
