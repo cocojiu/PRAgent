@@ -247,7 +247,8 @@ class LlmReviewPipeline {
                 settings,
                 context.task(),
                 diff,
-                context.promptContext()
+                context.promptContext(),
+                budget::remainingNanos
             )
         );
         try {

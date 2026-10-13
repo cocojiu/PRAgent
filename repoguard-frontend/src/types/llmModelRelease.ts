@@ -1,32 +1,9 @@
+export type {
+  LlmModelReleaseRequest,
+  LlmModelRollbackRequest,
+  LlmModelReleaseDriftRepairRequest
+} from "@/api/generated/modelQualityTypes";
 import type { LlmUsageCostSnapshot } from "@/api/generated/reviewDetailTypes";
-
-export interface LlmModelReleaseRequest {
-  releaseKey: string;
-  provider: string;
-  modelName: string;
-  promptVersion: string;
-  contextVersion: string;
-  schemaVersion: string;
-  datasetId: string;
-  datasetVersion: string;
-  datasetFingerprint: string;
-  trafficPercent: number;
-  qualityGatePassed: boolean;
-  precisionRate: number;
-  recallRate: number;
-  anchorRate: number;
-  duplicateRate: number;
-  parseFailureRate: number;
-  p95LatencyMs: number;
-  averageCost: number;
-  totalTokens: number;
-  blockers?: string[];
-  evaluationReportId?: number;
-}
-
-export interface LlmModelRollbackRequest {
-  reason: string;
-}
 
 export interface LlmModelRelease {
   id: number;
@@ -40,6 +17,9 @@ export interface LlmModelRelease {
   datasetVersion: string;
   datasetFingerprint: string;
   state: "SHADOW" | "CANARY" | "ACTIVE" | "ROLLED_BACK" | string;
+  safetyRevoked?: boolean;
+  safetyRevokedAt?: string;
+  safetyRevokeReason?: string;
   trafficPercent: number;
   qualityGatePassed: boolean;
   precisionRate: number;
@@ -269,6 +249,8 @@ export interface LlmModelBudget {
   month: string;
   tokenBudget: number;
   tokenUsed: number;
+  unpricedCalls?: number;
+  legacyUnknownAttempts?: number;
   tokenRemaining: number;
   costBudget: number;
   costUsed: number;
@@ -401,12 +383,6 @@ export interface LlmModelReleaseDrift {
   findings: LlmModelReleaseDriftFinding[];
   releaseSummary: LlmModelReleaseDriftReleaseSummary;
   assignmentSummary: LlmModelReleaseDriftAssignmentSummary;
-}
-
-export interface LlmModelReleaseDriftRepairRequest {
-  idempotencyKey: string;
-  previewFingerprint: string;
-  confirm: boolean;
 }
 
 export interface LlmModelReleaseDriftRepair {

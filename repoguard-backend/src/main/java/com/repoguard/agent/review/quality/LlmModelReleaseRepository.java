@@ -115,6 +115,9 @@ public class LlmModelReleaseRepository {
     }
     public LlmModelReleaseDto save(long tenantId, LlmModelReleaseService.NormalizedRelease release, String state,
         int trafficPercent, String operator, String rollbackReason) {
+        if (Boolean.TRUE.equals(jdbcTemplate.queryForObject("select exists(select 1 from llm_model_release where tenant_id=? and release_key=? and safety_revoked_at is not null)", Boolean.class, tenantId, release.releaseKey()))) {
+            throw new BusinessException(ErrorCode.CONFLICT, "安全撤销的发布版本不能再次启用；请使用新的评估版本");
+        }
         List<Long> ids = jdbcTemplate.query("select id from llm_model_release where tenant_id = ? and release_key = ?",
             (rs, rowNum) -> rs.getLong(1), tenantId, release.releaseKey());
         String blockers = release.blockers().stream().collect(Collectors.joining(","));
@@ -341,7 +344,8 @@ public class LlmModelReleaseRepository {
             rs.getBoolean("quality_gate_passed"), rs.getBigDecimal("precision_rate"), rs.getBigDecimal("recall_rate"), rs.getBigDecimal("anchor_rate"),
             rs.getBigDecimal("duplicate_rate"), rs.getBigDecimal("parse_failure_rate"), rs.getLong("p95_latency_ms"), rs.getBigDecimal("average_cost"),
             rs.getLong("total_tokens"), parseBlockers(rs.getString("blockers")), rs.getString("rollback_reason"), rs.getString("created_by"),
-            time(rs, "created_at"), time(rs, "updated_at"), rs.getObject("evaluation_report_id") == null ? null : rs.getLong("evaluation_report_id"));
+            time(rs, "created_at"), time(rs, "updated_at"), rs.getObject("evaluation_report_id") == null ? null : rs.getLong("evaluation_report_id"),
+            rs.getTimestamp("safety_revoked_at") != null, time(rs, "safety_revoked_at"), rs.getString("safety_revoke_reason"));
     }
 
     private LocalDateTime time(java.sql.ResultSet rs, String column) throws SQLException {

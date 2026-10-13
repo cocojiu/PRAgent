@@ -403,6 +403,7 @@ export type ApiContract = {
     { releaseId: number; payload: LlmModelRollbackRequest },
     LlmModelRelease
   >;
+  safetyRevokeLlmModelRelease: ApiOperation<{ releaseId: number; payload: LlmModelRollbackRequest }, LlmModelRelease>;
   createReviewRule: ApiOperation<ReviewRuleConfigRequest, ReviewRuleConfig>;
   updateReviewRule: ApiOperation<
     { id: string; expectedPolicyVersion: number; payload: ReviewRuleConfigRequest },
@@ -891,6 +892,10 @@ const apiEndpoints: ApiEndpointMap = {
     body: input => input.payload
   }),
   rollbackLlmModelRelease: generatedEndpoint("reviewCalibrationControllerRollbackModelRelease", {
+    path: input => ({ releaseId: input.releaseId }),
+    body: input => input.payload
+  }),
+  safetyRevokeLlmModelRelease: generatedEndpoint("reviewCalibrationControllerSafetyRevokeModelRelease", {
     path: input => ({ releaseId: input.releaseId }),
     body: input => input.payload
   }),

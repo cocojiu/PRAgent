@@ -1320,6 +1320,115 @@
         }
       }
     },
+    "/api/v1/config/llm-usage/pending" : {
+      "get" : {
+        "tags" : [ "LlmUsageAccounting" ],
+        "operationId" : "llmUsageAccountingControllerPending",
+        "x-controller-operation" : "LlmUsageAccountingController#pending",
+        "parameters" : [ {
+          "name" : "limit",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 100,
+            "default" : 50
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "List<PendingUsage>",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "array",
+                      "items" : {
+                        "$ref" : "#/components/schemas/PendingUsage"
+                      }
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/llm-usage/reconcile" : {
+      "post" : {
+        "tags" : [ "LlmUsageAccounting" ],
+        "operationId" : "llmUsageAccountingControllerReconcile",
+        "x-controller-operation" : "LlmUsageAccountingController#reconcile",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "ReconciliationRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ReconciliationRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ReconciledUsage",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ReconciledUsage"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/config/notification-bindings" : {
       "get" : {
         "tags" : [ "NotificationIntegration" ],
@@ -3193,6 +3302,68 @@
         "tags" : [ "ReviewCalibration" ],
         "operationId" : "reviewCalibrationControllerRollbackModelRelease",
         "x-controller-operation" : "ReviewCalibrationController#rollbackModelRelease",
+        "parameters" : [ {
+          "name" : "releaseId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "LlmModelRollbackRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/LlmModelRollbackRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "LlmModelReleaseDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/LlmModelReleaseDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-calibration/release-center/{releaseId}/safety-revoke" : {
+      "post" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerSafetyRevokeModelRelease",
+        "x-controller-operation" : "ReviewCalibrationController#safetyRevokeModelRelease",
         "parameters" : [ {
           "name" : "releaseId",
           "in" : "path",
@@ -11020,8 +11191,8 @@
             "format" : "int32"
           },
           "usageDate" : {
-            "type" : "object",
-            "x-java-type" : "LocalDate"
+            "type" : "string",
+            "format" : "date"
           },
           "updatedAt" : {
             "type" : "string",
@@ -12899,8 +13070,7 @@
         "x-java-type" : "LlmModelBudgetDto",
         "properties" : {
           "month" : {
-            "type" : "object",
-            "x-java-type" : "YearMonth"
+            "type" : "string"
           },
           "tokenBudget" : {
             "type" : "integer",
@@ -12925,9 +13095,17 @@
           },
           "exhausted" : {
             "type" : "boolean"
+          },
+          "unpricedCalls" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "legacyUnknownAttempts" : {
+            "type" : "integer",
+            "format" : "int64"
           }
         },
-        "required" : [ "tokenBudget", "tokenUsed", "tokenRemaining", "exhausted" ]
+        "required" : [ "tokenBudget", "tokenUsed", "tokenRemaining", "exhausted", "unpricedCalls", "legacyUnknownAttempts" ]
       },
       "LlmModelReleaseAuditDto" : {
         "type" : "object",
@@ -13251,8 +13429,19 @@
           "evaluationReportId" : {
             "type" : "integer",
             "format" : "int64"
+          },
+          "safetyRevoked" : {
+            "type" : "boolean"
+          },
+          "safetyRevokedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "safetyRevokeReason" : {
+            "type" : "string"
           }
-        }
+        },
+        "required" : [ "safetyRevoked" ]
       },
       "LlmModelReleaseMetricDto" : {
         "type" : "object",
@@ -14278,6 +14467,51 @@
         },
         "required" : [ "total", "hasMore" ]
       },
+      "PendingUsage" : {
+        "type" : "object",
+        "x-java-type" : "PendingUsage",
+        "properties" : {
+          "callKey" : {
+            "type" : "string"
+          },
+          "month" : {
+            "type" : "string",
+            "format" : "date"
+          },
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "attemptId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "operation" : {
+            "type" : "string"
+          },
+          "provider" : {
+            "type" : "string"
+          },
+          "modelName" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "accountedTokens" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "accountedCost" : {
+            "type" : "number"
+          },
+          "startedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        },
+        "required" : [ "accountedTokens" ]
+      },
       "PrReviewSummaryDto" : {
         "type" : "object",
         "x-java-type" : "PrReviewSummaryDto",
@@ -14422,6 +14656,79 @@
             "type" : "string"
           }
         }
+      },
+      "ReconciledUsage" : {
+        "type" : "object",
+        "x-java-type" : "ReconciledUsage",
+        "properties" : {
+          "idempotencyKey" : {
+            "type" : "string"
+          },
+          "callKey" : {
+            "type" : "string"
+          },
+          "accountedTokens" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "accountedCost" : {
+            "type" : "number"
+          },
+          "operator" : {
+            "type" : "string"
+          },
+          "evidenceReference" : {
+            "type" : "string"
+          },
+          "reason" : {
+            "type" : "string"
+          },
+          "reconciledAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        },
+        "required" : [ "accountedTokens" ]
+      },
+      "ReconciliationRequest" : {
+        "type" : "object",
+        "x-java-type" : "ReconciliationRequest",
+        "properties" : {
+          "callKey" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "^[A-Za-z0-9:._-]{1,128}$"
+          },
+          "idempotencyKey" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "^[A-Za-z0-9._-]{1,64}$"
+          },
+          "accountedTokens" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 0,
+            "maximum" : 9007199254740991
+          },
+          "accountedCost" : {
+            "type" : "number",
+            "minimum" : 0
+          },
+          "evidenceReference" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 512
+          },
+          "reason" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 512
+          },
+          "finalEvidence" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "callKey", "idempotencyKey", "accountedTokens", "accountedCost", "evidenceReference", "reason", "finalEvidence" ]
       },
       "ReleaseSummary" : {
         "type" : "object",

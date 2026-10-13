@@ -11,6 +11,12 @@ public record LlmModelBudgetDto(
     BigDecimal costBudget,
     BigDecimal costUsed,
     BigDecimal costRemaining,
-    boolean exhausted
+    boolean exhausted,
+    long unpricedCalls,
+    long legacyUnknownAttempts
 ) {
+    public LlmModelBudgetDto(YearMonth month, long tokenBudget, long tokenUsed, long tokenRemaining,
+        BigDecimal costBudget, BigDecimal costUsed, BigDecimal costRemaining, boolean exhausted) {
+        this(month, tokenBudget, tokenUsed, tokenRemaining, costBudget, costUsed, costRemaining, exhausted, 0, 0);
+    }
 }

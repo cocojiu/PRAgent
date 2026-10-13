@@ -1,6 +1,7 @@
 package com.repoguard.agent.review;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.external.ExternalHttpRequestFactory;
 import com.repoguard.agent.external.ExternalHttpJsonResponseReader;
 import com.repoguard.agent.external.ExternalHttpResponseProfile;
@@ -17,6 +18,7 @@ final class LlmChatTransport {
     private final RestClient.Builder restClientBuilder;
     private final ExternalHttpJsonResponseReader responseReader;
     private final LlmChatCompletionResponseExtractor responseExtractor;
+    private final LlmUsageBudgetLedger ledger;
     private final AtomicReference<CachedRestClient> cachedRestClient = new AtomicReference<>();
 
     LlmChatTransport(
@@ -24,9 +26,15 @@ final class LlmChatTransport {
         ExternalHttpJsonResponseReader responseReader,
         LlmChatCompletionResponseExtractor responseExtractor
     ) {
+        this(restClientBuilder, responseReader, responseExtractor, null);
+    }
+
+    LlmChatTransport(RestClient.Builder restClientBuilder, ExternalHttpJsonResponseReader responseReader,
+        LlmChatCompletionResponseExtractor responseExtractor, LlmUsageBudgetLedger ledger) {
         this.restClientBuilder = Objects.requireNonNull(restClientBuilder, "restClientBuilder");
         this.responseReader = Objects.requireNonNull(responseReader, "responseReader");
         this.responseExtractor = Objects.requireNonNull(responseExtractor, "responseExtractor");
+        this.ledger = ledger;
     }
 
     JsonNode execute(
@@ -38,16 +46,41 @@ final class LlmChatTransport {
         Map<String, Object> payload,
         LlmProviderCapability capability
     ) {
-        if (budget == null) {
+        return execute(budget, settings, systemPrompt, userPrompt, maxTokens, payload, capability,
+            null, java.util.UUID.randomUUID().toString(), "chat_completions");
+    }
+
+    JsonNode execute(LlmEvaluationBudget budget, ReviewPolicySettings settings, String systemPrompt,
+        String userPrompt, Integer maxTokens, Map<String, Object> payload, LlmProviderCapability capability,
+        ReviewTask task, String callKey, String operation) {
+        return execute(budget, settings, systemPrompt, userPrompt, maxTokens, payload, capability,
+            task, callKey, operation, () -> Long.MAX_VALUE);
+    }
+
+    JsonNode execute(LlmEvaluationBudget budget, ReviewPolicySettings settings, String systemPrompt,
+        String userPrompt, Integer maxTokens, Map<String, Object> payload, LlmProviderCapability capability,
+        ReviewTask task, String callKey, String operation, java.util.function.LongSupplier remaining) {
+        int outputLimit = maxTokens == null ? 1024 : maxTokens;
+        java.util.function.Supplier<JsonNode> request = () -> {
+            if (ledger != null) ledger.requireReleaseAllowed(task);
+            // Admission may have waited on a database lock. Check again before the first HTTP byte.
+            if (Thread.currentThread().isInterrupted() || remaining.getAsLong() <= 0) {
+                throw new LlmUsageBudgetLedger.AdmissionDeniedException("llm_budget_deadline_exhausted");
+            }
             return executeRequest(settings, payload, capability);
+        };
+        java.util.function.Supplier<JsonNode> accounted = ledger == null ? request : () -> ledger.execute(
+            task, callKey, operation, settings, systemPrompt, userPrompt, outputLimit, payload, request, responseExtractor::extractUsage);
+        if (budget == null) {
+            return accounted.get();
         }
         return budget.execute(
             systemPrompt,
             userPrompt,
-            maxTokens,
+            outputLimit,
             settings.conservativeInputTokenPricePerMillion(),
             settings.outputTokenPricePerMillion(),
-            () -> executeRequest(settings, payload, capability),
+            accounted,
             responseExtractor::extractUsage
         );
     }
@@ -63,7 +96,7 @@ final class LlmChatTransport {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("model", settings.modelName());
         payload.put("temperature", settings.temperature());
-        payload.put("max_tokens", maxTokens);
+        payload.put("max_tokens", maxTokens == null ? 1024 : maxTokens);
         payload.put("messages", List.of(
             Map.of("role", "system", "content", systemPrompt),
             Map.of("role", "user", "content", userPrompt)

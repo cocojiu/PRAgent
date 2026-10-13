@@ -10,6 +10,7 @@ import {
   registerLlmModelShadowRelease,
   verifyLlmModelReleaseAudit,
   rollbackLlmModelRelease,
+  safetyRevokeLlmModelRelease,
   transitionLlmEvaluationReportLifecycle
 } from "@/api/config";
 import type {
@@ -185,6 +186,7 @@ export const useLlmModelReleaseCenter = () => {
   };
 
   const runAction = async (name: string, callback: () => Promise<unknown>) => {
+    if (action.value) return;
     action.value = name;
     errorMessage.value = "";
     try {
@@ -251,6 +253,16 @@ export const useLlmModelReleaseCenter = () => {
     );
   };
 
+  const safetyRevoke = async (releaseId: number, reason: string) => {
+    if (!reason.trim()) {
+      errorMessage.value = "安全撤销必须填写原因";
+      return;
+    }
+    await runAction(`safety-revoke-${releaseId}`, () =>
+      safetyRevokeLlmModelRelease(releaseId, { reason: reason.trim() })
+    );
+  };
+
   const transitionReportLifecycle = async (
     reportId: number,
     lifecycleAction: "FREEZE" | "REVOKE_AUTHORIZATION" | "DELETE",
@@ -296,6 +308,7 @@ export const useLlmModelReleaseCenter = () => {
     exportAudits,
     verifyAudit,
     rollback,
+    safetyRevoke,
     selectedReport,
     selectedReportId,
     trendDays,

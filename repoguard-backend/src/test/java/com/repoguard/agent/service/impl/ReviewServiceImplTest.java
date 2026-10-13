@@ -3,6 +3,7 @@ package com.repoguard.agent.service.impl;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -825,7 +826,7 @@ class ReviewServiceImplTest {
         page.setRecords(List.of(failedTask));
         page.setTotal(1);
         when(reviewTaskMapper.selectPage(any(), any())).thenReturn(page);
-        when(reviewTimelineMapper.selectList(any())).thenReturn(List.of(timeline("Review failed: 401 Bad credentials")));
+        when(reviewTimelineMapper.selectLatestFailures(anyList())).thenReturn(List.of(timeline("Review failed: 401 Bad credentials")));
 
         var result = service.listReviews(new ReviewQuery(1, 20, null, null, null, null, null, null));
 
@@ -845,7 +846,7 @@ class ReviewServiceImplTest {
         page.setRecords(List.of(failedTask));
         page.setTotal(1);
         when(reviewTaskMapper.selectPage(any(), any())).thenReturn(page);
-        when(reviewTimelineMapper.selectList(any())).thenReturn(List.of(timeline(
+        when(reviewTimelineMapper.selectLatestFailures(anyList())).thenReturn(List.of(timeline(
             "Review failed: GitHub external call failed: category=github_rate_limited retryable=true status=429"
         )));
 

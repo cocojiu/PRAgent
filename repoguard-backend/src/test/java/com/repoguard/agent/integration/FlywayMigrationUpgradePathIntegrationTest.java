@@ -20,7 +20,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
  * Exercises the supported rolling-upgrade path against a real MySQL instance.
  *
  * <p>The test is opt-in because local unit-test runs do not provision a database. CI enables it
- * with an isolated database and verifies the V76 expand state through the V104 isolated preflight state.
+ * with an isolated database and verifies the V76 expand state through the V106 safety state.
  */
 @EnabledIfEnvironmentVariable(named = "REPOGUARD_RUN_INTEGRATION_TESTS", matches = "true")
 class FlywayMigrationUpgradePathIntegrationTest {
@@ -357,6 +357,66 @@ class FlywayMigrationUpgradePathIntegrationTest {
                     assertThat(rows.next()).isTrue();
                     assertThat(rows.getLong(1)).isZero();
                 }
+            }
+            try (Connection connection = open(url, username, password);
+                 PreparedStatement legacy = connection.prepareStatement("""
+                     update review_execution_attempt set prompt_tokens=42,completion_tokens=10,total_tokens=52,
+                         estimated_cost=0.001,cost_snapshot_json=JSON_OBJECT('historical','unchanged','currency','CNY')
+                     where tenant_id=? and id=?
+                     """)) {
+                legacy.setLong(1, tenantId); legacy.setLong(2, attemptId); legacy.executeUpdate();
+                try (PreparedStatement previousRetry = connection.prepareStatement("""
+                    insert into review_execution_attempt(tenant_id,task_id,attempt_no,generation,commit_sha,
+                        input_fingerprint,status,queued_at,started_at,created_at,prompt_tokens,completion_tokens,total_tokens,estimated_cost,cost_snapshot_json)
+                    select tenant_id,task_id,2,generation,commit_sha,input_fingerprint,'FAILED',queued_at,started_at,created_at,13,2,15,0.002,JSON_OBJECT('currency','CNY')
+                    from review_execution_attempt where tenant_id=? and id=?
+                    """)) {
+                    previousRetry.setLong(1, tenantId); previousRetry.setLong(2, attemptId); previousRetry.executeUpdate();
+                }
+                try (PreparedStatement foreignCurrency = connection.prepareStatement("""
+                    insert into review_execution_attempt(tenant_id,task_id,attempt_no,generation,commit_sha,input_fingerprint,
+                        status,queued_at,started_at,created_at,prompt_tokens,completion_tokens,total_tokens,estimated_cost,cost_snapshot_json)
+                    select tenant_id,task_id,3,generation,commit_sha,input_fingerprint,'FAILED',queued_at,started_at,created_at,
+                        8,2,10,1.5,JSON_OBJECT('currency','USD','estimatedAmount',1.5)
+                    from review_execution_attempt where tenant_id=? and id=?
+                    """)) {
+                    foreignCurrency.setLong(1, tenantId); foreignCurrency.setLong(2, attemptId); foreignCurrency.executeUpdate();
+                }
+            }
+            migrateTo(url, username, password, "105");
+            try (Connection connection = open(url, username, password);
+                 PreparedStatement totals = connection.prepareStatement(
+                     "select sum(accounted_tokens),sum(accounted_cost) from llm_usage_month where tenant_id=?")) {
+                assertThat(latestSuccessfulMigration(connection)).isEqualTo("105");
+                totals.setLong(1, tenantId);
+                try (ResultSet rows = totals.executeQuery()) {
+                    assertThat(rows.next()).isTrue();
+                    assertThat(rows.getLong(1)).isEqualTo(77);
+                    assertThat(rows.getBigDecimal(2)).isEqualByComparingTo("0.003");
+                }
+                try (PreparedStatement calls = connection.prepareStatement(
+                    "select count(*),max(json_unquote(json_extract(pricing_json,'$.historical'))) from llm_usage_call where tenant_id=?")) {
+                    calls.setLong(1, tenantId);
+                    try (ResultSet rows = calls.executeQuery()) {
+                        assertThat(rows.next()).isTrue();
+                        assertThat(rows.getLong(1)).isEqualTo(4);
+                        assertThat(rows.getString(2)).isEqualTo("unchanged");
+                    }
+                }
+                try (PreparedStatement unknown = connection.prepareStatement(
+                    "select sum(unpriced_calls),sum(legacy_unknown_attempts) from llm_usage_month where tenant_id=?")) {
+                    unknown.setLong(1, tenantId);
+                    try (ResultSet rows = unknown.executeQuery()) {
+                        assertThat(rows.next()).isTrue(); assertThat(rows.getLong(1)).isEqualTo(1);
+                        assertThat(rows.getLong(2)).isEqualTo(1);
+                    }
+                }
+            }
+            migrateTo(url, username, password, "106");
+            try (Connection connection = open(url, username, password)) {
+                assertThat(latestSuccessfulMigration(connection)).isEqualTo("106");
+                assertThat(columnExists(connection, "llm_model_release", "safety_revoked_at")).isTrue();
+                assertThat(columnExists(connection, "llm_model_release", "safety_revoke_reason")).isTrue();
             }
         } finally {
             cleanup(url, username, password, tenantId, taskId, attemptId);
@@ -781,6 +841,15 @@ class FlywayMigrationUpgradePathIntegrationTest {
                 policies.executeUpdate();
                 settings.setLong(1, tenantId);
                 settings.executeUpdate();
+            }
+            // Accounting deliberately survives task retention. Delete only this fixture's ledger
+            // so the fixture tenant itself can be removed; never truncate shared test tables.
+            for (String table : List.of("llm_usage_call", "llm_usage_month")) {
+                if (columnExists(connection, table, "tenant_id")) {
+                    try (PreparedStatement accounting = connection.prepareStatement("delete from " + table + " where tenant_id=?")) {
+                        accounting.setLong(1, tenantId); accounting.executeUpdate();
+                    }
+                }
             }
             deleteTenant(connection, tenantId);
         }

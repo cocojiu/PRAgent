@@ -49,13 +49,21 @@ final class LlmEvaluationReviewCaller implements LlmReviewCaller {
         PullRequestDiff diff,
         LlmReviewContext context
     ) {
+        return callLlm(settings, task, diff, context, () -> Long.MAX_VALUE);
+    }
+
+    @Override
+    public LlmCallResult callLlm(ReviewPolicySettings settings, ReviewTask task, PullRequestDiff diff,
+        LlmReviewContext context, java.util.function.LongSupplier remaining) {
         return reviewer.callChat(
+            task,
             settings,
             promptBuilder.systemPrompt(),
             promptBuilder.buildPrompt(task, diff, context),
             "chat_completions",
             settings.maxTokens(),
-            budget
+            budget,
+            remaining
         );
     }
 
@@ -72,14 +80,22 @@ final class LlmEvaluationReviewCaller implements LlmReviewCaller {
         ReviewFindingResult candidate,
         LlmReviewContext context
     ) {
+        return verifyHighRisk(settings, task, diff, candidate, context, () -> Long.MAX_VALUE);
+    }
+
+    @Override
+    public LlmCallResult verifyHighRisk(ReviewPolicySettings settings, ReviewTask task, PullRequestDiff diff,
+        ReviewFindingResult candidate, LlmReviewContext context, java.util.function.LongSupplier remaining) {
         int maxTokens = Math.min(1_200, Math.max(256, settings.maxTokens() == null ? 1_200 : settings.maxTokens()));
         return reviewer.callChat(
+            task,
             settings,
             promptBuilder.verificationSystemPrompt(),
             promptBuilder.buildVerificationPrompt(task, diff, candidate, context),
             "high_risk_verification",
             maxTokens,
-            budget
+            budget,
+            remaining
         );
     }
 }
