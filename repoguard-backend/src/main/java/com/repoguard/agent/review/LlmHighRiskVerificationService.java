@@ -118,7 +118,8 @@ class LlmHighRiskVerificationService {
                     context.task(),
                     diff,
                     finding,
-                    context.promptContext()
+                    context.promptContext(),
+                    budget::remainingNanos
                 );
                 if (callResult == null) {
                     throw new IllegalStateException("High-risk verification returned no response");

@@ -45,7 +45,7 @@ public final class FrontendApiContractCatalog {
     }
 
     public static Map<String, EndpointContract> endpointContracts() throws IOException {
-        String source = Files.readString(contractsPath());
+        String source = contractSource();
         Matcher operationMatcher = FRONTEND_API_OPERATION_PATTERN.matcher(source);
         Map<String, OperationTypes> operationTypes = apiOperationTypes(source);
         Map<String, OpenApiGeneratedClientDryRun.GeneratedOperation> generatedOperations =
@@ -156,7 +156,10 @@ public final class FrontendApiContractCatalog {
         Map<String, OperationTypes> operationTypes = new LinkedHashMap<>();
         while (matcher.find()) {
             List<String> arguments = apiOperationTypeArguments(source, matcher.end());
-            operationTypes.put(matcher.group(1), new OperationTypes(arguments.get(0), arguments.get(1)));
+            if (operationTypes.putIfAbsent(matcher.group(1),
+                new OperationTypes(arguments.get(0), arguments.get(1))) != null) {
+                throw new IllegalStateException("Duplicate frontend API operation: " + matcher.group(1));
+            }
         }
         return operationTypes;
     }
@@ -318,6 +321,23 @@ public final class FrontendApiContractCatalog {
         return sourcePath("api", "contracts.ts");
     }
 
+    private static String contractSource() throws IOException {
+        String facade = Files.readString(contractsPath());
+        Matcher modules = Pattern.compile("\"@/api/contracts/([A-Za-z0-9]+)\"").matcher(facade);
+        StringBuilder source = new StringBuilder(facade);
+        List<String> discovered = new ArrayList<>();
+        while (modules.find()) {
+            String module = modules.group(1);
+            if (discovered.contains(module)) {
+                throw new IllegalStateException("Duplicate frontend contract module: " + module);
+            }
+            discovered.add(module);
+            source.append('\n').append(Files.readString(contractsPath().getParent()
+                .resolve("contracts").resolve(module + ".ts")));
+        }
+        return source.toString();
+    }
+
     private static Path openApiPath() {
         Path backendCandidate = Path.of("src/test/resources/contracts/openapi.json");
         if (Files.exists(backendCandidate)) {
@@ -357,6 +377,7 @@ public final class FrontendApiContractCatalog {
         String relativePath = relativePath(root, path);
         return "api/client.ts".equals(relativePath)
             || "api/contracts.ts".equals(relativePath)
+            || relativePath.startsWith("api/contracts/")
             || "api/generated/openapiOperations.ts".equals(relativePath);
     }
 

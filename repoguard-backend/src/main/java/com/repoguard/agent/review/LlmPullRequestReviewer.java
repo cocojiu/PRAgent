@@ -43,7 +43,8 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         LlmChatCompletionResponseExtractor responseExtractor,
         OutboundEndpointPolicy endpointPolicy,
         ObjectProvider<LlmModelReleaseService> modelReleaseServiceProvider,
-        ObjectProvider<RepositoryPolicyRuntime> repositoryPolicyRuntimeProvider
+        ObjectProvider<RepositoryPolicyRuntime> repositoryPolicyRuntimeProvider,
+        ObjectProvider<LlmUsageBudgetLedger> ledgerProvider
     ) {
         this(
             reviewPolicyProvider,
@@ -57,6 +58,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
             endpointPolicy,
             modelReleaseServiceProvider.getIfAvailable(),
             repositoryPolicyRuntimeProvider.getIfAvailable(),
+            ledgerProvider.getObject(),
             true
         );
     }
@@ -83,6 +85,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
             null,
             null,
             null,
+            null,
             true
         );
     }
@@ -99,6 +102,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         OutboundEndpointPolicy endpointPolicy,
         LlmModelReleaseService modelReleaseService,
         RepositoryPolicyRuntime repositoryPolicyRuntime,
+        LlmUsageBudgetLedger ledger,
         boolean ignored
     ) {
         this.reviewPolicyProvider = Objects.requireNonNull(reviewPolicyProvider, "reviewPolicyProvider");
@@ -107,7 +111,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         this.promptBuilder = Objects.requireNonNull(promptBuilder, "promptBuilder");
         this.reviewPipeline = Objects.requireNonNull(reviewPipeline, "reviewPipeline");
         this.responseExtractor = Objects.requireNonNull(responseExtractor, "responseExtractor");
-        this.chatTransport = new LlmChatTransport(restClientBuilder, responseReader, responseExtractor);
+        this.chatTransport = new LlmChatTransport(restClientBuilder, responseReader, responseExtractor, ledger);
         this.endpointPolicy = endpointPolicy;
         this.modelReleaseService = modelReleaseService;
         this.repositoryPolicyRuntime = repositoryPolicyRuntime;
@@ -217,12 +221,21 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         PullRequestDiff diff,
         LlmReviewContext context
     ) {
+        return callLlm(settings, task, diff, context, () -> Long.MAX_VALUE);
+    }
+
+    @Override
+    public LlmCallResult callLlm(ReviewPolicySettings settings, ReviewTask task, PullRequestDiff diff,
+        LlmReviewContext context, java.util.function.LongSupplier remaining) {
         return callChat(
+            task,
             settings,
             promptBuilder.systemPrompt(),
             promptBuilder.buildPrompt(task, diff, context),
             "chat_completions",
-            settings.maxTokens()
+            settings.maxTokens(),
+            null,
+            remaining
         );
     }
 
@@ -239,24 +252,34 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         ReviewFindingResult candidate,
         LlmReviewContext context
     ) {
+        return verifyHighRisk(settings, task, diff, candidate, context, () -> Long.MAX_VALUE);
+    }
+
+    @Override
+    public LlmCallResult verifyHighRisk(ReviewPolicySettings settings, ReviewTask task, PullRequestDiff diff,
+        ReviewFindingResult candidate, LlmReviewContext context, java.util.function.LongSupplier remaining) {
         int maxTokens = Math.min(1_200, Math.max(256, settings.maxTokens() == null ? 1_200 : settings.maxTokens()));
         return callChat(
+            task,
             settings,
             promptBuilder.verificationSystemPrompt(),
             promptBuilder.buildVerificationPrompt(task, diff, candidate, context),
             "high_risk_verification",
-            maxTokens
+            maxTokens,
+            null,
+            remaining
         );
     }
 
     private LlmCallResult callChat(
+        ReviewTask task,
         ReviewPolicySettings settings,
         String systemPrompt,
         String userPrompt,
         String operation,
         Integer maxTokens
     ) {
-        return callChat(settings, systemPrompt, userPrompt, operation, maxTokens, null);
+        return callChat(task, settings, systemPrompt, userPrompt, operation, maxTokens, null);
     }
 
     LlmCallResult callChat(
@@ -267,7 +290,20 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         Integer maxTokens,
         LlmEvaluationBudget evaluationBudget
     ) {
+        return callChat(null, settings, systemPrompt, userPrompt, operation, maxTokens, evaluationBudget);
+    }
+
+    LlmCallResult callChat(ReviewTask task, ReviewPolicySettings settings, String systemPrompt,
+        String userPrompt, String operation, Integer maxTokens, LlmEvaluationBudget evaluationBudget) {
+        return callChat(task, settings, systemPrompt, userPrompt, operation, maxTokens, evaluationBudget, () -> Long.MAX_VALUE);
+    }
+
+    LlmCallResult callChat(ReviewTask task, ReviewPolicySettings settings, String systemPrompt,
+        String userPrompt, String operation, Integer maxTokens, LlmEvaluationBudget evaluationBudget,
+        java.util.function.LongSupplier remaining) {
         long startedAt = System.nanoTime();
+        String logicalCall = java.util.UUID.randomUUID().toString();
+        java.util.concurrent.atomic.AtomicInteger attempt = new java.util.concurrent.atomic.AtomicInteger();
         if (endpointPolicy != null) {
             endpointPolicy.validate(OutboundEndpointType.LLM, settings.baseUrl());
         }
@@ -295,14 +331,15 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         try {
             JsonNode response;
             try {
-                response = executeLlm(operation, () -> chatTransport.execute(
+                response = executeLlm(operation, settings, remaining, () -> chatTransport.execute(
                     evaluationBudget,
                     settings,
                     systemPrompt,
                     userPrompt,
                     maxTokens,
                     structuredPayload,
-                    capability
+                    capability,
+                    task, logicalCall + ":" + attempt.incrementAndGet(), operation, remaining
                 ));
             } catch (RuntimeException ex) {
                 ExternalCallException classified = ExternalCallErrorClassifier.llm(ex);
@@ -316,14 +353,15 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
                     outputStatus.code(),
                     classified.getCategory()
                 );
-                response = executeLlm(operation + "_legacy_format", () -> chatTransport.execute(
+                response = executeLlm(operation + "_legacy_format", settings, remaining, () -> chatTransport.execute(
                     evaluationBudget,
                     settings,
                     systemPrompt,
                     userPrompt,
                     maxTokens,
                     legacyPayload,
-                    capability
+                    capability,
+                    task, logicalCall + ":" + attempt.incrementAndGet(), operation + "_legacy_format", remaining
                 ));
             }
             metrics.llmRequestDuration(Duration.ofNanos(System.nanoTime() - startedAt), "success");
@@ -391,8 +429,9 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         }
     }
 
-    private <T> T executeLlm(String operation, java.util.function.Supplier<T> supplier) {
-        return resilience.llm(operation, supplier);
+    private <T> T executeLlm(String operation, ReviewPolicySettings settings,
+        java.util.function.LongSupplier remaining, java.util.function.Supplier<T> supplier) {
+        return resilience.llm(operation, settings.llmProvider(), settings.baseUrl(), remaining, supplier);
     }
 
 }

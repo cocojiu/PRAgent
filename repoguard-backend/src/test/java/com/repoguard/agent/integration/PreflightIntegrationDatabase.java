@@ -1,6 +1,7 @@
 package com.repoguard.agent.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import com.repoguard.agent.config.SchemaVersionProperties;
 import javax.sql.DataSource;
 import org.flywaydb.core.Flyway;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -40,7 +41,7 @@ public final class PreflightIntegrationDatabase {
             .initSql("SET SESSION sql_mode = REPLACE(@@SESSION.sql_mode, 'ONLY_FULL_GROUP_BY', '')")
             .cleanDisabled(true).load().migrate();
         assertThat(jdbc.queryForObject("select version from flyway_schema_history where success=1 order by installed_rank desc limit 1",
-            String.class)).isEqualTo("104");
+            String.class)).isEqualTo(Integer.toString(new SchemaVersionProperties().getExpectedVersion()));
         return source;
     }
 }

@@ -1,10 +1,26 @@
 package com.repoguard.agent.mapper;
 
+import java.util.List;
+import com.repoguard.agent.mapper.ReviewFindingMapper.SarifImportBatchRow;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
 /** Export preflight statements inherited by the finding mapper. */
 public interface SarifExportQueries {
+    @Select("""
+        <script>
+        select id, tool_name, tool_version
+        from sarif_import_batch
+        where task_id = #{taskId}
+          and id in
+          <foreach collection="batchIds" item="batchId" open="(" separator="," close=")">
+            #{batchId}
+          </foreach>
+        </script>
+        """)
+    List<SarifImportBatchRow> selectSarifExportBatches(@Param("taskId") Long taskId,
+        @Param("batchIds") List<Long> batchIds);
+
     @Select("""
         select coalesce(sum(export_text_bytes), 0)
         from (

@@ -109,6 +109,7 @@ revokeRepositorySuppression -> repositoryPolicyControllerRevoke // POST /api/v1/
 rollbackLlmModelRelease -> reviewCalibrationControllerRollbackModelRelease // POST /api/v1/config/review-calibration/release-center/{releaseId}/rollback
 rollbackReviewRule -> systemConfigControllerRollbackReviewRule // POST /api/v1/config/review-rules/{id}/versions/{policyVersion}/rollback
 rollbackReviewStrategy -> systemConfigControllerRollbackReviewStrategy // POST /api/v1/config/review-strategy/versions/{snapshotId}/rollback
+safetyRevokeLlmModelRelease -> reviewCalibrationControllerSafetyRevokeModelRelease // POST /api/v1/config/review-calibration/release-center/{releaseId}/safety-revoke
 startLlmEvaluationRun -> reviewCalibrationControllerStartEvaluationRun // POST /api/v1/config/review-calibration/evaluation-runs
 submitHumanReview -> reviewControllerSubmitHumanReview // POST /api/v1/reviews/{id}/human-review
 testGithubIntegrationConnection -> systemConfigControllerTestGithubIntegration // POST /api/v1/config/integrations/github/test

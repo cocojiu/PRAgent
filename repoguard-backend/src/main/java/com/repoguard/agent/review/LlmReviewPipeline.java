@@ -247,7 +247,8 @@ class LlmReviewPipeline {
                 settings,
                 context.task(),
                 diff,
-                context.promptContext()
+                context.promptContext(),
+                budget::remainingNanos
             )
         );
         try {
@@ -301,10 +302,7 @@ class LlmReviewPipeline {
                     "executionBudgetExceededStage=rule_scan"
                 ));
             }
-            ReviewResult ruleReview = ruleBasedReviewer.review(context.diff());
-            if (context.deadline() != null) {
-                ruleReview = ruleBasedReviewer.review(context.diff(), context.deadline());
-            }
+            ReviewResult ruleReview = ruleReview(context);
             ReviewResult parsed = state.llmReview();
             ReviewResult merged = reviewMerger.mergeWithRuleReview(parsed, ruleReview);
             ReviewPolicySettings settings = context.settings();

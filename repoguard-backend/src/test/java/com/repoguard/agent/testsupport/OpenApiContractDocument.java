@@ -420,6 +420,14 @@ public final class OpenApiContractDocument {
         if (type == BigDecimal.class || type == Double.class || type == double.class || type == Float.class || type == float.class) {
             return scalarSchema("number");
         }
+        if (type == java.time.YearMonth.class) {
+            return scalarSchema("string");
+        }
+        if (type == java.time.LocalDate.class) {
+            Map<String, Object> schema = scalarSchema("string");
+            schema.put("format", "date");
+            return schema;
+        }
         if (type == OffsetDateTime.class || type == LocalDateTime.class) {
             Map<String, Object> schema = scalarSchema("string");
             schema.put("format", "date-time");

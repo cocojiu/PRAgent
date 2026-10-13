@@ -23,6 +23,8 @@ class OpenApiGeneratedClientContractTest {
         Path.of("src/test/resources/contracts/openapi-generated-client.frontend-signature.snapshot");
 
     private static final Set<String> SERVER_ONLY_ENDPOINTS = Set.of(
+        "GET /api/v1/config/llm-usage/pending",
+        "POST /api/v1/config/llm-usage/reconcile",
         "GET /api/v1/config/data-retention/payload-preview",
         "POST /api/v1/auth/refresh",
         "POST /api/v1/preflight/credentials",

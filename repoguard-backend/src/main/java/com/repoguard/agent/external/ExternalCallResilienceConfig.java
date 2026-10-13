@@ -28,7 +28,8 @@ public class ExternalCallResilienceConfig {
             circuitBreaker("llm", properties.getLlm(), ExternalCallErrorClassifier::llm),
             retry("llm", properties.getLlm(), ExternalCallErrorClassifier::llm, retryMetricsRecorder),
             rateLimiter("llm", properties.getLlm()),
-            bulkhead("llm", properties.getLlm())
+            bulkhead("llm", properties.getLlm()),
+            properties.getLlmMaxEndpointDomains()
         );
     }
 
@@ -43,6 +44,7 @@ public class ExternalCallResilienceConfig {
             .minimumNumberOfCalls(Math.max(1, properties.getCircuitBreakerMinimumCalls()))
             .waitDurationInOpenState(Duration.ofSeconds(Math.max(1, properties.getCircuitBreakerWaitOpenSeconds())))
             .recordException(throwable -> isRetryable(classifier, throwable))
+            .ignoreException(ExternalRetryTiming::localDecline)
             .build();
         return CircuitBreaker.of("repoguard-" + name, config);
     }
@@ -55,7 +57,8 @@ public class ExternalCallResilienceConfig {
     ) {
         RetryConfig config = RetryConfig.custom()
             .maxAttempts(Math.max(1, properties.getRetryMaxAttempts()))
-            .waitDuration(Duration.ofMillis(Math.max(0, properties.getRetryWaitMillis())))
+            .intervalBiFunction((attempt, result) -> ExternalRetryTiming.delay(
+                attempt, result.isLeft() ? result.getLeft() : null, properties))
             .retryOnException(throwable -> isRetryable(classifier, throwable))
             .build();
         Retry retry = Retry.of("repoguard-" + name, config);
@@ -67,7 +70,7 @@ public class ExternalCallResilienceConfig {
         Function<RuntimeException, ExternalCallException> classifier,
         Throwable throwable
     ) {
-        if (!(throwable instanceof RuntimeException runtimeException)) {
+        if (ExternalRetryTiming.localDecline(throwable) || !(throwable instanceof RuntimeException runtimeException)) {
             return false;
         }
         return classifier.apply(runtimeException).isRetryable();

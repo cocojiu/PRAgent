@@ -38,6 +38,8 @@ githubCommentHistoryControllerGetItems(input: { path: { batchId: number; taskId:
 githubFeedbackControllerDiagnostics(input?: { query?: { limit?: number } }): Promise<GithubFeedbackDiagnostics>; // GET /api/v1/github/feedback-events
 githubFeedbackControllerRetry(input: { path: { id: number } }): Promise<void>; // POST /api/v1/github/feedback-events/{id}/retry
 githubWebhookControllerReceive(input: { body: Uint8Array }): Promise<GithubWebhookResponse>; // POST /api/v1/github/webhooks
+llmUsageAccountingControllerPending(input?: { query?: { limit?: number } }): Promise<PendingUsage[]>; // GET /api/v1/config/llm-usage/pending
+llmUsageAccountingControllerReconcile(input: { body: ReconciliationRequest }): Promise<ReconciledUsage>; // POST /api/v1/config/llm-usage/reconcile
 messageQueueHealthControllerGetHealth(): Promise<MessageQueueHealth>; // GET /api/v1/message-queue/health
 messageQueueHealthControllerRequeueTask(input: { path: { taskId: number } }): Promise<MessageQueueRequeueResponse>; // POST /api/v1/message-queue/tasks/{taskId}/requeue
 notificationControllerGetNotifications(): Promise<NotificationCenter>; // GET /api/v1/notifications
@@ -78,6 +80,7 @@ reviewCalibrationControllerPromoteModelRelease(input: { body: LlmModelReleaseReq
 reviewCalibrationControllerRegisterShadowRelease(input: { body: LlmModelReleaseRequest }): Promise<LlmModelRelease>; // POST /api/v1/config/review-calibration/release-center/shadow
 reviewCalibrationControllerRepairModelReleaseDrift(input: { body: LlmModelReleaseDriftRepairRequest }): Promise<LlmModelReleaseDriftRepair>; // POST /api/v1/config/review-calibration/release-center/drift/repair
 reviewCalibrationControllerRollbackModelRelease(input: { path: { releaseId: number }; body: LlmModelRollbackRequest }): Promise<LlmModelRelease>; // POST /api/v1/config/review-calibration/release-center/{releaseId}/rollback
+reviewCalibrationControllerSafetyRevokeModelRelease(input: { path: { releaseId: number }; body: LlmModelRollbackRequest }): Promise<LlmModelRelease>; // POST /api/v1/config/review-calibration/release-center/{releaseId}/safety-revoke
 reviewCalibrationControllerStartEvaluationRun(input: { body: LlmEvaluationRunRequest }): Promise<LlmEvaluationRun>; // POST /api/v1/config/review-calibration/evaluation-runs
 reviewCalibrationControllerTransitionEvaluationReportLifecycle(input: { path: { reportId: number }; body: LlmEvaluationReportLifecycleRequest }): Promise<LlmEvaluationReport>; // POST /api/v1/config/review-calibration/evaluation-reports/{reportId}/lifecycle
 reviewCalibrationControllerVerifyModelReleaseAudit(input: { path: { auditId: number } }): Promise<LlmModelReleaseAuditVerification>; // GET /api/v1/config/review-calibration/release-center/audits/{auditId}/verify

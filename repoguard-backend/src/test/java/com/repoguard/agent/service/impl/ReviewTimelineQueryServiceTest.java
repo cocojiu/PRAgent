@@ -72,6 +72,22 @@ class ReviewTimelineQueryServiceTest {
         assertThat(service.latestItem(List.of())).isNull();
     }
 
+    @Test
+    void listSummaryFetchesOnlyTheLatestRelevantFailureForFailedTasks() {
+        ReviewTask failed = task(101L);
+        failed.setStatus("FAILED");
+        ReviewTask completed = task(102L);
+        completed.setStatus("COMPLETED");
+        when(reviewTimelineMapper.selectLatestFailures(List.of(101L))).thenReturn(
+            List.of(timeline(101L, "Review failed: category=llm_timeout", "FAILED", 9)));
+        var result = service.loadLatestFailures(List.of(failed, completed));
+        assertThat(result).containsOnlyKeys(101L);
+        assertThat(service.labels(result.get(101L))).containsExactly("Review failed: category=llm_timeout");
+        Mockito.verify(reviewTimelineMapper).selectLatestFailures(List.of(101L));
+        Mockito.verify(reviewTimelineMapper, Mockito.never()).selectList(any());
+        assertThat(service.loadLatestFailures(List.of(completed))).isEmpty();
+    }
+
     private ReviewTask task(Long id) {
         ReviewTask task = new ReviewTask();
         task.setId(id);

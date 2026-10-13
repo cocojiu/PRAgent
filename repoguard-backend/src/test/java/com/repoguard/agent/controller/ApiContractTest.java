@@ -328,6 +328,8 @@ class ApiContractTest {
 
     private Set<String> serverOnlyApiEndpointKeys() {
         return Set.of(
+            "GET /api/v1/config/llm-usage/pending",
+            "POST /api/v1/config/llm-usage/reconcile",
             "GET /api/v1/config/data-retention/payload-preview",
             "POST /api/v1/auth/refresh",
         "POST /api/v1/preflight/credentials",
