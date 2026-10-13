@@ -17,8 +17,11 @@ import com.repoguard.agent.review.FindingFeedbackStatus;
 import com.repoguard.agent.review.ReviewFindingProjectionAssembler;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 @Component
@@ -46,6 +49,7 @@ public class ReviewTaskDetailDataLoader {
         this.findingAssembler = Objects.requireNonNull(findingAssembler, "findingAssembler must not be null");
     }
 
+    @Transactional(readOnly = true)
     public ReviewTaskDetailData load(Long taskId) {
         PageResponse<ChangedFileDto> changedFiles = loadChangedFilesPage(taskId, 1, DETAIL_INITIAL_PAGE_SIZE, null);
         PageResponse<ReviewFindingDto> findings = loadFindingsPage(taskId, 1, DETAIL_INITIAL_PAGE_SIZE, null, null, null);
@@ -93,9 +97,17 @@ public class ReviewTaskDetailDataLoader {
         return timelineQueryService.loadLatestItemsByTaskId(taskId, limit);
     }
 
+    @Transactional(readOnly = true)
     public PageResponse<ChangedFileDto> loadChangedFilesPage(Long taskId, int page, int pageSize, Boolean hasFinding) {
         Page<ChangedFile> result = changedFilePage(taskId, page, pageSize, hasFinding);
-        return new PageResponse<>(findingAssembler.toChangedFileDtos(pageRecords(result)), pageTotal(result));
+        List<ChangedFile> files = pageRecords(result);
+        List<Long> fileIds = files.stream().map(ChangedFile::getId).filter(Objects::nonNull).distinct().toList();
+        List<ChangedFileMapper.FileFindingCount> rows = fileIds.isEmpty()
+            ? List.of() : changedFileMapper.selectFindingCountsForFiles(taskId, fileIds);
+        Map<Long, Long> counts = rows == null ? Map.of() : rows.stream().collect(Collectors.toMap(
+            ChangedFileMapper.FileFindingCount::changedFileId, row -> row.total() == null ? 0L : row.total()
+        ));
+        return new PageResponse<>(findingAssembler.toChangedFileDtos(files, counts), pageTotal(result));
     }
 
     public PageResponse<ReviewFindingDto> loadFindingsPage(

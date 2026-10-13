@@ -11,9 +11,88 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.Test;
 
 class DashboardSnapshotStoreTest {
+
+    @Test
+    void invalidatedRunningRefreshCannotOverwriteNewDataOrReleaseTheNewRefresh() throws Exception {
+        List<Runnable> refreshes = new ArrayList<>();
+        var registry = new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+        DashboardSnapshotStore store = new DashboardSnapshotStore(refreshes::add, 10,
+            java.time.Duration.ofSeconds(10), System::nanoTime, registry);
+        store.getOrLoad("summary", () -> "seed");
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        store.getOrLoad("summary", () -> {
+            started.countDown();
+            await(release);
+            return "obsolete";
+        });
+        var workers = Executors.newSingleThreadExecutor();
+        try {
+            var old = workers.submit(refreshes.removeFirst());
+            assertThat(started.await(1, TimeUnit.SECONDS)).isTrue();
+            store.evict("summary");
+            assertThat(store.getOrLoad("summary", () -> "new")).isEqualTo("new");
+            assertThat(store.getOrLoad("summary", () -> "newer")).isEqualTo("new");
+            assertThat(refreshes).hasSize(1);
+            release.countDown();
+            old.get(1, TimeUnit.SECONDS);
+            assertThat(store.getOrLoad("summary", () -> "duplicate")).isEqualTo("new");
+            assertThat(refreshes).hasSize(1);
+            assertThat(registry.get("repoguard.dashboard.snapshot.discarded_write").counter().count()).isEqualTo(1);
+            refreshes.removeFirst().run();
+            assertThat(store.getOrLoad("summary", () -> "next")).isEqualTo("newer");
+        } finally {
+            release.countDown();
+            workers.shutdownNow();
+            registry.close();
+        }
+    }
+
+    @Test
+    void expiredSnapshotIsReloadedAndAnOlderQueuedRefreshCannotReplaceIt() {
+        AtomicLong clock = new AtomicLong();
+        List<Runnable> refreshes = new ArrayList<>();
+        DashboardSnapshotStore store = new DashboardSnapshotStore(refreshes::add, 10,
+            java.time.Duration.ofSeconds(10), clock::get, null);
+        assertThat(store.getOrLoad("summary", () -> "seed")).isEqualTo("seed");
+        assertThat(store.getOrLoad("summary", () -> "obsolete")).isEqualTo("seed");
+        clock.set(java.time.Duration.ofSeconds(10).toNanos());
+        assertThat(store.getOrLoad("summary", () -> "fresh")).isEqualTo("fresh");
+        refreshes.removeFirst().run();
+        assertThat(store.getOrLoad("summary", () -> "next")).isEqualTo("fresh");
+    }
+
+    @Test
+    void snapshotCapacityAndIdleExpiryAreBounded() {
+        AtomicLong clock = new AtomicLong();
+        DashboardSnapshotStore store = new DashboardSnapshotStore(Runnable::run, 2,
+            java.time.Duration.ofSeconds(10), clock::get, null);
+        for (int index = 0; index < 20; index++) {
+            store.getOrLoad("summary-" + index, () -> "value");
+        }
+        assertThat(store.retainedKeys()).isLessThanOrEqualTo(2);
+        clock.set(java.time.Duration.ofSeconds(21).toNanos());
+        assertThat(store.retainedKeys()).isZero();
+    }
+
+    @Test
+    void cacheEvictionDoesNotCancelOrDuplicateDurableBackgroundRefreshes() {
+        List<Runnable> refreshes = new ArrayList<>();
+        DashboardSnapshotStore store = new DashboardSnapshotStore(refreshes::add);
+        AtomicInteger completed = new AtomicInteger();
+        store.executeAsync("refresh", completed::incrementAndGet);
+        store.evictByPrefix("");
+        store.executeAsync("refresh", completed::incrementAndGet);
+        assertThat(refreshes).hasSize(1);
+        refreshes.removeFirst().run();
+        assertThat(completed).hasValue(1);
+        store.executeAsync("refresh", completed::incrementAndGet);
+        assertThat(refreshes).hasSize(1);
+    }
 
     @Test
     void coldMissLoadsOnlyOnceForSameKey() throws Exception {

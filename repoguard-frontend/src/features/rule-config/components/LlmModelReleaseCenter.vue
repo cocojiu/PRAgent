@@ -56,6 +56,11 @@
           <span>本月预算</span>
           <strong>{{ budgetText(center.monthlyBudget) }}</strong>
           <small>{{ center.monthlyBudget.exhausted ? "已触发保护" : `剩余 ${tokenText(center.monthlyBudget.tokenRemaining)}` }}</small>
+          <small>按 UTC 月份统计，包含在途调用的保守预留，费用为人民币估算。</small>
+          <small v-if="center.monthlyBudget.unpricedCalls || center.monthlyBudget.legacyUnknownAttempts">
+            待核对：{{ center.monthlyBudget.unpricedCalls ?? 0 }} 次未计价调用，
+            {{ center.monthlyBudget.legacyUnknownAttempts ?? 0 }} 次历史用量不完整；有限预算可能暂停新调用。
+          </small>
         </div>
       </div>
 
@@ -125,7 +130,7 @@
           </template>
         </el-table-column>
         <el-table-column label="状态" width="105">
-          <template #default="{ row }"><el-tag :type="stateType(row.state)">{{ stateText(row.state) }}</el-tag></template>
+          <template #default="{ row }"><el-tag :type="row.safetyRevoked ? 'danger' : stateType(row.state)">{{ row.safetyRevoked ? '安全撤销' : stateText(row.state) }}</el-tag></template>
         </el-table-column>
         <el-table-column label="流量" width="90"><template #default="{ row }">{{ row.trafficPercent }}%</template></el-table-column>
         <el-table-column label="评估证据" min-width="160">
@@ -134,10 +139,10 @@
         <el-table-column label="操作者 / 时间" min-width="190">
           <template #default="{ row }"><div class="release-version-cell"><span>{{ row.createdBy }}</span><small>{{ row.updatedAt || row.createdAt || "—" }}</small></div></template>
         </el-table-column>
-        <el-table-column label="操作" width="220" fixed="right">
+        <el-table-column label="操作" width="310" fixed="right">
           <template #default="{ row }">
             <el-button
-              v-if="row.state === 'SHADOW' || row.state === 'CANARY'"
+              v-if="!row.safetyRevoked && (row.state === 'SHADOW' || row.state === 'CANARY')"
               size="small"
               type="success"
               plain
@@ -154,6 +159,15 @@
               :loading="action === `rollback-${row.id}`"
               @click="requestRollback(row.id)"
             >回滚</el-button>
+            <el-button
+              v-if="!row.safetyRevoked"
+              size="small"
+              type="danger"
+              plain
+              :disabled="!canManageSafety"
+              :loading="action === `safety-revoke-${row.id}`"
+              @click="requestSafetyRevoke(row.id)"
+            >安全撤销</el-button>
           </template>
         </el-table-column>
         <template #empty><el-empty description="暂无模型发布记录" /></template>
@@ -214,6 +228,7 @@
               <el-option value="REPLACE_ACTIVE" label="替换 Active" />
               <el-option value="ROLLBACK" label="人工回滚" />
               <el-option value="AUTO_ROLLBACK" label="自动回滚" />
+              <el-option value="SAFETY_REVOKE" label="安全撤销" />
             </el-select>
             <el-button :loading="auditLoading" @click="loadAudits(1)">刷新审计</el-button>
             <el-button
@@ -277,7 +292,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { ElMessageBox } from "element-plus/es/components/message-box/index.mjs";
-import { canManage } from "@/stores/authState";
+import { canManage, currentUser } from "@/stores/authState";
 import type { LlmModelBudget } from "@/types";
 import { useLlmModelReleaseCenter } from "@/features/rule-config/composables/useLlmModelReleaseCenter";
 
@@ -303,6 +318,7 @@ const {
   releaseKey,
   reports,
   rollback,
+  safetyRevoke,
   selectedReport,
   selectedReportId,
   trendDays,
@@ -325,9 +341,11 @@ const readNotices = computed(() => ([
       : "尚无成功查询结果。" }];
 }));
 
+const canManageSafety = computed(() => ["ADMIN", "PLATFORM_ADMIN"].includes(currentUser.value?.role ?? ""));
+
 const requestRollback = async (releaseId: number) => {
   try {
-    const result = await ElMessageBox.prompt("回滚后新任务会立即使用目标版本，请记录可审计原因。", "确认模型回滚", {
+    const result = await ElMessageBox.prompt("普通回滚停止该版本的新流量，已有任务仍保留绑定版本。请填写原因。", "确认模型回滚", {
       confirmButtonText: "确认回滚",
       cancelButtonText: "取消",
       inputPlaceholder: "例如：P95 延迟超过门禁",
@@ -336,6 +354,18 @@ const requestRollback = async (releaseId: number) => {
     await rollback(releaseId, result.value);
   } catch {
     // Cancelled dialogs intentionally leave the current server state untouched.
+  }
+};
+
+const requestSafetyRevoke = async (releaseId: number) => {
+  try {
+    const result = await ElMessageBox.prompt("安全撤销停止该版本的新调用和重试，保留版本及既有结果。在途请求按实际用量或保守预留记录。请填写原因。", "确认安全撤销", {
+      confirmButtonText: "确认安全撤销", cancelButtonText: "取消", inputPlaceholder: "例如：发现版本安全问题",
+      inputValidator: (value: string) => value.trim().length > 0 || "必须填写安全撤销原因"
+    });
+    await safetyRevoke(releaseId, result.value);
+  } catch {
+    // Cancelling the dialog does not send a safety operation.
   }
 };
 
@@ -373,7 +403,8 @@ const auditActionText = (action: string) => ({
   PROMOTE: "发布 / 更新",
   REPLACE_ACTIVE: "替换 Active",
   ROLLBACK: "人工回滚",
-  AUTO_ROLLBACK: "自动回滚"
+  AUTO_ROLLBACK: "自动回滚",
+  SAFETY_REVOKE: "安全撤销"
 }[action] ?? action);
 const tokenText = (value: number) => value < 0 ? "未设置" : value.toLocaleString();
 const budgetText = (budget: LlmModelBudget) => budget.tokenBudget > 0

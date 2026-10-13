@@ -7,7 +7,7 @@
     "externalDatabaseSupported": true,
     "publishedMigrationPolicy": "IMMUTABLE",
     "newInstallationStrategy": "VALIDATED_SCHEMA_SNAPSHOT_THEN_BASELINE",
-    "candidateVersion": 104,
+    "candidateVersion": 106,
     "requiredEvidence": [
       "empty database migration to the candidate version",
       "schema structure diff against the supported production shape",
@@ -411,6 +411,32 @@
       "nMinusOneCompatible": true,
       "interruptedRecovery": "keep preflight disabled; inspect Flyway and the complete new table before a reviewed retry",
       "rollbackStrategy": "disable preflight and roll back application while retaining the independent additive preview table"
+    },
+    {
+      "version": 105,
+      "file": "V105__durable_llm_usage_budget.sql",
+      "phase": "MIGRATE",
+      "estimatedRows": "one monthly balance per tenant/month, one row per retained attempt or legacy task, one cutover checkpoint per existing tenant, and an append-only reconciliation table",
+      "lockType": "new-table metadata locks and bounded-by-retained-data INSERT SELECT; stop all old and new review workers during backfill",
+      "maxDurationSeconds": 900,
+      "maxDiskMegabytes": 1024,
+      "nMinusOneCompatible": true,
+      "compatibilityNote": "schema is additive, but budget enforcement requires every sending worker to run the ledger version; no mixed worker rollout with finite budgets. Historical months retain source timestamps. Only explicit CNY snapshots contribute priced costs; other historical amounts remain evidence for reconciliation. Existing tenants require a final cutover checkpoint to enable finite budgets in the migration UTC month.",
+      "interruptedRecovery": "keep sending workers stopped; inspect both tables and Flyway history, restore the rehearsal backup after a partial backfill, then perform a reviewed retry; never sum the same historical usage twice",
+      "rollbackStrategy": "stop sending workers and roll back application while retaining all accounting evidence; finite-budget enforcement cannot be promised by old workers; restore a validated backup or use a forward fix for partial backfill"
+    },
+    {
+      "version": 106,
+      "file": "V106__llm_model_safety_revocation.sql",
+      "phase": "EXPAND",
+      "estimatedRows": "two nullable safety columns and a widened audit-action check; existing releases, assignments and audit rows are retained",
+      "lockType": "metadata and additive-column DDL on the model release table; atomic replacement of the audit-action check",
+      "maxDurationSeconds": 300,
+      "maxDiskMegabytes": 256,
+      "nMinusOneCompatible": true,
+      "compatibilityNote": "ordinary rollback semantics are unchanged; safety enforcement requires all sending workers to use the new admission gate",
+      "interruptedRecovery": "inspect Flyway, both nullable columns and the audit-action check before a reviewed forward fix or backup restore; do not blindly rerun after partial DDL; keep sending workers stopped if revocation enforcement is uncertain",
+      "rollbackStrategy": "retain safety evidence and additive columns; stop sending before an old-binary rollback because old workers do not enforce the safety flag"
     }
   ]
 }

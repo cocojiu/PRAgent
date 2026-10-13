@@ -326,16 +326,18 @@ class SarifFindingServiceTest {
         imported.setCurrentAttempt(true);
         imported.setCategory("FINDING");
         SarifImportBatchRow batch = new SarifImportBatchRow();
+        batch.setId(101L);
         batch.setToolName("CodeQL");
         batch.setToolVersion("2.15");
         when(findingMapper.selectList(any())).thenReturn(List.of(imported, imported));
-        when(findingMapper.selectSarifImportBatchById(101L)).thenReturn(batch);
+        when(findingMapper.selectSarifExportBatches(9L, List.of(101L))).thenReturn(List.of(batch));
 
         var document = service.exportFindings(9L);
 
         assertThat(document.runs()).singleElement().satisfies(run ->
             assertThat(run.get("tool").toString()).contains("CodeQL", "2.15"));
-        verify(findingMapper, times(1)).selectSarifImportBatchById(101L);
+        verify(findingMapper, times(1)).selectSarifExportBatches(9L, List.of(101L));
+        verify(findingMapper, never()).selectSarifImportBatchById(101L);
 
         when(findingMapper.selectList(any())).thenReturn(null);
         assertThat(service.exportFindings(9L).runs()).isEmpty();
@@ -352,15 +354,58 @@ class SarifFindingServiceTest {
         imported.setCurrentAttempt(true);
         imported.setCategory("FINDING");
         SarifImportBatchRow batch = new SarifImportBatchRow();
+        batch.setId(102L);
         batch.setToolName(" ");
         batch.setToolVersion(null);
         when(findingMapper.selectList(any())).thenReturn(List.of(imported));
-        when(findingMapper.selectSarifImportBatchById(102L)).thenReturn(batch);
+        when(findingMapper.selectSarifExportBatches(9L, List.of(102L))).thenReturn(List.of(batch));
 
         var document = service.exportFindings(9L);
 
         assertThat(document.runs()).singleElement().satisfies(run ->
             assertThat(run.get("tool").toString()).contains("unknown"));
+    }
+
+    @Test
+    void batchesManyScannerVersionsWithoutPerFindingQueriesAndMeasuresBoundedExport() throws Exception {
+        when(taskMapper.selectById(9L)).thenReturn(currentTask());
+        List<ReviewFinding> findings = new java.util.ArrayList<>();
+        for (long id = 1; id <= 1001; id++) {
+            ReviewFinding finding = new ReviewFinding();
+            finding.setId(id);
+            finding.setSource("SARIF");
+            finding.setSourceBatchId(id);
+            finding.setRuleId("RULE-" + id);
+            finding.setFilePath("src/File" + id + ".java");
+            finding.setMessage("Fixture finding");
+            finding.setSeverity("HIGH");
+            findings.add(finding);
+        }
+        when(findingMapper.selectList(any())).thenReturn(findings);
+        when(findingMapper.selectSarifExportBatches(eq(9L), any())).thenAnswer(invocation -> {
+            List<Long> ids = invocation.getArgument(1);
+            return ids.stream().map(id -> {
+                SarifImportBatchRow batch = new SarifImportBatchRow();
+                batch.setId(id);
+                batch.setToolName("Fixture scanner");
+                batch.setToolVersion(id % 2 == 0 ? "2" : "1");
+                return batch;
+            }).toList();
+        });
+        var memory = (com.sun.management.ThreadMXBean) java.lang.management.ManagementFactory.getThreadMXBean();
+        long before = memory.getThreadAllocatedBytes(Thread.currentThread().threadId());
+        long started = System.nanoTime();
+        var document = service.exportFindings(9L);
+        int bytes = new ObjectMapper().writeValueAsBytes(document).length;
+        long allocated = memory.getThreadAllocatedBytes(Thread.currentThread().threadId()) - before;
+        assertThat(document.runs()).hasSize(2);
+        assertThat(bytes).isLessThan(8 * 1024 * 1024);
+        var requests = org.mockito.ArgumentCaptor.<List<Long>>captor();
+        verify(findingMapper, times(3)).selectSarifExportBatches(eq(9L), requests.capture());
+        assertThat(requests.getAllValues()).extracting(List::size).containsExactly(500, 500, 1);
+        verify(findingMapper, never()).selectSarifImportBatchById(any());
+        System.out.printf("SARIF fixture findings=1001 metadataQueries=3 bytes=%d elapsedMs=%.3f allocatedBytes=%d%n",
+            bytes, (System.nanoTime() - started) / 1_000_000d, allocated);
     }
 
     @Test

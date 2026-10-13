@@ -43,6 +43,24 @@ class LlmReviewPipelineTest {
     private final Executor llmChunkExecutor = Runnable::run;
 
     @Test
+    void successfulReviewScansRulesOnceUsingTheExecutionDeadline() {
+        PullRequestDiff diff = diff();
+        ReviewDeadline deadline = ReviewDeadline.startingNow(java.time.Duration.ofMinutes(1));
+        when(ruleBasedReviewer.review(diff, deadline)).thenReturn(ReviewResult.completed("INFO", List.of()));
+        LlmReviewCaller caller = (settings, task, callDiff) -> new LlmCallResult(emptyReviewJson(), 20, 5, 25);
+
+        ReviewResult result = pipeline(ruleBasedReviewer, promptBuilder, reviewMerger, qualityScorer,
+            costEstimator, reviewResultParser, fallbackReasonClassifier, diffChunker).execute(
+                new ReviewPipelineContext(new ReviewTask(), diff, settings(true), "promptSummary",
+                    System.nanoTime(), caller, LlmReviewContext.legacy(), deadline)
+            );
+
+        assertThat(result.llmStatus()).isEqualTo("COMPLETED");
+        verify(ruleBasedReviewer).review(diff, deadline);
+        verifyNoMoreInteractions(ruleBasedReviewer);
+    }
+
+    @Test
     void constructorRejectsMissingExplicitDependencies() {
         assertMissing("ruleBasedReviewer", () -> pipeline(null, promptBuilder, reviewMerger, qualityScorer, costEstimator, reviewResultParser, fallbackReasonClassifier, diffChunker));
         assertMissing("promptBuilder", () -> pipeline(ruleBasedReviewer, null, reviewMerger, qualityScorer, costEstimator, reviewResultParser, fallbackReasonClassifier, diffChunker));

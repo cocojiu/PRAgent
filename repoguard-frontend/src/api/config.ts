@@ -201,6 +201,9 @@ export const transitionLlmEvaluationReportLifecycle = (
 export const rollbackLlmModelRelease = (releaseId: number, payload: LlmModelRollbackRequest) =>
   apiRequest("rollbackLlmModelRelease", { releaseId, payload });
 
+export const safetyRevokeLlmModelRelease = (releaseId: number, payload: LlmModelRollbackRequest) =>
+  apiRequest("safetyRevokeLlmModelRelease", { releaseId, payload });
+
 export const createReviewRule = (payload: ReviewRuleConfigRequest) =>
   apiRequest("createReviewRule", payload);
 

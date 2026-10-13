@@ -9,6 +9,10 @@ public class ExternalCallResilienceProperties {
 
     private Instance github = new Instance();
     private Instance llm = new Instance();
+    private int llmMaxEndpointDomains = 64;
+
+    public int getLlmMaxEndpointDomains() { return llmMaxEndpointDomains; }
+    public void setLlmMaxEndpointDomains(int value) { llmMaxEndpointDomains = value; }
 
     public Instance getGithub() {
         return github;
@@ -33,6 +37,10 @@ public class ExternalCallResilienceProperties {
         private int circuitBreakerWaitOpenSeconds = 30;
         private int retryMaxAttempts = 2;
         private int retryWaitMillis = 200;
+        private int retryMaxWaitMillis = 2000;
+
+        public int getRetryMaxWaitMillis() { return retryMaxWaitMillis; }
+        public void setRetryMaxWaitMillis(int value) { retryMaxWaitMillis = value; }
         private int rateLimitForPeriod = 30;
         private int rateLimitRefreshMillis = 1000;
         private int rateLimitTimeoutMillis = 0;

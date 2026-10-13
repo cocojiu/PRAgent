@@ -8,6 +8,11 @@ import io.github.resilience4j.ratelimiter.RateLimiter;
 import io.github.resilience4j.ratelimiter.RequestNotPermitted;
 import io.github.resilience4j.retry.Retry;
 import java.util.Objects;
+import java.net.URI;
+import java.util.LinkedHashMap;
+import java.util.Locale;
+import java.util.Map;
+import java.util.function.LongSupplier;
 import java.util.function.Supplier;
 
 public class ExternalCallResilience {
@@ -19,6 +24,8 @@ public class ExternalCallResilience {
     private final Retry llmRetry;
     private final RateLimiter llmRateLimiter;
     private final Bulkhead llmBulkhead;
+    private final int maxEndpointDomains;
+    private final Map<String, CircuitBreaker> llmDomains = new LinkedHashMap<>();
 
     ExternalCallResilience(
         CircuitBreaker githubCircuitBreaker,
@@ -29,6 +36,13 @@ public class ExternalCallResilience {
         RateLimiter llmRateLimiter,
         Bulkhead llmBulkhead
     ) {
+        this(githubCircuitBreaker, githubRetry, githubRateLimiter, llmCircuitBreaker, llmRetry,
+            llmRateLimiter, llmBulkhead, 64);
+    }
+
+    ExternalCallResilience(CircuitBreaker githubCircuitBreaker, Retry githubRetry, RateLimiter githubRateLimiter,
+        CircuitBreaker llmCircuitBreaker, Retry llmRetry, RateLimiter llmRateLimiter, Bulkhead llmBulkhead,
+        int maxEndpointDomains) {
         this.githubCircuitBreaker = Objects.requireNonNull(githubCircuitBreaker, "githubCircuitBreaker");
         this.githubRetry = Objects.requireNonNull(githubRetry, "githubRetry");
         this.githubRateLimiter = Objects.requireNonNull(githubRateLimiter, "githubRateLimiter");
@@ -36,7 +50,30 @@ public class ExternalCallResilience {
         this.llmRetry = Objects.requireNonNull(llmRetry, "llmRetry");
         this.llmRateLimiter = Objects.requireNonNull(llmRateLimiter, "llmRateLimiter");
         this.llmBulkhead = Objects.requireNonNull(llmBulkhead, "llmBulkhead");
+        this.maxEndpointDomains = Math.max(1, Math.min(256, maxEndpointDomains));
     }
+
+    public <T> T llm(String operation, String provider, String endpoint, LongSupplier remaining, Supplier<T> supplier) {
+        return ExternalRetryTiming.withinBudget(Objects.requireNonNull(remaining, "remaining"), () -> executeWithBulkhead(
+            "LLM", "llm", operation, supplier, endpointBreaker(provider, endpoint), llmRetry, llmRateLimiter, llmBulkhead));
+    }
+
+    private synchronized CircuitBreaker endpointBreaker(String provider, String endpoint) {
+        URI uri = URI.create(endpoint);
+        if (uri.getHost() == null || uri.getScheme() == null) throw ExternalRetryTiming.declined("endpoint_invalid");
+        int port = uri.getPort() < 0 ? ("https".equalsIgnoreCase(uri.getScheme()) ? 443 : 80) : uri.getPort();
+        String key = (provider == null ? "unknown" : provider.toLowerCase(Locale.ROOT)) + "|"
+            + uri.getScheme().toLowerCase(Locale.ROOT) + "|" + uri.getHost().toLowerCase(Locale.ROOT) + "|" + port;
+        CircuitBreaker existing = llmDomains.get(key);
+        if (existing != null) return existing;
+        // Never evict a live breaker: changing endpoint paths cannot reset an open fault domain.
+        if (llmDomains.size() >= maxEndpointDomains) throw ExternalRetryTiming.declined("endpoint_registry_full");
+        CircuitBreaker created = CircuitBreaker.of("repoguard-llm-domain-" + llmDomains.size(), llmCircuitBreaker.getCircuitBreakerConfig());
+        llmDomains.put(key, created);
+        return created;
+    }
+
+    synchronized int retainedEndpointDomains() { return llmDomains.size(); }
 
     public <T> T github(String operation, Supplier<T> supplier) {
         return execute(
@@ -72,12 +109,19 @@ public class ExternalCallResilience {
         Retry retry,
         RateLimiter rateLimiter
     ) {
-        Supplier<T> decorated = supplier;
+        Supplier<T> attempt = () -> {
+            ExternalRetryTiming.requireRemaining();
+            return supplier.get();
+        };
+        Supplier<T> limited = RateLimiter.decorateSupplier(rateLimiter, attempt);
+        Supplier<T> decorated = () -> {
+            ExternalRetryTiming.requireRemaining();
+            return limited.get();
+        };
         // Retry is inside the circuit breaker so one logical external call contributes
         // one final outcome instead of counting every retry attempt as a breaker failure.
         decorated = Retry.decorateSupplier(retry, decorated);
         decorated = CircuitBreaker.decorateSupplier(circuitBreaker, decorated);
-        decorated = RateLimiter.decorateSupplier(rateLimiter, decorated);
         try {
             return decorated.get();
         } catch (RuntimeException ex) {
@@ -100,7 +144,10 @@ public class ExternalCallResilience {
             system,
             categoryPrefix,
             operation,
-            Bulkhead.decorateSupplier(bulkhead, supplier),
+            Bulkhead.decorateSupplier(bulkhead, () -> {
+                ExternalRetryTiming.requireRemaining();
+                return supplier.get();
+            }),
             circuitBreaker,
             retry,
             rateLimiter

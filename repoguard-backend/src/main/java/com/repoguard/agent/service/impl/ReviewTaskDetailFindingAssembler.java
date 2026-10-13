@@ -42,6 +42,11 @@ public class ReviewTaskDetailFindingAssembler {
         return changedFiles.stream().map(this::toChangedFileDto).toList();
     }
 
+    public List<ChangedFileDto> toChangedFileDtos(List<ChangedFile> files, Map<Long, Long> findingCounts) {
+        return files.stream().map(file -> new ChangedFileDto(file.getFilePath(), file.getChangeType(),
+            file.getAdditions(), file.getDeletions(), findingCounts.getOrDefault(file.getId(), 0L))).toList();
+    }
+
     public List<ReviewFindingDto> toFindingDtos(List<ReviewFinding> findings) {
         Map<Long, String> sarifBatchStatuses = sarifBatchStatuses(findings);
         return findings.stream()

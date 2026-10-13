@@ -21,6 +21,7 @@ import com.repoguard.agent.dto.LlmModelReleaseDriftRepairDto;
 import com.repoguard.agent.dto.LlmModelReleaseDriftRepairRequest;
 import com.repoguard.agent.review.quality.LlmModelReleaseDriftService;
 import com.repoguard.agent.review.quality.LlmModelReleaseService;
+import com.repoguard.agent.review.quality.LlmModelSafetyService;
 import com.repoguard.agent.review.quality.LlmModelReleaseMetricsService;
 import com.repoguard.agent.review.quality.LlmEvaluationRunService;
 import com.repoguard.agent.security.RequireRole;
@@ -53,6 +54,7 @@ public class ReviewCalibrationController {
     private final LlmModelReleaseMetricsService modelReleaseMetricsService;
     private final LlmModelReleaseDriftService modelReleaseDriftService;
     private final LlmEvaluationRunService evaluationRunService;
+    private final LlmModelSafetyService modelSafetyService;
 
     public ReviewCalibrationController(ReviewCalibrationService calibrationService) {
         this(calibrationService, null, null, null, null);
@@ -82,7 +84,6 @@ public class ReviewCalibrationController {
         this(calibrationService, modelReleaseService, modelReleaseMetricsService, modelReleaseDriftService, null);
     }
 
-    @Autowired
     public ReviewCalibrationController(
         ReviewCalibrationService calibrationService,
         LlmModelReleaseService modelReleaseService,
@@ -90,11 +91,20 @@ public class ReviewCalibrationController {
         LlmModelReleaseDriftService modelReleaseDriftService,
         LlmEvaluationRunService evaluationRunService
     ) {
+        this(calibrationService, modelReleaseService, modelReleaseMetricsService, modelReleaseDriftService,
+            evaluationRunService, null);
+    }
+
+    @Autowired
+    public ReviewCalibrationController(ReviewCalibrationService calibrationService, LlmModelReleaseService modelReleaseService,
+        LlmModelReleaseMetricsService modelReleaseMetricsService, LlmModelReleaseDriftService modelReleaseDriftService,
+        LlmEvaluationRunService evaluationRunService, LlmModelSafetyService modelSafetyService) {
         this.calibrationService = calibrationService;
         this.modelReleaseService = modelReleaseService;
         this.modelReleaseMetricsService = modelReleaseMetricsService;
         this.modelReleaseDriftService = modelReleaseDriftService;
         this.evaluationRunService = evaluationRunService;
+        this.modelSafetyService = modelSafetyService;
     }
 
     @GetMapping("/queue")
@@ -291,6 +301,15 @@ public class ReviewCalibrationController {
             throw new IllegalStateException("LLM model release center is not available");
         }
         return modelReleaseService;
+    }
+
+    @PostMapping("/release-center/{releaseId}/safety-revoke")
+    @RequireRole({"ADMIN", "PLATFORM_ADMIN"})
+    public ApiResponse<LlmModelReleaseDto> safetyRevokeModelRelease(@PathVariable @Min(1) long releaseId,
+        @Valid @RequestBody LlmModelRollbackRequest request, HttpServletRequest servletRequest) {
+        if (modelSafetyService == null) throw new IllegalStateException("Model safety control is unavailable");
+        return ApiResponse.ok(modelSafetyService.revoke(releaseId, request,
+            RequestAuthentication.require(servletRequest).username()));
     }
 
     private LlmEvaluationRunService requireEvaluationRunService() {

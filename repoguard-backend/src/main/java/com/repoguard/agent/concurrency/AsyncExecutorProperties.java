@@ -17,6 +17,8 @@ public class AsyncExecutorProperties {
     private int recoveryQueueCapacity = 100;
     private int dashboardThreads = 1;
     private int dashboardQueueCapacity = 16;
+    private int dashboardSnapshotMaxEntries = 2048;
+    private int dashboardSnapshotMaxStaleSeconds = 120;
     private int rabbitHealthThreads = 1;
     private int rabbitHealthQueueCapacity = 4;
     private int llmChunkThreads = 3;
@@ -45,6 +47,10 @@ public class AsyncExecutorProperties {
     public void setDashboardThreads(int value) { dashboardThreads = value; }
     public int getDashboardQueueCapacity() { return dashboardQueueCapacity; }
     public void setDashboardQueueCapacity(int value) { dashboardQueueCapacity = value; }
+    public int getDashboardSnapshotMaxEntries() { return dashboardSnapshotMaxEntries; }
+    public void setDashboardSnapshotMaxEntries(int value) { dashboardSnapshotMaxEntries = value; }
+    public int getDashboardSnapshotMaxStaleSeconds() { return dashboardSnapshotMaxStaleSeconds; }
+    public void setDashboardSnapshotMaxStaleSeconds(int value) { dashboardSnapshotMaxStaleSeconds = value; }
     public int getRabbitHealthThreads() { return rabbitHealthThreads; }
     public void setRabbitHealthThreads(int value) { rabbitHealthThreads = value; }
     public int getRabbitHealthQueueCapacity() { return rabbitHealthQueueCapacity; }

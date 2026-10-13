@@ -40,9 +40,7 @@ final class LlmModelReleaseRuntimeSupport {
     }
 
     LlmModelBudgetDto monthlyBudget(long tenantId) {
-        YearMonth month = YearMonth.now();
-        LocalDateTime start = month.atDay(1).atStartOfDay();
-        LocalDateTime end = month.plusMonths(1).atDay(1).atStartOfDay();
+        YearMonth month = YearMonth.now(java.time.Clock.systemUTC());
         List<Map<String, Object>> limits = jdbcTemplate.queryForList(
             "select monthly_llm_token_budget, monthly_llm_cost_budget from tenant_quota_config where tenant_id = ?",
             tenantId);
@@ -50,19 +48,21 @@ final class LlmModelReleaseRuntimeSupport {
         BigDecimal costBudget = limits.isEmpty() ? BigDecimal.ZERO
             : decimal(limits.getFirst().get("monthly_llm_cost_budget"));
         List<Map<String, Object>> usage = jdbcTemplate.queryForList(
-            "select coalesce(sum(llm_total_tokens), 0) as token_used, coalesce(sum(llm_estimated_cost), 0) as cost_used "
-                + "from review_task where tenant_id = ? and created_at >= ? and created_at < ? "
-                + "and llm_status_norm <> '' and llm_status_norm <> 'pending'",
-            tenantId, start, end);
+            "select accounted_tokens as token_used, accounted_cost as cost_used, unpriced_calls,legacy_unknown_attempts "
+                + "from llm_usage_month where tenant_id = ? and usage_month = ?",
+            tenantId, month.atDay(1));
         long tokenUsed = usage.isEmpty() ? 0L : number(usage.getFirst().get("token_used"));
         BigDecimal costUsed = usage.isEmpty() ? BigDecimal.ZERO : decimal(usage.getFirst().get("cost_used"));
+        long unpriced = usage.isEmpty() ? 0 : number(usage.getFirst().get("unpriced_calls"));
+        long legacyUnknown = usage.isEmpty() ? 0 : number(usage.getFirst().get("legacy_unknown_attempts"));
         long tokenRemaining = tokenBudget <= 0 ? -1L : Math.max(0L, tokenBudget - tokenUsed);
         BigDecimal costRemaining = costBudget.signum() <= 0 ? BigDecimal.valueOf(-1)
             : costBudget.subtract(costUsed).max(BigDecimal.ZERO);
         boolean exhausted = tokenBudget > 0 && tokenUsed >= tokenBudget
-            || costBudget.signum() > 0 && costUsed.compareTo(costBudget) >= 0;
+            || costBudget.signum() > 0 && (costUsed.compareTo(costBudget) >= 0 || unpriced > 0)
+            || (tokenBudget > 0 || costBudget.signum() > 0) && legacyUnknown > 0;
         return new LlmModelBudgetDto(month, tokenBudget, tokenUsed, tokenRemaining, costBudget, costUsed,
-            costRemaining, exhausted);
+            costRemaining, exhausted, unpriced, legacyUnknown);
     }
 
     Map<String, Object> configuredModel(long tenantId) {
@@ -98,7 +98,8 @@ final class LlmModelReleaseRuntimeSupport {
             releases = releaseRepository.findAll(tenantId);
             assigned = assignedRelease(task, releases);
         }
-        if (assigned != null) return routedSettings(settings, assigned);
+        if (assigned != null) return assigned.safetyRevoked() ? disableLlm(settings) : routedSettings(settings, assigned);
+        if (task.getLlmReleaseKey() != null && !task.getLlmReleaseKey().isBlank()) return disableLlm(settings);
 
         reconcileCanaries(tenantId);
         releases = releaseRepository.findAll(tenantId);
@@ -107,7 +108,8 @@ final class LlmModelReleaseRuntimeSupport {
             return assignAndRoute(tenantId, task, settings, canary);
         }
         LlmModelReleaseDto active = firstState(releases, "ACTIVE");
-        return active == null ? settings : assignAndRoute(tenantId, task, settings, active);
+        if (active != null) return assignAndRoute(tenantId, task, settings, active);
+        return releases.stream().anyMatch(LlmModelReleaseDto::safetyRevoked) ? disableLlm(settings) : settings;
     }
 
     void audit(long tenantId, String action, LlmModelReleaseDto before, LlmModelReleaseDto after,
@@ -132,7 +134,7 @@ final class LlmModelReleaseRuntimeSupport {
 
     LlmModelReleaseDto firstState(List<LlmModelReleaseDto> releases, String state) {
         if (releases == null || state == null) return null;
-        return releases.stream().filter(release -> state.equalsIgnoreCase(release.state())).findFirst().orElse(null);
+        return releases.stream().filter(release -> !release.safetyRevoked() && state.equalsIgnoreCase(release.state())).findFirst().orElse(null);
     }
 
     private LlmModelReleaseDto assignedRelease(ReviewTask task, LlmModelReleaseDto release) {
@@ -211,6 +213,9 @@ final class LlmModelReleaseRuntimeSupport {
         snapshot.put("datasetVersion", release.datasetVersion());
         snapshot.put("datasetFingerprint", release.datasetFingerprint());
         snapshot.put("state", release.state());
+        snapshot.put("safetyRevoked", release.safetyRevoked());
+        snapshot.put("safetyRevokedAt", release.safetyRevokedAt() == null ? null : release.safetyRevokedAt().toString());
+        snapshot.put("safetyRevokeReason", release.safetyRevokeReason());
         snapshot.put("trafficPercent", release.trafficPercent());
         snapshot.put("qualityGatePassed", release.qualityGatePassed());
         snapshot.put("precisionRate", release.precisionRate());

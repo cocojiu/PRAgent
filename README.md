@@ -309,6 +309,8 @@ LLM 评测与模型发布中心：
 3. 灰度路由使用审查任务 ID 的确定性桶分配，重试不会改变模型；运行时发现质量指标不安全或月度预算耗尽会自动回滚/停用 LLM 并回退规则审查。租户配额中的 `monthlyLlmTokenBudget` 与 `monthlyLlmCostBudget` 为 0 表示不设上限。
 4. 受控数据集清单可使用 `PROVISIONAL_REAL_PR` 运行单仓库、20～49 个真实 PR 的小样本验收；仍须完成授权、脱敏、人工复核、固定/滚动分片和 SHA-256 指纹。报告会标记为 `PROVISIONAL`，可查看、比较和导出，但不能注册 Shadow 或晋级 Canary/Active。正式 `REAL_PR` 门禁仍要求 2～3 个仓库和 50～100 个样本。
 
+普通模型回滚停止该版本的新流量分配，已经绑定版本的任务仍按原版本重试。遇到模型安全事件，ADMIN / PLATFORM_ADMIN 可在发布中心执行“安全撤销”，或调用 `POST /api/v1/config/review-calibration/release-center/{releaseId}/safety-revoke` 并提交 `reason`。撤销不可恢复到同一发布键：排队及重试任务保留原绑定并降级规则审查，发送前再次检查；已经准入的在途请求继续记录结果和实际用量，既有结果、版本与审计证据保留。恢复服务须注册新的发布键并重新通过质量门禁。
+
 运行角色边界：
 
 - `combined` 同时提供 HTTP API、RabbitMQ 消费者和受数据库保护的定时任务。
@@ -321,6 +323,14 @@ LLM 评测与模型发布中心：
 后台清理默认每60秒运行，每批500行、每轮最多10批；只删除早于当前分钟减2的窗口。`REPOGUARD_RATE_LIMIT_CLEANUP_ENABLED=false` 可停止清理。`REPOGUARD_RATE_LIMIT_CLEANUP_INTERVAL_MS`、`REPOGUARD_RATE_LIMIT_CLEANUP_BATCH_SIZE`、`REPOGUARD_RATE_LIMIT_CLEANUP_MAX_BATCHES_PER_RUN` 和 `REPOGUARD_RATE_LIMIT_CLEANUP_MAX_RUN_MS` 可调整间隔和预算。默认3秒预算用于停止启动新批次，每条删除语句及事务另有2秒超时；它不是整轮执行的硬截止时间。
 
 观测 `repoguard.security.shared_rate_limit.cleanup.deleted_rows`、`cleanup.backlog`、`cleanup.failed` 及 `cleanup.duration`。`backlog` 记录触及批数/时间上限的轮次，不表示剩余行数。清理失败不改变有效计数，认证计数失败仍记录 `repoguard.security.shared_rate_limit.fail_closed`。
+
+受控出口可选配置：进程环境变量 `REPOGUARD_OUTBOUND_HTTP_PROXY` 接受 `http://gateway:3128` 形式，只允许显式端口，不接受凭据、路径、查询或片段。配置后 GitHub、模型、通知及使用注入客户端的 SCM 请求都经过同一网关；代理不可用时拒绝发送，继续使用 JDK 的 TLS 校验和禁重定向设置。空值沿用默认部署。该变量需要重启进程生效，应用的主机、端口和解析地址允许列表仍须配置。[JDK HTTP 代理设置](https://docs.oracle.com/en/java/javase/25/docs/api/java.net.http/java/net/http/HttpClient.Builder.html#proxy(java.net.ProxySelector))。
+
+Compose 可使用 `docker-compose.prod.yml` 加 `docker-compose.egress.yml`，API / Worker 只加入 `internal` 网络，网关连接内部和出口网络。需要 Docker Compose 2.33.1 及以上；须提供固定摘要的、经审核的 Squid 6/7 镜像 `REPOGUARD_EGRESS_PROXY_IMAGE`，并设置该镜像实际的非 root UID:GID `REPOGUARD_EGRESS_PROXY_UID_GID`，并核对 `deploy/egress/squid.conf` 中的域名；TLS 通过 CONNECT 端到端校验，MySQL / RabbitMQ 继续走内部网络。该模式只支持允许域名的公共 HTTPS 443；自定义域名须同时更新应用和网关策略，私网 HTTP 服务不自动获得出口许可。`internal` 网络的隔离语义见 [Docker 网络文档](https://docs.docker.com/reference/compose-file/networks/#internal)，网关规则见 [Squid ACL](https://www.squid-cache.org/Doc/config/acl/)。
+
+Kubernetes 可渲染 `deploy/kubernetes/egress-proxy` 的 Kustomize 配置；先在 `egress` 命名空间配置受控网关服务，并给命名空间和网关 Pod 都设置 `networking.repoguard.io/egress-gateway=true`。补丁替换原有公网 HTTPS 许可，保留 DNS / MySQL / RabbitMQ，不单独叠加另一个许可策略。使用支持 NetworkPolicy 的 CNI，并检查其他策略是否额外放行；规则为累加语义。[Kubernetes 网络策略](https://kubernetes.io/docs/concepts/services-networking/network-policies/)。
+
+启用前须在隔离环境验证配置渲染、允许域名、未授权公网/私网、混合 DNS 地址、解析变化、代理不可用及禁止直连绕过。把配置解析或应用级测试单独作为部署证据；网络层有效性需要真实容器或 CNI 验收。切换现有线上网络前保留原配置及维护窗口，停止发送 Worker 后切换；回退先停止发送，再恢复原编排及代理设置。
 
 ## 本地日志观测
 
@@ -397,8 +407,16 @@ API 响应通常使用统一 `ApiResponse` 包装。业务错误优先使用稳�
 新调用保存当次单价、计价版本、CNY 币种和估算来源快照；配置变更不会重算历史费用。缓存单价未知时按完整输入保守估算，预算预留不预先假定缓存命中或优惠。
 输入、输出单价均为正数且用量拆分完整时才产生可确认的调用估算；未配置、缺失和历史聚合的 0 不代表免费。
 失败或取消后，未知用量的调用可能保留保守预算预留，不得将其当作实际扣费。
-未配置价格时，费用上限不能约束真实账单，必须同时设置 token 和时长上限。
+未配置价格时不能建立有限费用预算的预留，调用会在发送前被拒绝；配置 `0` 仍表示无限月度预算。Token 预留包含序列化请求与输出上限，供应商超出该约定时报量会被完整记账并阻止后续调用。
 历史不可变评估报告保留原始金额，不换算、不回填；原来使用其他币种的部署必须先隔离旧统计口径，不能混合汇总。
+
+月度预算按新调用的 UTC 月份核算，每次真实 HTTP 尝试单独预留、结算，任务重试及结果保留期不会清除用量账本。余额包含已结算估算和未确认请求的保守预留。历史回填只将明确 CNY 的费用快照加入人民币余额；币种未知或不同的原始金额保留为对账证据。
+
+启用账本版本前暂停所有发送 Worker，并完成迁移后再一起切换；旧 Worker 无法参与原子预算，不能混版保证有限预算。既有租户在迁移 UTC 月份保留历史核对记录，因为已清理或中断的调用不能由保留任务重建。有限预算在该记录核对完成前拒绝新调用，后续 UTC 月份从完整账本开始核算。
+
+管理员可通过 `GET /api/v1/config/llm-usage/pending?limit=50` 查看当前租户待核对记录（最多 100 条），再使用 `POST /api/v1/config/llm-usage/reconcile` 提交最终证据。接口限 ADMIN / PLATFORM_ADMIN，沿用认证、租户和 CSRF 保护。请求包含 `callKey`、`idempotencyKey`、`accountedTokens`、CNY `accountedCost`、`evidenceReference`、`reason` 和必须为 `true` 的 `finalEvidence`；证据引用只填账单或工单编号，不填凭据或提示词。
+
+同一幂等键和同一证据返回原结果，不重复调整余额；不同证据会拒绝。供应商已确认的结算不可覆盖，一小时内的在途预留不可释放；不确定记录不会自动按时间归零。历史核对记录填写迁移截止点仍未计入账本的差额，不能把整月账单重复加到已回填用量上。操作人、原始证据、差额和原因保存在追加审计中，原定价快照不变。
 
 ## 指定样本诊断
 

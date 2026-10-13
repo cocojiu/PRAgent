@@ -5,6 +5,7 @@ export type ChangedFile = {
   additions?: number;
   changeType?: string;
   deletions?: number;
+  findingCount?: number;
   path?: string;
 };
 

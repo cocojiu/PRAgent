@@ -48,10 +48,10 @@ describe("useReviewDetailSectionLoaders", () => {
     await sections.loadMissingTestsPage(1);
     await sections.loadTimelineItems();
 
-    expect(fetchReviewFindings).toHaveBeenCalledWith(7, { page: 2, pageSize: 20 });
-    expect(fetchReviewChangedFiles).toHaveBeenCalledWith(7, { page: 3, pageSize: 20 });
-    expect(fetchReviewMissingTests).toHaveBeenCalledWith(7, { page: 1, pageSize: 20 });
-    expect(fetchReviewTimeline).toHaveBeenCalledWith(7, { limit: 20 });
+    expect(fetchReviewFindings).toHaveBeenCalledWith(7, { page: 2, pageSize: 20 }, { signal: expect.any(AbortSignal) });
+    expect(fetchReviewChangedFiles).toHaveBeenCalledWith(7, { page: 3, pageSize: 20 }, { signal: expect.any(AbortSignal) });
+    expect(fetchReviewMissingTests).toHaveBeenCalledWith(7, { page: 1, pageSize: 20 }, { signal: expect.any(AbortSignal) });
+    expect(fetchReviewTimeline).toHaveBeenCalledWith(7, { limit: 20 }, { signal: expect.any(AbortSignal) });
     expect(selectedTask.value?.findingTotal).toBe(41);
     expect(selectedTask.value?.changedFileTotal).toBe(12);
     expect(selectedTask.value?.missingTestTotal).toBe(3);
@@ -112,10 +112,53 @@ describe("useReviewDetailSectionLoaders", () => {
 
     await sections.setFindingsSource("SARIF");
 
-    expect(fetchReviewFindings).toHaveBeenCalledWith(12, { page: 1, pageSize: 20, source: "SARIF" });
+    expect(fetchReviewFindings).toHaveBeenCalledWith(12, { page: 1, pageSize: 20, source: "SARIF" }, { signal: expect.any(AbortSignal) });
     expect(sections.findingsSource.value).toBe("SARIF");
     expect(sections.findingsPage.value).toBe(1);
     expect(selectedTask.value?.findings[0]).toMatchObject({ id: 31, source: "SARIF" });
+  });
+  it("cancels an in-flight page and applies the latest page intent despite a delayed old response", async () => {
+    const first = deferred<{ items: unknown[]; total: number }>();
+    const second = deferred<{ items: unknown[]; total: number }>();
+    fetchReviewFindings.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const selectedTask = ref<ReviewTaskDetail | null>(task(8));
+    const sections = createSections(selectedTask);
+    const oldLoad = sections.loadFindingsPage(1);
+    const oldSignal = fetchReviewFindings.mock.calls[0]![2].signal as AbortSignal;
+    const newLoad = sections.loadFindingsPage(3);
+    expect(oldSignal.aborted).toBe(true);
+    second.resolve({ items: [{ id: 33 }], total: 80 });
+    await newLoad;
+    first.resolve({ items: [{ id: 11 }], total: 40 });
+    await oldLoad;
+    expect(sections.findingsPage.value).toBe(3);
+    expect(selectedTask.value?.findings).toEqual([{ id: 33 }]);
+    expect(selectedTask.value?.findingTotal).toBe(80);
+    expect(showError).not.toHaveBeenCalled();
+  });
+
+  it("aborts both paged sections and timeline on task change and suppresses cancelled failures", async () => {
+    const files = deferred<{ items: unknown[]; total: number }>();
+    const timeline = deferred<unknown[]>();
+    fetchReviewChangedFiles.mockReturnValueOnce(files.promise);
+    fetchReviewTimeline.mockReturnValueOnce(timeline.promise);
+    const selectedTask = ref<ReviewTaskDetail | null>(task(8));
+    const sections = createSections(selectedTask);
+    const filesLoad = sections.loadChangedFilesPage(1);
+    const timelineLoad = sections.loadTimelineItems();
+    const fileSignal = fetchReviewChangedFiles.mock.calls[0]![2].signal as AbortSignal;
+    const timelineSignal = fetchReviewTimeline.mock.calls[0]![2].signal as AbortSignal;
+    selectedTask.value = task(9);
+    expect(fileSignal.aborted).toBe(true);
+    expect(timelineSignal.aborted).toBe(true);
+    files.reject(new DOMException("cancelled", "AbortError"));
+    timeline.reject(new DOMException("cancelled", "AbortError"));
+    await Promise.all([filesLoad, timelineLoad]);
+    expect(selectedTask.value?.changedFiles).toEqual([]);
+    expect(sections.changedFilesLoading.value).toBe(false);
+    expect(sections.timelineLoading.value).toBe(false);
+    expect(showError).not.toHaveBeenCalled();
+    expect(showWarning).not.toHaveBeenCalled();
   });
 });
 

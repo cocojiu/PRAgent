@@ -4,6 +4,24 @@ import { useReviewDetailDerivedCollections } from "./useReviewDetailDerivedColle
 import type { ReviewTaskDetail } from "@/types";
 
 describe("useReviewDetailDerivedCollections", () => {
+  it("keeps complete file counts when findings pages change and preserves unknown legacy counts", () => {
+    const selectedTask = ref({
+      findings: [{ severity: "low", file: "src/A.java" }],
+      changedFiles: [
+        { path: "src/A.java", findingCount: 30 },
+        { path: "src/B.java", findingCount: 0 },
+        { path: "src/Legacy.java" }
+      ],
+      missingTests: [], timeline: []
+    } as unknown as ReviewTaskDetail);
+    const { changedFilesWithFindingCounts } = useReviewDetailDerivedCollections({
+      failureReason: computed(() => ""), selectedTask
+    });
+    expect(changedFilesWithFindingCounts.value.map(file => file.findingCount)).toEqual([30, 0, undefined]);
+    selectedTask.value = { ...selectedTask.value!, findings: [] };
+    expect(changedFilesWithFindingCounts.value.map(file => file.findingCount)).toEqual([30, 0, undefined]);
+  });
+
   it("uses aggregated severity counts instead of the current findings page", () => {
     const selectedTask = ref({
       findings: [

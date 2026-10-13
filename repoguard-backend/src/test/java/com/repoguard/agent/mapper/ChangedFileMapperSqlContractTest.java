@@ -11,6 +11,16 @@ import org.junit.jupiter.api.Test;
 class ChangedFileMapperSqlContractTest {
 
     @Test
+    void countsAreScopedToTheFilePageTaskAndCurrentFindings() throws Exception {
+        assertThat(sql("selectFindingCountsForFiles", Long.class, java.util.List.class))
+            .contains("left join review_finding finding", "finding.task_id = file.task_id",
+                "finding.current_attempt = 1", "finding.category = 'finding'",
+                "cast(finding.file_path as binary) = cast(file.file_path as binary)", "file.task_id = #{taskid}",
+                "file.current_attempt = 1", "collection=\"fileids\"", "group by file.id",
+                "count(finding.id)");
+    }
+
+    @Test
     void changedFileFindingPresenceQueriesUseExistsInsteadOfDistinctInSubqueries() throws Exception {
         String withFindings = sql("selectChangedFilesWithFindings", Page.class, Long.class);
         String withoutFindings = sql("selectChangedFilesWithoutFindings", Page.class, Long.class);
@@ -30,7 +40,7 @@ class ChangedFileMapperSqlContractTest {
             .contains("finding.task_id = file.task_id")
             .contains("finding.current_attempt = 1")
             .contains("finding.category = 'finding'")
-            .contains("finding.file_path = file.file_path")
+            .contains("cast(finding.file_path as binary) = cast(file.file_path as binary)")
             .contains("order by file.id asc")
             .doesNotContain("select distinct")
             .doesNotContain("force index")

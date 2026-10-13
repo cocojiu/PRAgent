@@ -50,6 +50,22 @@ class OpenApiPathsContractTest {
     }
 
     @Test
+    void temporalSchemasMatchTheApplicationJsonRepresentation() {
+        var mapper = new com.repoguard.agent.config.JacksonConfig().objectMapper();
+        var month = mapper.valueToTree(java.time.YearMonth.of(2026, 10));
+        var day = mapper.valueToTree(java.time.LocalDate.of(2026, 10, 1));
+        assertThat(month.asText()).isEqualTo("2026-10");
+        assertThat(day.asText()).isEqualTo("2026-10-01");
+        var schemas = map(map(OpenApiContractDocument.fromControllers(controllers()).get("components")).get("schemas"));
+        var budgetProperties = map(map(schemas.get("LlmModelBudgetDto")).get("properties"));
+        var usageProperties = map(map(schemas.get("PendingUsage")).get("properties"));
+        assertThat(map(budgetProperties.get("month"))).containsEntry("type", "string");
+        assertThat(map(usageProperties.get("month"))).containsEntry("type", "string").containsEntry("format", "date");
+        var instant = mapper.valueToTree(java.time.OffsetDateTime.parse("2026-10-31T23:59:59Z"));
+        assertThat(instant.asText()).endsWith("Z");
+    }
+
+    @Test
     void openApiComponentsExposeRequestDtoValidationConstraints() {
         Map<String, Object> schemas = map(map(OpenApiContractDocument.fromControllers(controllers()).get("components")).get("schemas"));
 

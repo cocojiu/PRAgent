@@ -36,23 +36,27 @@ export const fetchReviewFindings = (
     category?: string;
     feedbackStatus?: string;
     source?: string;
-  }
-) => apiRequest("fetchReviewFindings", { id, ...params });
+  },
+  options?: ApiRequestOptions
+) => apiRequest("fetchReviewFindings", { id, ...params }, options);
 
 export const fetchReviewChangedFiles = (
   id: number,
-  params?: { page?: number; pageSize?: number; hasFinding?: boolean }
-) => apiRequest("fetchReviewChangedFiles", { id, ...params });
+  params?: { page?: number; pageSize?: number; hasFinding?: boolean },
+  options?: ApiRequestOptions
+) => apiRequest("fetchReviewChangedFiles", { id, ...params }, options);
 
 export const fetchReviewMissingTests = (
   id: number,
-  params?: { page?: number; pageSize?: number }
-) => apiRequest("fetchReviewMissingTests", { id, ...params });
+  params?: { page?: number; pageSize?: number },
+  options?: ApiRequestOptions
+) => apiRequest("fetchReviewMissingTests", { id, ...params }, options);
 
 export const fetchReviewTimeline = (
   id: number,
-  params?: { limit?: number }
-) => apiRequest("fetchReviewTimeline", { id, ...params });
+  params?: { limit?: number },
+  options?: ApiRequestOptions
+) => apiRequest("fetchReviewTimeline", { id, ...params }, options);
 
 export const fetchReviewExecutionAttempts = (taskId: number) =>
   apiRequest("fetchReviewExecutionAttempts", { taskId });

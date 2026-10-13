@@ -1,0 +1,19 @@
+# Replace the existing public-HTTPS peer. Adding a separate allow policy would
+# leave the original permission active because NetworkPolicy rules are additive.
+- op: test
+  path: /spec/egress/2/to/0/ipBlock/cidr
+  value: 0.0.0.0/0
+- op: replace
+  path: /spec/egress/2/to
+  value:
+    - namespaceSelector:
+        matchLabels:
+          networking.repoguard.io/egress-gateway: "true"
+      podSelector:
+        matchLabels:
+          networking.repoguard.io/egress-gateway: "true"
+- op: replace
+  path: /spec/egress/2/ports
+  value:
+    - protocol: TCP
+      port: 3128
