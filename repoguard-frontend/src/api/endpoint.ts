@@ -8,6 +8,10 @@ export type ApiOperation<Input, Response> = {
   response: Response;
 };
 
+export type ApiEndpointMap<Contract extends { [Operation in keyof Contract]: ApiOperation<unknown, unknown> }> = {
+  [Operation in keyof Contract]: ApiEndpoint<Contract[Operation]["input"], Contract[Operation]["response"]>;
+};
+
 export type ApiEndpoint<Input, Response> = {
   readonly __responseType?: (value: Response) => Response;
   method?: HttpMethod;

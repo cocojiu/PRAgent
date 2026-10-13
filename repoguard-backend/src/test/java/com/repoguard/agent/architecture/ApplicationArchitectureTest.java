@@ -3,6 +3,7 @@ package com.repoguard.agent.architecture;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.tree.IdentifierTree;
 import com.sun.source.tree.MemberSelectTree;
 import com.sun.source.util.JavacTask;
 import com.sun.source.util.TreeScanner;
@@ -16,6 +17,7 @@ import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -690,7 +692,8 @@ class ApplicationArchitectureTest {
             .contains("metrics.llmFallback", "DEFERRED_RULE_REVIEW")
             .doesNotContain("RuleBasedPullRequestReviewer", "ruleBasedReviewer.review");
         assertThat(pipeline.sourceText())
-            .contains("ReviewResult ruleReview = ruleBasedReviewer.review(", "context.deadline()");
+            .contains("ReviewResult ruleReview = ruleReview(context)",
+                "return ruleBasedReviewer.review(context.diff(), context.deadline())");
         assertThat(resultAggregator.sourceText()).contains("ReviewResult.completed(", "record ChunkAggregation");
         assertThat(aggregator.sourceText())
             .contains("LlmChunkReviewFallbackHandler", "LlmChunkReviewResultAggregator")
@@ -1003,6 +1006,46 @@ class ApplicationArchitectureTest {
     }
 
     @Test
+    void coreDependencyAndPotentialChangePropagationStayWithinReviewedBudgets() throws IOException {
+        Properties budgets = new Properties();
+        try (var reader = Files.newBufferedReader(Path.of("src/test/resources/architecture-dependencies.properties"))) {
+            budgets.load(reader);
+        }
+        Map<String, Set<String>> graph = new TreeMap<>();
+        SOURCES.forEach(source -> graph.put(source.path().replace('/', '.').replace(".java", ""), new TreeSet<>()));
+        SOURCES.forEach(source -> {
+            String owner = source.path().replace('/', '.').replace(".java", "");
+            for (String dependency : source.dependencies()) {
+                String target = dependency;
+                while (!graph.containsKey(target) && target.contains(".")) target = target.substring(0, target.lastIndexOf('.'));
+                if (graph.containsKey(target) && !target.equals(owner)) graph.get(owner).add(target);
+            }
+        });
+        Map<String, Set<String>> reverse = new TreeMap<>();
+        graph.keySet().forEach(type -> reverse.put(type, new TreeSet<>()));
+        graph.forEach((source, targets) -> targets.forEach(target -> reverse.get(target).add(source)));
+        for (String type : List.of("review.LlmReviewPipeline", "review.LlmPullRequestReviewer",
+            "review.LlmUsageBudgetLedger", "review.quality.LlmModelReleaseService",
+            "external.ExternalCallResilience")) {
+            String name = BASE_PACKAGE + "." + type;
+            assertThat(graph).as("core source discovery").containsKey(name);
+            Set<String> affected = new TreeSet<>();
+            Deque<String> pending = new ArrayDeque<>(reverse.get(name));
+            while (!pending.isEmpty()) {
+                String next = pending.removeFirst();
+                if (affected.add(next)) pending.addAll(reverse.get(next));
+            }
+            affected.remove(name);
+            int direct = graph.get(name).size();
+            System.out.printf("ARCHITECTURE_DEPENDENCY %s direct=%d potentialDependents=%d%n", type, direct, affected.size());
+            assertThat(direct).as(type + " production type dependency count")
+                .isLessThanOrEqualTo(Integer.parseInt(budgets.getProperty(type + ".direct")));
+            assertThat(affected.size()).as(type + " potential source change propagation (not runtime calls)")
+                .isLessThanOrEqualTo(Integer.parseInt(budgets.getProperty(type + ".potentialDependents")));
+        }
+    }
+
+    @Test
     void retiredCycleEdgesRemainAbsent() {
         Map<String, Set<String>> dependencies = domainDependencies();
         Set<String> retiredEdges = Set.of(
@@ -1127,6 +1170,9 @@ class ApplicationArchitectureTest {
                 javaFiles
             );
             List<SourceUnit> sources = new ArrayList<>();
+            Set<String> sourceTypes = new TreeSet<>();
+            sourcePaths.forEach(path -> sourceTypes.add(MAIN_SOURCE_ROOT.relativize(path)
+                .toString().replace('\\', '.').replace('/', '.').replace(".java", "")));
             for (CompilationUnitTree unit : task.parse()) {
                 String packageName = unit.getPackageName() == null ? "" : unit.getPackageName().toString();
                 Set<String> dependencies = new TreeSet<>();
@@ -1134,6 +1180,13 @@ class ApplicationArchitectureTest {
                     importTree.getQualifiedIdentifier().toString().replace(".*", "")
                 ));
                 new TreeScanner<Void, Set<String>>() {
+                    @Override
+                    public Void visitIdentifier(IdentifierTree node, Set<String> values) {
+                        String localType = packageName + "." + node.getName();
+                        if (sourceTypes.contains(localType)) values.add(localType);
+                        return super.visitIdentifier(node, values);
+                    }
+
                     @Override
                     public Void visitMemberSelect(MemberSelectTree node, Set<String> values) {
                         String reference = node.toString();
