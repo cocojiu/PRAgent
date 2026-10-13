@@ -29,7 +29,7 @@ public class ReviewTaskListQueryBuilder {
 
     public LambdaQueryWrapper<ReviewTask> build(ReviewQuery query) {
         ReviewTaskListQueryCriteria criteria = normalize(query);
-        return filteredQuery(criteria, true);
+        return selectListFields(filteredQuery(criteria, true));
     }
 
     public LambdaQueryWrapper<ReviewTask> buildKeysetPage(ReviewQuery query) {
@@ -49,11 +49,22 @@ public class ReviewTaskListQueryBuilder {
             );
         }
         applyStableListOrder(wrapper);
-        return wrapper.last("limit " + keysetFetchSize(query.pageSize()));
+        return selectListFields(wrapper).last("limit " + keysetFetchSize(query.pageSize()));
     }
 
     public LambdaQueryWrapper<ReviewTask> buildCountQuery(ReviewQuery query) {
         return filteredQuery(normalize(query), false);
+    }
+
+    private LambdaQueryWrapper<ReviewTask> selectListFields(LambdaQueryWrapper<ReviewTask> wrapper) {
+        return wrapper.select(ReviewTask::getId, ReviewTask::getPrNumber, ReviewTask::getTitle,
+            ReviewTask::getRepository, ReviewTask::getOrganization, ReviewTask::getCommitSha,
+            ReviewTask::getBranchName, ReviewTask::getStatus, ReviewTask::getRiskLevel,
+            ReviewTask::getMqRetries, ReviewTask::getLlmStatus, ReviewTask::getSource,
+            ReviewTask::getTriggerSource, ReviewTask::getCreatedAt, ReviewTask::getDurationSeconds,
+            ReviewTask::getHumanReviewRequired, ReviewTask::getHumanReviewStatus,
+            ReviewTask::getHumanReviewNote, ReviewTask::getHumanReviewBy,
+            ReviewTask::getHumanReviewedAt, ReviewTask::getAssessmentStatus);
     }
 
     public boolean hasKeysetCursor(ReviewQuery query) {
