@@ -69,6 +69,28 @@ class ReviewTaskQueryItemLoaderTest {
     }
 
     @Test
+    void statusKeepsFailureSummaryEvenWhenLatestEventIsNotTheFailure() {
+        ReviewTask failed = task();
+        failed.setStatus("FAILED");
+        when(reviewTimelineMapper.selectList(any())).thenReturn(List.of(timeline("Notification delivered")));
+        when(reviewTimelineMapper.selectLatestFailures(List.of(521L))).thenReturn(List.of(
+            timeline("Review failed: category=llm_timeout")));
+
+        assertThat(loader.loadLatestTimelineItem(521L).label()).isEqualTo("Notification delivered");
+        assertThat(loader.assembleStatus(failed).failureCategory()).isEqualTo("llm_timeout");
+        org.mockito.Mockito.verify(reviewTimelineMapper).selectList(org.mockito.ArgumentMatchers.argThat(
+            query -> query.getSqlSegment().contains("DESC") && query.getSqlSegment().endsWith("limit 1")));
+    }
+
+    @Test
+    void statusDoesNotQueryFailuresForRunningTasks() {
+        ReviewTask running = task();
+        running.setStatus("REVIEWING");
+        assertThat(loader.assembleStatus(running).failureCategory()).isNull();
+        org.mockito.Mockito.verifyNoInteractions(reviewTimelineMapper);
+    }
+
+    @Test
     void constructorRejectsMissingListItemAssembler() {
         assertThatThrownBy(() -> new ReviewTaskQueryItemLoader(
             reviewTaskMapper,

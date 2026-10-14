@@ -334,7 +334,7 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
 
     @Override
     public ReviewTaskStatusResponse getReviewStatus(Long id) {
-        ReviewTask task = reviewTaskMapper.selectById(id);
+        ReviewTask task = queryItemLoader.loadStatusTask(id);
         if (task == null) {
             ReviewTaskArchiveSummary archive = loadArchiveSummaryOrThrow(id);
             return statusAssembler.assemble(
@@ -343,9 +343,8 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
                 archivedTimelineItem(archive)
             );
         }
-        List<ReviewTimeline> timelines = queryItemLoader.loadTimelines(id);
-        var latestTimeline = queryItemLoader.latestTimelineItem(timelines);
-        ReviewTaskListItem item = queryItemLoader.assemble(task, timelines);
+        var latestTimeline = queryItemLoader.loadLatestTimelineItem(id);
+        ReviewTaskListItem item = queryItemLoader.assembleStatus(task);
 
         return statusAssembler.assemble(task, item, latestTimeline);
     }
