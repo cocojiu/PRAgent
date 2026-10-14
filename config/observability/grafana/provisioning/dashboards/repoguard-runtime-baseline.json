@@ -1,0 +1,564 @@
+{
+  "uid": "repoguard-runtime-baseline",
+  "title": "RepoGuard Runtime Baseline",
+  "description": "复用日志栈。LEGACY 为历史待核对证据；无活动时等待和耗时面板可能没有样本。告警只在 Grafana 查看。",
+  "tags": [
+    "repoguard",
+    "metrics",
+    "operations"
+  ],
+  "schemaVersion": 40,
+  "version": 2,
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "API 与 Worker 最近心跳",
+      "type": "timeseries",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "interval": "1m",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "last_over_time({container=~\"repoguard-backend|repoguard-backend-worker\"} |= \"operation=runtime_metric_snapshot metric=heartbeat \" | regexp \"dimension=(?P<dimension>[a-z_]+) value=(?P<value>[0-9.eE+-]+)\" | unwrap value | __error__=\"\" [3m])",
+          "legendFormat": "{{container}}",
+          "queryType": "range",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "待核对调用数",
+      "type": "timeseries",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "interval": "1m",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "last_over_time({container=~\"repoguard-backend|repoguard-backend-worker\"} |= \"operation=runtime_metric_snapshot metric=llm_pending \" | regexp \"dimension=(?P<dimension>[a-z_]+) value=(?P<value>[0-9.eE+-]+)\" | unwrap value | __error__=\"\" [3m])",
+          "legendFormat": "{{dimension}}",
+          "queryType": "range",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "最早待核对记录年龄",
+      "type": "timeseries",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "interval": "1m",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "last_over_time({container=~\"repoguard-backend|repoguard-backend-worker\"} |= \"operation=runtime_metric_snapshot metric=llm_oldest_age \" | regexp \"dimension=(?P<dimension>[a-z_]+) value=(?P<value>[0-9.eE+-]+)\" | unwrap value | __error__=\"\" [3m])",
+          "legendFormat": "{{dimension}}",
+          "queryType": "range",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "账本指标距上次成功采集",
+      "type": "timeseries",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "interval": "1m",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "last_over_time({container=~\"repoguard-backend|repoguard-backend-worker\"} |= \"operation=runtime_metric_snapshot metric=accounting_snapshot_age \" | regexp \"dimension=(?P<dimension>[a-z_]+) value=(?P<value>[0-9.eE+-]+)\" | unwrap value | __error__=\"\" [3m])",
+          "legendFormat": "{{container}}",
+          "queryType": "range",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "持续预算拒绝速率",
+      "type": "timeseries",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "interval": "1m",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (dimension) (rate_counter({container=~\"repoguard-backend|repoguard-backend-worker\"} |= \"operation=runtime_metric_snapshot metric=budget_denied_total \" | regexp \"dimension=(?P<dimension>[a-z_]+) value=(?P<value>[0-9.eE+-]+)\" | unwrap value | __error__=\"\" [5m]))",
+          "legendFormat": "{{dimension}}",
+          "queryType": "range",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "消息等待 P95",
+      "type": "timeseries",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "interval": "1m",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "quantile_over_time(0.95, {container=\"repoguard-backend-worker\"} |= \"operation=review_queue_wait\" | regexp \"value=(?P<value>[0-9.eE+-]+)\" | unwrap value | __error__=\"\" [5m])",
+          "legendFormat": "P95",
+          "queryType": "range",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "title": "任务平均耗时",
+      "type": "timeseries",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "interval": "1m",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (container) (rate_counter({container=~\"repoguard-backend|repoguard-backend-worker\"} |= \"operation=runtime_metric_snapshot metric=task_duration_sum \" | regexp \"dimension=(?P<dimension>[a-z_]+) value=(?P<value>[0-9.eE+-]+)\" | unwrap value | __error__=\"\" [5m])) / sum by (container) (rate_counter({container=~\"repoguard-backend|repoguard-backend-worker\"} |= \"operation=runtime_metric_snapshot metric=task_duration_count \" | regexp \"dimension=(?P<dimension>[a-z_]+) value=(?P<value>[0-9.eE+-]+)\" | unwrap value | __error__=\"\" [5m]))",
+          "legendFormat": "{{container}}",
+          "queryType": "range",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 8,
+      "title": "任务失败速率",
+      "type": "timeseries",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "interval": "1m",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (container) (rate_counter({container=~\"repoguard-backend|repoguard-backend-worker\"} |= \"operation=runtime_metric_snapshot metric=task_failed_total \" | regexp \"dimension=(?P<dimension>[a-z_]+) value=(?P<value>[0-9.eE+-]+)\" | unwrap value | __error__=\"\" [5m]))",
+          "legendFormat": "{{container}}",
+          "queryType": "range",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 9,
+      "title": "外部重试速率",
+      "type": "timeseries",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      },
+      "interval": "1m",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (container) (rate_counter({container=~\"repoguard-backend|repoguard-backend-worker\"} |= \"operation=runtime_metric_snapshot metric=external_retry_total \" | regexp \"dimension=(?P<dimension>[a-z_]+) value=(?P<value>[0-9.eE+-]+)\" | unwrap value | __error__=\"\" [5m]))",
+          "legendFormat": "{{container}}",
+          "queryType": "range",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 10,
+      "title": "缓存整体命中率",
+      "type": "timeseries",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      },
+      "interval": "1m",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (container) (rate_counter({container=~\"repoguard-backend|repoguard-backend-worker\"} |= \"operation=runtime_metric_snapshot metric=cache_hit_total \" | regexp \"dimension=(?P<dimension>[a-z_]+) value=(?P<value>[0-9.eE+-]+)\" | unwrap value | __error__=\"\" [5m])) / (sum by (container) (rate_counter({container=~\"repoguard-backend|repoguard-backend-worker\"} |= \"operation=runtime_metric_snapshot metric=cache_hit_total \" | regexp \"dimension=(?P<dimension>[a-z_]+) value=(?P<value>[0-9.eE+-]+)\" | unwrap value | __error__=\"\" [5m])) + sum by (container) (rate_counter({container=~\"repoguard-backend|repoguard-backend-worker\"} |= \"operation=runtime_metric_snapshot metric=cache_miss_total \" | regexp \"dimension=(?P<dimension>[a-z_]+) value=(?P<value>[0-9.eE+-]+)\" | unwrap value | __error__=\"\" [5m])))",
+          "legendFormat": "{{container}}",
+          "queryType": "range",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 11,
+      "title": "JVM 堆占用",
+      "type": "timeseries",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 40,
+        "w": 12,
+        "h": 8
+      },
+      "interval": "1m",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "last_over_time({container=~\"repoguard-backend|repoguard-backend-worker\"} |= \"operation=runtime_metric_snapshot metric=heap_bytes \" | regexp \"dimension=(?P<dimension>[a-z_]+) value=(?P<value>[0-9.eE+-]+)\" | unwrap value | __error__=\"\" [3m])",
+          "legendFormat": "{{container}}",
+          "queryType": "range",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 100,
+      "title": "当前告警状态",
+      "type": "alertlist",
+      "gridPos": {
+        "x": 12,
+        "y": 40,
+        "w": 12,
+        "h": 8
+      },
+      "options": {
+        "viewMode": "list",
+        "groupMode": "default",
+        "maxItems": 20,
+        "sortOrder": 1,
+        "datasource": "loki",
+        "alertInstanceLabelFilter": "{scope=\"repoguard-runtime\"}",
+        "showInactiveAlerts": true,
+        "stateFilter": {
+          "firing": true,
+          "pending": true,
+          "normal": true,
+          "error": true,
+          "noData": true
+        }
+      }
+    }
+  ]
+}

@@ -18,6 +18,7 @@ class ControllerAuthorizationContractTest {
 
     private static final Set<String> SENSITIVE_READ_ENDPOINTS = Set.of(
         "LlmUsageAccountingController#pending",
+        "LlmUsageAccountingController#pendingPage",
         "CodeownersRecommendationController#recommendations",
         "ReviewMemberAssignmentController#options",
         "BackupStatusController#status",

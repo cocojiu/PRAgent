@@ -43,6 +43,8 @@ jobs:
             -f config/observability/docker-compose.production.yml
           )
           docker compose "${compose_args[@]}" config --quiet
+          docker compose "${compose_args[@]}" \
+            -f config/observability/docker-compose.runtime-metrics.yml config --quiet
           METRICS_REMOTE_WRITE_URL=https://metrics-validation.invalid/api/v1/write \
           METRICS_REMOTE_WRITE_USERNAME=validation \
           METRICS_REMOTE_WRITE_PASSWORD=validation \
@@ -53,7 +55,14 @@ jobs:
             echo "Unexpected observability service set: ${services}" >&2
             exit 1
           }
-          compose_images="$(docker compose "${compose_args[@]}" config --images | sort -u)"
+          local_services="$(docker compose "${compose_args[@]}" \
+            -f config/observability/docker-compose.runtime-metrics.yml config --services | sort | paste -sd, -)"
+          test "${local_services}" = "alloy,docker-proxy,grafana,loki" || {
+            echo "Unexpected local metrics service set: ${local_services}" >&2
+            exit 1
+          }
+          compose_images="$(docker compose "${compose_args[@]}" \
+            -f config/observability/docker-compose.runtime-metrics.yml config --images | sort -u)"
           image_count="$(printf '%s\n' "${compose_images}" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')"
           test "${image_count}" -eq 4 || {
             echo "Expected exactly four observability images; found ${image_count}." >&2
@@ -92,6 +101,24 @@ jobs:
           )"
           images_json="$(printf '%s\n' "${images}" | jq -Rsc 'split("\n") | map(select(length > 0))')"
           echo "images=${images_json}" >> "${GITHUB_OUTPUT}"
+
+      - name: Validate runtime metrics Loki configuration
+        shell: bash
+        env:
+          GRAFANA_ADMIN_PASSWORD: validation-only
+          DOCKER_SOCKET_GID: "0"
+        run: |
+          set -euo pipefail
+          loki_image="$(docker compose -p repoguard-observability --env-file /dev/null \
+            -f docker-compose.observability.yml \
+            -f config/observability/docker-compose.production.yml \
+            -f config/observability/docker-compose.runtime-metrics.yml config --images | grep '^grafana/loki:' | head -n 1)"
+          test -n "${loki_image}"
+          docker run --rm --network none --read-only \
+            --memory 256m --cpus 0.25 --cap-drop ALL --security-opt no-new-privileges \
+            -v "${PWD}/config/observability/loki-runtime-metrics.yml:/etc/loki/loki.yml:ro" \
+            -v "${PWD}/config/observability/runtime-rules:/etc/loki/runtime-rules:ro" \
+            "${loki_image}" -config.file=/etc/loki/loki.yml -verify-config=true
 
       - name: Validate Loki and Alloy configurations
         shell: bash

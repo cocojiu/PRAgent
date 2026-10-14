@@ -53,6 +53,7 @@ public class ReviewTaskWorker {
         @Header(name = TracePropagation.TRACEPARENT_HEADER, required = false) String traceparent
     ) throws IOException {
         long startedAt = metricsRecorder.startedAt();
+        metricsRecorder.recordQueueWait(message.queuedAt());
         try (TracePropagation.Scope _ = TracePropagation.openIncoming(traceparent)) {
             try (LogContext.Scope _ = LogContext.withReviewTaskMessage(message)) {
             LOGGER.info(

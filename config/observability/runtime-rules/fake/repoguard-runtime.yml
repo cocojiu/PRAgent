@@ -1,0 +1,74 @@
+groups:
+  - name: repoguard-runtime
+    interval: 1m
+    rules:
+      - alert: RepoGuardApiHeartbeatMissing
+        expr: absent_over_time({container="repoguard-backend"} |= "operation=runtime_metric_snapshot metric=heartbeat" [3m])
+        for: 2m
+        labels:
+          severity: critical
+          scope: repoguard-runtime
+        annotations:
+          summary: API heartbeat is missing from the log pipeline
+          description: Check API health and Alloy/Loki delivery; missing telemetry alone does not prove an application outage.
+      - alert: RepoGuardWorkerHeartbeatMissing
+        expr: absent_over_time({container="repoguard-backend-worker"} |= "operation=runtime_metric_snapshot metric=heartbeat" [3m])
+        for: 2m
+        labels:
+          severity: critical
+          scope: repoguard-runtime
+        annotations:
+          summary: Worker heartbeat is missing from the log pipeline
+          description: Check Worker health and Alloy/Loki delivery before restarting or retrying tasks.
+      - alert: RepoGuardUsageSnapshotStale
+        expr: >-
+          (max(max_over_time({container="repoguard-backend"} |= "operation=runtime_metric_snapshot metric=accounting_snapshot_age"
+          | regexp "value=(?P<value>[0-9.eE+-]+)" | unwrap value | __error__="" [3m])) > 180)
+          and (max(max_over_time({container="repoguard-backend"} |= "operation=runtime_metric_snapshot metric=accounting_enabled"
+          | regexp "value=(?P<value>[0-9.eE+-]+)" | unwrap value | __error__="" [3m])) == 1)
+        for: 2m
+        labels:
+          severity: warning
+          scope: repoguard-runtime
+        annotations:
+          summary: LLM accounting diagnostic snapshot is stale
+          description: Inspect database availability; retained values are previous evidence, not a current zero balance.
+      - alert: RepoGuardUncertainUsageAged
+        expr: >-
+          (max by (dimension) (max_over_time({container="repoguard-backend"} |= "operation=runtime_metric_snapshot metric=llm_oldest_age"
+          | regexp "dimension=(?P<dimension>[a-z_]+) value=(?P<value>[0-9.eE+-]+)"
+          | dimension=~"reserved|unknown" | unwrap value | __error__="" [3m])) > 3600)
+          and on() (max(max_over_time({container="repoguard-backend"} |= "operation=runtime_metric_snapshot metric=accounting_snapshot_age"
+          | regexp "value=(?P<value>[0-9.eE+-]+)" | unwrap value | __error__="" [3m])) < 180)
+        for: 5m
+        labels:
+          severity: warning
+          scope: repoguard-runtime
+        annotations:
+          summary: LLM usage has remained uncertain for over an hour
+          description: Inspect final provider evidence; never release reservations or assign zero cost automatically.
+      - alert: RepoGuardBudgetAdmissionDenied
+        expr: >-
+          sum by (dimension) (rate_counter({container=~"repoguard-backend|repoguard-backend-worker"}
+          |= "operation=runtime_metric_snapshot metric=budget_denied_total"
+          | regexp "dimension=(?P<dimension>[a-z_]+) value=(?P<value>[0-9.eE+-]+)"
+          | unwrap value | __error__="" [5m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+          scope: repoguard-runtime
+        annotations:
+          summary: LLM budget admission is repeatedly denied
+          description: Inspect quotas, pricing evidence and store availability; do not raise budgets automatically.
+      - alert: RepoGuardQueueWaitHigh
+        expr: >-
+          (quantile_over_time(0.95, {container="repoguard-backend-worker"} |= "operation=review_queue_wait"
+          | regexp "value=(?P<value>[0-9.eE+-]+)" | unwrap value | __error__="" [5m]) > 60)
+          and on() (sum(count_over_time({container="repoguard-backend-worker"} |= "operation=review_queue_wait" [5m])) >= 5)
+        for: 5m
+        labels:
+          severity: warning
+          scope: repoguard-runtime
+        annotations:
+          summary: Review messages have high queue waiting time
+          description: Check Worker capacity and retries; the threshold requires at least five messages in the window.

@@ -34,6 +34,20 @@ class LlmUsageBudgetLedgerTest {
     private final Clock clock = Clock.fixed(Instant.parse("2026-10-31T23:59:59Z"), ZoneOffset.UTC);
     private final LlmUsageBudgetLedger ledger = new LlmUsageBudgetLedger(jdbc, manager, new ObjectMapper(), clock);
 
+    @Test
+    void rejectedUserInputsHaveOneFixedMetricLabelAndKeepAdmissionSemantics() {
+        var registry = new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+        var observed = new LlmUsageBudgetLedger(jdbc, manager, new ObjectMapper(), clock, new TenantProperties(), registry);
+        for (int index = 0; index < 100; index++) {
+            String key = "private-request-" + index;
+            assertThatThrownBy(() -> observed.reserve(null, key, "review", LlmUsageBudgetMathTest.settings(), "", "", -1))
+                .hasMessageContaining("llm_budget_request_invalid");
+        }
+        assertThat(registry.find("repoguard.llm.budget.denied").counters()).hasSize(1);
+        assertThat(registry.get("repoguard.llm.budget.denied").tag("reason", "llm_budget_request_invalid").counter().count())
+            .isEqualTo(100);
+    }
+
     @BeforeEach
     void defaults() {
         when(manager.getTransaction(any())).thenAnswer(invocation -> new SimpleTransactionStatus());

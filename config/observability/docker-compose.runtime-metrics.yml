@@ -1,0 +1,6 @@
+# Reuse the existing log stack for bounded numeric telemetry and read-only alert rules.
+services:
+  loki:
+    volumes:
+      - ./config/observability/loki-runtime-metrics.yml:/etc/loki/loki.yml:ro
+      - ./config/observability/runtime-rules:/etc/loki/runtime-rules:ro
