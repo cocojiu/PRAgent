@@ -19,6 +19,18 @@ class ReviewTaskWorkerMetricsRecorderTest {
         new ReviewTaskWorkerMetricsRecorder(recorderFactory, clock);
 
     @Test
+    void queueWaitUsesUtcClampsFutureValuesAndIgnoresAbsentTimestamps() {
+        var registry = new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+        var observed = new ReviewTaskWorkerMetricsRecorder(recorderFactory, clock, registry);
+        observed.recordQueueWait(java.time.LocalDateTime.ofInstant(clock.utcNow().minusSeconds(60), java.time.ZoneOffset.UTC));
+        observed.recordQueueWait(java.time.LocalDateTime.ofInstant(clock.utcNow().plusSeconds(60), java.time.ZoneOffset.UTC));
+        observed.recordQueueWait(null);
+        var timer = registry.get("repoguard.review.queue.wait").timer();
+        assertThat(timer.count()).isEqualTo(2);
+        assertThat(timer.totalTime(java.util.concurrent.TimeUnit.SECONDS)).isEqualTo(60);
+    }
+
+    @Test
     void recordsConsumedDurationWithResult() {
         clock.setTimes(1_000L, 6_000_000L);
 
@@ -64,6 +76,8 @@ class ReviewTaskWorkerMetricsRecorderTest {
     }
 
     private static class TestReviewTaskWorkerClock extends ReviewTaskWorkerClock {
+        @Override
+        java.time.Instant utcNow() { return java.time.Instant.parse("2026-10-14T03:00:00Z"); }
 
         private long[] times = new long[0];
         private int index;

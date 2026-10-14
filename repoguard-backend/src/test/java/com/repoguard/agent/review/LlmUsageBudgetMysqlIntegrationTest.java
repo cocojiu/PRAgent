@@ -107,13 +107,13 @@ class LlmUsageBudgetMysqlIntegrationTest {
         try (TenantContext.Scope _ = TenantContext.withTenant(tenant)) {
             var reserved = ledger.reserve(null, "crash", "review", settings(), "", "", 100);
             var restarted = ledger(Clock.fixed(Instant.parse("2026-11-01T00:00:01Z"), ZoneOffset.UTC));
-            assertThat(restarted.pendingUsage(100)).hasSize(1);
+            assertThat(new LlmUsagePendingQuery(jdbc, new ObjectMapper()).page(100, null, null, null).items()).hasSize(1);
             restarted.settle(reserved, settings(), new LlmCallResult("", 100, 10, 110));
             restarted.settle(reserved, settings(), new LlmCallResult("", 999, 999, 1998));
             assertThat(tokens()).isEqualTo(110);
             assertThat(jdbc.queryForObject("select count(*) from llm_usage_month where tenant_id=? and usage_month='2026-11-01'", Integer.class, tenant))
                 .isZero();
-            assertThat(restarted.pendingUsage(100)).isEmpty();
+            assertThat(new LlmUsagePendingQuery(jdbc, new ObjectMapper()).page(100, null, null, null).items()).isEmpty();
             restarted.reserve(null, "next-month", "review", settings(), "", "", 100);
             assertThat(jdbc.queryForObject("select accounted_tokens from llm_usage_month where tenant_id=? and usage_month='2026-11-01'", Long.class, tenant))
                 .isEqualTo(1124);
@@ -127,7 +127,7 @@ class LlmUsageBudgetMysqlIntegrationTest {
                 () -> { throw new IllegalStateException("fixture uncertain timeout"); }, result -> null))
                 .hasMessage("fixture uncertain timeout");
             assertThat(tokens()).isEqualTo(1124);
-            assertThat(ledger.pendingUsage(1).getFirst()).containsEntry("status", "UNKNOWN");
+            assertThat(new LlmUsagePendingQuery(jdbc, new ObjectMapper()).page(1, null, null, null).items().getFirst().status()).isEqualTo("UNKNOWN");
             jdbc.update("update tenant_quota_config set monthly_llm_token_budget=10000 where tenant_id=?", tenant);
             assertThatThrownBy(() -> ledger.reserve(null, "failed", "review", settings(), "", "", 100))
                 .hasMessageContaining("llm_budget_duplicate_call");
@@ -238,7 +238,7 @@ class LlmUsageBudgetMysqlIntegrationTest {
                     new DataSourceTransactionManager(zoned), new ObjectMapper(), OCTOBER);
                 String key = "clock-" + timezone.replace('/', '-');
                 zonedLedger.reserve(null, key, "review", settings(), "", "", 100);
-                var pending = zonedLedger.pendingCalls(100).stream().filter(row -> row.callKey().equals(key)).findFirst().orElseThrow();
+                var pending = new LlmUsagePendingQuery(new JdbcTemplate(zoned), new ObjectMapper()).page(100, null, null, null).items().stream().filter(row -> row.callKey().equals(key)).findFirst().orElseThrow();
                 assertThat(pending.month()).isEqualTo(java.time.LocalDate.of(2026, 10, 1));
                 assertThat(pending.startedAt()).isEqualTo(OCTOBER.instant().atOffset(ZoneOffset.UTC));
             }
@@ -253,11 +253,11 @@ class LlmUsageBudgetMysqlIntegrationTest {
                 .hasMessage("fixture lost response");
             var request = new com.repoguard.agent.dto.LlmUsageAccountingDto.ReconciliationRequest(
                 "uncertain", "invoice-1", 123, new BigDecimal("0.003"), "fixture-invoice-item-1", "Final provider usage", true);
-            assertThat(ledger.pendingCalls(100)).hasSize(1);
+            assertThat(new LlmUsagePendingQuery(jdbc, new ObjectMapper()).page(100, null, null, null).items()).hasSize(1);
             var reconciled = ledger.reconcile(request, "fixture-admin");
             assertThat(ledger.reconcile(request, "fixture-admin")).isEqualTo(reconciled);
             assertThat(tokens()).isEqualTo(123);
-            assertThat(ledger.pendingCalls(100)).isEmpty();
+            assertThat(new LlmUsagePendingQuery(jdbc, new ObjectMapper()).page(100, null, null, null).items()).isEmpty();
             assertThat(jdbc.queryForObject("select count(*) from llm_usage_reconciliation where tenant_id=?", Integer.class, tenant)).isEqualTo(1);
             assertThat(jdbc.queryForObject("select json_unquote(json_extract(previous_evidence_json,'$.status')) from llm_usage_reconciliation where tenant_id=?", String.class, tenant))
                 .isEqualTo("UNKNOWN");
@@ -268,7 +268,7 @@ class LlmUsageBudgetMysqlIntegrationTest {
         try (TenantContext.Scope _ = TenantContext.withTenant(tenant + 100000)) {
             var foreign = new com.repoguard.agent.dto.LlmUsageAccountingDto.ReconciliationRequest(
                 "uncertain", "foreign-1", 0, BigDecimal.ZERO, "fixture", "Foreign access", true);
-            assertThat(ledger.pendingCalls(100)).isEmpty();
+            assertThat(new LlmUsagePendingQuery(jdbc, new ObjectMapper()).page(100, null, null, null).items()).isEmpty();
             assertThatThrownBy(() -> ledger.reconcile(foreign, "fixture-admin")).hasMessageContaining("unavailable");
         }
     }
@@ -327,14 +327,14 @@ class LlmUsageBudgetMysqlIntegrationTest {
                 JSON_OBJECT('currency','USD','estimatedAmount',1.5),JSON_OBJECT('legacyUnpriced',true),'2026-10-01')
             """, tenant, "a".repeat(64));
         try (TenantContext.Scope _ = TenantContext.withTenant(tenant)) {
-            assertThat(ledger.pendingCalls(100)).hasSize(1);
+            assertThat(new LlmUsagePendingQuery(jdbc, new ObjectMapper()).page(100, null, null, null).items()).hasSize(1);
             ledger.reconcile(new com.repoguard.agent.dto.LlmUsageAccountingDto.ReconciliationRequest(
                 "legacy-usd", "cny-evidence-1", 100, new BigDecimal("0.002"), "fixture-final-cny-item",
                 "Confirmed CNY accounting evidence", true), "fixture-admin");
             assertThat(jdbc.queryForObject("select unpriced_calls from llm_usage_month where tenant_id=?", Long.class, tenant)).isZero();
             assertThat(jdbc.queryForObject("select json_unquote(json_extract(pricing_json,'$.currency')) from llm_usage_call where tenant_id=?", String.class, tenant))
                 .isEqualTo("USD");
-            assertThat(ledger.pendingCalls(100)).isEmpty();
+            assertThat(new LlmUsagePendingQuery(jdbc, new ObjectMapper()).page(100, null, null, null).items()).isEmpty();
         }
     }
 }

@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
-import com.repoguard.agent.dto.LlmUsageAccountingDto.PendingUsage;
 import com.repoguard.agent.dto.LlmUsageAccountingDto.ReconciliationRequest;
 import com.repoguard.agent.dto.LlmUsageAccountingDto.ReconciledUsage;
 import com.repoguard.agent.external.ExternalCallException;
@@ -211,30 +210,6 @@ public final class LlmUsageBudgetLedger {
                 (currentCost == null ? BigDecimal.ZERO : currentCost).subtract(previousCost == null ? BigDecimal.ZERO : previousCost),
                 unpricedDelta, now(), reservation.tenantId(), reservation.month());
         });
-    }
-
-    public List<Map<String, Object>> pendingUsage(int limit) {
-        return jdbc.queryForList("""
-            select call_key,task_id,attempt_id,operation,provider,model_name,status,accounted_tokens,
-                accounted_cost,started_at from llm_usage_call
-            where tenant_id=? and status in ('RESERVED','UNKNOWN')
-            order by started_at,call_key limit ?
-            """, tenantId(), Math.max(1, Math.min(limit, 100)));
-    }
-
-    public List<PendingUsage> pendingCalls(int limit) {
-        return jdbc.query("""
-            select call_key,usage_month,task_id,attempt_id,operation,provider,model_name,status,
-                accounted_tokens,accounted_cost,started_at from llm_usage_call
-            where tenant_id=? and (status in ('RESERVED','UNKNOWN') or (status='LEGACY' and (
-                json_unquote(json_extract(usage_json,'$.legacyUnknown')) in ('1','true')
-                or json_unquote(json_extract(usage_json,'$.legacyUnpriced')) in ('1','true'))))
-            order by started_at,call_key limit ?
-            """, (row, index) -> new PendingUsage(row.getString("call_key"), row.getObject("usage_month", LocalDate.class),
-                row.getObject("task_id", Long.class), row.getObject("attempt_id", Long.class), row.getString("operation"),
-                row.getString("provider"), row.getString("model_name"), row.getString("status"),
-                row.getLong("accounted_tokens"), row.getBigDecimal("accounted_cost"), row.getObject("started_at", LocalDateTime.class).atOffset(ZoneOffset.UTC)),
-            tenantId(), Math.max(1, Math.min(limit, 100)));
     }
 
     void requireReleaseAllowed(ReviewTask task) {

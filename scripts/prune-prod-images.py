@@ -155,8 +155,22 @@ def apply(root, path, expected):
         if hashes != reviewed["protectedManifests"] or image["id"] in protected \
                 or set(image["references"]) & protected:
             raise RuntimeError("cleanup_protection_changed")
-        # Never force deletion. Docker independently refuses to remove an image newly used by a container.
-        docker("image", "rm", *image["references"])
+        # Removing the last tag can also remove its digest reference. Refresh each
+        # reference instead of submitting already-removed digests in one command.
+        for _ in range(len(image["references"]) + 1):
+            current = next((value for value in inventory() if value["id"] == image["id"]), None)
+            if current is None:
+                break
+            if not current["references"] or not set(current["references"]) <= set(image["references"]):
+                raise RuntimeError("cleanup_image_references_changed")
+            protected, _, hashes = protected_references(root)
+            if hashes != reviewed["protectedManifests"] or current["id"] in protected \
+                    or set(current["references"]) & protected:
+                raise RuntimeError("cleanup_protection_changed")
+            # No force; Docker also refuses an image newly used by a container.
+            docker("image", "rm", current["references"][0])
+        else:
+            raise RuntimeError("cleanup_image_removal_incomplete")
         removed.append(image["id"])
     print(json.dumps({"status": "completed", "removed": removed}, sort_keys=True))
 

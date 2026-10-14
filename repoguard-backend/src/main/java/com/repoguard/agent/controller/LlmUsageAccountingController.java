@@ -41,7 +41,7 @@ public class LlmUsageAccountingController {
 
     @GetMapping("/pending")
     public ApiResponse<List<PendingUsage>> pending(@RequestParam(defaultValue = "50") @Min(1) @Max(100) int limit) {
-        return ApiResponse.ok(ledger.pendingCalls(limit));
+        return ApiResponse.ok(pendingQuery.page(limit, null, null, null).items());
     }
 
     @GetMapping("/pending/page")

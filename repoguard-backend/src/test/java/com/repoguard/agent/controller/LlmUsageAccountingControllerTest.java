@@ -33,7 +33,7 @@ class LlmUsageAccountingControllerTest {
 
     @Test
     void originalEndpointKeepsItsListResponse() throws Exception {
-        when(ledger.pendingCalls(50)).thenReturn(List.of());
+        when(query.page(50, null, null, null)).thenReturn(new PendingUsagePage(List.of(), null, false));
         mvc.perform(get("/api/v1/config/llm-usage/pending"))
             .andExpect(status().isOk()).andExpect(jsonPath("$.data").isArray());
     }
