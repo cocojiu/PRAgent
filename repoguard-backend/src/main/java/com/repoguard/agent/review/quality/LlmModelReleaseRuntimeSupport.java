@@ -21,12 +21,6 @@ import org.springframework.stereotype.Component;
 /** Runtime routing, budget protection, and append-only release transition evidence. */
 @Component
 final class LlmModelReleaseRuntimeSupport {
-    private static final BigDecimal MIN_PRECISION = new BigDecimal("0.90");
-    private static final BigDecimal MIN_RECALL = new BigDecimal("0.80");
-    private static final BigDecimal MIN_ANCHOR_RATE = new BigDecimal("0.95");
-    private static final BigDecimal MAX_DUPLICATE_RATE = new BigDecimal("0.05");
-    private static final BigDecimal MAX_PARSE_FAILURE_RATE = new BigDecimal("0.05");
-    private static final long MAX_P95_LATENCY_MS = 15_000L;
 
     private final JdbcTemplate jdbcTemplate;
     private final LlmModelReleaseRepository releaseRepository;
@@ -181,14 +175,7 @@ final class LlmModelReleaseRuntimeSupport {
     }
 
     private List<String> unsafeRuntimeBlockers(LlmModelReleaseDto release, LlmModelBudgetDto budget) {
-        List<String> blockers = new ArrayList<>();
-        if (!Boolean.TRUE.equals(release.qualityGatePassed())) blockers.add("QUALITY_GATE_FAILED");
-        if (release.precisionRate().compareTo(MIN_PRECISION) < 0) blockers.add("PRECISION_BELOW_90");
-        if (release.recallRate().compareTo(MIN_RECALL) < 0) blockers.add("RECALL_BELOW_80");
-        if (release.anchorRate().compareTo(MIN_ANCHOR_RATE) < 0) blockers.add("ANCHOR_RATE_BELOW_95");
-        if (release.duplicateRate().compareTo(MAX_DUPLICATE_RATE) > 0) blockers.add("DUPLICATE_RATE_ABOVE_5");
-        if (release.parseFailureRate().compareTo(MAX_PARSE_FAILURE_RATE) > 0) blockers.add("PARSE_FAILURE_RATE_ABOVE_5");
-        if (release.p95LatencyMs() > MAX_P95_LATENCY_MS) blockers.add("P95_LATENCY_ABOVE_15000_MS");
+        List<String> blockers = new ArrayList<>(ReleaseQualityPolicy.blockerCodes(ReleaseQualityPolicy.Evidence.from(release)));
         if (budget.exhausted()) blockers.add("MONTHLY_LLM_BUDGET_EXHAUSTED");
         return List.copyOf(blockers);
     }
