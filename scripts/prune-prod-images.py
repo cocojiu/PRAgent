@@ -99,6 +99,21 @@ def inventory():
     return images
 
 
+def current_image(identity):
+    result = subprocess.run(["docker", "image", "inspect", identity],
+                            capture_output=True, text=True, timeout=90)
+    if result.returncode:
+        if result.stdout.strip() == "[]" and "No such image: " + identity in result.stderr:
+            return None
+        raise RuntimeError("docker_operation_failed")
+    values = json.loads(result.stdout)
+    if len(values) != 1 or values[0]["Id"] != identity:
+        raise RuntimeError("cleanup_image_identity_changed")
+    value = values[0]
+    return {"id": identity, "references": sorted(set(
+        (value.get("RepoTags") or []) + (value.get("RepoDigests") or [])))}
+
+
 def eligible(image, protected, repositories, newest, cutoff):
     return (IMAGE_ID.fullmatch(image["id"]) and REVISION.fullmatch(image["revision"])
             and image["version"].startswith("main-") and image["references"]
@@ -158,7 +173,7 @@ def apply(root, path, expected):
         # Removing the last tag can also remove its digest reference. Refresh each
         # reference instead of submitting already-removed digests in one command.
         for _ in range(len(image["references"]) + 1):
-            current = next((value for value in inventory() if value["id"] == image["id"]), None)
+            current = current_image(image["id"])
             if current is None:
                 break
             if not current["references"] or not set(current["references"]) <= set(image["references"]):
