@@ -74,7 +74,7 @@ jobs:
             printf '%s\n' \
               'grafana/alloy:v1.18.0@sha256:491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b308' \
               'grafana/grafana:13.1.1@sha256:7cb8c64c4d57a57e734073f3cc94620adb24a0acb929bd80ba9f14017e3a975b' \
-              'grafana/loki:3.7.4@sha256:87f0a067673756a3cede1bcbf0c74875f7df9b09fddb53e399d0c576f756cfcc' \
+              'grafana/loki:3.7.8@sha256:1107dd5274e0ada47e42472b7a7e71f3b2a2fe878878108f3e2f9e51528f0193' \
               'wollomatic/socket-proxy:1.12.3@sha256:74e770f5ed3cfc9ecb6350e177d2aa55873568c85bc953079834e68607dbf71b' \
               | sort
           )"
@@ -87,7 +87,7 @@ jobs:
           for loki_image in \
             'grafana/loki:3.5.12@sha256:c2a6860c2f94ecc98fffce7c10e6c8b350cf25e2ea3daa255dff27d7c6a4dffc' \
             'grafana/loki:3.6.13@sha256:b31e171ab90b521ff7e7f3a909eefc050811d4dbf02c857e44c2a2f555461b6b' \
-            'grafana/loki:3.7.4@sha256:87f0a067673756a3cede1bcbf0c74875f7df9b09fddb53e399d0c576f756cfcc'; do
+            'grafana/loki:3.7.8@sha256:1107dd5274e0ada47e42472b7a7e71f3b2a2fe878878108f3e2f9e51528f0193'; do
             docker run --rm --network none --read-only \
               --cap-drop ALL --security-opt no-new-privileges \
               -v "${PWD}/config/observability/loki.yml:/etc/loki/loki.yml:ro" \
@@ -272,7 +272,8 @@ jobs:
           set -eu
           legacy_loki_image='grafana/loki:3.4.2@sha256:58a6c186ce78ba04d58bfe2a927eff296ba733a430df09645d56cdc158f3ba08'
           legacy_promtail_image='grafana/promtail:3.4.2@sha256:c6e9a987ca086cbfef945b8ebd708eb09f98b5e78bfb659e4e5a8b3bd604d11b'
-          final_loki_image='grafana/loki:3.7.4@sha256:87f0a067673756a3cede1bcbf0c74875f7df9b09fddb53e399d0c576f756cfcc'
+          final_loki_image='grafana/loki:3.7.8@sha256:1107dd5274e0ada47e42472b7a7e71f3b2a2fe878878108f3e2f9e51528f0193'
+          previous_loki_image='grafana/loki:3.7.4@sha256:87f0a067673756a3cede1bcbf0c74875f7df9b09fddb53e399d0c576f756cfcc'
           final_alloy_image='grafana/alloy:v1.18.0@sha256:491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b308'
           final_proxy_image='wollomatic/socket-proxy:1.12.3@sha256:74e770f5ed3cfc9ecb6350e177d2aa55873568c85bc953079834e68607dbf71b'
           grafana_image='grafana/grafana:13.1.1@sha256:7cb8c64c4d57a57e734073f3cc94620adb24a0acb929bd80ba9f14017e3a975b'
@@ -335,7 +336,16 @@ jobs:
           elif docker inspect repoguard-alloy >/dev/null 2>&1 \
             && ! docker inspect repoguard-promtail >/dev/null 2>&1; then
             deployment_state=upgraded
-            check_running_image repoguard-loki "${final_loki_image}"
+            running_loki_image="$(docker inspect --format '{{.Config.Image}}' repoguard-loki)"
+            case "${running_loki_image}" in
+              "${previous_loki_image}" | "${final_loki_image}")
+                check_running_image repoguard-loki "${running_loki_image}"
+                ;;
+              *)
+                echo "Unexpected immutable Loki patch image." >&2
+                exit 1
+                ;;
+            esac
             check_running_image repoguard-alloy "${final_alloy_image}"
             check_running_image repoguard-docker-proxy "${final_proxy_image}"
             current_loki_volume="$(docker inspect --format \
@@ -457,7 +467,7 @@ jobs:
           helper_image='grafana/grafana:13.1.1@sha256:7cb8c64c4d57a57e734073f3cc94620adb24a0acb929bd80ba9f14017e3a975b'
           loki_35_image='grafana/loki:3.5.12@sha256:c2a6860c2f94ecc98fffce7c10e6c8b350cf25e2ea3daa255dff27d7c6a4dffc'
           loki_36_image='grafana/loki:3.6.13@sha256:b31e171ab90b521ff7e7f3a909eefc050811d4dbf02c857e44c2a2f555461b6b'
-          loki_37_image='grafana/loki:3.7.4@sha256:87f0a067673756a3cede1bcbf0c74875f7df9b09fddb53e399d0c576f756cfcc'
+          loki_37_image='grafana/loki:3.7.8@sha256:1107dd5274e0ada47e42472b7a7e71f3b2a2fe878878108f3e2f9e51528f0193'
           alloy_image='grafana/alloy:v1.18.0@sha256:491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b308'
           proxy_image='wollomatic/socket-proxy:1.12.3@sha256:74e770f5ed3cfc9ecb6350e177d2aa55873568c85bc953079834e68607dbf71b'
           network_name="repoguard-observability-canary-${CANARY_ID}"
@@ -702,7 +712,7 @@ jobs:
           run_loki_stage "${loki_35_image}" 3.5.12
           run_loki_stage "${loki_36_image}" 3.6.13
 
-          echo "CANARY_STAGE=loki-3.7.4-starting"
+          echo "CANARY_STAGE=loki-3.7.8-starting"
           docker run -d --name "${loki_container}" \
             --label com.repoguard.purpose=observability-log-canary \
             --network "${network_name}" --network-alias loki \
@@ -715,8 +725,8 @@ jobs:
           loki_ip="$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${loki_container}")"
           wait_http "http://${loki_ip}:3100/ready" '^ready' 60
           curl -fsS --connect-timeout 5 --max-time 10 "http://${loki_ip}:3100/loki/api/v1/status/buildinfo" \
-            | grep -q '"version":"3.7.4"'
-          echo "CANARY_STAGE=loki-3.7.4-ready"
+            | grep -q '"version":"3.7.8"'
+          echo "CANARY_STAGE=loki-3.7.8-ready"
 
           echo "CANARY_STAGE=docker-proxy-starting"
           docker run -d --name "${proxy_container}" \
@@ -846,7 +856,7 @@ jobs:
           echo "CANARY_STAGE=collector-verified"
 
           echo "CANARY_OK=true"
-          echo "LOKI_UPGRADE_PATH=3.5.12,3.6.13,3.7.4"
+          echo "LOKI_UPGRADE_PATH=3.5.12,3.6.13,3.7.8"
           echo "ALLOY_VERSION=1.18.0"
           echo "ALLOY_TARGET_SERIES_GT_ZERO=true"
           echo "ALLOY_TARGET_ENTRIES_TOTAL=${entries}"
@@ -892,7 +902,7 @@ jobs:
           helper_image='grafana/grafana:13.1.1@sha256:7cb8c64c4d57a57e734073f3cc94620adb24a0acb929bd80ba9f14017e3a975b'
           loki_35_image='grafana/loki:3.5.12@sha256:c2a6860c2f94ecc98fffce7c10e6c8b350cf25e2ea3daa255dff27d7c6a4dffc'
           loki_36_image='grafana/loki:3.6.13@sha256:b31e171ab90b521ff7e7f3a909eefc050811d4dbf02c857e44c2a2f555461b6b'
-          loki_37_image='grafana/loki:3.7.4@sha256:87f0a067673756a3cede1bcbf0c74875f7df9b09fddb53e399d0c576f756cfcc'
+          loki_37_image='grafana/loki:3.7.8@sha256:1107dd5274e0ada47e42472b7a7e71f3b2a2fe878878108f3e2f9e51528f0193'
           alloy_image='grafana/alloy:v1.18.0@sha256:491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b308'
           proxy_image='wollomatic/socket-proxy:1.12.3@sha256:74e770f5ed3cfc9ecb6350e177d2aa55873568c85bc953079834e68607dbf71b'
           intermediate_name=""
@@ -1163,7 +1173,7 @@ jobs:
           test "${proxy_policy_statuses}" = "200,200,405,403"
           curl -fsS --connect-timeout 5 --max-time 10 \
             http://127.0.0.1:3100/loki/api/v1/status/buildinfo \
-            | grep -q '"version":"3.7.4"'
+            | grep -q '"version":"3.7.8"'
           curl -fsS --connect-timeout 5 --max-time 10 \
             http://127.0.0.1:3100/loki/api/v1/labels \
             | grep -q '"status"[[:space:]]*:[[:space:]]*"success"'
@@ -1320,7 +1330,7 @@ jobs:
           rm -rf "${STAGE_PATH}"
 
           echo "LOG_STACK_UPGRADE_OK=true"
-          echo "LOKI_VERSION=3.7.4"
+          echo "LOKI_VERSION=3.7.8"
           echo "LOG_COLLECTOR=alloy-1.18.0"
           echo "LOKI_VOLUME=${new_loki_volume}"
           echo "ALLOY_VOLUME=${new_alloy_volume}"

@@ -199,7 +199,7 @@ jobs:
               fi
               if curl -fsS --connect-timeout 3 --max-time 5 \
                 "http://${canary_loki_ip}:3100/loki/api/v1/status/buildinfo" 2>/dev/null \
-                | grep -q '"version":"3.7.4"'; then
+                | grep -q '"version":"3.7.8"'; then
                 canary_loki_v37_count=$((canary_loki_v37_count + 1))
               fi
             fi
