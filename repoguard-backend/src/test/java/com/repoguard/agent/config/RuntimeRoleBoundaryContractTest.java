@@ -53,7 +53,8 @@ class RuntimeRoleBoundaryContractTest {
         assertThat(scheduledComponents.stream()
             .filter(component -> AnnotatedElementUtils.hasAnnotation(component, ReplicaRuntimeEnabled.class))
             .map(Class::getName))
-            .containsExactly("com.repoguard.agent.cache.ClusterCacheInvalidationPoller");
+            .containsExactly("com.repoguard.agent.cache.ClusterCacheInvalidationPoller",
+                "com.repoguard.agent.review.LlmUsageMetricsCollector");
 
         assertThat(listenerComponents).isNotEmpty();
         for (Class<?> component : listenerComponents) {

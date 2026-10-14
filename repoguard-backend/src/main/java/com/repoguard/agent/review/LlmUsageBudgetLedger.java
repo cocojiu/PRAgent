@@ -8,6 +8,7 @@ import com.repoguard.agent.dto.LlmUsageAccountingDto.PendingUsage;
 import com.repoguard.agent.dto.LlmUsageAccountingDto.ReconciliationRequest;
 import com.repoguard.agent.dto.LlmUsageAccountingDto.ReconciledUsage;
 import com.repoguard.agent.external.ExternalCallException;
+import io.micrometer.core.instrument.MeterRegistry;
 import com.repoguard.agent.review.LlmUsageBudgetMath.Bound;
 import com.repoguard.agent.tenancy.TenantContext;
 import com.repoguard.agent.tenancy.TenantProperties;
@@ -42,15 +43,21 @@ public final class LlmUsageBudgetLedger {
     private final ObjectMapper json;
     private final Clock clock;
     private final TenantProperties tenancy;
+    private final MeterRegistry metrics;
 
     public LlmUsageBudgetLedger(JdbcTemplate jdbc, PlatformTransactionManager transactionManager, ObjectMapper json) {
         this(jdbc, transactionManager, json, Clock.systemUTC());
     }
 
-    @Autowired
     public LlmUsageBudgetLedger(JdbcTemplate jdbc, PlatformTransactionManager transactionManager,
         ObjectMapper json, TenantProperties tenancy) {
         this(jdbc, transactionManager, json, Clock.systemUTC(), tenancy);
+    }
+
+    @Autowired
+    public LlmUsageBudgetLedger(JdbcTemplate jdbc, PlatformTransactionManager transactionManager,
+        ObjectMapper json, TenantProperties tenancy, MeterRegistry metrics) {
+        this(jdbc, transactionManager, json, Clock.systemUTC(), tenancy, metrics);
     }
 
     LlmUsageBudgetLedger(JdbcTemplate jdbc, PlatformTransactionManager transactionManager, ObjectMapper json, Clock clock) {
@@ -59,10 +66,16 @@ public final class LlmUsageBudgetLedger {
 
     LlmUsageBudgetLedger(JdbcTemplate jdbc, PlatformTransactionManager transactionManager, ObjectMapper json,
         Clock clock, TenantProperties tenancy) {
+        this(jdbc, transactionManager, json, clock, tenancy, null);
+    }
+
+    LlmUsageBudgetLedger(JdbcTemplate jdbc, PlatformTransactionManager transactionManager, ObjectMapper json,
+        Clock clock, TenantProperties tenancy, MeterRegistry metrics) {
         this.jdbc = Objects.requireNonNull(jdbc, "jdbc");
         this.json = Objects.requireNonNull(json, "json");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.tenancy = Objects.requireNonNull(tenancy, "tenancy");
+        this.metrics = metrics;
         transactions = new TransactionTemplate(Objects.requireNonNull(transactionManager, "transactionManager"));
         transactions.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         transactions.setTimeout(3);
@@ -398,7 +411,9 @@ public final class LlmUsageBudgetLedger {
         return result;
     }
 
-    private static AdmissionDeniedException denied(String category) {
+    private AdmissionDeniedException denied(String category) {
+        // Categories are private, fixed call-site constants; request data never becomes a label.
+        if (metrics != null) metrics.counter("repoguard.llm.budget.denied", "reason", category).increment();
         return new AdmissionDeniedException(category);
     }
 

@@ -167,6 +167,45 @@ class LlmUsageBudgetMysqlIntegrationTest {
     }
 
     @Test
+    void keysetPagesTraverseMoreThanOneHundredTiesAndKeepTenantMonthAndStatusBoundaries() {
+        var query = new LlmUsagePendingQuery(jdbc, new ObjectMapper());
+        jdbc.update("insert into llm_usage_month(tenant_id,usage_month) values(?,'2026-10-01'),(?,'2026-11-01')", tenant, tenant);
+        String insert = """
+            insert into llm_usage_call(tenant_id,call_key,usage_month,operation,provider,model_name,
+                request_fingerprint,status,accounted_tokens,usage_json,started_at)
+            values(?,?,?,'review','fixture','fixture',repeat('a',64),?,0,?,?)
+            """;
+        for (int index = 0; index < 101; index++) {
+            jdbc.update(insert, tenant, "page-" + String.format(java.util.Locale.ROOT, "%03d", index),
+                "2026-10-01", "UNKNOWN", "{}", "2026-10-14 02:00:00.123456");
+        }
+        jdbc.update(insert, tenant, "checkpoint", "2026-11-01", "LEGACY", "{\"legacyUnknown\":true}", "2026-11-01 00:00:00");
+        jdbc.update(insert, tenant, "known-legacy", "2026-10-01", "LEGACY", "{\"legacyUnknown\":false}", "2026-10-14 02:00:00");
+        jdbc.update(insert, tenant, "reserved", "2026-11-01", "RESERVED", "{}", "2026-11-01 01:00:00");
+        try (TenantContext.Scope _ = TenantContext.withTenant(tenant)) {
+            var first = query.page(100, null, null, null);
+            assertThat(first.items()).hasSize(100);
+            assertThat(first.items().getFirst().callKey()).isEqualTo("page-000");
+            assertThat(first.items().getLast().callKey()).isEqualTo("page-099");
+            assertThat(first.items().getLast().startedAt().getNano()).isEqualTo(123456000);
+            assertThat(first.hasMore()).isTrue();
+            // Removing the cursor row does not invalidate the next boundary.
+            jdbc.update("delete from llm_usage_call where tenant_id=? and call_key='page-099'", tenant);
+            var last = query.page(100, null, null, first.nextCursor());
+            assertThat(last.items()).extracting(com.repoguard.agent.dto.LlmUsageAccountingDto.PendingUsage::callKey)
+                .containsExactly("page-100", "checkpoint", "reserved");
+            assertThat(last.hasMore()).isFalse();
+            assertThat(last.nextCursor()).isNull();
+            assertThat(query.page(100, "2026-11", "LEGACY", null).items())
+                .extracting(com.repoguard.agent.dto.LlmUsageAccountingDto.PendingUsage::callKey).containsExactly("checkpoint");
+            assertThat(query.page(100, "2026-11", "UNKNOWN", null).items()).isEmpty();
+        }
+        try (TenantContext.Scope _ = TenantContext.withTenant(tenant + 100000)) {
+            assertThat(query.page(100, null, null, null).items()).isEmpty();
+        }
+    }
+
+    @Test
     void knownNotSentDeadlineReleasesBothBudgetsAndRecordsTheReason() {
         try (TenantContext.Scope _ = TenantContext.withTenant(tenant)) {
             var evaluation = new LlmEvaluationBudget(10000, BigDecimal.TEN);

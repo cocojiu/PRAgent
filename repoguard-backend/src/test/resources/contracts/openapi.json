@@ -1376,6 +1376,83 @@
         }
       }
     },
+    "/api/v1/config/llm-usage/pending/page" : {
+      "get" : {
+        "tags" : [ "LlmUsageAccounting" ],
+        "operationId" : "llmUsageAccountingControllerPendingPage",
+        "x-controller-operation" : "LlmUsageAccountingController#pendingPage",
+        "parameters" : [ {
+          "name" : "limit",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 100,
+            "default" : 50
+          }
+        }, {
+          "name" : "month",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "pattern" : "[0-9]{4}-(0[1-9]|1[0-2])"
+          }
+        }, {
+          "name" : "status",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "pattern" : "RESERVED|UNKNOWN|LEGACY"
+          }
+        }, {
+          "name" : "cursor",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 1024
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "PendingUsagePage",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/PendingUsagePage"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/config/llm-usage/reconcile" : {
       "post" : {
         "tags" : [ "LlmUsageAccounting" ],
@@ -14511,6 +14588,25 @@
           }
         },
         "required" : [ "accountedTokens" ]
+      },
+      "PendingUsagePage" : {
+        "type" : "object",
+        "x-java-type" : "PendingUsagePage",
+        "properties" : {
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/PendingUsage"
+            }
+          },
+          "nextCursor" : {
+            "type" : "string"
+          },
+          "hasMore" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "hasMore" ]
       },
       "PrReviewSummaryDto" : {
         "type" : "object",

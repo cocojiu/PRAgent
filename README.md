@@ -416,7 +416,21 @@ API 响应通常使用统一 `ApiResponse` 包装。业务错误优先使用稳�
 
 管理员可通过 `GET /api/v1/config/llm-usage/pending?limit=50` 查看当前租户待核对记录（最多 100 条），再使用 `POST /api/v1/config/llm-usage/reconcile` 提交最终证据。接口限 ADMIN / PLATFORM_ADMIN，沿用认证、租户和 CSRF 保护。请求包含 `callKey`、`idempotencyKey`、`accountedTokens`、CNY `accountedCost`、`evidenceReference`、`reason` 和必须为 `true` 的 `finalEvidence`；证据引用只填账单或工单编号，不填凭据或提示词。
 
+记录超过100条时，使用 `GET /api/v1/config/llm-usage/pending/page?limit=50&month=2026-10&status=LEGACY`。`month`（UTC月份，YYYY-MM）、`status`（RESERVED、UNKNOWN、LEGACY）均可省略；LEGACY只返回仍有未知历史或未计价证据的记录。响应包含 `items`、`hasMore`、`nextCursor`，下一页携带该游标和相同筛选条件；更改筛选或租户时重新从首页读取。记录按时间和调用键升序，游标行完成对账或被移除后仍可继续；它不是一致性快照，遍历期间早于当前游标新增的记录需重新查询。原列表接口响应不变，分页不会修改账本或自动释放预留。
+
 同一幂等键和同一证据返回原结果，不重复调整余额；不同证据会拒绝。供应商已确认的结算不可覆盖，一小时内的在途预留不可释放；不确定记录不会自动按时间归零。历史核对记录填写迁移截止点仍未计入账本的差额，不能把整月账单重复加到已回填用量上。操作人、原始证据、差额和原因保存在追加审计中，原定价快照不变。
+
+## 运行指标与容量管理
+
+API 每60秒读取待核对调用的聚合数量和最早时间，数据库查询超时为3秒。指标不包含租户、调用键、模型或提示词标签；查询失败保留上次证据，并更新失败计数，`snapshot.last.success` 用于判断新鲜度。可以用 `repoguard.observability.llm-usage-metrics-enabled=false` 关闭聚合采集。Worker另记录消息 `queuedAt` 到消费开始的等待时间；缺失时间不计样本，未来时间按零等待计。现有任务耗时、失败、外部重试、缓存和 JVM 指标继续复用。
+
+现有 Grafana 可选择本地 Prometheus 存储，无需远端写入凭据：在观测栈的现有 Compose 文件后叠加 `config/observability/docker-compose.local-metrics.yml`，并在应用栈保留 `docker-compose.metrics-bridge.yml`。先启动观测栈建立网络，再按正常部署流程连接 API/Worker。该方案与远端写入覆盖文件分别选择，避免重复采集。镜像固定到 [Prometheus 官方 LTS](https://prometheus.io/download/) 版本及不可变摘要；存储保留7天、块数据预算256MB、内存256MiB、CPU0.25，WAL和活跃数据仍需要额外磁盘余量，启用前复核主机容量。
+
+Prometheus只绑定服务器回环地址9090，Grafana继续通过已有SSH入口访问。`RepoGuard Runtime Baseline` 面板显示API/Worker状态、账本数量与年龄、预算拒绝、消息等待、任务耗时/失败、重试、缓存及堆内存。`当前告警状态` 展示Prometheus规则的pending/firing状态；默认不配置外部接收器。规则涵盖采集不可用、账本快照过期、长期未知用量、持续预算拒绝和有足够样本的队列等待。历史LEGACY记录单独展示，不按在途故障告警；无业务活动时等待、耗时和缓存面板可能没有样本。先积累可比运行基线再判断优化收益。关闭本地指标覆盖文件时保留数据卷，不影响日志栈或应用数据。
+
+磁盘维护使用 `python3 scripts/prune-prod-images.py --root /opt/repoguard` 先输出只读清理计划。仅候选已标记main版本、具有完整提交身份且全部引用属于清单中RepoGuard仓库的镜像；默认至少14天，保留最近3个提交、所有运行/停止容器引用和全部本地发布清单，每批最多20个。计划中的未压缩大小只是上界，不等于可释放的实际磁盘空间。
+
+确认计划后，通过 `--apply-plan <计划文件> --expected-sha256 <已核验的计划SHA256>` 执行。计划30分钟内有效，执行前重新比对完整范围，每项删除前再次校验保护，持有与默认部署流程相同的 `.deploy.lock`，从不强制删除。自定义部署锁的环境应先统一锁路径。该工具不删除容器、数据卷、备份、构建缓存或其他项目镜像；保留无标签和身份不完整镜像供人工核查。执行后检查实际磁盘及服务健康，不依赖Docker共享层的reclaimable估算。
 
 ## 指定样本诊断
 
@@ -462,7 +476,7 @@ SARIF 导出包含当前审查的 findings，按扫描器名称与版本分组�
 
 企业日报/周报在当前租户内一次聚合最近1/7天的任务，时间范围包含 `from`、不包含 `to`。完成数包括 `COMPLETED` 和 `APPROVED`；高风险数包括 `HIGH` 和 `CRITICAL`；待人工复核且 SLA 截止时间不晚于同一 `to` 的任务计入超时。空范围返回0，报表不加载完整任务实体。个人版仍受原有企业版条件开关保护。
 
-Schema 期望版本为 V103；新增评论历史游标索引、可空的用量费用快照，以及默认不清理的载荷保留字段和候选索引。API 迁移所有者完成升级后再启动非迁移角色；迁移不回填历史费用，不删除历史记录。
+当前 Schema 期望版本为 V106。V103保留评论历史游标索引、可空用量费用快照和默认关闭的载荷清理；V105新增持久月度账本及历史核对记录，V106新增独立安全撤销。API迁移所有者完成升级后再启动非迁移角色，按上述账本说明保留未知历史证据；迁移不重算历史费用，不删除历史记录。
 
 ## 开发规范
 

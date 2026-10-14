@@ -39,6 +39,7 @@ githubFeedbackControllerDiagnostics(input?: { query?: { limit?: number } }): Pro
 githubFeedbackControllerRetry(input: { path: { id: number } }): Promise<void>; // POST /api/v1/github/feedback-events/{id}/retry
 githubWebhookControllerReceive(input: { body: Uint8Array }): Promise<GithubWebhookResponse>; // POST /api/v1/github/webhooks
 llmUsageAccountingControllerPending(input?: { query?: { limit?: number } }): Promise<PendingUsage[]>; // GET /api/v1/config/llm-usage/pending
+llmUsageAccountingControllerPendingPage(input?: { query?: { cursor?: string; limit?: number; month?: string; status?: string } }): Promise<PendingUsagePage>; // GET /api/v1/config/llm-usage/pending/page
 llmUsageAccountingControllerReconcile(input: { body: ReconciliationRequest }): Promise<ReconciledUsage>; // POST /api/v1/config/llm-usage/reconcile
 messageQueueHealthControllerGetHealth(): Promise<MessageQueueHealth>; // GET /api/v1/message-queue/health
 messageQueueHealthControllerRequeueTask(input: { path: { taskId: number } }): Promise<MessageQueueRequeueResponse>; // POST /api/v1/message-queue/tasks/{taskId}/requeue

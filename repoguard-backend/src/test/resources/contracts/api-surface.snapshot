@@ -9,6 +9,7 @@ GET /api/v1/config/integrations/github/checks query=[organization, repository] b
 GET /api/v1/config/integrations/mysql query=[] body=- bodyRequired=false
 GET /api/v1/config/integrations/rabbitmq query=[] body=- bodyRequired=false
 GET /api/v1/config/llm-usage/pending query=[limit] body=- bodyRequired=false
+GET /api/v1/config/llm-usage/pending/page query=[limit, month, status, cursor] body=- bodyRequired=false
 GET /api/v1/config/notification-bindings query=[page, pageSize, organization, repository, provider] body=- bodyRequired=false
 GET /api/v1/config/repository-policy/preview query=[organization, repository, headSha] body=- bodyRequired=false
 GET /api/v1/config/repository-policy/suppressions query=[organization, repository, limit] body=- bodyRequired=false

@@ -12,6 +12,7 @@ import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.List;
 
 /** Transport contracts for bounded diagnostics and explicit, audited accounting reconciliation. */
 public final class LlmUsageAccountingDto {
@@ -20,6 +21,10 @@ public final class LlmUsageAccountingDto {
     public record PendingUsage(String callKey, LocalDate month, Long taskId, Long attemptId,
         String operation, String provider, String modelName, String status, long accountedTokens,
         BigDecimal accountedCost, OffsetDateTime startedAt) { }
+
+    public record PendingUsagePage(List<PendingUsage> items, String nextCursor, boolean hasMore) {
+        public PendingUsagePage { items = List.copyOf(items); }
+    }
 
     public record ReconciliationRequest(
         @NotBlank @Pattern(regexp = "^[A-Za-z0-9:._-]{1,128}$") String callKey,
