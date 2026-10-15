@@ -30,14 +30,13 @@ import org.mybatis.spring.SqlSessionTemplate;
 import org.springframework.context.annotation.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
-import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
 import org.springframework.transaction.support.TransactionTemplate;
 
-/** Opt-in fixture on a dedicated local instance; never accepts a production host or database. */
-@EnabledIfEnvironmentVariable(named = "REPOGUARD_ASSIGNMENT_MYSQL_URL", matches = "jdbc:mysql://127\\.0\\.0\\.1:33080/repoguard_assignment_test(?:[?].*)?")
+/** Opt-in fixture on guarded loopback or GitHub-hosted CI; never accepts a production database. */
+@EnabledIfEnvironmentVariable(named = "REPOGUARD_RUN_INTEGRATION_TESTS", matches = "true")
 @SuppressWarnings("try")
 class ReviewMemberAssignmentMysqlIntegrationTest {
     private static AnnotationConfigApplicationContext context;
@@ -49,14 +48,8 @@ class ReviewMemberAssignmentMysqlIntegrationTest {
     private record Fixture(long tenant, long otherTenant, long task, long attempt, long first, long second, long foreignMember) { }
 
     @BeforeAll static void open() {
-        dataSource = new DriverManagerDataSource(System.getenv("REPOGUARD_ASSIGNMENT_MYSQL_URL"), "root", "");
+        dataSource = PreflightIntegrationDatabase.migrateFixture();
         jdbc = new JdbcTemplate(dataSource);
-        var identity = jdbc.queryForMap("select @@port as port, @@datadir as datadir, @@bind_address as bindAddress, database() as db");
-        assertThat(((Number) identity.get("port")).intValue()).isEqualTo(33080);
-        assertThat(identity.get("bindAddress")).isEqualTo("127.0.0.1");
-        assertThat(identity.get("db")).isEqualTo("repoguard_assignment_test");
-        assertThat(identity.get("datadir").toString().replace('\\', '/')).endsWith("/.tmp/mysql-assignment-20261008/data/");
-        assertThat(jdbc.queryForObject("select version from flyway_schema_history where success=1 order by installed_rank desc limit 1", String.class)).isEqualTo("103");
         context = new AnnotationConfigApplicationContext();
         context.registerBean(DataSource.class, () -> dataSource); context.register(FixtureConfiguration.class); context.refresh();
         service = context.getBean(ReviewMemberAssignmentService.class); workflow = context.getBean(ReviewWorkflowService.class);
@@ -86,6 +79,19 @@ class ReviewMemberAssignmentMysqlIntegrationTest {
             """, tenant, task, "a".repeat(40), "b".repeat(64));
         assertThat(jdbc.update("update review_task set current_attempt_id=? where id=? and tenant_id=?", attempt, task, tenant)).isEqualTo(1);
         fixture = new Fixture(tenant, other, task, attempt, first, second, foreign);
+    }
+    @AfterEach void cleanup() {
+        if (fixture == null) return;
+        var users = jdbc.queryForList("select user_id from tenant_membership where tenant_id in (?,?)",
+            Long.class, fixture.tenant(), fixture.otherTenant());
+        for (long tenant : new long[] {fixture.tenant(), fixture.otherTenant()}) {
+            for (String table : java.util.List.of("review_timeline", "review_finding", "changed_file",
+                "review_execution_attempt", "review_task", "tenant_membership")) {
+                jdbc.update("delete from " + table + " where tenant_id=?", tenant);
+            }
+            jdbc.update("delete from tenant where id=?", tenant);
+        }
+        for (Long user : users) jdbc.update("delete from user_account where id=?", user);
     }
     private static long insert(String sql, Object... values) {
         var keys = new GeneratedKeyHolder();
@@ -220,7 +226,7 @@ class ReviewMemberAssignmentMysqlIntegrationTest {
             var count = jdbc.queryForObject("""
                 select count(*) from performance_schema.data_lock_waits w
                 join performance_schema.data_locks l on l.engine_lock_id=w.requesting_engine_lock_id
-                where l.object_schema='repoguard_assignment_test'
+                where l.object_schema=database()
                 """, Integer.class);
             if (count >= minimum) return;
             Thread.sleep(20);
