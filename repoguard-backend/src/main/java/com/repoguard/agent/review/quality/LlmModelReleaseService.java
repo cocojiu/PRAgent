@@ -69,10 +69,9 @@ public class LlmModelReleaseService {
         this.auditService = new LlmModelReleaseAuditService(this.releaseRepository, this.objectMapper);
         this.lifecycleService = Objects.requireNonNull(lifecycleService, "lifecycleService");
     }
-    @Transactional
+    @Transactional(readOnly = true)
     public LlmModelReleaseCenterDto getCenter(Integer trendDays) {
         long tenantId = TenantContext.currentTenantIdOrDefault();
-        runtimeSupport.reconcileCanaries(tenantId);
         int days = normalizeTrendDays(trendDays);
         Map<String, Object> configured = runtimeSupport.configuredModel(tenantId);
         List<LlmModelReleaseDto> releases = releaseRepository.findAll(tenantId);
@@ -167,6 +166,10 @@ public class LlmModelReleaseService {
         return lifecycleService.expireDueReports();
     }
 
+    @Transactional
+    public void reconcileCanaries() {
+        runtimeSupport.reconcileCanaries(TenantContext.currentTenantIdOrDefault());
+    }
     @Transactional(readOnly = true)
     public com.repoguard.agent.dto.PageResponse<LlmModelReleaseAuditDto> listReleaseAudits(
         Long releaseId, String releaseKey, String operator, String action, String from, String to, int page, int pageSize) {
@@ -247,6 +250,7 @@ public class LlmModelReleaseService {
     }
 
     /** Applies budget protection and persisted canary assignment to one review task. */
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public ReviewPolicySettings route(ReviewPolicySettings settings, ReviewTask task) {
         if (settings == null || task == null || !settings.enabled()) return settings;
         return runtimeSupport.route(TenantContext.currentTenantIdOrDefault(), settings, task);

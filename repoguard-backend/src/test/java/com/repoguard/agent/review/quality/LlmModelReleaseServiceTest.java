@@ -386,7 +386,41 @@ class LlmModelReleaseServiceTest {
 
         service.route(settings("openai"), task(2L));
 
-        verify(repository).rollback(42L, 14L, "自动回滚: QUALITY_GATE_FAILED");
+        verify(repository).rollbackCanary(42L, 14L, "自动回滚: QUALITY_GATE_FAILED");
+    }
+
+    @Test
+    void repeatedCenterQueriesNeverReconcileUnsafeCanaries() {
+        when(repository.findAll(42L)).thenReturn(List.of(release(14L, "CANARY", 30, "unsafe", false)));
+
+        assertThat(service.getCenter(7).canaryRelease().state()).isEqualTo("CANARY");
+        assertThat(service.getCenter(7).canaryRelease().state()).isEqualTo("CANARY");
+
+        verify(repository, never()).lockTenant(anyLong());
+        verify(repository, never()).findByState(anyLong(), anyString());
+        verify(repository, never()).rollbackCanary(anyLong(), anyLong(), anyString());
+        verify(repository, never()).insertAudit(anyLong(), anyLong(), anyString(), anyString(),
+            anyString(), anyString(), anyInt(), anyString(), anyString(), anyString(), anyString());
+        verify(jdbcTemplate, never()).update(anyString(), any(Object[].class));
+    }
+
+    @Test
+    void reconciliationSerializesWithReleaseCommandsAndAuditsOnlyWinningTransition() {
+        LlmModelReleaseDto unsafe = release(14L, "CANARY", 30, "unsafe", false);
+        when(repository.findByState(42L, "CANARY")).thenReturn(List.of(unsafe));
+        when(repository.rollbackCanary(42L, 14L, "自动回滚: QUALITY_GATE_FAILED")).thenReturn(1, 0);
+        when(repository.findById(42L, 14L)).thenReturn(release(14L, "ROLLED_BACK", 0, "unsafe", false));
+
+        service.reconcileCanaries();
+        service.reconcileCanaries();
+
+        var ordered = org.mockito.Mockito.inOrder(repository);
+        ordered.verify(repository).lockTenant(42L);
+        ordered.verify(repository).findByState(42L, "CANARY");
+        ordered.verify(repository).rollbackCanary(42L, 14L, "自动回滚: QUALITY_GATE_FAILED");
+        verify(repository, org.mockito.Mockito.times(1)).insertAudit(eq(42L), eq(14L), eq(unsafe.releaseKey()),
+            eq("AUTO_ROLLBACK"), eq("CANARY"), eq("ROLLED_BACK"), eq(0), eq("system"),
+            eq("自动回滚: QUALITY_GATE_FAILED"), anyString(), anyString());
     }
 
     @Test

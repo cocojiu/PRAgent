@@ -40,6 +40,10 @@ class LlmModelReleaseMetricsSchedulerTest {
         taskCaptor.getValue().run();
         verify(metricsService).collectCurrentWindow();
         verify(releaseService).expireDueEvaluationReports();
+        var ordered = org.mockito.Mockito.inOrder(releaseService, metricsService);
+        ordered.verify(releaseService).reconcileCanaries();
+        ordered.verify(metricsService).collectCurrentWindow();
+        ordered.verify(releaseService).expireDueEvaluationReports();
     }
 
     @Test

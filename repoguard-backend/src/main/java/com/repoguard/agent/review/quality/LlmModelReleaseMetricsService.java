@@ -57,13 +57,6 @@ public class LlmModelReleaseMetricsService {
         return collectWindow(end);
     }
 
-    /** Collects the current window before serving the bounded history query. */
-    @Transactional
-    public List<LlmModelReleaseMetricDto> collectAndList(String releaseKey, int days, int limit) {
-        collectCurrentWindow();
-        return list(releaseKey, days, limit);
-    }
-
     @Transactional
     public List<LlmModelReleaseMetricDto> collectWindow(LocalDateTime windowEnd) {
         LocalDateTime end = normalizeWindowEnd(windowEnd);
@@ -116,7 +109,7 @@ public class LlmModelReleaseMetricsService {
 
     private void autoRollback(long tenantId, LlmModelReleaseDto release, LlmModelReleaseMetricSnapshot snapshot) {
         if (!"AUTO_ROLLBACK".equals(snapshot.action())) return;
-        int updated = releaseRepository.rollback(tenantId, release.id(),
+        int updated = releaseRepository.rollbackCanary(tenantId, release.id(),
             "运行指标自动回滚: " + String.join(", ", snapshot.alertCodes()));
         if (updated == 1) {
             runtimeSupport.audit(tenantId, "AUTO_ROLLBACK", release,

@@ -75,7 +75,7 @@ class LlmModelReleaseMetricsServiceTest {
         when(metricsRepository.countRollbacks(1L, 7L, end.minusHours(1), end)).thenReturn(1L);
         when(metricsRepository.findOne(7L, end.minusHours(1), end)).thenReturn(null);
         when(metricsRepository.upsert(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(releaseRepository.rollback(1L, 7L, "运行指标自动回滚: PARSE_FAILURE_RATE_ABOVE_5, FALLBACK_RATE_ABOVE_20, P95_LATENCY_ABOVE_RUNTIME_THRESHOLD, COST_ABOVE_150_PERCENT, ROLLBACK_OBSERVED"))
+        when(releaseRepository.rollbackCanary(1L, 7L, "运行指标自动回滚: PARSE_FAILURE_RATE_ABOVE_5, FALLBACK_RATE_ABOVE_20, P95_LATENCY_ABOVE_RUNTIME_THRESHOLD, COST_ABOVE_150_PERCENT, ROLLBACK_OBSERVED"))
             .thenReturn(1);
         when(releaseRepository.findById(1L, 7L)).thenReturn(release("ROLLED_BACK"));
 
@@ -94,7 +94,7 @@ class LlmModelReleaseMetricsServiceTest {
         });
         ArgumentCaptor<LlmModelReleaseMetricSnapshot> snapshotCaptor = ArgumentCaptor.forClass(LlmModelReleaseMetricSnapshot.class);
         verify(alertPublisher).publish(snapshotCaptor.capture());
-        verify(releaseRepository).rollback(1L, 7L, "运行指标自动回滚: PARSE_FAILURE_RATE_ABOVE_5, FALLBACK_RATE_ABOVE_20, P95_LATENCY_ABOVE_RUNTIME_THRESHOLD, COST_ABOVE_150_PERCENT, ROLLBACK_OBSERVED");
+        verify(releaseRepository).rollbackCanary(1L, 7L, "运行指标自动回滚: PARSE_FAILURE_RATE_ABOVE_5, FALLBACK_RATE_ABOVE_20, P95_LATENCY_ABOVE_RUNTIME_THRESHOLD, COST_ABOVE_150_PERCENT, ROLLBACK_OBSERVED");
         verify(runtimeSupport).audit(1L, "AUTO_ROLLBACK", release, releaseRepository.findById(1L, 7L), "system",
             snapshotCaptor.getValue().alertCodes().toString());
     }
@@ -132,7 +132,6 @@ class LlmModelReleaseMetricsServiceTest {
 
         assertThat(service.collectWindow(null)).isEmpty();
         assertThat(service.collectCurrentWindow()).isEmpty();
-        assertThat(service.collectAndList(" ", 0, 0)).isEmpty();
         assertThat(service.list(null, 0, 1)).isEmpty();
 
         verify(metricsRepository, org.mockito.Mockito.atLeastOnce()).findSnapshots(eq(1L), eq(null),
@@ -156,11 +155,19 @@ class LlmModelReleaseMetricsServiceTest {
         when(metricsRepository.countRollbacks(1L, 7L, end.minusHours(1), end)).thenReturn(0L);
         when(metricsRepository.findOne(7L, end.minusHours(1), end)).thenReturn(null);
         when(metricsRepository.upsert(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(releaseRepository.rollback(eq(1L), eq(7L), org.mockito.ArgumentMatchers.anyString())).thenReturn(0);
+        when(releaseRepository.rollbackCanary(eq(1L), eq(7L), org.mockito.ArgumentMatchers.anyString())).thenReturn(0);
 
         assertThat(service.collectWindow(end)).singleElement().extracting(LlmModelReleaseMetricDto::alertState)
             .isEqualTo("NORMAL");
-        verify(releaseRepository, org.mockito.Mockito.never()).rollback(eq(1L), eq(7L), any());
+        verify(releaseRepository, org.mockito.Mockito.never()).rollbackCanary(eq(1L), eq(7L), any());
+    }
+
+    @Test
+    void listingMetricsNeverCollectsOrPublishes() {
+        assertThat(service.list(null, 7, 20)).isEmpty();
+        verify(metricsRepository).findSnapshots(eq(1L), eq(null), any(LocalDateTime.class), eq(20));
+        org.mockito.Mockito.verifyNoMoreInteractions(metricsRepository);
+        verifyNoInteractions(releaseRepository, metrics, runtimeSupport, alertPublisher);
     }
 
     private LlmModelReleaseDto release(String state) {
