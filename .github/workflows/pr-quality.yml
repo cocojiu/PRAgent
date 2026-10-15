@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       linux_backup_integration:
-        description: Validate scheduled backups and SSE proxy transport in a fresh hosted runner
+        description: Validate scheduled backups, SSE proxy transport and immutable schema rollback on a fresh hosted runner
         required: false
         default: false
         type: boolean
@@ -334,12 +334,20 @@ jobs:
         run: ./mvnw -B -Dsurefire.runOrder=alphabetical -Dtest=FlywayMigrationUpgradePathIntegrationTest,LlmUsageBudgetMysqlIntegrationTest,LlmModelSafetyMysqlIntegrationTest,ReviewQueryOptimizationMysqlIntegrationTest test
 
   scheduled-backup-integration:
-    name: Linux backup restore and SSE proxy transport
+    name: Linux backup restore, SSE transport and schema rollback
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.linux_backup_integration == true }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read
     env:
       REPOGUARD_RUN_LINUX_BACKUP_INTEGRATION: 'true'
+      # Signed release-source manifests: upgrade run 38738844105; approved rollback run 38520743134.
+      REPOGUARD_ROLLBACK_UPGRADE_IMAGE: ghcr.io/cocojiu/pragent-backend@sha256:46ec3f67c64918ad0ec05cfaad101390046d48c51c8a7dfc0980d85c86097c34
+      REPOGUARD_ROLLBACK_UPGRADE_REVISION: 486b0aed250c212fe1269aba5619e9b9fba5750e
+      REPOGUARD_ROLLBACK_PREVIOUS_IMAGE: ghcr.io/cocojiu/pragent-backend@sha256:9c8e73fafa1dc6daf3f29d8ee7dd97069ddb89138b196ea2d19ab46ae8d1eb93
+      REPOGUARD_ROLLBACK_PREVIOUS_REVISION: d8876b76d6aef062fd0c3fefde9a6638dca56cbb
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
@@ -347,9 +355,15 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
-      - name: Run real systemd restore and TLS proxy streaming checks
+      - name: Authenticate immutable release image pulls
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run real restore, TLS streaming and runtime rollback checks
         working-directory: repoguard-backend
-        run: ./mvnw -B -Dtest=ScheduledMysqlBackupLinuxIntegrationTest,ReviewProgressTransportIntegrationTest test
+        run: ./mvnw -B -Dtest=ScheduledMysqlBackupLinuxIntegrationTest,ReviewProgressTransportIntegrationTest,RuntimeSchemaRollbackLinuxIntegrationTest test
       - name: Require actual Linux integration execution
         shell: pwsh
         working-directory: repoguard-backend
@@ -357,6 +371,7 @@ jobs:
           $expectedSuites = @{
             ScheduledMysqlBackupLinuxIntegrationTest = 1
             ReviewProgressTransportIntegrationTest = 2
+            RuntimeSchemaRollbackLinuxIntegrationTest = 1
           }
           foreach ($suiteName in $expectedSuites.Keys) {
             [xml]$testReport = Get-Content -LiteralPath "target/surefire-reports/TEST-com.repoguard.agent.integration.$suiteName.xml" -Raw
@@ -373,6 +388,8 @@ jobs:
           path: |
             repoguard-backend/target/surefire-reports/*ScheduledMysqlBackupLinuxIntegrationTest*
             repoguard-backend/target/surefire-reports/*ReviewProgressTransportIntegrationTest*
+            repoguard-backend/target/surefire-reports/*RuntimeSchemaRollbackLinuxIntegrationTest*
+            repoguard-backend/target/runtime-rollback/
           if-no-files-found: warn
           retention-days: 7
 
