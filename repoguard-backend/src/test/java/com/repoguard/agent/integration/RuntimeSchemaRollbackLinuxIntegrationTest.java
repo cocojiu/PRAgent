@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.ConnectionFactory;
 import com.repoguard.agent.review.task.ReviewFailureSummaryResolver.ReviewFailureDetails;
+import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -57,7 +58,7 @@ class RuntimeSchemaRollbackLinuxIntegrationTest {
     private static String previousRevision;
     private static String upgradeRevision;
     private static String rabbitPassword;
-    private static int rabbitPort;
+    private static String rabbitHost;
     private static Path applicationEnvironment;
 
     @BeforeAll static void prepare() throws Exception {
@@ -96,12 +97,17 @@ class RuntimeSchemaRollbackLinuxIntegrationTest {
             "MYSQL_PWD=\"$MYSQL_ROOT_PASSWORD\" mysql --protocol=TCP -h127.0.0.1 -uroot -N -e 'SELECT 1'")), 120);
         rabbit = container("rabbit", RABBIT_IMAGE, environment("rabbit", Map.of(
             "RABBITMQ_DEFAULT_USER", "repoguard", "RABBITMQ_DEFAULT_PASS", rabbitPassword,
-            "RABBITMQ_DEFAULT_VHOST", VHOST)), List.of("--network-alias", "rabbitmq", "--publish", "127.0.0.1::5672"), List.of());
+            "RABBITMQ_DEFAULT_VHOST", VHOST)), List.of("--network-alias", "rabbitmq"), List.of());
         // A root CLI probe can create a root-owned cookie before the entrypoint drops privileges.
         await(() -> succeeds(List.of("docker", "exec", "--user", "rabbitmq", rabbit, "rabbitmq-diagnostics", "-q", "ping")), 90);
-        JsonNode binding = inspect("container", rabbit).path("NetworkSettings").path("Ports").path("5672/tcp");
-        assertThat(binding.size()).isEqualTo(1); assertThat(binding.get(0).path("HostIp").asText()).isEqualTo("127.0.0.1");
-        rabbitPort = Integer.parseInt(binding.get(0).path("HostPort").asText());
+        // Internal bridges do not publish host ports; the trusted Linux host can use the owned bridge IP.
+        JsonNode broker = inspect("container", rabbit).path("NetworkSettings");
+        assertThat(broker.path("Ports").path("5672/tcp").isNull()).isTrue();
+        JsonNode attachment = broker.path("Networks").path(OWNER);
+        assertThat(attachment.path("NetworkID").asText()).isEqualTo(network);
+        rabbitHost = attachment.path("IPAddress").asText();
+        assertThat(rabbitHost).matches("[0-9.]{7,15}");
+        assertThat(InetAddress.getByName(rabbitHost).isSiteLocalAddress()).isTrue();
         var env = new LinkedHashMap<String, String>();
         env.put("SPRING_PROFILES_ACTIVE", "prod");
         env.put("SERVER_PORT", "8081");
@@ -198,7 +204,7 @@ class RuntimeSchemaRollbackLinuxIntegrationTest {
     }
 
     private static void publishTerminalDuplicate() throws Exception {
-        ConnectionFactory factory = new ConnectionFactory(); factory.setHost("127.0.0.1"); factory.setPort(rabbitPort);
+        ConnectionFactory factory = new ConnectionFactory(); factory.setHost(rabbitHost); factory.setPort(5672);
         factory.setUsername("repoguard"); factory.setPassword(rabbitPassword); factory.setVirtualHost(VHOST);
         factory.setConnectionTimeout(5000); factory.setAutomaticRecoveryEnabled(false);
         try (var connection = factory.newConnection(); var channel = connection.createChannel()) {
