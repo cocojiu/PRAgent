@@ -129,7 +129,7 @@ public class ReviewCalibrationController {
         @RequestParam(defaultValue = "7") @Min(1) @Max(90) int days,
         @RequestParam(defaultValue = "168") @Min(1) @Max(500) int limit
     ) {
-        return ApiResponse.ok(requireMetricsService().collectAndList(releaseKey, days, limit));
+        return ApiResponse.ok(requireMetricsService().list(releaseKey, days, limit));
     }
 
     @GetMapping("/release-center/drift")

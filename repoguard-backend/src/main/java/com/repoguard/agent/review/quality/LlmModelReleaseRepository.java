@@ -194,6 +194,9 @@ public class LlmModelReleaseRepository {
     public int rollback(long tenantId, long releaseId, String reason) {
         return jdbcTemplate.update("update llm_model_release set state = 'ROLLED_BACK', traffic_percent = 0, rollback_reason = ?, updated_at = current_timestamp(6) where tenant_id = ? and id = ? and state <> 'ROLLED_BACK'", reason, tenantId, releaseId);
     }
+    public int rollbackCanary(long tenantId, long releaseId, String reason) {
+        return jdbcTemplate.update("update llm_model_release set state = 'ROLLED_BACK', traffic_percent = 0, rollback_reason = ?, updated_at = current_timestamp(6) where tenant_id = ? and id = ? and state = 'CANARY'", reason, tenantId, releaseId);
+    }
 
     /** Append-only transition record; there is intentionally no update/delete path for audits. */
     public void insertAudit(long tenantId, long releaseId, String releaseKey, String action,

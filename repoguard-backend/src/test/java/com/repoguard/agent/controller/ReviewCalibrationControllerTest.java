@@ -43,7 +43,7 @@ class ReviewCalibrationControllerTest {
     @Test
     void listsCollectedRuntimeMetricsWithBoundedQueryParameters() throws Exception {
         LlmModelReleaseMetricsService metricsService = org.mockito.Mockito.mock(LlmModelReleaseMetricsService.class);
-        org.mockito.Mockito.when(metricsService.collectAndList("release-next", 7, 20)).thenReturn(List.of(
+        org.mockito.Mockito.when(metricsService.list("release-next", 7, 20)).thenReturn(List.of(
             new LlmModelReleaseMetricDto(
                 8L, 7L, "release-next", "openai", "gpt-next",
                 java.time.LocalDateTime.of(2026, 9, 3, 1, 0), java.time.LocalDateTime.of(2026, 9, 3, 2, 0),
@@ -64,7 +64,8 @@ class ReviewCalibrationControllerTest {
             .andExpect(jsonPath("$.data[0].releaseKey").value("release-next"))
             .andExpect(jsonPath("$.data[0].sampleCount").value(12));
 
-        org.mockito.Mockito.verify(metricsService).collectAndList("release-next", 7, 20);
+        org.mockito.Mockito.verify(metricsService).list("release-next", 7, 20);
+        org.mockito.Mockito.verifyNoMoreInteractions(metricsService);
     }
 
     @Test

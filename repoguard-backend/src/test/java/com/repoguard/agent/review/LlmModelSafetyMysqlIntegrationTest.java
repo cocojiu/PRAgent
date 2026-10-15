@@ -10,6 +10,9 @@ import com.repoguard.agent.external.ExternalHttpJsonResponseReader;
 import com.repoguard.agent.external.ExternalHttpResponseReader;
 import com.repoguard.agent.review.quality.LlmModelReleaseRepository;
 import com.repoguard.agent.review.quality.LlmModelSafetyService;
+import com.repoguard.agent.review.quality.LlmModelReleaseService;
+import com.repoguard.agent.review.quality.LlmQualityComparisonProvider;
+import com.repoguard.agent.config.JacksonConfig;
 import com.repoguard.agent.tenancy.TenantContext;
 import com.sun.net.httpserver.HttpServer;
 import java.math.BigDecimal;
@@ -139,6 +142,145 @@ class LlmModelSafetyMysqlIntegrationTest {
         }
         assertThat(jdbc.queryForObject("select accounted_tokens from llm_usage_call where tenant_id=? and call_key='in-flight'", Long.class, tenant)).isEqualTo(110);
         assertThat(jdbc.queryForObject("select status from llm_usage_call where tenant_id=? and call_key='in-flight'", String.class, tenant)).isEqualTo("SETTLED");
+    }
+
+    @Test
+    void repeatedCenterReadsLeaveUnsafeReleaseAndAuditUnchanged() {
+        jdbc.update("update llm_model_release set state='CANARY', traffic_percent=25 where tenant_id=? and id=?", tenant, releaseId);
+        var service = releaseService(releases);
+        try (TenantContext.Scope _ = TenantContext.withTenant(tenant)) {
+            assertThat(service.getCenter(7).canaryRelease().state()).isEqualTo("CANARY");
+            assertThat(service.getCenter(7).canaryRelease().state()).isEqualTo("CANARY");
+        }
+        assertThat(releases.findById(tenant, releaseId).state()).isEqualTo("CANARY");
+        assertThat(jdbc.queryForObject("select count(*) from llm_model_release_audit where tenant_id=?", Integer.class, tenant)).isZero();
+    }
+
+    @Test
+    void concurrentCoordinationCommitsOneRollbackAndOneAudit() throws Exception {
+        jdbc.update("update llm_model_release set state='CANARY', traffic_percent=25 where tenant_id=? and id=?", tenant, releaseId);
+        var service = releaseService(releases);
+        var ready = new CountDownLatch(2);
+        var start = new CountDownLatch(1);
+        try (var workers = Executors.newFixedThreadPool(2)) {
+            java.util.concurrent.Callable<Void> coordinate = () -> {
+                try (TenantContext.Scope _ = TenantContext.withTenant(tenant)) {
+                    ready.countDown();
+                    if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("coordination fixture timeout");
+                    service.reconcileCanaries();
+                    return null;
+                }
+            };
+            var first = workers.submit(coordinate);
+            var second = workers.submit(coordinate);
+            try { assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue(); }
+            finally { start.countDown(); }
+            first.get(10, TimeUnit.SECONDS);
+            second.get(10, TimeUnit.SECONDS);
+        }
+        assertThat(releases.findById(tenant, releaseId).state()).isEqualTo("ROLLED_BACK");
+        assertThat(jdbc.queryForObject("select count(*) from llm_model_release_audit where tenant_id=? and action='AUTO_ROLLBACK'", Integer.class, tenant)).isEqualTo(1);
+    }
+
+    @Test
+    void auditFailureRollsBackTheReleaseTransition() {
+        jdbc.update("update llm_model_release set state='CANARY', traffic_percent=25 where tenant_id=? and id=?", tenant, releaseId);
+        var failing = org.mockito.Mockito.spy(releases);
+        org.mockito.Mockito.doThrow(new IllegalStateException("fixture audit failure")).when(failing).insertAudit(
+            org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString());
+        try (TenantContext.Scope _ = TenantContext.withTenant(tenant)) {
+            assertThatThrownBy(() -> releaseService(failing).reconcileCanaries()).hasMessageContaining("fixture audit failure");
+        }
+        assertThat(releases.findById(tenant, releaseId).state()).isEqualTo("CANARY");
+        assertThat(jdbc.queryForObject("select count(*) from llm_model_release_audit where tenant_id=?", Integer.class, tenant)).isZero();
+    }
+
+    @Test
+    void automaticRollbackCannotChangeAnActiveReleaseOrAnotherTenant() {
+        assertThat(releases.rollbackCanary(tenant + 1, releaseId, "fixture stale tenant")).isZero();
+        assertThat(releases.rollbackCanary(tenant, releaseId, "fixture stale canary")).isZero();
+        assertThat(releases.findById(tenant, releaseId).state()).isEqualTo("ACTIVE");
+    }
+
+    @Test
+    void routingDoesNotAssignACanaryRolledBackAfterItsFirstRead() throws Exception {
+        jdbc.update("update llm_model_release set state='CANARY', traffic_percent=100 where tenant_id=? and id=?", tenant, releaseId);
+        var concurrent = org.mockito.Mockito.spy(releases);
+        try (var workers = Executors.newFixedThreadPool(1)) {
+            org.mockito.Mockito.doAnswer(invocation -> {
+                assertThat(workers.submit(() -> releases.rollbackCanary(tenant, releaseId, "fixture concurrent metrics"))
+                    .get(5, TimeUnit.SECONDS)).isEqualTo(1);
+                return invocation.callRealMethod();
+            }).when(concurrent).findByState(tenant, "CANARY");
+            var task = new ReviewTask();
+            var settings = new ReviewPolicySettings(true, true, "fixture", "configured", "http://127.0.0.1", "",
+                10, BigDecimal.ZERO, 100, true, 1, 5, 100, 5, 100, null, null, ReviewStrategyRelease.observeDefaults(), null);
+            try (TenantContext.Scope _ = TenantContext.withTenant(tenant)) {
+                assertThat(releaseService(concurrent).route(settings, task).modelName()).isEqualTo("configured");
+            }
+            assertThat(task.getLlmReleaseKey()).isNull();
+        }
+    }
+
+    @Test
+    void metricCollectionExcludesConcurrentReleaseCommands() throws Exception {
+        var snapshots = org.mockito.Mockito.mock(com.repoguard.agent.review.quality.LlmModelReleaseMetricsRepository.class);
+        org.mockito.Mockito.when(snapshots.upsert(org.mockito.ArgumentMatchers.any())).thenAnswer(call -> call.getArgument(0));
+        try (var workers = Executors.newFixedThreadPool(1);
+             var context = new org.springframework.context.annotation.AnnotationConfigApplicationContext()) {
+            context.registerBean(JdbcTemplate.class, () -> jdbc);
+            context.registerBean(ObjectMapper.class, () -> new JacksonConfig().objectMapper());
+            context.registerBean(LlmModelReleaseRepository.class, () -> releases);
+            context.registerBean(com.repoguard.agent.review.quality.LlmModelReleaseMetricsRepository.class, () -> snapshots);
+            context.registerBean(com.repoguard.agent.observability.RepoGuardMetrics.class,
+                () -> org.mockito.Mockito.mock(com.repoguard.agent.observability.RepoGuardMetrics.class));
+            context.registerBean(com.repoguard.agent.review.quality.LlmModelReleaseAlertPublisher.class,
+                () -> org.mockito.Mockito.mock(com.repoguard.agent.review.quality.LlmModelReleaseAlertPublisher.class));
+            context.register(Class.forName("com.repoguard.agent.review.quality.LlmModelReleaseRuntimeSupport"),
+                com.repoguard.agent.review.quality.LlmModelReleaseMetricsService.class);
+            context.refresh();
+            org.mockito.Mockito.when(snapshots.aggregate(org.mockito.ArgumentMatchers.eq(tenant),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(call -> {
+                    int lockResult = workers.submit(() -> {
+                        try {
+                            new TransactionTemplate(new DataSourceTransactionManager(data)).execute(status ->
+                                jdbc.queryForObject("select id from tenant where id=? for update nowait", Long.class, tenant));
+                            return 0;
+                        } catch (org.springframework.dao.DataAccessException failure) {
+                            Throwable cause = org.springframework.core.NestedExceptionUtils.getMostSpecificCause(failure);
+                            if (cause instanceof java.sql.SQLException sql) return sql.getErrorCode();
+                            throw failure;
+                        }
+                    }).get(5, TimeUnit.SECONDS);
+                    assertThat(lockResult).as("competing release command must encounter the held tenant lock").isEqualTo(3572);
+                    return new com.repoguard.agent.review.quality.LlmModelReleaseMetricsRepository.RuntimeAggregate(
+                        0L, 0L, BigDecimal.ZERO, 0L, 0L, 0L);
+                });
+            var service = (com.repoguard.agent.review.quality.LlmModelReleaseMetricsService) transactionalProxy(
+                context.getBean(com.repoguard.agent.review.quality.LlmModelReleaseMetricsService.class));
+            try (TenantContext.Scope _ = TenantContext.withTenant(tenant)) {
+                assertThat(service.collectCurrentWindow()).hasSize(1);
+            }
+        }
+    }
+
+    private LlmModelReleaseService releaseService(LlmModelReleaseRepository repository) {
+        var target = new LlmModelReleaseService(jdbc, org.mockito.Mockito.mock(LlmQualityComparisonProvider.class),
+            repository, new JacksonConfig().objectMapper());
+        return (LlmModelReleaseService) transactionalProxy(target);
+    }
+
+    private Object transactionalProxy(Object target) {
+        var transaction = new org.springframework.transaction.interceptor.TransactionInterceptor();
+        transaction.setTransactionManager(new DataSourceTransactionManager(data));
+        transaction.setTransactionAttributeSource(new org.springframework.transaction.annotation.AnnotationTransactionAttributeSource());
+        var factory = new org.springframework.aop.framework.ProxyFactory(target);
+        factory.addAdvice(transaction);
+        return factory.getProxy();
     }
 
     private com.repoguard.agent.dto.LlmModelReleaseDto revoke() {

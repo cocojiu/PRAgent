@@ -66,6 +66,7 @@ final class LlmModelReleaseRuntimeSupport {
     }
 
     void reconcileCanaries(long tenantId) {
+        releaseRepository.lockTenant(tenantId);
         List<LlmModelReleaseDto> canaries = releaseRepository.findByState(tenantId, "CANARY");
         if (canaries.isEmpty()) return;
         LlmModelBudgetDto budget = monthlyBudget(tenantId);
@@ -73,7 +74,7 @@ final class LlmModelReleaseRuntimeSupport {
             List<String> blockers = unsafeRuntimeBlockers(canary, budget);
             if (blockers.isEmpty()) continue;
             String reason = truncate("自动回滚: " + String.join(", ", blockers), 512);
-            int updated = releaseRepository.rollback(tenantId, canary.id(), reason);
+            int updated = releaseRepository.rollbackCanary(tenantId, canary.id(), reason);
             if (updated == 1) {
                 audit(tenantId, "AUTO_ROLLBACK", canary, releaseRepository.findById(tenantId, canary.id()),
                     "system", reason);

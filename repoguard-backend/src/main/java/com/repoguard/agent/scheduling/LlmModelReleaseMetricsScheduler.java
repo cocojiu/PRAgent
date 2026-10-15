@@ -57,6 +57,9 @@ public class LlmModelReleaseMetricsScheduler {
     @Scheduled(cron = "${repoguard.review.llm-release-metrics-cron:0 5 * * * *}")
     public void collectReleaseRuntimeMetrics() {
         tenantRunner.runForEachActiveTenant("llm_release_runtime_metrics", () -> {
+            if (releaseService != null) {
+                releaseService.reconcileCanaries();
+            }
             metricsService.collectCurrentWindow();
             if (releaseService != null) {
                 releaseService.expireDueEvaluationReports();
