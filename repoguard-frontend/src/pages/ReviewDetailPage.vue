@@ -272,7 +272,7 @@ import ReviewMemberAssignmentCard from "@/features/review-detail/components/Revi
 import CodeownersRecommendationCard from "@/features/review-detail/components/CodeownersRecommendationCard.vue";
 import { enterpriseEditionEnabled } from "@/config/edition";
 import ReviewDetailCiSarifGuide from "@/features/review-detail/components/ReviewDetailCiSarifGuide.vue";
-import { computed, onBeforeUnmount, onMounted, watch } from "vue";
+import { computed } from "vue";
 import { ArrowLeft, ExternalLink, RefreshCw, ShieldAlert } from "@lucide/vue";
 import Github from "@/components/icons/GithubIcon.vue";
 import { canManage, currentUser } from "@/stores/authState";
@@ -295,10 +295,8 @@ import {
   commentPreviewKey,
   commentTargetText,
   consumeStatusText,
-  findingFeedbackPromptTitle,
   findingFeedbackStatusClass,
   findingFeedbackStatusText,
-  humanReviewActionText,
   publicationBatchStatusClass,
   publicationBatchStatusText,
   publicationItemStatusClass,
@@ -307,21 +305,11 @@ import {
   refreshStatusText as mapRefreshStatusText,
   repositoryText,
   sourceText,
+  useReviewDetailViewModel,
   useReviewDetailDerivedCollections,
-  useReviewDetailAttemptComparison,
-  useReviewDetailFindingFeedback,
-  useReviewDetailGithubCommentPublishConfirm,
-  useReviewDetailGithubComments,
-  useReviewDetailHumanReview,
-  useReviewDetailHumanReviewDisplay,
-  useReviewDetailLoader,
   useReviewDetailLlmDisplay,
-  useReviewDetailPolling,
-  useReviewDetailRetry,
-  useReviewDetailSectionLoaders,
   writebackCheckStatusText as mapWritebackCheckStatusText
 } from "@/features/review-detail";
-import type { ReviewStatus } from "@/types";
 import {
   assessmentStatusClass,
   assessmentStatusDescription,
@@ -334,23 +322,33 @@ import { formatDateTime } from "@/utils/dateTime";
 const canReadCodeowners = computed(() => enterpriseEditionEnabled
   && new Set(["ADMIN", "PLATFORM_ADMIN", "TENANT_ADMIN", "REVIEWER"]).has(currentUser.value?.role?.toUpperCase() || ""));
 
-const POLL_INTERVAL_MS = 5000;
 const MAX_POLL_FAILURES = 3;
-const MAX_POLL_INTERVAL_MS = 30000;
 
 const router = useRouter();
 const route = useRoute();
 
-const isTerminalReviewStatus = (status?: ReviewStatus | string) =>
-  status === "completed"
-    || status === "failed"
-    || status === "superseded"
-    || status === "pending_human_review"
-    || status === "approved"
-    || status === "changes_requested"
-    || status === "rejected";
-
 const {
+  canManageHotTask,
+  canPublishGithubComments,
+  canRetryTask,
+  failureReason,
+  confirmRetryReview,
+  retryingTask,
+  canSubmitHumanReview,
+  humanReviewPublishBlockReason,
+  humanReviewStatusClass,
+  humanReviewStatusText,
+  submittingHumanReview,
+  submitHumanReviewDecision,
+  loadGithubCommentPreviewPage,
+  loadGithubCommentPreviewCommentableOnly,
+  loadGithubCommentPublicationHistoryPage,
+  toggleGithubCommentHistoryBatch,
+  changeGithubCommentHistoryItemsPage,
+  feedbackSavingId,
+  submitFindingFeedback,
+  confirmPublishGithubComments,
+  loadGithubCommentData,
   githubCommentPreview,
   githubCommentPublishResult,
   historyError,
@@ -358,10 +356,6 @@ const {
   historyPageSize,
   historyLoading,
   historyItems,
-  toggleHistoryBatch,
-  changeHistoryItemsPage,
-  loadGithubCommentPreview,
-  loadGithubCommentPublicationHistory,
   previewError,
   previewCommentableOnly,
   previewLoading,
@@ -370,79 +364,26 @@ const {
   publishedCommentCount,
   publishingComments,
   writebackCheck,
-  clearGithubCommentPreviewAndHistory,
-  clearGithubCommentState,
-  publishGithubCommentsForTask,
-  resetGithubCommentPublishResult,
-  stopGithubCommentPublishPolling
-} = useReviewDetailGithubComments();
-let stopPolling = () => {};
-let syncPolling = () => {};
-let resetDetailSections = () => {};
-let loadAttemptComparison: (page?: number) => Promise<void> = async () => {};
-
-function afterDetailSummaryLoaded() {
-  resetDetailSections();
-  void loadAttemptComparison();
-}
-
-const {
-  cancelPendingRequests,
   errorMessage,
+  currentPollIntervalSeconds,
   lastRefreshedAt,
   loading,
   loadDetail,
   pollErrorMessage,
   pollFailureCount,
-  pollReviewStatus,
   refreshDetail,
   selectedTask,
-  silentRefreshing
-} = useReviewDetailLoader({
-  afterDetailLoaded: afterDetailSummaryLoaded,
-  clearGithubCommentPreviewAndHistory,
-  getTaskId: () => Number(route.params.id),
-  isTerminalReviewStatus,
-  maxPollFailures: MAX_POLL_FAILURES,
-  resetGithubCommentPublishResult,
-  stopPolling: () => stopPolling(),
-  syncPolling: () => syncPolling()
-});
-const canPublishGithubComments = computed(() =>
-  Boolean(
-    canManage.value
-      && !isArchivedTask.value
-      && !isSupersededTask.value
-      && !previewLoading.value
-      && !previewError.value
-      && githubCommentPreview.value?.taskId === Number(route.params.id)
-      && githubCommentPreview.value?.commentableCount
-      && writebackCheck.value?.tokenConfigured !== false
-      && isHumanReviewPublishAllowed.value
-  )
-);
-
-const emptyDescription = computed(() => (errorMessage.value ? "审查详情加载失败" : "未找到审查任务"));
-const isTerminalTask = computed(() => {
-  return isTerminalReviewStatus(selectedTask.value?.status);
-});
-const isArchivedTask = computed(() => selectedTask.value?.archived === true);
-const isSupersededTask = computed(() => selectedTask.value?.status === "superseded");
-const canLoadGithubComments = computed(() =>
-  isTerminalTask.value && !isSupersededTask.value && !isArchivedTask.value
-);
-const attemptComparison = useReviewDetailAttemptComparison({ selectedTask, isArchivedTask });
-const {
-  attempts: attemptComparisonAttempts,
-  comparison: attemptComparisonResult,
-  error: attemptComparisonError,
-  loading: attemptComparisonLoading,
-  page: attemptComparisonPage,
-  pageSize: attemptComparisonPageSize
-} = attemptComparison;
-loadAttemptComparison = attemptComparison.load;
-const sectionLoaders = useReviewDetailSectionLoaders({ isArchivedTask, selectedTask });
-const {
+  silentRefreshing,
+  isTerminalTask,
+  isArchivedTask,
+  isSupersededTask,
+  canLoadGithubComments,
+  attemptComparisonAttempts,
+  attemptComparisonResult,
+  attemptComparisonError,
+  attemptComparisonLoading,
+  attemptComparisonPage,
+  attemptComparisonPageSize,
   changedFilesLoaded,
   changedFilesLoading,
   changedFilesPage,
@@ -462,16 +403,11 @@ const {
   missingTestsLoading,
   missingTestsPage,
   timelineLoaded,
-  timelineLoading
-} = sectionLoaders;
-resetDetailSections = sectionLoaders.resetDetailSections;
-const canManageHotTask = computed(() => canManage.value && !isArchivedTask.value);
+  timelineLoading,
+  loadAttemptComparison
+} = useReviewDetailViewModel({ getTaskId: () => Number(route.params.id) });
+const emptyDescription = computed(() => (errorMessage.value ? "审查详情加载失败" : "未找到审查任务"));
 const shouldPollTask = computed(() => Boolean(selectedTask.value && !isTerminalTask.value));
-const canRetryTask = computed(() =>
-  (selectedTask.value?.status === "failed" || selectedTask.value?.status === "superseded")
-    && !isArchivedTask.value
-);
-const failureReason = computed(() => selectedTask.value?.failureReason ?? "");
 const failureSuggestion = computed(() => selectedTask.value?.failureSuggestion ?? "");
 const failureBannerTitle = computed(() => isSupersededTask.value ? "审查已过期" : "审查失败");
 const retryButtonText = computed(() => isSupersededTask.value ? "按最新提交重评" : "重试");
@@ -527,28 +463,6 @@ const retryTooltip = computed(() => {
   }
   return failureSuggestion.value || "重新入队执行审查";
 });
-const { confirmRetryReview, retryingTask } = useReviewDetailRetry({
-  canManage,
-  getTaskId: () => Number(route.params.id),
-  canRetryTask,
-  clearGithubCommentState,
-  failureReason,
-  refreshDetail: () => loadDetail({ silent: true, resetPublishResult: true }),
-  resetPollFailure: () => {
-    pollFailureCount.value = 0;
-    pollErrorMessage.value = "";
-  },
-  selectedTask
-});
-const {
-  canSubmitHumanReview,
-  humanReviewPublishBlockReason,
-  humanReviewStatusClass,
-  humanReviewStatusText,
-  isHumanReviewPublishAllowed
-} = useReviewDetailHumanReviewDisplay({
-  selectedTask
-});
 const refreshStatusText = computed(() => {
   return mapRefreshStatusText({
     currentPollIntervalSeconds: currentPollIntervalSeconds.value,
@@ -561,23 +475,6 @@ const refreshStatusText = computed(() => {
     maxPollFailures: MAX_POLL_FAILURES
   });
 });
-
-const currentPollIntervalMs = computed(() =>
-  Math.min(POLL_INTERVAL_MS * 2 ** pollFailureCount.value, MAX_POLL_INTERVAL_MS)
-);
-const currentPollIntervalSeconds = computed(() => currentPollIntervalMs.value / 1000);
-
-const polling = useReviewDetailPolling({
-  getTaskId: () => Number(route.params.id),
-  currentPollIntervalMs,
-  maxPollFailures: MAX_POLL_FAILURES,
-  pollFailureCount,
-  pollReviewStatus: () => pollReviewStatus(),
-  shouldPollTask
-});
-const { cleanupPolling } = polling;
-stopPolling = polling.stopPolling;
-syncPolling = polling.syncPolling;
 
 const writebackCheckStatusText = computed(() => {
   return writebackCheck.value ? mapWritebackCheckStatusText(writebackCheck.value.status) : "";
@@ -592,77 +489,6 @@ const writebackCheckStatusClass = computed(() => {
     return "warning";
   }
   return "danger";
-});
-
-const { submittingHumanReview, submitHumanReviewDecision } = useReviewDetailHumanReview({
-  canManage,
-  getTaskId: () => Number(route.params.id),
-  canSubmitHumanReview,
-  humanReviewActionText,
-  refreshDetail: () => loadDetail({ silent: true, resetPublishResult: true, force: true }),
-  selectedTask
-});
-
-const refreshLoadedGithubCommentPreview = async (id: number) => {
-  if (!githubCommentPreview.value) {
-    return;
-  }
-  await loadGithubCommentPreview(id);
-};
-
-const loadGithubCommentPreviewPage = async (page: number) => {
-  const id = Number(route.params.id);
-  if (!Number.isFinite(id) || !canLoadGithubComments.value || !githubCommentPreview.value) {
-    return;
-  }
-  await loadGithubCommentPreview(id, { page });
-};
-
-const loadGithubCommentPreviewCommentableOnly = async (commentableOnly: boolean) => {
-  const id = Number(route.params.id);
-  if (!Number.isFinite(id) || !canLoadGithubComments.value) {
-    return;
-  }
-  await loadGithubCommentPreview(id, { page: 1, commentableOnly });
-};
-
-const loadGithubCommentPublicationHistoryPage = async (page: number) => {
-  const id = Number(route.params.id);
-  if (!Number.isFinite(id) || !canLoadGithubComments.value) {
-    return;
-  }
-  await loadGithubCommentPublicationHistory(id, { page });
-};
-
-const toggleGithubCommentHistoryBatch = async (batchId: number) => {
-  const id = Number(route.params.id);
-  if (Number.isFinite(id) && canLoadGithubComments.value) await toggleHistoryBatch(id, batchId);
-};
-
-const changeGithubCommentHistoryItemsPage = async (batchId: number, direction: "next" | "previous") => {
-  const id = Number(route.params.id);
-  if (Number.isFinite(id) && canLoadGithubComments.value) await changeHistoryItemsPage(id, batchId, direction);
-};
-
-const { feedbackSavingId, submitFindingFeedback, cancelFindingFeedback } = useReviewDetailFindingFeedback({
-  canManage: canManageHotTask,
-  findingFeedbackPromptTitle,
-  isTerminalTask,
-  loadGithubCommentPreview: refreshLoadedGithubCommentPreview,
-  resetGithubCommentPublishResult,
-  selectedTask
-});
-
-const { confirmPublishGithubComments } = useReviewDetailGithubCommentPublishConfirm({
-  canManage,
-  canPublishGithubComments,
-  githubCommentPreview,
-  loadGithubCommentPreview,
-  loadGithubCommentPublicationHistory,
-  publishGithubCommentsForTask,
-  publishingComments,
-  selectedTask,
-  writebackCheck
 });
 
 const goBack = () => {
@@ -684,38 +510,4 @@ const openPrUrl = () => {
   }
 };
 
-const loadGithubCommentData = async () => {
-  const id = Number(route.params.id);
-  if (!Number.isFinite(id) || !canLoadGithubComments.value) {
-    return;
-  }
-  await Promise.all([
-    loadGithubCommentPreview(id, { page: 1 }),
-    loadGithubCommentPublicationHistory(id, { page: 1 })
-  ]);
-};
-
-watch(
-  () => route.params.id,
-  () => {
-    cancelFindingFeedback();
-    clearGithubCommentState();
-    stopGithubCommentPublishPolling();
-    stopPolling();
-    resetDetailSections();
-    void loadDetail();
-  }
-);
-
-onMounted(() => {
-  void loadDetail();
-});
-
-onBeforeUnmount(() => {
-  cancelFindingFeedback();
-  cancelPendingRequests();
-  resetDetailSections();
-  stopGithubCommentPublishPolling();
-  cleanupPolling();
-});
 </script>

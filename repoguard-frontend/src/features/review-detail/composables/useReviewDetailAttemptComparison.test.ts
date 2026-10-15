@@ -27,8 +27,8 @@ describe("useReviewDetailAttemptComparison", () => {
 
     await state.load();
 
-    expect(loadAttempts).toHaveBeenCalledWith(7);
-    expect(loadComparison).toHaveBeenCalledWith(7, 11, { page: 1, pageSize: 8 });
+    expect(loadAttempts).toHaveBeenCalledWith(7, { signal: expect.any(AbortSignal) });
+    expect(loadComparison).toHaveBeenCalledWith(7, 11, { page: 1, pageSize: 8 }, { signal: expect.any(AbortSignal) });
     expect(state.attempts.value).toHaveLength(2);
     expect(state.comparison.value?.candidateAttemptId).toBe(11);
   });

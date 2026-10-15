@@ -58,8 +58,8 @@ export const fetchReviewTimeline = (
   options?: ApiRequestOptions
 ) => apiRequest("fetchReviewTimeline", { id, ...params }, options);
 
-export const fetchReviewExecutionAttempts = (taskId: number) =>
-  apiRequest("fetchReviewExecutionAttempts", { taskId });
+export const fetchReviewExecutionAttempts = (taskId: number, options?: ApiRequestOptions) =>
+  apiRequest("fetchReviewExecutionAttempts", { taskId }, options);
 
 export const fetchReviewExecutionAttemptResult = (
   taskId: number,
@@ -70,8 +70,9 @@ export const fetchReviewExecutionAttemptResult = (
 export const fetchReviewAttemptComparison = (
   taskId: number,
   candidateAttemptId: number,
-  params?: { baselineAttemptId?: number; page?: number; pageSize?: number }
-) => apiRequest("fetchReviewAttemptComparison", { taskId, candidateAttemptId, ...params });
+  params?: { baselineAttemptId?: number; page?: number; pageSize?: number },
+  options?: ApiRequestOptions
+) => apiRequest("fetchReviewAttemptComparison", { taskId, candidateAttemptId, ...params }, options);
 
 export const fetchReviewRepositories = (options?: ApiRequestOptions) =>
   apiRequest("fetchReviewRepositories", undefined, options);

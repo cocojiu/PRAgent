@@ -133,7 +133,7 @@ export const useReviewDetailLoader = ({
     }
   };
 
-  const pollReviewStatus = async () => {
+  const pollReviewStatus = async (reloadTerminal = true) => {
     const id = getTaskId();
     if (!Number.isFinite(id)) {
       return;
@@ -156,7 +156,7 @@ export const useReviewDetailLoader = ({
       pollErrorMessage.value = "";
       pollFailureCount.value = 0;
       lastRefreshedAt.value = formatRefreshTime();
-      if (isTerminalReviewStatus(status.status as ReviewStatus)) {
+      if (reloadTerminal && isTerminalReviewStatus(status.status as ReviewStatus)) {
         await loadDetail({ silent: true, resetPublishResult: false, force: true });
         return;
       }
@@ -207,6 +207,7 @@ export const useReviewDetailLoader = ({
     cancelPendingRequests,
     loadDetail,
     pollReviewStatus,
-    refreshDetail
+    refreshDetail,
+    refreshStatusSummary: () => pollReviewStatus(false)
   };
 };
