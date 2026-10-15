@@ -247,6 +247,7 @@ jobs:
     env:
       REPOGUARD_RUN_INTEGRATION_TESTS: 'true'
       REPOGUARD_RUN_PREFLIGHT_INTEGRATION: 'true'
+      REPOGUARD_MYSQL_DIAGNOSTICS_PASSWORD: integration-root
       SPRING_DATASOURCE_URL: jdbc:mysql://127.0.0.1:3306/repoguard_integration?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&useSSL=false&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true
       SPRING_DATASOURCE_USERNAME: repoguard
       SPRING_DATASOURCE_PASSWORD: integration-db
@@ -281,21 +282,22 @@ jobs:
           echo "REPOGUARD_ADMIN_API_KEY=${admin_api_key}" >> "$GITHUB_ENV"
       - name: Run production-like context tests
         working-directory: repoguard-backend
-        run: ./mvnw -B -Dtest=ProductionRuntimeContextIntegrationTest,PreflightPreviewMysqlIntegrationTest,PreflightTransportIntegrationTest test 2>&1
+        run: ./mvnw -B -Dtest=ProductionRuntimeContextIntegrationTest,PreflightPreviewMysqlIntegrationTest,PreflightTransportIntegrationTest,ReviewMemberAssignmentMysqlIntegrationTest test 2>&1
 
-      - name: Require actual online CLI integration execution
+      - name: Require actual online CLI and assignment integration execution
         shell: pwsh
         working-directory: repoguard-backend
         run: |
           $expectedSuites = @{
             'integration.PreflightPreviewMysqlIntegrationTest' = 5
             'review.PreflightTransportIntegrationTest' = 1
+            'integration.ReviewMemberAssignmentMysqlIntegrationTest' = 7
           }
           foreach ($suiteName in $expectedSuites.Keys) {
             [xml]$testReport = Get-Content -LiteralPath "target/surefire-reports/TEST-com.repoguard.agent.$suiteName.xml" -Raw
             $suite = $testReport.testsuite
             if ([int]$suite.tests -ne $expectedSuites[$suiteName] -or [int]$suite.skipped -ne 0 -or [int]$suite.failures -ne 0 -or [int]$suite.errors -ne 0) {
-              throw "Online CLI $suiteName must execute and pass without skipping."
+              throw "Integration $suiteName must execute and pass without skipping."
             }
           }
 
