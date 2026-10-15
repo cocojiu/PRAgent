@@ -106,7 +106,7 @@ public class ReviewProgressStreamService {
             group.future = scheduler.scheduleWithFixedDelay(() -> tick(taskKey, group),
                 limits.sampleIntervalMs, limits.sampleIntervalMs, TimeUnit.MILLISECONDS);
         }
-        scheduler.execute(() -> tick(taskKey, group, false));
+        connection.initialSample = scheduler.schedule(() -> tick(taskKey, group, false), 0, TimeUnit.MILLISECONDS);
         return emitter;
     }
 
@@ -135,7 +135,8 @@ public class ReviewProgressStreamService {
     }
 
     private synchronized void release(TaskKey taskKey, SampleGroup group, String key) {
-        connections.remove(key);
+        Connection removed = connections.remove(key);
+        if (removed != null && removed.initialSample != null) removed.initialSample.cancel(false);
         group.subscribers.remove(key);
         if (group.subscribers.isEmpty() && groups.remove(taskKey, group) && group.future != null) {
             group.future.cancel(false);
@@ -246,6 +247,7 @@ public class ReviewProgressStreamService {
         private final AuthenticatedPrincipal principal;
         private final long tenantId;
         private final long startedAt = System.nanoTime();
+        private volatile ScheduledFuture<?> initialSample;
         private long cursor;
         private String previousState;
 

@@ -67,6 +67,10 @@ class ReviewProgressStreamServiceTest {
         streams.close();
         var scheduler = mock(java.util.concurrent.ScheduledThreadPoolExecutor.class);
         java.util.List<Runnable> ticks = new java.util.ArrayList<>();
+        java.util.concurrent.ScheduledFuture<?> firstWarmup = mock(java.util.concurrent.ScheduledFuture.class);
+        java.util.concurrent.ScheduledFuture<?> secondWarmup = mock(java.util.concurrent.ScheduledFuture.class);
+        org.mockito.Mockito.doReturn(firstWarmup, secondWarmup).when(scheduler).schedule(any(Runnable.class),
+            org.mockito.ArgumentMatchers.eq(0L), org.mockito.ArgumentMatchers.eq(java.util.concurrent.TimeUnit.MILLISECONDS));
         when(scheduler.scheduleWithFixedDelay(any(Runnable.class), org.mockito.ArgumentMatchers.anyLong(),
             org.mockito.ArgumentMatchers.anyLong(), any(java.util.concurrent.TimeUnit.class))).thenAnswer(call -> {
                 ticks.add(call.getArgument(0));
@@ -90,6 +94,8 @@ class ReviewProgressStreamServiceTest {
         org.mockito.Mockito.clearInvocations(tasks, timelines);
         ticks.getFirst().run();
         org.mockito.Mockito.verifyNoInteractions(tasks, timelines);
+        verify(firstWarmup).cancel(false);
+        verify(secondWarmup, never()).cancel(false);
         when(accounts.findById(8L)).thenReturn(null);
         org.mockito.Mockito.clearInvocations(tasks, timelines);
         ticks.getFirst().run();
