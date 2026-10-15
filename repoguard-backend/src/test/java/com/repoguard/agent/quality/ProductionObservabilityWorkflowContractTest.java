@@ -99,6 +99,8 @@ class ProductionObservabilityWorkflowContractTest {
             "persistence['productionConnections'] == persistence['publishedPorts'] == 0",
             "phases[1]['retainedLogs'] == phases[2]['retainedLogs']",
             "loaded[0]['Id'] == identity",
+            "persistence['runtimeConfigSha256'] == hashlib.sha256(runtime_config.read_bytes()).hexdigest()",
+            "persistence['memoryLimitBytes'] == 384 * 1024 * 1024",
             "'go1.26.9' in version"
         );
     }

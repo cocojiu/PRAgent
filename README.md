@@ -384,7 +384,7 @@ $env:REPOGUARD_LOG_PATH = "../logs/backend"
 
 ### 可选 Loki 安全候选交付
 
-`Production Observability Image Security` 默认只验证镜像与配置。手动设置 `build_loki_candidate=true` 可从固定官方源码和修复依赖构建候选，要求 HIGH/CRITICAL 为零，并验证现有配置、持久日志升级和回退。设置 `archive_loki_candidate=true` 还会保存同一受检镜像，由独立 runner 核对归档校验和、镜像 ID、SBOM 和持久化证据后实际加载，归档与证据保留7天。
+`Production Observability Image Security` 默认只验证镜像与配置。手动设置 `build_loki_candidate=true` 可从固定官方源码和修复依赖构建候选，要求 HIGH/CRITICAL 为零，并验证现有配置，以及384MiB/0.50CPU下运行指标规则的实际加载、持久日志升级和回退。设置 `archive_loki_candidate=true` 还会保存同一受检镜像，由独立 runner 核对归档校验和、镜像 ID、SBOM 和持久化证据后实际加载，归档与证据保留7天。
 
 只有在 `main` 手动设置 `publish_loki_candidate=true` 才会发布候选源镜像；该选项包含前述全部验证。发布作业加载经过验证的原镜像归档，不重新构建，再按不可变 digest 回读并核对镜像 ID，生成镜像来源证明、SBOM 证明及签名的 `loki-source-manifest`，清单保留90天。PR、push 和其他分支不能发布；该工作流不连接生产或修改 Compose 中的镜像。
 

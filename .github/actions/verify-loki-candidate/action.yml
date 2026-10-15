@@ -55,11 +55,17 @@ runs:
 
         persistence = read('persistence-result.json')
         assert persistence['productionConnections'] == persistence['publishedPorts'] == 0
+        runtime_config = pathlib.Path(os.environ['GITHUB_WORKSPACE']) / 'config/observability/loki-runtime-metrics.yml'
+        assert persistence['runtimeConfigSha256'] == hashlib.sha256(runtime_config.read_bytes()).hexdigest()
+        assert persistence['memoryLimitBytes'] == 384 * 1024 * 1024 and persistence['cpuLimit'] == 0.50
+        assert len(persistence['expectedRules']) >= 6
         phases = persistence['phases']
         assert [p['phase'] for p in phases] == ['baseline', 'candidate', 'rollback']
         assert phases[1]['imageId'] == identity
         assert len(phases[1]['retainedLogs']) == 2
         assert phases[1]['retainedLogs'] == phases[2]['retainedLogs']
+        assert all(p['memoryLimitBytes'] == persistence['memoryLimitBytes'] for p in phases)
+        assert all(set(persistence['expectedRules']) <= set(p['loadedRules']) for p in phases)
         assert set(phases[0]['retainedLogs']) <= set(phases[2]['retainedLogs'])
 
         archive = directory / 'image.tar'
@@ -78,7 +84,9 @@ runs:
             text=True, stderr=subprocess.STDOUT, timeout=30)
         assert '3.7.8-repoguard.1' in version and 'go1.26.9' in version
         result = {'imageId': identity, 'archiveSha256': digest, 'highCriticalCount': 0,
-            'sameCheckedImage': True, 'persistedLogsRetainedAfterRollback': 2}
+            'sameCheckedImage': True, 'persistedLogsRetainedAfterRollback': 2,
+            'runtimeConfigSha256': persistence['runtimeConfigSha256'],
+            'memoryLimitBytes': persistence['memoryLimitBytes'], 'runtimeRuleCount': len(persistence['expectedRules'])}
         (directory / 'transfer-verification.json').write_text(json.dumps(result, indent=2))
         with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
             output.write('image_id=' + identity + '\narchive_sha256=' + digest + '\n')

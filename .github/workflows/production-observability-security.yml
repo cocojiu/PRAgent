@@ -298,7 +298,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import json, os, pathlib, subprocess, time, urllib.error, urllib.parse, urllib.request
+          import hashlib, json, os, pathlib, re, subprocess, time, urllib.error, urllib.parse, urllib.request
 
           evidence = pathlib.Path('loki-candidate-evidence')
           owner = 'repoguard-loki-' + os.environ['GITHUB_RUN_ID'] + '-' + os.environ['GITHUB_RUN_ATTEMPT']
@@ -309,6 +309,11 @@ jobs:
           results = []
           expected = set()
           start = time.time_ns() - 60_000_000_000
+          runtime_config = pathlib.Path('config/observability/loki-runtime-metrics.yml').resolve()
+          runtime_rules = pathlib.Path('config/observability/runtime-rules').resolve()
+          expected_rules = set(re.findall(r'^\s+- alert: ([A-Za-z0-9_]+)$',
+              (runtime_rules / 'fake/repoguard-runtime.yml').read_text(), re.MULTILINE))
+          assert len(expected_rules) >= 6
 
           def docker(*args):
               return subprocess.check_output(['docker', *args], text=True, stderr=subprocess.STDOUT, timeout=120).strip()
@@ -344,18 +349,32 @@ jobs:
                                           ('rollback', baseline, False)]:
                   active = owner + '-' + phase
                   docker('run', '-d', '--name', active, '--network', network, '--read-only',
-                      '--memory', '768m', '--cpus', '1', '--cap-drop', 'ALL',
+                      '--memory', '384m', '--cpus', '0.50', '--cap-drop', 'ALL',
                       '--security-opt', 'no-new-privileges', '--tmpfs', '/tmp:rw,noexec,nosuid,size=32m',
                       '--label', 'repoguard.loki-owner=' + owner,
                       '-v', volume + ':/loki',
-                      '-v', str(pathlib.Path('config/observability/loki.yml').resolve()) + ':/etc/loki/loki.yml:ro',
+                      '-v', str(runtime_config) + ':/etc/loki/loki.yml:ro',
+                      '-v', str(runtime_rules) + ':/etc/loki/runtime-rules:ro',
                       image, '-config.file=/etc/loki/loki.yml', '-ingester.wal-dir=/loki/wal')
                   state = json.loads(docker('inspect', active))[0]
                   assert state['Config']['User'] == '10001'
                   assert state['HostConfig']['ReadonlyRootfs'] is True
+                  assert state['HostConfig']['Memory'] == 384 * 1024 * 1024
+                  assert state['HostConfig']['NanoCpus'] == 500_000_000
                   assert not any(binding for binding in (state['NetworkSettings']['Ports'] or {}).values())
                   base = 'http://' + state['NetworkSettings']['Networks'][network]['IPAddress'] + ':3100'
                   wait_for(lambda: request(base, '/ready')[0] == 200, phase + ' readiness')
+                  loaded_rules = set()
+
+                  def all_rules_loaded():
+                      status, body = request(base, '/prometheus/api/v1/rules')
+                      rules = json.loads(body)
+                      assert status == 200 and rules['status'] == 'success'
+                      loaded_rules.clear()
+                      loaded_rules.update(rule['name'] for group in rules['data']['groups'] for rule in group['rules'])
+                      return expected_rules <= loaded_rules
+
+                  wait_for(all_rules_loaded, phase + ' runtime rule loading')
                   if write:
                       message = phase + '-' + owner
                       status, _ = request(base, '/loki/api/v1/push', {'streams': [{
@@ -374,13 +393,19 @@ jobs:
                       return expected <= messages
 
                   wait_for(has_all_logs, phase + ' persisted log query')
-                  results.append({'phase': phase, 'imageId': state['Image'], 'retainedLogs': sorted(expected)})
+                  results.append({'phase': phase, 'imageId': state['Image'], 'retainedLogs': sorted(expected),
+                      'loadedRules': sorted(loaded_rules), 'memoryLimitBytes': state['HostConfig']['Memory']})
                   docker('stop', '--time', '45', active)
+                  stopped = json.loads(docker('inspect', active))[0]['State']
+                  assert not stopped.get('OOMKilled') and stopped['ExitCode'] == 0
                   (evidence / (phase + '.log')).write_text(docker('logs', active))
                   docker('rm', active)
                   active = None
               (evidence / 'persistence-result.json').write_text(json.dumps({
-                  'productionConnections': 0, 'publishedPorts': 0, 'phases': results}, indent=2))
+                  'productionConnections': 0, 'publishedPorts': 0, 'phases': results,
+                  'runtimeConfigSha256': hashlib.sha256(runtime_config.read_bytes()).hexdigest(),
+                  'memoryLimitBytes': 384 * 1024 * 1024, 'cpuLimit': 0.50,
+                  'expectedRules': sorted(expected_rules)}, indent=2))
           finally:
               if active:
                   try:
@@ -523,6 +548,7 @@ jobs:
           evidence = {}
           for name in ('trivy.json', 'sbom.cdx.json', 'persistence-result.json', 'transfer-verification.json'):
               evidence[name] = hashlib.sha256((root / name).read_bytes()).hexdigest()
+          runtime = json.loads((root / 'persistence-result.json').read_text())
           manifest = {'formatVersion': 1, 'version': '3.7.8-repoguard.1',
               'source': {'repository': os.environ['GITHUB_REPOSITORY'],
                   'workflow': '.github/workflows/production-observability-security.yml',
@@ -534,6 +560,9 @@ jobs:
               'checks': {'highCriticalCount': 0, 'configurationValidation': 'passed',
                   'persistenceUpgradeRollback': 'passed', 'independentImageTransfer': 'passed',
                   'imageProvenance': 'attested', 'sbom': 'attested'},
+              'runtime': {'configSha256': runtime['runtimeConfigSha256'],
+                  'memoryLimitBytes': runtime['memoryLimitBytes'], 'cpuLimit': runtime['cpuLimit'],
+                  'expectedRules': runtime['expectedRules']},
               'archiveSha256': os.environ['CHECKED_ARCHIVE_SHA256'], 'evidenceSha256': evidence}
           pathlib.Path('loki-source-manifest.json').write_text(json.dumps(manifest, indent=2))
           PY
