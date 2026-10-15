@@ -7,7 +7,7 @@
     "externalDatabaseSupported": true,
     "publishedMigrationPolicy": "IMMUTABLE",
     "newInstallationStrategy": "VALIDATED_SCHEMA_SNAPSHOT_THEN_BASELINE",
-    "candidateVersion": 106,
+    "candidateVersion": 107,
     "requiredEvidence": [
       "empty database migration to the candidate version",
       "schema structure diff against the supported production shape",
@@ -437,6 +437,19 @@
       "compatibilityNote": "ordinary rollback semantics are unchanged; safety enforcement requires all sending workers to use the new admission gate",
       "interruptedRecovery": "inspect Flyway, both nullable columns and the audit-action check before a reviewed forward fix or backup restore; do not blindly rerun after partial DDL; keep sending workers stopped if revocation enforcement is uncertain",
       "rollbackStrategy": "retain safety evidence and additive columns; stop sending before an old-binary rollback because old workers do not enforce the safety flag"
+    },
+    {
+      "version": 107,
+      "file": "V107__structured_review_failure.sql",
+      "phase": "EXPAND",
+      "estimatedRows": "one nullable JSON column on review_task; no historical failure inference or backfill",
+      "lockType": "brief additive-column metadata DDL; inspect online DDL behavior for the deployed MySQL version",
+      "maxDurationSeconds": 300,
+      "maxDiskMegabytes": 256,
+      "nMinusOneCompatible": true,
+      "compatibilityNote": "old workers leave the column null and readers retain the legacy timeline adapter; new workers persist snapshots with terminal-state claim and attempt fences",
+      "interruptedRecovery": "inspect Flyway and column existence before a reviewed retry or forward repair; do not blindly repeat DDL",
+      "rollbackStrategy": "roll back application while retaining the nullable column and captured failure evidence; no column drop or historical rewrite"
     }
   ]
 }

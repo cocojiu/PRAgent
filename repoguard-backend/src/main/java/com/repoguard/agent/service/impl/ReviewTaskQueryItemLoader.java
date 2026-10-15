@@ -1,5 +1,6 @@
 package com.repoguard.agent.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.dto.ReviewTaskListItem;
@@ -49,6 +50,26 @@ public class ReviewTaskQueryItemLoader {
 
     public List<ReviewTimeline> loadTimelines(Long taskId) {
         return timelineQueryService.loadByTaskId(taskId);
+    }
+
+    public ReviewTimelineItem loadLatestTimelineItem(Long taskId) {
+        return timelineQueryService.latestItem(timelineQueryService.loadLatestByTaskId(taskId, 1));
+    }
+
+    public ReviewTask loadStatusTask(Long taskId) {
+        return reviewTaskMapper.selectOne(new LambdaQueryWrapper<ReviewTask>()
+            .select(ReviewTask::getId, ReviewTask::getStatus, ReviewTask::getRiskLevel,
+                ReviewTask::getLlmStatus, ReviewTask::getDurationSeconds, ReviewTask::getCreatedAt,
+                ReviewTask::getStartedAt, ReviewTask::getFinishedAt, ReviewTask::getAssessmentStatus,
+                ReviewTask::getHumanReviewRequired, ReviewTask::getHumanReviewStatus,
+                ReviewTask::getHumanReviewNote, ReviewTask::getHumanReviewBy, ReviewTask::getHumanReviewedAt,
+                ReviewTask::getCurrentAttemptId, ReviewTask::getFailureDetailsJson)
+            .eq(ReviewTask::getId, taskId));
+    }
+
+    public ReviewTaskListItem assembleStatus(ReviewTask task) {
+        return assemble(task, timelineQueryService.loadLatestFailures(List.of(task))
+            .getOrDefault(task.getId(), List.of()));
     }
 
     public ReviewTimelineItem latestTimelineItem(List<ReviewTimeline> timelines) {

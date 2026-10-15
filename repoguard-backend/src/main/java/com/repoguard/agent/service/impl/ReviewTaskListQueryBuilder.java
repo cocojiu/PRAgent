@@ -64,7 +64,8 @@ public class ReviewTaskListQueryBuilder {
             ReviewTask::getTriggerSource, ReviewTask::getCreatedAt, ReviewTask::getDurationSeconds,
             ReviewTask::getHumanReviewRequired, ReviewTask::getHumanReviewStatus,
             ReviewTask::getHumanReviewNote, ReviewTask::getHumanReviewBy,
-            ReviewTask::getHumanReviewedAt, ReviewTask::getAssessmentStatus);
+            ReviewTask::getHumanReviewedAt, ReviewTask::getAssessmentStatus,
+            ReviewTask::getCurrentAttemptId, ReviewTask::getFailureDetailsJson);
     }
 
     public boolean hasKeysetCursor(ReviewQuery query) {

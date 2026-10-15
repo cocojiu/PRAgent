@@ -1,5 +1,7 @@
 package com.repoguard.agent.review.quality;
 
+import com.repoguard.agent.review.quality.LlmModelReleaseRuntimeSupport.ReleaseQualityPolicy;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.common.BusinessException;
@@ -40,12 +42,6 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class LlmModelReleaseService {
-    private static final BigDecimal MIN_PRECISION = new BigDecimal("0.90");
-    private static final BigDecimal MIN_RECALL = new BigDecimal("0.80");
-    private static final BigDecimal MIN_ANCHOR_RATE = new BigDecimal("0.95");
-    private static final BigDecimal MAX_DUPLICATE_RATE = new BigDecimal("0.05");
-    private static final BigDecimal MAX_PARSE_FAILURE_RATE = new BigDecimal("0.05");
-    private static final long MAX_P95_LATENCY_MS = 15_000L;
     private static final int MIN_CANARY_PERCENT = 1;
     private final LlmQualityComparisonProvider qualityComparisonProvider;
     private final LlmModelReleaseRepository releaseRepository;
@@ -264,14 +260,10 @@ public class LlmModelReleaseService {
 
     private List<String> promotionBlockers(NormalizedRelease release) {
         List<String> blockers = new ArrayList<>(release.blockers());
-        if (!release.qualityGatePassed()) blockers.add("QUALITY_GATE_FAILED");
+        blockers.addAll(ReleaseQualityPolicy.blockerCodes(new ReleaseQualityPolicy.Evidence(
+            release.qualityGatePassed(), release.precisionRate(), release.recallRate(), release.anchorRate(),
+            release.duplicateRate(), release.parseFailureRate(), release.p95LatencyMs())));
         if (release.trafficPercent() < MIN_CANARY_PERCENT) blockers.add("TRAFFIC_PERCENT_MUST_BE_1_TO_100");
-        if (release.precisionRate().compareTo(MIN_PRECISION) < 0) blockers.add("PRECISION_BELOW_90");
-        if (release.recallRate().compareTo(MIN_RECALL) < 0) blockers.add("RECALL_BELOW_80");
-        if (release.anchorRate().compareTo(MIN_ANCHOR_RATE) < 0) blockers.add("ANCHOR_RATE_BELOW_95");
-        if (release.duplicateRate().compareTo(MAX_DUPLICATE_RATE) > 0) blockers.add("DUPLICATE_RATE_ABOVE_5");
-        if (release.parseFailureRate().compareTo(MAX_PARSE_FAILURE_RATE) > 0) blockers.add("PARSE_FAILURE_RATE_ABOVE_5");
-        if (release.p95LatencyMs() > MAX_P95_LATENCY_MS) blockers.add("P95_LATENCY_ABOVE_15000_MS");
         return blockers.stream().distinct().toList();
     }
 

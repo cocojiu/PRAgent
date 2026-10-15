@@ -542,7 +542,8 @@ class ReviewTaskExecutorImplTest {
             timelineRecorder,
             metricsRecorder,
             cacheInvalidator,
-            failureClassifier
+            failureClassifier,
+            new com.repoguard.agent.config.JacksonConfig().objectMapper()
         );
         ReviewExecutionSupersededHandler supersededHandler = new ReviewExecutionSupersededHandler(
             taskTerminalWriter,

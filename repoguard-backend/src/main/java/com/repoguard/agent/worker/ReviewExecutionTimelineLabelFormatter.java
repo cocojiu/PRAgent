@@ -1,5 +1,6 @@
 package com.repoguard.agent.worker;
 
+import com.repoguard.agent.common.SensitiveTextSanitizer;
 import com.repoguard.agent.github.GithubPullRequestHeadChangedException;
 import com.repoguard.agent.review.LlmParseStatus;
 import com.repoguard.agent.review.LlmStatus;
@@ -32,7 +33,7 @@ class ReviewExecutionTimelineLabelFormatter {
         if (message == null || message.isBlank()) {
             return "Review failed";
         }
-        return truncateLabel("Review failed: " + normalize(message));
+        return truncateLabel("Review failed: " + normalize(SensitiveTextSanitizer.sanitize(message)));
     }
 
     String reviewSuperseded(GithubPullRequestHeadChangedException ex) {

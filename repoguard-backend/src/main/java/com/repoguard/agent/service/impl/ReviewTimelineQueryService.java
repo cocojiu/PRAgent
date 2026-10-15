@@ -51,6 +51,7 @@ public class ReviewTimelineQueryService {
 
     public Map<Long, List<ReviewTimeline>> loadLatestFailures(List<ReviewTask> tasks) {
         List<Long> ids = tasks.stream().filter(task -> "FAILED".equals(task.getStatus()))
+            .filter(task -> task.getFailureDetailsJson() == null || task.getFailureDetailsJson().isBlank())
             .map(ReviewTask::getId).filter(java.util.Objects::nonNull).distinct().toList();
         if (ids.isEmpty()) {
             return Collections.emptyMap();

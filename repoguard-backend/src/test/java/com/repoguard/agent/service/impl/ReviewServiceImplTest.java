@@ -167,7 +167,7 @@ class ReviewServiceImplTest {
         ),
         new ReviewTaskQueryItemLoader(
             reviewTaskMapper,
-            new ReviewFailureSummaryResolver(),
+            new ReviewFailureSummaryResolver(new com.repoguard.agent.config.JacksonConfig().objectMapper()),
             reviewTimelineQueryService,
             reviewTaskListItemAssembler
         ),
@@ -970,9 +970,11 @@ class ReviewServiceImplTest {
         failedTask.setLlmStatus("FAILED");
         failedTask.setStartedAt(LocalDateTime.of(2026, 6, 12, 10, 0));
         failedTask.setFinishedAt(LocalDateTime.of(2026, 6, 12, 10, 1, 12));
-        when(reviewTaskMapper.selectById(521L)).thenReturn(failedTask);
+        when(reviewTaskMapper.selectOne(any())).thenReturn(failedTask);
         when(reviewTimelineMapper.selectList(any())).thenReturn(List.of(
-            timeline("Task queued"),
+            timeline("Review failed: 403 Resource not accessible by integration")
+        ));
+        when(reviewTimelineMapper.selectLatestFailures(List.of(521L))).thenReturn(List.of(
             timeline("Review failed: 403 Resource not accessible by integration")
         ));
 
@@ -990,7 +992,7 @@ class ReviewServiceImplTest {
 
     @Test
     void getReviewStatusRejectsMissingTask() {
-        when(reviewTaskMapper.selectById(404L)).thenReturn(null);
+        when(reviewTaskMapper.selectOne(any())).thenReturn(null);
 
         assertThatThrownBy(() -> service.getReviewStatus(404L))
             .isInstanceOf(BusinessException.class)

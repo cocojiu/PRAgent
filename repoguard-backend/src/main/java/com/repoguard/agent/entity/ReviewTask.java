@@ -20,6 +20,7 @@ public class ReviewTask {
     private String status;
     private String riskLevel;
     private String assessmentStatus;
+    private String failureDetailsJson;
     private Integer mqRetries;
     private Integer publishAttempts;
     private LocalDateTime nextPublishRetryAt;
@@ -85,6 +86,8 @@ public class ReviewTask {
     public void setRiskLevel(String riskLevel) { this.riskLevel = riskLevel; }
     public String getAssessmentStatus() { return assessmentStatus; }
     public void setAssessmentStatus(String assessmentStatus) { this.assessmentStatus = assessmentStatus; }
+    public String getFailureDetailsJson() { return failureDetailsJson; }
+    public void setFailureDetailsJson(String value) { this.failureDetailsJson = value; }
     public Integer getMqRetries() { return mqRetries; }
     public void setMqRetries(Integer mqRetries) { this.mqRetries = mqRetries; }
     public Integer getPublishAttempts() { return publishAttempts; }
