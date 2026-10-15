@@ -122,6 +122,11 @@ import org.springframework.transaction.support.AbstractPlatformTransactionManage
 import org.springframework.transaction.support.DefaultTransactionStatus;
 
 class ReviewServiceImplTest {
+    private com.repoguard.agent.tenancy.TenantContext.Scope personalScope;
+    @org.junit.jupiter.api.BeforeEach
+    void personalEntry() { personalScope = com.repoguard.agent.tenancy.TenantContext.withTenant(1L); }
+    @org.junit.jupiter.api.AfterEach
+    void clearPersonalEntry() { personalScope.close(); }
 
     private static final String COMMIT_SHA = "0123456789abcdef0123456789abcdef01234567";
     private static final String SECOND_COMMIT_SHA =
@@ -1193,7 +1198,7 @@ class ReviewServiceImplTest {
             return 1;
         }).when(reviewTaskMapper).insertManualReview(any(ReviewTask.class));
 
-        ExecutorService executor = Executors.newFixedThreadPool(concurrency);
+        ExecutorService executor = Executors.newFixedThreadPool(concurrency, task -> new Thread(com.repoguard.agent.tenancy.TenantContext.wrap(task)));
         CountDownLatch ready = new CountDownLatch(concurrency);
         CountDownLatch start = new CountDownLatch(1);
         List<CompletableFuture<ManualReviewResult>> futures = new ArrayList<>();

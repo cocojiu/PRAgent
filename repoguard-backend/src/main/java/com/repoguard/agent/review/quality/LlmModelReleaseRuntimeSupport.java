@@ -160,19 +160,11 @@ final class LlmModelReleaseRuntimeSupport {
 
     private ReviewPolicySettings routedSettings(ReviewPolicySettings settings, LlmModelReleaseDto release) {
         if (settings.llmProvider() == null || !settings.llmProvider().equalsIgnoreCase(release.provider())) return settings;
-        return new ReviewPolicySettings(settings.exists(), settings.llmEnabled(), settings.llmProvider(), release.modelName(),
-            settings.baseUrl(), settings.apiKey(), settings.timeoutSeconds(), settings.temperature(), settings.maxTokens(),
-            settings.fallbackToRules(), settings.workerConcurrency(), settings.chunkFileThreshold(), settings.chunkLineThreshold(),
-            settings.chunkMaxFiles(), settings.chunkMaxLines(), settings.inputTokenPricePerMillion(),
-            settings.outputTokenPricePerMillion(), settings.strategyRelease(), settings.cachedInputTokenPricePerMillion());
+        return settings.withModel(release.modelName());
     }
 
     private ReviewPolicySettings disableLlm(ReviewPolicySettings settings) {
-        return new ReviewPolicySettings(settings.exists(), false, settings.llmProvider(), settings.modelName(), settings.baseUrl(),
-            settings.apiKey(), settings.timeoutSeconds(), settings.temperature(), settings.maxTokens(), true,
-            settings.workerConcurrency(), settings.chunkFileThreshold(), settings.chunkLineThreshold(), settings.chunkMaxFiles(),
-            settings.chunkMaxLines(), settings.inputTokenPricePerMillion(), settings.outputTokenPricePerMillion(),
-            settings.strategyRelease(), settings.cachedInputTokenPricePerMillion());
+        return settings.withoutLlm();
     }
 
     private List<String> unsafeRuntimeBlockers(LlmModelReleaseDto release, LlmModelBudgetDto budget) {

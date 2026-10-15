@@ -20,6 +20,23 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 
 class OperationalDataRetentionWorkerTest {
+    private TenantContext.Scope personalScope;
+    @org.junit.jupiter.api.BeforeEach
+    void personalEntry() { personalScope = TenantContext.withTenant(TenantContext.DEFAULT_TENANT_ID); }
+    @org.junit.jupiter.api.AfterEach
+    void clearPersonalEntry() { personalScope.close(); }
+
+    @Test
+    void missingTenantCannotStartTenantOrCombinedCleanup() {
+        personalScope.close();
+        var mapper = mock(OperationalDataRetentionMapper.class);
+        var registry = new SimpleMeterRegistry();
+        var worker = new OperationalDataRetentionWorker(mapper, new OperationalDataRetentionProperties(), registry);
+        org.assertj.core.api.Assertions.assertThatThrownBy(worker::cleanupTenantData).isInstanceOf(IllegalStateException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(worker::cleanup).isInstanceOf(IllegalStateException.class);
+        org.mockito.Mockito.verifyNoInteractions(mapper);
+        registry.close();
+    }
 
     @Test
     void cleanupIncludesItsOwnAuditTable() {

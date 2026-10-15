@@ -28,7 +28,7 @@ class LlmModelReleaseMetricsServiceTest {
     private final LlmModelReleaseAlertPublisher alertPublisher = org.mockito.Mockito.mock(LlmModelReleaseAlertPublisher.class);
     private final LlmModelReleaseMetricsService service = new LlmModelReleaseMetricsService(
         releaseRepository, metricsRepository, metrics, runtimeSupport, alertPublisher
-    );
+    , new com.repoguard.agent.tenancy.TenantProperties());
 
     @Test
     void keepsInsufficientWindowsQuietAndUsesTheActiveTenant() {

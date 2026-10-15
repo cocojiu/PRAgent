@@ -69,7 +69,7 @@ class LlmEvaluationRunServiceTest {
             LlmEvaluationRunService service = new LlmEvaluationRunService(
                 datasetLoader, previewRunner, modelReleaseService, store, executor,
                 "15afe07737b5f90515cef13b8b37e6ac332c182f"
-            );
+            , new com.repoguard.agent.tenancy.TenantProperties());
             LlmEvaluationRunDto queued = service.start(request("run-1", 100, "1.00"), "operator");
             LlmEvaluationRunDto same = service.start(request("run-1", 100, "1.00"), "operator");
             LlmEvaluationRunDto completed = await(service, queued.runId(), "COMPLETE");
@@ -137,7 +137,7 @@ class LlmEvaluationRunServiceTest {
     void invalidRuntimeRevisionCannotBeUsedAsReleaseEvidence() {
         LlmEvaluationRunService service = new LlmEvaluationRunService(
             datasetLoader, previewRunner, modelReleaseService, store, null, "main-latest"
-        );
+        , new com.repoguard.agent.tenancy.TenantProperties());
         assertThat(service.runtimeVersion(dataset(sample()).version()).codeRevision()).isEqualTo("unknown");
     }
 

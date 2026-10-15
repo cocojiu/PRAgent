@@ -213,7 +213,7 @@ class LlmModelReleaseDriftServiceTest {
         when(failureRecorder.record(eq(42L), eq("op-fail"), eq("ILLEGALSTATEEXCEPTION"))).thenReturn(failed);
         doThrow(new IllegalStateException("lock unavailable")).when(releaseRepository).lockTenant(42L);
         LlmModelReleaseDriftService failingService = new LlmModelReleaseDriftService(
-            jdbcTemplate, new JacksonConfig().objectMapper(), releaseRepository, auditRepository, failureRecorder);
+            jdbcTemplate, new JacksonConfig().objectMapper(), releaseRepository, auditRepository, failureRecorder, new com.repoguard.agent.tenancy.TenantProperties());
 
         LlmModelReleaseDriftRepairDto result = failingService.repair(
             new LlmModelReleaseDriftRepairRequest("op-fail", preview.fingerprint(), true), "", "ADMIN");

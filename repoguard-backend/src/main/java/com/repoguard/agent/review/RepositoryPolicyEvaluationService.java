@@ -212,26 +212,7 @@ public class RepositoryPolicyEvaluationService {
             maxTokens = PLATFORM_MAX_TOKENS;
             warnings.add("llm_token_budget_capped_by_platform");
         }
-        return new ReviewPolicySettings(
-            server.exists(),
-            enabled,
-            server.llmProvider(),
-            server.modelName(),
-            server.baseUrl(),
-            server.apiKey(),
-            server.timeoutSeconds(),
-            server.temperature(),
-            maxTokens,
-            server.fallbackToRules(),
-            server.workerConcurrency(),
-            server.chunkFileThreshold(),
-            server.chunkLineThreshold(),
-            server.chunkMaxFiles(),
-            server.chunkMaxLines(),
-            server.inputTokenPricePerMillion(),
-            server.outputTokenPricePerMillion(),
-            server.strategyRelease(), server.cachedInputTokenPricePerMillion()
-        );
+        return server.withExecution(enabled, maxTokens, server.fallbackToRules());
     }
 
     private boolean disabledByPolicy(ReviewFindingResult finding, RepositoryPolicyEvaluation evaluation) {

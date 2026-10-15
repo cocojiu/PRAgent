@@ -31,6 +31,11 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.time.LocalDateTime;
 
 class ManualReviewCreationServiceTest {
+    private com.repoguard.agent.tenancy.TenantContext.Scope personalScope;
+    @org.junit.jupiter.api.BeforeEach
+    void personalEntry() { personalScope = com.repoguard.agent.tenancy.TenantContext.withTenant(1L); }
+    @org.junit.jupiter.api.AfterEach
+    void clearPersonalEntry() { personalScope.close(); }
 
     private static final String COMMIT_SHA = "0123456789abcdef0123456789abcdef01234567";
 
@@ -278,7 +283,7 @@ class ManualReviewCreationServiceTest {
             "main",
             "manual_input"
         );
-        ExecutorService executor = Executors.newFixedThreadPool(2);
+        ExecutorService executor = Executors.newFixedThreadPool(2, task -> new Thread(com.repoguard.agent.tenancy.TenantContext.wrap(task)));
 
         try {
             CompletableFuture<ManualReviewResponse> owner = CompletableFuture.supplyAsync(

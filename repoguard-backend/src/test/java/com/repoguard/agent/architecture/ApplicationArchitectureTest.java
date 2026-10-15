@@ -692,12 +692,20 @@ class ApplicationArchitectureTest {
             .contains("metrics.llmFallback", "DEFERRED_RULE_REVIEW")
             .doesNotContain("RuleBasedPullRequestReviewer", "ruleBasedReviewer.review");
         assertThat(pipeline.sourceText())
-            .contains("ReviewResult ruleReview = ruleReview(context)",
+            .contains("ReviewResult ruleReview = fallback.ruleReview(context)",
                 "return ruleBasedReviewer.review(context.diff(), context.deadline())");
         assertThat(resultAggregator.sourceText()).contains("ReviewResult.completed(", "record ChunkAggregation");
         assertThat(aggregator.sourceText())
             .contains("LlmChunkReviewFallbackHandler", "LlmChunkReviewResultAggregator")
             .doesNotContain("metrics.llmFallback(", "ReviewResult.completed(", "record ChunkAggregation");
+    }
+
+    @Test
+    void modelReleasePersistenceDoesNotDependBackOnItsApplicationService() {
+        SourceUnit repository = SOURCES.stream()
+            .filter(source -> source.path().endsWith("review/quality/LlmModelReleaseRepository.java"))
+            .findFirst().orElseThrow();
+        assertThat(repository.dependencies()).doesNotContain(BASE_PACKAGE + ".review.quality.LlmModelReleaseService");
     }
 
     @Test

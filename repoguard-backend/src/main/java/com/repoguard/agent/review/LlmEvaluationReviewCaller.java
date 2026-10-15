@@ -27,14 +27,7 @@ final class LlmEvaluationReviewCaller implements LlmReviewCaller {
             || !provider.trim().equalsIgnoreCase(configured.llmProvider())) {
             throw new IllegalArgumentException("评估版本与当前 LLM 配置不一致");
         }
-        return new ReviewPolicySettings(
-            configured.exists(), configured.llmEnabled(), configured.llmProvider(), model.trim(),
-            configured.baseUrl(), configured.apiKey(), configured.timeoutSeconds(), configured.temperature(),
-            configured.maxTokens(), configured.fallbackToRules(), configured.workerConcurrency(),
-            configured.chunkFileThreshold(), configured.chunkLineThreshold(), configured.chunkMaxFiles(),
-            configured.chunkMaxLines(), configured.inputTokenPricePerMillion(),
-            configured.outputTokenPricePerMillion(), configured.strategyRelease(), configured.cachedInputTokenPricePerMillion()
-        );
+        return configured.withModel(model.trim());
     }
 
     @Override

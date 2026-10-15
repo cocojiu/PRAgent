@@ -89,7 +89,7 @@ public class DashboardSnapshotStore {
     }
 
     public void evictByPrefix(String prefix) {
-        long tenantId = TenantContext.currentTenantIdOrDefault();
+        long tenantId = TenantContext.requireTenantId();
         states.asMap().keySet().removeIf(key -> key.belongsTo(tenantId)
             && key.businessKey() instanceof String businessKey && businessKey.startsWith(prefix));
     }

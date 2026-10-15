@@ -36,7 +36,7 @@ public class SecretReEncryptionJobWorker {
 
     public void processDueJob() {
         LocalDateTime now = LocalDateTime.now();
-        long tenantId = TenantContext.currentTenantIdOrDefault();
+        long tenantId = TenantContext.requireTenantId();
         SecretReEncryptionJob dueJob = jobMapper.selectDueJob(tenantId, now);
         if (dueJob == null) {
             return;

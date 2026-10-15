@@ -1,11 +1,12 @@
 package com.repoguard.agent.review.quality;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import com.repoguard.agent.common.BusinessException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.dto.LlmModelReleaseDto;
 import com.repoguard.agent.dto.LlmModelRollbackRequest;
-import com.repoguard.agent.tenancy.TenantContext;
+import com.repoguard.agent.tenancy.TenantProperties;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,11 +14,14 @@ import org.springframework.transaction.annotation.Transactional;
 /** Terminal safety action: retain version/evidence and stop queued sends without changing models. */
 @Service
 public class LlmModelSafetyService {
+    private final TenantProperties tenancy;
     private final JdbcTemplate jdbc;
     private final LlmModelReleaseRepository releases;
     private final LlmModelReleaseRuntimeSupport runtime;
 
-    public LlmModelSafetyService(JdbcTemplate jdbc, LlmModelReleaseRepository releases, ObjectMapper json) {
+    @Autowired
+    public LlmModelSafetyService(JdbcTemplate jdbc, LlmModelReleaseRepository releases, ObjectMapper json, TenantProperties tenancy) {
+        this.tenancy = tenancy;
         this.jdbc = jdbc; this.releases = releases; this.runtime = new LlmModelReleaseRuntimeSupport(jdbc, releases, json);
     }
 
@@ -26,7 +30,7 @@ public class LlmModelSafetyService {
         if (request == null || request.reason() == null || request.reason().isBlank() || request.reason().length() > 512) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "安全撤销必须填写原因");
         }
-        long tenant = TenantContext.currentTenantIdOrDefault();
+        long tenant = tenancy.currentTenantId();
         releases.lockTenant(tenant);
         LlmModelReleaseDto before = releases.findById(tenant, releaseId);
         if (before == null) throw new BusinessException(ErrorCode.BAD_REQUEST, "模型发布不存在");

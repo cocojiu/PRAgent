@@ -63,6 +63,71 @@ class ReviewProgressStreamServiceTest {
     }
 
     @Test
+    void sameTenantTaskSharesReadsButRevocationRemainsPerSubscriber() {
+        streams.close();
+        var scheduler = mock(java.util.concurrent.ScheduledThreadPoolExecutor.class);
+        java.util.List<Runnable> ticks = new java.util.ArrayList<>();
+        java.util.concurrent.ScheduledFuture<?> firstWarmup = mock(java.util.concurrent.ScheduledFuture.class);
+        java.util.concurrent.ScheduledFuture<?> secondWarmup = mock(java.util.concurrent.ScheduledFuture.class);
+        org.mockito.Mockito.doReturn(firstWarmup, secondWarmup).when(scheduler).schedule(any(Runnable.class),
+            org.mockito.ArgumentMatchers.eq(0L), org.mockito.ArgumentMatchers.eq(java.util.concurrent.TimeUnit.MILLISECONDS));
+        when(scheduler.scheduleWithFixedDelay(any(Runnable.class), org.mockito.ArgumentMatchers.anyLong(),
+            org.mockito.ArgumentMatchers.anyLong(), any(java.util.concurrent.TimeUnit.class))).thenAnswer(call -> {
+                ticks.add(call.getArgument(0));
+                return mock(java.util.concurrent.ScheduledFuture.class);
+            });
+        streams = new ReviewProgressStreamService(tasks, timelines, accounts, properties, tenants,
+            new ReviewProgressStreamService.Limits(), scheduler);
+        UserAccount second = new UserAccount(); second.setStatus("ACTIVE"); second.setSessionVersion(2);
+        when(accounts.findById(8L)).thenReturn(second);
+        var other = new AuthenticatedPrincipal(8L, "other", "USER", principal.expiresAt(), 2);
+        streams.open(9L, principal, null);
+        streams.open(9L, other, null);
+        assertThat(ticks).hasSize(1);
+        org.mockito.Mockito.clearInvocations(tasks, timelines, accounts);
+        ticks.getFirst().run();
+        verify(tasks).selectOne(any());
+        verify(timelines).selectOne(any());
+        verify(accounts).findById(7L);
+        verify(accounts).findById(8L);
+        when(accounts.findById(7L)).thenReturn(null);
+        org.mockito.Mockito.clearInvocations(tasks, timelines);
+        ticks.getFirst().run();
+        org.mockito.Mockito.verifyNoInteractions(tasks, timelines);
+        verify(firstWarmup).cancel(false);
+        verify(secondWarmup, never()).cancel(false);
+        when(accounts.findById(8L)).thenReturn(null);
+        org.mockito.Mockito.clearInvocations(tasks, timelines);
+        ticks.getFirst().run();
+        org.mockito.Mockito.verifyNoInteractions(tasks, timelines);
+    }
+
+    @Test
+    void separateTenantTasksNeverShareASampleGroup() {
+        streams.close();
+        var scheduler = mock(java.util.concurrent.ScheduledThreadPoolExecutor.class);
+        java.util.List<Runnable> ticks = new java.util.ArrayList<>();
+        when(scheduler.scheduleWithFixedDelay(any(Runnable.class), org.mockito.ArgumentMatchers.anyLong(),
+            org.mockito.ArgumentMatchers.anyLong(), any(java.util.concurrent.TimeUnit.class))).thenAnswer(call -> {
+                ticks.add(call.getArgument(0));
+                return mock(java.util.concurrent.ScheduledFuture.class);
+            });
+        streams = new ReviewProgressStreamService(tasks, timelines, accounts, properties, tenants,
+            new ReviewProgressStreamService.Limits(), scheduler);
+        try (var _ = TenantContext.withTenant(11L)) { streams.open(9L, principal, null); }
+        try (var _ = TenantContext.withTenant(12L)) { streams.open(9L, principal, null); }
+        assertThat(ticks).hasSize(2);
+        java.util.List<Long> observed = new java.util.ArrayList<>();
+        when(tasks.selectOne(any())).thenAnswer(call -> {
+            observed.add(TenantContext.requireTenantId());
+            ReviewTask task = new ReviewTask(); task.setId(9L); task.setStatus("QUEUED"); return task;
+        });
+        ticks.forEach(Runnable::run);
+        assertThat(observed).containsExactly(11L, 12L);
+        assertThat(TenantContext.currentTenantId()).isNull();
+    }
+
+    @Test
     void rejectsExpiredSessionAndAdminKeyIdentity() {
         assertThatThrownBy(() -> streams.open(9L, new AuthenticatedPrincipal(7L, "reader", "USER", 1), null))
             .isInstanceOf(BusinessException.class);
@@ -102,7 +167,9 @@ class ReviewProgressStreamServiceTest {
         properties.setEnabled(true);
         when(tenants.resolve(7L, 1L, null)).thenThrow(new BusinessException(
             com.repoguard.agent.common.ErrorCode.FORBIDDEN, "revoked"));
-        assertThatThrownBy(() -> streams.open(9L, principal, null)).hasMessage("revoked");
+        try (var _ = TenantContext.withTenant(1L)) {
+            assertThatThrownBy(() -> streams.open(9L, principal, null)).hasMessage("revoked");
+        }
         verify(tasks, never()).selectOne(any());
     }
 

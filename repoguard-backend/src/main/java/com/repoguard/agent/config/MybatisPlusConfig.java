@@ -114,7 +114,9 @@ public class MybatisPlusConfig {
             if (!TENANT_TABLES.contains(normalized)) {
                 return true;
             }
-            return PlatformTenantScope.isActive();
+            if (PlatformTenantScope.isActive()) return true;
+            getTenantId(); // Inserts with an explicit tenant_id can skip getTenantId in MyBatis-Plus.
+            return false;
         }
     }
 }

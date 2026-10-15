@@ -16,7 +16,7 @@ public record TenantScopedKey(long tenantId, Object businessKey) {
     }
 
     public static TenantScopedKey current(Object businessKey) {
-        return new TenantScopedKey(TenantContext.currentTenantIdOrDefault(), businessKey);
+        return new TenantScopedKey(TenantContext.requireTenantId(), businessKey);
     }
 
     public boolean belongsTo(long expectedTenantId) {

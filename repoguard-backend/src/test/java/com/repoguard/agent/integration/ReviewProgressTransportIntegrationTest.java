@@ -119,7 +119,8 @@ class ReviewProgressTransportIntegrationTest {
 
     @Test void realTomcatStreamsWithoutBufferingAndClosesRevokedSession() throws Exception {
         URI endpoint = URI.create("http://127.0.0.1:" + tomcat.getConnector().getLocalPort() + "/api/v1/reviews/9/events");
-        try (HttpClient client = client(null)) {
+        HttpClient client = client(null);
+        try {
             assertThat(statusCode(client, endpoint, null)).isEqualTo(401);
             verifyRejectedInputs(client, endpoint);
             Stream stream = subscribe(client, endpoint, 1);
@@ -134,7 +135,7 @@ class ReviewProgressTransportIntegrationTest {
             assertThat(readEvent(second, 8)).isEmpty();
             await(() -> active() == 0, 8);
             assertThat(scheduler().getQueue()).isEmpty();
-        }
+        } finally { client.shutdownNow(); }
     }
 
     @Test

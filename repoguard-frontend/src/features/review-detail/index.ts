@@ -65,3 +65,4 @@ export {
   observeDetailRegionRender,
   truncateDetailText
 } from "./reviewDetailRenderBudget";
+export { useReviewDetailViewModel } from "./composables/useReviewDetailViewModel";

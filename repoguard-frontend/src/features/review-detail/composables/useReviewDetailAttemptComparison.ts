@@ -21,8 +21,11 @@ export const useReviewDetailAttemptComparison = ({
   const error = ref("");
   const page = ref(1);
   let requestSequence = 0;
+  let controller: AbortController | undefined;
 
   const reset = () => {
+    controller?.abort();
+    controller = undefined;
     requestSequence += 1;
     attempts.value = [];
     comparison.value = null;
@@ -38,11 +41,14 @@ export const useReviewDetailAttemptComparison = ({
       return;
     }
     const taskId = task.id;
+    controller?.abort();
+    controller = new AbortController();
+    const signal = controller.signal;
     const sequence = ++requestSequence;
     loading.value = true;
     error.value = "";
     try {
-      const loadedAttempts = await fetchReviewExecutionAttempts(taskId);
+      const loadedAttempts = await fetchReviewExecutionAttempts(taskId, { signal });
       if (sequence !== requestSequence || selectedTask.value?.id !== taskId) {
         return;
       }
@@ -56,7 +62,7 @@ export const useReviewDetailAttemptComparison = ({
       const result = await fetchReviewAttemptComparison(taskId, candidate.id, {
         page: requestedPage,
         pageSize: PAGE_SIZE
-      });
+      }, { signal });
       if (sequence !== requestSequence || selectedTask.value?.id !== taskId) {
         return;
       }

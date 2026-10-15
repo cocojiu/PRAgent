@@ -23,12 +23,18 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import java.util.List;
+import java.util.concurrent.ScheduledFuture;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /** Bounded, coalesced invalidations sourced from durable task/timeline state, never worker transactions. */
 @Service
 @ApiRuntimeEnabled
+@EnableConfigurationProperties(ReviewProgressStreamService.Limits.class)
 @ConditionalOnProperty(name = "repoguard.review.progress-stream-enabled", havingValue = "true")
 public class ReviewProgressStreamService {
     private static final Set<String> TERMINAL = Set.of("COMPLETED", "FAILED", "SUPERSEDED",
@@ -38,16 +44,35 @@ public class ReviewProgressStreamService {
     private final AuthAccountCache accounts;
     private final TenantProperties tenantProperties;
     private final TenantResolutionService tenantResolution;
+    private final Limits limits;
+    private final Map<TaskKey, SampleGroup> groups = new ConcurrentHashMap<>();
     private final Map<String, Connection> connections = new ConcurrentHashMap<>();
-    private final ScheduledThreadPoolExecutor scheduler = new ScheduledThreadPoolExecutor(2, runnable -> {
+    private final ScheduledThreadPoolExecutor scheduler;
+
+    private static ScheduledThreadPoolExecutor newScheduler() {
+        return new ScheduledThreadPoolExecutor(2, runnable -> {
         Thread thread = new Thread(runnable, "review-progress-stream");
         thread.setDaemon(true);
         return thread;
-    });
+        });
+    }
 
     public ReviewProgressStreamService(ReviewTaskMapper tasks, ReviewTimelineMapper timelines,
-                                      AuthAccountCache accounts, TenantProperties tenantProperties,
-                                      TenantResolutionService tenantResolution) {
+        AuthAccountCache accounts, TenantProperties tenantProperties, TenantResolutionService tenantResolution) {
+        this(tasks, timelines, accounts, tenantProperties, tenantResolution, new Limits());
+    }
+
+    @Autowired
+    public ReviewProgressStreamService(ReviewTaskMapper tasks, ReviewTimelineMapper timelines,
+        AuthAccountCache accounts, TenantProperties tenantProperties, TenantResolutionService tenantResolution, Limits limits) {
+        this(tasks, timelines, accounts, tenantProperties, tenantResolution, limits, newScheduler());
+    }
+
+    ReviewProgressStreamService(ReviewTaskMapper tasks, ReviewTimelineMapper timelines,
+        AuthAccountCache accounts, TenantProperties tenantProperties, TenantResolutionService tenantResolution,
+        Limits limits, ScheduledThreadPoolExecutor scheduler) {
+        this.scheduler = scheduler;
+        this.limits = limits;
         this.tasks = tasks;
         this.timelines = timelines;
         this.accounts = accounts;
@@ -57,11 +82,12 @@ public class ReviewProgressStreamService {
     }
 
     public synchronized SseEmitter open(Long taskId, AuthenticatedPrincipal principal, Long lastEventId) {
-        long tenantId = TenantContext.currentTenantIdOrDefault();
+        if (scheduler.isShutdown()) throw new IllegalStateException("Progress stream is closed");
+        long tenantId = tenantProperties.currentTenantId();
         authorize(principal, tenantId);
         task(taskId); // Synchronous 404 and tenant check before HTTP headers are committed.
         long perUser = connections.values().stream().filter(c -> c.principal.id().equals(principal.id())).count();
-        if (connections.size() >= 16 || perUser >= 2) {
+        if (connections.size() >= limits.maxConnections || perUser >= limits.perUser) {
             throw new BusinessException(ErrorCode.TOO_MANY_REQUESTS, "Progress stream limit reached");
         }
         String key = UUID.randomUUID().toString();
@@ -69,17 +95,18 @@ public class ReviewProgressStreamService {
         Connection connection = new Connection(emitter, taskId, principal, tenantId,
             lastEventId == null ? 0L : lastEventId);
         connections.put(key, connection);
-        Runnable release = () -> connections.remove(key);
+        TaskKey taskKey = new TaskKey(tenantId, taskId);
+        SampleGroup group = groups.computeIfAbsent(taskKey, ignored -> new SampleGroup());
+        group.subscribers.put(key, connection);
+        Runnable release = () -> release(taskKey, group, key);
         emitter.onCompletion(release);
         emitter.onTimeout(release);
         emitter.onError(ignored -> release.run());
-        var future = scheduler.scheduleWithFixedDelay(() -> tick(key, connection), 0, 5, TimeUnit.SECONDS);
-        emitter.onCompletion(() -> future.cancel(false));
-        emitter.onTimeout(() -> future.cancel(false));
-        emitter.onError(ignored -> future.cancel(false));
-        if (!connections.containsKey(key)) {
-            future.cancel(false);
+        if (group.future == null) {
+            group.future = scheduler.scheduleWithFixedDelay(() -> tick(taskKey, group),
+                limits.sampleIntervalMs, limits.sampleIntervalMs, TimeUnit.MILLISECONDS);
         }
+        connection.initialSample = scheduler.schedule(() -> tick(taskKey, group, false), 0, TimeUnit.MILLISECONDS);
         return emitter;
     }
 
@@ -107,47 +134,111 @@ public class ReviewProgressStreamService {
         return task;
     }
 
-    private void tick(String key, Connection connection) {
-        if (!connections.containsKey(key)) {
-            return;
+    private synchronized void release(TaskKey taskKey, SampleGroup group, String key) {
+        Connection removed = connections.remove(key);
+        if (removed != null && removed.initialSample != null) removed.initialSample.cancel(false);
+        group.subscribers.remove(key);
+        if (group.subscribers.isEmpty() && groups.remove(taskKey, group) && group.future != null) {
+            group.future.cancel(false);
         }
-        try (var _ = TenantContext.withTenant(connection.tenantId)) {
-            authorize(connection.principal, connection.tenantId);
-            if (System.nanoTime() - connection.startedAt >= TimeUnit.SECONDS.toNanos(110)) {
+    }
+
+    void tick(TaskKey key, SampleGroup group) { tick(key, group, true); }
+
+    private void tick(TaskKey key, SampleGroup group, boolean heartbeat) {
+        synchronized (group) {
+            // Authorization belongs to each subscriber; sampling belongs to the tenant/task.
+            List<Map.Entry<String, Connection>> eligible = group.subscribers.entrySet().stream().filter(entry -> {
+                Connection connection = entry.getValue();
+                try (var _ = TenantContext.withTenant(key.tenantId)) {
+                    authorize(connection.principal, key.tenantId);
+                    if (System.nanoTime() - connection.startedAt < TimeUnit.SECONDS.toNanos(110)) return true;
+                } catch (RuntimeException ignored) { /* Revoked sessions receive no more data. */ }
+                release(key, group, entry.getKey());
                 connection.emitter.complete();
-                return;
+                return false;
+            }).toList();
+            if (eligible.isEmpty()) return;
+            try (var _ = TenantContext.withTenant(key.tenantId)) {
+                Sample sample = group.latest;
+                if (sample == null || System.nanoTime() - group.sampledAt >= TimeUnit.MILLISECONDS.toNanos(limits.sampleIntervalMs)) {
+                    ReviewTask task = task(key.taskId);
+                    ReviewTimeline latest = timelines.selectOne(new LambdaQueryWrapper<ReviewTimeline>()
+                        .select(ReviewTimeline::getId).eq(ReviewTimeline::getTaskId, key.taskId)
+                        .orderByDesc(ReviewTimeline::getId).last("limit 1"));
+                    long eventId = latest == null ? 0L : latest.getId();
+                    String state = Objects.toString(task.getStatus(), "") + ":"
+                        + Objects.toString(task.getLlmStatus(), "") + ":" + Objects.toString(task.getCurrentAttemptId(), "");
+                    sample = new Sample(eventId, state, task.getStatus());
+                    group.latest = sample;
+                    group.sampledAt = System.nanoTime();
+                }
+                for (var entry : eligible) {
+                    Connection connection = entry.getValue();
+                    if (!group.subscribers.containsKey(entry.getKey())) continue;
+                    try {
+                        // Resync new subscribers immediately, including restart, stale and future cursors.
+                        if (connection.previousState == null || sample.eventId != connection.cursor || !sample.state.equals(connection.previousState)) {
+                            connection.emitter.send(SseEmitter.event().name("progress").id(Long.toString(sample.eventId))
+                                .data(Map.of("taskId", key.taskId)));
+                            connection.cursor = sample.eventId;
+                            connection.previousState = sample.state;
+                        } else if (heartbeat) connection.emitter.send(SseEmitter.event().comment("keepalive"));
+                        if (sample.status != null && TERMINAL.contains(sample.status.toUpperCase(java.util.Locale.ROOT))) {
+                            release(key, group, entry.getKey());
+                            connection.emitter.complete();
+                        }
+                    } catch (Exception ignored) {
+                        release(key, group, entry.getKey());
+                        connection.emitter.complete();
+                    }
+                }
+            } catch (Exception ignored) {
+                eligible.forEach(entry -> {
+                    release(key, group, entry.getKey());
+                    entry.getValue().emitter.complete();
+                });
             }
-            ReviewTask task = task(connection.taskId);
-            ReviewTimeline latest = timelines.selectOne(new LambdaQueryWrapper<ReviewTimeline>()
-                .select(ReviewTimeline::getId).eq(ReviewTimeline::getTaskId, connection.taskId)
-                .orderByDesc(ReviewTimeline::getId).last("limit 1"));
-            long eventId = latest == null ? 0L : latest.getId();
-            String state = Objects.toString(task.getStatus(), "") + ":"
-                + Objects.toString(task.getLlmStatus(), "") + ":" + Objects.toString(task.getCurrentAttemptId(), "");
-            // Always resync on connect, including after restart, cursor expiry, or a forged future cursor.
-            // Events coalesce intervening changes: the authenticated status endpoint is authoritative.
-            if (connection.previousState == null || eventId != connection.cursor || !state.equals(connection.previousState)) {
-                connection.emitter.send(SseEmitter.event().name("progress").id(Long.toString(eventId))
-                    .data(Map.of("taskId", connection.taskId)));
-                connection.cursor = eventId;
-                connection.previousState = state;
-            } else {
-                connection.emitter.send(SseEmitter.event().comment("keepalive"));
-            }
-            if (task.getStatus() != null && TERMINAL.contains(task.getStatus().toUpperCase(java.util.Locale.ROOT))) {
-                connection.emitter.complete();
-            }
-        } catch (Exception failure) {
-            connections.remove(key);
-            connection.emitter.complete(); // No exception text or provider payload on the wire.
         }
     }
 
     @PreDestroy
-    public void close() {
+    public synchronized void close() {
         scheduler.shutdownNow();
         connections.values().forEach(connection -> connection.emitter.complete());
         connections.clear();
+        groups.clear();
+    }
+
+    record TaskKey(long tenantId, Long taskId) { }
+    private record Sample(long eventId, String state, String status) { }
+    static final class SampleGroup {
+        final Map<String, Connection> subscribers = new ConcurrentHashMap<>();
+        volatile ScheduledFuture<?> future;
+        Sample latest;
+        long sampledAt;
+    }
+
+    @ConfigurationProperties(prefix = "repoguard.review.progress-stream")
+    public static class Limits {
+        private int maxConnections = 16;
+        private int perUser = 2;
+        private long sampleIntervalMs = 5000;
+        public int getMaxConnections() { return maxConnections; }
+        public void setMaxConnections(int value) {
+            if (value < 1 || value > 128) throw new IllegalArgumentException("maxConnections must be 1..128");
+            maxConnections = value;
+        }
+        public int getPerUser() { return perUser; }
+        public void setPerUser(int value) {
+            if (value < 1 || value > 16) throw new IllegalArgumentException("perUser must be 1..16");
+            perUser = value;
+        }
+        public long getSampleIntervalMs() { return sampleIntervalMs; }
+        public void setSampleIntervalMs(long value) {
+            if (value < 1000 || value > 30000) throw new IllegalArgumentException("sampleIntervalMs must be 1000..30000");
+            sampleIntervalMs = value;
+        }
     }
 
     private static final class Connection {
@@ -156,6 +247,7 @@ public class ReviewProgressStreamService {
         private final AuthenticatedPrincipal principal;
         private final long tenantId;
         private final long startedAt = System.nanoTime();
+        private volatile ScheduledFuture<?> initialSample;
         private long cursor;
         private String previousState;
 

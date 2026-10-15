@@ -1,16 +1,14 @@
 package com.repoguard.agent.review.quality;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.dto.LlmModelReleaseDto;
 import com.repoguard.agent.dto.LlmModelReleaseMetricDto;
 import com.repoguard.agent.observability.RepoGuardMetrics;
-import com.repoguard.agent.tenancy.TenantContext;
+import com.repoguard.agent.tenancy.TenantProperties;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -30,19 +28,20 @@ public class LlmModelReleaseMetricsService {
     private static final BigDecimal COST_MULTIPLIER = new BigDecimal("1.50");
     private static final long MAX_P95_LATENCY_MS = 15_000L;
 
+    private final TenantProperties tenancy;
     private final LlmModelReleaseRepository releaseRepository;
     private final LlmModelReleaseMetricsRepository metricsRepository;
     private final RepoGuardMetrics metrics;
     private final LlmModelReleaseRuntimeSupport runtimeSupport;
     private final LlmModelReleaseAlertPublisher alertPublisher;
 
-    public LlmModelReleaseMetricsService(
-        LlmModelReleaseRepository releaseRepository,
+    @Autowired
+    public LlmModelReleaseMetricsService(LlmModelReleaseRepository releaseRepository,
         LlmModelReleaseMetricsRepository metricsRepository,
         RepoGuardMetrics metrics,
         LlmModelReleaseRuntimeSupport runtimeSupport,
-        LlmModelReleaseAlertPublisher alertPublisher
-    ) {
+        LlmModelReleaseAlertPublisher alertPublisher, TenantProperties tenancy) {
+        this.tenancy = tenancy;
         this.releaseRepository = Objects.requireNonNull(releaseRepository, "releaseRepository");
         this.metricsRepository = Objects.requireNonNull(metricsRepository, "metricsRepository");
         this.metrics = Objects.requireNonNull(metrics, "metrics");
@@ -61,7 +60,7 @@ public class LlmModelReleaseMetricsService {
     public List<LlmModelReleaseMetricDto> collectWindow(LocalDateTime windowEnd) {
         LocalDateTime end = normalizeWindowEnd(windowEnd);
         LocalDateTime start = end.minusHours(1);
-        long tenantId = TenantContext.currentTenantIdOrDefault();
+        long tenantId = tenancy.currentTenantId();
         releaseRepository.lockTenant(tenantId);
         List<LlmModelReleaseMetricDto> result = new ArrayList<>();
         for (LlmModelReleaseDto release : releaseRepository.findAll(tenantId)) {
@@ -72,11 +71,11 @@ public class LlmModelReleaseMetricsService {
     @Transactional(readOnly = true)
     public List<LlmModelReleaseMetricDto> list(String releaseKey, int days, int limit) {
         String normalizedKey = normalizeKey(releaseKey);
-        if (normalizedKey != null && releaseRepository.findByReleaseKey(TenantContext.currentTenantIdOrDefault(), normalizedKey) == null) {
+        if (normalizedKey != null && releaseRepository.findByReleaseKey(tenancy.currentTenantId(), normalizedKey) == null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "模型发布版本不存在");
         }
         LocalDateTime start = LocalDateTime.now().minusDays(Math.max(1, Math.min(90, days)));
-        return metricsRepository.findSnapshots(TenantContext.currentTenantIdOrDefault(), normalizedKey, start, limit)
+        return metricsRepository.findSnapshots(tenancy.currentTenantId(), normalizedKey, start, limit)
             .stream().map(this::toDto).toList();
     }
 
@@ -146,14 +145,7 @@ public class LlmModelReleaseMetricsService {
 
     private String fingerprint(LlmModelReleaseDto release, LocalDateTime start, LocalDateTime end, Decision decision) {
         String value = release.releaseKey() + "|" + start + "|" + end + "|" + decision.state() + "|" + decision.codes();
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
-            StringBuilder result = new StringBuilder(digest.length * 2);
-            for (byte item : digest) result.append(String.format(Locale.ROOT, "%02x", item));
-            return result.toString();
-        } catch (NoSuchAlgorithmException exception) {
-            throw new IllegalStateException("SHA-256 不可用", exception);
-        }
+        return LlmModelReleaseAuditService.sha256(value);
     }
 
     private LocalDateTime normalizeWindowEnd(LocalDateTime value) {

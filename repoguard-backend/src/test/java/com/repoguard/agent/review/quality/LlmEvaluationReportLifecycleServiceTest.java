@@ -52,13 +52,13 @@ class LlmEvaluationReportLifecycleServiceTest {
 
     @Test
     void constructorClampsRetentionAndRejectsMissingDependencies() {
-        assertThat(new LlmEvaluationReportLifecycleService(jdbcTemplate, releaseRepository, 10).defaultRetentionDays())
+        assertThat(new LlmEvaluationReportLifecycleService(jdbcTemplate, releaseRepository, 10, new com.repoguard.agent.tenancy.TenantProperties()).defaultRetentionDays())
             .isEqualTo(180);
-        assertThat(new LlmEvaluationReportLifecycleService(jdbcTemplate, releaseRepository, 4_000).defaultRetentionDays())
+        assertThat(new LlmEvaluationReportLifecycleService(jdbcTemplate, releaseRepository, 4_000, new com.repoguard.agent.tenancy.TenantProperties()).defaultRetentionDays())
             .isEqualTo(3_650);
-        assertThatThrownBy(() -> new LlmEvaluationReportLifecycleService(null, releaseRepository, 180))
+        assertThatThrownBy(() -> new LlmEvaluationReportLifecycleService(null, releaseRepository, 180, new com.repoguard.agent.tenancy.TenantProperties()))
             .isInstanceOf(NullPointerException.class);
-        assertThatThrownBy(() -> new LlmEvaluationReportLifecycleService(jdbcTemplate, null, 180))
+        assertThatThrownBy(() -> new LlmEvaluationReportLifecycleService(jdbcTemplate, null, 180, new com.repoguard.agent.tenancy.TenantProperties()))
             .isInstanceOf(NullPointerException.class);
     }
 

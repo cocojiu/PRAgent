@@ -15,6 +15,11 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.Test;
 
 class DashboardSnapshotStoreTest {
+    private TenantContext.Scope personalScope;
+    @org.junit.jupiter.api.BeforeEach
+    void personalEntry() { personalScope = TenantContext.withTenant(TenantContext.DEFAULT_TENANT_ID); }
+    @org.junit.jupiter.api.AfterEach
+    void clearPersonalEntry() { personalScope.close(); }
 
     @Test
     void invalidatedRunningRefreshCannotOverwriteNewDataOrReleaseTheNewRefresh() throws Exception {
@@ -97,7 +102,7 @@ class DashboardSnapshotStoreTest {
     @Test
     void coldMissLoadsOnlyOnceForSameKey() throws Exception {
         DashboardSnapshotStore store = new DashboardSnapshotStore(Runnable::run);
-        var callers = Executors.newFixedThreadPool(2);
+        var callers = Executors.newFixedThreadPool(2, task -> new Thread(TenantContext.wrap(task)));
         CountDownLatch loaderStarted = new CountDownLatch(1);
         CountDownLatch releaseLoader = new CountDownLatch(1);
         AtomicInteger loadCount = new AtomicInteger();

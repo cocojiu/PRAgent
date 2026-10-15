@@ -32,6 +32,43 @@ class TenantContextExecutorPropagationTest {
     }
 
     @Test
+    void emptyCaptureClearsWorkerTenantAndRestoresItAfterFailure() {
+        Runnable wrapped = TenantContext.wrap(() -> {
+            assertThat(TenantContext.currentTenantId()).isNull();
+            throw new IllegalStateException("expected");
+        });
+        try (var _ = TenantContext.withTenant(9L)) {
+            assertThatThrownBy(wrapped::run).isInstanceOf(IllegalStateException.class);
+            assertThat(TenantContext.currentTenantId()).isEqualTo(9L);
+        }
+    }
+
+    @Test
+    void cancellingQueuedTenantTaskCannotLeakIntoNextSubmission() throws Exception {
+        var registry = new SimpleMeterRegistry();
+        var executor = new BoundedExecutorFactory(registry, new AsyncExecutorProperties()).create("cancel-tenant", 1, 4);
+        var started = new java.util.concurrent.CountDownLatch(1);
+        var release = new java.util.concurrent.CountDownLatch(1);
+        try {
+            executor.submit(() -> {
+                started.countDown();
+                try { release.await(); } catch (InterruptedException ex) { Thread.currentThread().interrupt(); }
+            });
+            assertThat(started.await(2, TimeUnit.SECONDS)).isTrue();
+            java.util.concurrent.Future<?> cancelled;
+            try (var _ = TenantContext.withTenant(21L)) {
+                cancelled = executor.submit(() -> { throw new AssertionError("cancelled task ran"); });
+            }
+            assertThat(cancelled.cancel(false)).isTrue();
+            release.countDown();
+            try (var _ = TenantContext.withTenant(22L)) {
+                assertThat(executor.submit(TenantContext::currentTenantId).get(2, TimeUnit.SECONDS)).isEqualTo(22L);
+            }
+            assertThat(executor.submit(TenantContext::currentTenantId).get(2, TimeUnit.SECONDS)).isNull();
+        } finally { release.countDown(); executor.shutdownNow(); registry.close(); }
+    }
+
+    @Test
     void boundedExecutorCapturesTenantAtSubmissionAndClearsAfterFailure() throws Exception {
         AsyncExecutorProperties properties = new AsyncExecutorProperties();
         properties.setShutdownWaitSeconds(1);

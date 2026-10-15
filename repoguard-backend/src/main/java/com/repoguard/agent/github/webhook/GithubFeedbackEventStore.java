@@ -1,6 +1,7 @@
 package com.repoguard.agent.github.webhook;
 
-import com.repoguard.agent.tenancy.TenantContext;
+import org.springframework.beans.factory.annotation.Autowired;
+import com.repoguard.agent.tenancy.TenantProperties;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
@@ -13,8 +14,14 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class GithubFeedbackEventStore {
     private final JdbcTemplate jdbc;
+    private final TenantProperties tenancy;
 
-    public GithubFeedbackEventStore(JdbcTemplate jdbc) { this.jdbc = jdbc; }
+    public GithubFeedbackEventStore(JdbcTemplate jdbc) { this(jdbc, new TenantProperties()); }
+
+    @Autowired
+    public GithubFeedbackEventStore(JdbcTemplate jdbc, TenantProperties tenancy) {
+        this.jdbc = jdbc; this.tenancy = tenancy;
+    }
 
     public Target target(GithubFeedbackCommand command, boolean lock) {
         List<Target> rows = jdbc.query("""
@@ -105,7 +112,7 @@ public class GithubFeedbackEventStore {
             rs.getLong("finding_id"), rs.getLong("attempt_id"), rs.getString("status"));
     }
 
-    private long tenant() { return TenantContext.currentTenantIdOrDefault(); }
+    private long tenant() { return tenancy.currentTenantId(); }
     private static LocalDateTime time(ResultSet rs, String name) throws SQLException {
         return rs.getTimestamp(name) == null ? null : rs.getTimestamp(name).toLocalDateTime();
     }

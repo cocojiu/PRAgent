@@ -7,7 +7,8 @@ import com.repoguard.agent.dto.RepositorySuppressionResponse;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
-import com.repoguard.agent.tenancy.TenantContext;
+import com.repoguard.agent.tenancy.TenantProperties;
+import org.springframework.beans.factory.annotation.Autowired;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -27,15 +28,21 @@ public class RepositorySuppressionService {
     private static final int MAX_REPLAY = 100;
     private static final int DEFAULT_FEEDBACK_EXPIRY_DAYS = 90;
 
+    private final TenantProperties tenancy;
     private final RepositorySuppressionRepository repository;
     private final ReviewFindingMapper findingMapper;
     private final ReviewRuleRegistry ruleRegistry;
 
+    public RepositorySuppressionService(RepositorySuppressionRepository repository, ReviewFindingMapper findingMapper,
+        ReviewRuleRegistry ruleRegistry) { this(repository, findingMapper, ruleRegistry, new TenantProperties()); }
+
+    @Autowired
     public RepositorySuppressionService(
         RepositorySuppressionRepository repository,
         ReviewFindingMapper findingMapper,
-        ReviewRuleRegistry ruleRegistry
+        ReviewRuleRegistry ruleRegistry, TenantProperties tenancy
     ) {
+        this.tenancy = tenancy;
         this.repository = Objects.requireNonNull(repository, "repository");
         this.findingMapper = Objects.requireNonNull(findingMapper, "findingMapper");
         this.ruleRegistry = Objects.requireNonNull(ruleRegistry, "ruleRegistry");
@@ -57,7 +64,7 @@ public class RepositorySuppressionService {
         LocalDateTime expiresAt = parseExpiry(request.expiresAt());
         int previewHits = replay(organization, repositoryName, ruleId, fileGlob, symbol);
         RepositorySuppressionRepository.StoredSuppression stored = repository.insert(
-            TenantContext.currentTenantIdOrDefault(), organization, repositoryName, ruleId,
+            tenancy.currentTenantId(), organization, repositoryName, ruleId,
             fileGlob, symbol, reason, operatorName(operator), expiresAt, previewHits
         );
         return response(stored);
@@ -75,7 +82,7 @@ public class RepositorySuppressionService {
             task.getOrganization(), task.getRepository(), normalizeRule(finding.getRuleId()), finding.getFilePath(), null
         );
         RepositorySuppressionRepository.StoredSuppression stored = repository.insert(
-            TenantContext.currentTenantIdOrDefault(), task.getOrganization(), task.getRepository(),
+            tenancy.currentTenantId(), task.getOrganization(), task.getRepository(),
             normalizeRule(finding.getRuleId()), finding.getFilePath(), null, reason,
             operatorName(operator), expiresAt, previewHits
         );
@@ -84,14 +91,14 @@ public class RepositorySuppressionService {
 
     public List<RepositorySuppressionResponse> list(String organization, String repositoryName, int limit) {
         return repository.list(
-            TenantContext.currentTenantIdOrDefault(), required(organization, "organization"),
+            tenancy.currentTenantId(), required(organization, "organization"),
             required(repositoryName, "repository"), limit
         ).stream().map(this::response).toList();
     }
 
     public List<RepositoryPolicyDocument.SuppressionReference> activeReferences(String organization, String repositoryName) {
         return repository.activeFor(
-            TenantContext.currentTenantIdOrDefault(), organization, repositoryName
+            tenancy.currentTenantId(), organization, repositoryName
         ).stream().map(RepositorySuppressionRepository.StoredSuppression::toReference).toList();
     }
 
@@ -107,7 +114,7 @@ public class RepositorySuppressionService {
 
     @Transactional
     public int expireDue(int limit) {
-        return repository.expireDue(TenantContext.currentTenantIdOrDefault(), limit);
+        return repository.expireDue(tenancy.currentTenantId(), limit);
     }
 
     private RepositorySuppressionResponse transition(
@@ -117,7 +124,7 @@ public class RepositorySuppressionService {
         String operator,
         String reason
     ) {
-        long tenantId = TenantContext.currentTenantIdOrDefault();
+        long tenantId = tenancy.currentTenantId();
         RepositorySuppressionRepository.StoredSuppression existing = repository.find(tenantId, id);
         if (existing == null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Suppression proposal not found: " + id);

@@ -27,7 +27,7 @@ import org.springframework.jdbc.core.RowMapper;
 class LlmModelReleaseMetricsRepositoryTest {
 
     private final JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
-    private final LlmModelReleaseMetricsRepository repository = new LlmModelReleaseMetricsRepository(jdbcTemplate);
+    private final LlmModelReleaseMetricsRepository repository = new LlmModelReleaseMetricsRepository(jdbcTemplate, new com.repoguard.agent.tenancy.TenantProperties());
 
     @Test
     void aggregateNormalizesDatabaseValuesAndComputesP95() throws Exception {

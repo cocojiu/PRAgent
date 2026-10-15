@@ -24,6 +24,12 @@ public final class TenantContext {
         return tenantId == null ? DEFAULT_TENANT_ID : tenantId;
     }
 
+    public static long requireTenantId() {
+        Long tenantId = CURRENT.get();
+        if (tenantId == null) throw new IllegalStateException("Tenant context is required");
+        return tenantId;
+    }
+
     public static boolean hasTenant() {
         return CURRENT.get() != null;
     }

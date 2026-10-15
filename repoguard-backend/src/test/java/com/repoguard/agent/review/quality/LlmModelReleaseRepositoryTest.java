@@ -98,7 +98,7 @@ class LlmModelReleaseRepositoryTest {
 
     @Test
     void saveUpdatesExistingReleaseAndReturnsFreshRow() throws Exception {
-        LlmModelReleaseService.NormalizedRelease draft = draft();
+        LlmModelReleaseRepository.NormalizedRelease draft = draft();
         LlmModelReleaseDto stored = rowDto("SHADOW");
         when(jdbcTemplate.query(contains("release_key = ?"),
             org.mockito.ArgumentMatchers.<RowMapper<Long>>any(), eq(new Object[] { 42L, "release-1" })))
@@ -119,7 +119,7 @@ class LlmModelReleaseRepositoryTest {
 
     @Test
     void saveInsertsNewReleaseUsingGeneratedKey() throws Exception {
-        LlmModelReleaseService.NormalizedRelease draft = draft();
+        LlmModelReleaseRepository.NormalizedRelease draft = draft();
         LlmModelReleaseDto stored = rowDto("SHADOW");
         when(jdbcTemplate.query(contains("release_key = ?"),
             org.mockito.ArgumentMatchers.<RowMapper<Long>>any(), eq(new Object[] { 42L, "release-1" })))
@@ -304,8 +304,8 @@ class LlmModelReleaseRepositoryTest {
             1000L, List.of(), null, "tester", null, null);
     }
 
-    private LlmModelReleaseService.NormalizedRelease draft() {
-        return new LlmModelReleaseService.NormalizedRelease(
+    private LlmModelReleaseRepository.NormalizedRelease draft() {
+        return new LlmModelReleaseRepository.NormalizedRelease(
             "release-1", "openai", "gpt-next", "prompt-v1", "context-v1", "schema-v1", "dataset-1", "v1",
             FINGERPRINT, 25, true, new BigDecimal("0.95"), new BigDecimal("0.85"), new BigDecimal("0.98"),
             new BigDecimal("0.01"), new BigDecimal("0.01"), 1000L, new BigDecimal("0.01"), 1000L, List.of(), "operator"

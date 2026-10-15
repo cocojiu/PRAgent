@@ -3,7 +3,7 @@ package com.repoguard.agent.review.quality;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.dto.LlmModelReleaseRequest.LlmEvaluationReportLifecycleRequest;
-import com.repoguard.agent.tenancy.TenantContext;
+import com.repoguard.agent.tenancy.TenantProperties;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
@@ -29,16 +29,16 @@ public class LlmEvaluationReportLifecycleService {
     private static final int MAX_RETENTION_DAYS = 3_650;
     private static final int EXPIRY_BATCH_SIZE = 100;
 
+    private final TenantProperties tenancy;
     private final JdbcTemplate jdbcTemplate;
     private final LlmModelReleaseRepository releaseRepository;
     private final int configuredRetentionDays;
 
     @Autowired
-    public LlmEvaluationReportLifecycleService(
-        JdbcTemplate jdbcTemplate,
+    public LlmEvaluationReportLifecycleService(JdbcTemplate jdbcTemplate,
         LlmModelReleaseRepository releaseRepository,
-        @Value("${repoguard.review.evaluation-report-retention-days:180}") int configuredRetentionDays
-    ) {
+        @Value("${repoguard.review.evaluation-report-retention-days:180}") int configuredRetentionDays, TenantProperties tenancy) {
+        this.tenancy = tenancy;
         this.jdbcTemplate = Objects.requireNonNull(jdbcTemplate, "jdbcTemplate");
         this.releaseRepository = Objects.requireNonNull(releaseRepository, "releaseRepository");
         this.configuredRetentionDays = normalizeRetentionDays(configuredRetentionDays);
@@ -48,7 +48,7 @@ public class LlmEvaluationReportLifecycleService {
         JdbcTemplate jdbcTemplate,
         LlmModelReleaseRepository releaseRepository
     ) {
-        this(jdbcTemplate, releaseRepository, DEFAULT_RETENTION_DAYS);
+        this(jdbcTemplate, releaseRepository, DEFAULT_RETENTION_DAYS, new TenantProperties());
     }
 
     public int defaultRetentionDays() {
@@ -73,7 +73,7 @@ public class LlmEvaluationReportLifecycleService {
         String operator,
         String role
     ) {
-        return transition(TenantContext.currentTenantIdOrDefault(), reportId, request, operator, role);
+        return transition(tenancy.currentTenantId(), reportId, request, operator, role);
     }
 
     @Transactional
@@ -133,7 +133,7 @@ public class LlmEvaluationReportLifecycleService {
     /** Scans one bounded tenant batch; due rows remain retryable if a transition fails. */
     @Transactional
     public int expireDueReports() {
-        long tenantId = TenantContext.currentTenantIdOrDefault();
+        long tenantId = tenancy.currentTenantId();
         LocalDateTime now = LocalDateTime.now();
         releaseRepository.lockTenant(tenantId);
         List<Long> ids = jdbcTemplate.query(
@@ -181,7 +181,7 @@ public class LlmEvaluationReportLifecycleService {
         if (!isAdministrator(role)) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "评估报告导出需要管理员授权");
         }
-        long tenantId = TenantContext.currentTenantIdOrDefault();
+        long tenantId = tenancy.currentTenantId();
         LlmModelReleaseRepository.StoredEvaluationReport report = releaseRepository.findEvaluationReport(tenantId, reportId);
         if ("DELETED".equalsIgnoreCase(report.lifecycleStatus())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "评估报告已软删除，不能导出");

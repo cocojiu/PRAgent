@@ -24,6 +24,11 @@ import org.springframework.cache.support.SimpleCacheManager;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 class CacheStatsServiceImplTest {
+    private com.repoguard.agent.tenancy.TenantContext.Scope personalScope;
+    @org.junit.jupiter.api.BeforeEach
+    void personalEntry() { personalScope = com.repoguard.agent.tenancy.TenantContext.withTenant(1L); }
+    @org.junit.jupiter.api.AfterEach
+    void clearPersonalEntry() { personalScope.close(); }
 
     private static final LocalDate SNAPSHOT_DATE = LocalDate.of(2026, 6, 19);
 

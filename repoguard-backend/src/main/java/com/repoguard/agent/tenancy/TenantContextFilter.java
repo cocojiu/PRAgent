@@ -40,7 +40,9 @@ public class TenantContextFilter extends OncePerRequestFilter {
         FilterChain filterChain
     ) throws ServletException, IOException {
         if (!properties.isEnabled()) {
-            filterChain.doFilter(request, response);
+            try (var _ = TenantContext.withTenant(TenantContext.DEFAULT_TENANT_ID)) {
+                filterChain.doFilter(request, response);
+            }
             return;
         }
         if (isControlPlaneRequest(request)) {

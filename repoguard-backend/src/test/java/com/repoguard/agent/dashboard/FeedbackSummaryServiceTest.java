@@ -61,7 +61,7 @@ class FeedbackSummaryServiceTest {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
         when(jdbc.query(anyString(), org.mockito.ArgumentMatchers.<RowMapper<Observation>>any(), any(Object[].class))).thenReturn(List.of());
         try (TenantContext.Scope _ = TenantContext.withTenant(42L)) {
-            assertThat(new FeedbackSummaryService(jdbc).summary().sampleSize()).isZero();
+            assertThat(new FeedbackSummaryService(jdbc, new com.repoguard.agent.tenancy.TenantProperties()).summary().sampleSize()).isZero();
         }
         var values = org.mockito.ArgumentCaptor.forClass(Object[].class);
         verify(jdbc).query(argThat(sql -> sql.contains("f.tenant_id = ?")
@@ -92,7 +92,7 @@ class FeedbackSummaryServiceTest {
         when(jdbc.query(anyString(), org.mockito.ArgumentMatchers.<RowMapper<Observation>>any(), any(Object[].class)))
             .thenAnswer(call -> List.of(call.<RowMapper<Observation>>getArgument(1).mapRow(rs, 0)));
 
-        assertThat(new FeedbackSummaryService(jdbc).summary().details().getFirst().feedbackAt()).isEqualTo(NOW);
+        assertThat(new FeedbackSummaryService(jdbc, new com.repoguard.agent.tenancy.TenantProperties()).summary().details().getFirst().feedbackAt()).isEqualTo(NOW);
     }
 
     private FeedbackSummaryService.FeedbackSummary summarize(List<Observation> rows) {
