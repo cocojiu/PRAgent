@@ -22,7 +22,7 @@ class ReviewTaskQueryItemLoaderTest {
     private final ReviewTimelineMapper reviewTimelineMapper = org.mockito.Mockito.mock(ReviewTimelineMapper.class);
     private final ReviewTaskQueryItemLoader loader = new ReviewTaskQueryItemLoader(
         reviewTaskMapper,
-        new ReviewFailureSummaryResolver(),
+        new ReviewFailureSummaryResolver(new com.repoguard.agent.config.JacksonConfig().objectMapper()),
         new ReviewTimelineQueryService(reviewTimelineMapper),
         new ReviewTaskListItemAssembler()
     );
@@ -83,6 +83,17 @@ class ReviewTaskQueryItemLoaderTest {
     }
 
     @Test
+    void structuredStatusDoesNotReadLegacyFailureTimeline() {
+        ReviewTask failed = task();
+        failed.setStatus("FAILED");
+        failed.setCurrentAttemptId(42L);
+        failed.setFailureDetailsJson(new com.repoguard.agent.review.task.ReviewFailureSummaryResolver.ReviewFailureDetails(
+            "github_timeout", true, "GITHUB", 42L, "").toJson(new com.repoguard.agent.config.JacksonConfig().objectMapper()));
+        assertThat(loader.assembleStatus(failed).failureCategory()).isEqualTo("github_timeout");
+        org.mockito.Mockito.verifyNoInteractions(reviewTimelineMapper);
+    }
+
+    @Test
     void statusDoesNotQueryFailuresForRunningTasks() {
         ReviewTask running = task();
         running.setStatus("REVIEWING");
@@ -94,7 +105,7 @@ class ReviewTaskQueryItemLoaderTest {
     void constructorRejectsMissingListItemAssembler() {
         assertThatThrownBy(() -> new ReviewTaskQueryItemLoader(
             reviewTaskMapper,
-            new ReviewFailureSummaryResolver(),
+            new ReviewFailureSummaryResolver(new com.repoguard.agent.config.JacksonConfig().objectMapper()),
             new ReviewTimelineQueryService(reviewTimelineMapper),
             null
         ))

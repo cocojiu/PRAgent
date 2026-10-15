@@ -223,6 +223,7 @@ public class ReviewTaskTransitionStore {
             .set("status", reviewTaskStateMachine.statusWhenQueued())
             .set("risk_level", "INFO")
             .set("assessment_status", AssessmentStatus.PARTIAL.name())
+            .set("failure_details_json", null)
             .set("publish_attempts", 0)
             .set("next_publish_retry_at", null)
             .set("last_publish_error", null)
@@ -261,6 +262,7 @@ public class ReviewTaskTransitionStore {
         task.setStatus(reviewTaskStateMachine.statusWhenQueued());
         task.setRiskLevel("INFO");
         task.setAssessmentStatus(AssessmentStatus.PARTIAL.name());
+        task.setFailureDetailsJson(null);
         task.setPublishAttempts(0);
         task.setNextPublishRetryAt(null);
         task.setLastPublishError(null);

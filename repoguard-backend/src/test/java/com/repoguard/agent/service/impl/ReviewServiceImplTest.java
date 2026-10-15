@@ -167,7 +167,7 @@ class ReviewServiceImplTest {
         ),
         new ReviewTaskQueryItemLoader(
             reviewTaskMapper,
-            new ReviewFailureSummaryResolver(),
+            new ReviewFailureSummaryResolver(new com.repoguard.agent.config.JacksonConfig().objectMapper()),
             reviewTimelineQueryService,
             reviewTaskListItemAssembler
         ),

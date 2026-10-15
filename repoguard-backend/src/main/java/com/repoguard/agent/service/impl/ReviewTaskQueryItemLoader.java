@@ -62,7 +62,8 @@ public class ReviewTaskQueryItemLoader {
                 ReviewTask::getLlmStatus, ReviewTask::getDurationSeconds, ReviewTask::getCreatedAt,
                 ReviewTask::getStartedAt, ReviewTask::getFinishedAt, ReviewTask::getAssessmentStatus,
                 ReviewTask::getHumanReviewRequired, ReviewTask::getHumanReviewStatus,
-                ReviewTask::getHumanReviewNote, ReviewTask::getHumanReviewBy, ReviewTask::getHumanReviewedAt)
+                ReviewTask::getHumanReviewNote, ReviewTask::getHumanReviewBy, ReviewTask::getHumanReviewedAt,
+                ReviewTask::getCurrentAttemptId, ReviewTask::getFailureDetailsJson)
             .eq(ReviewTask::getId, taskId));
     }
 

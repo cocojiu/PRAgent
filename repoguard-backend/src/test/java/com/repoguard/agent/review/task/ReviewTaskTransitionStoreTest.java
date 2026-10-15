@@ -29,6 +29,7 @@ class ReviewTaskTransitionStoreTest {
     @Test
     void retryUsesFailedCasAndExplicitlyClearsAttemptState() {
         ReviewTask task = staleFailedTask();
+        task.setFailureDetailsJson("previous-failure");
         when(reviewTaskMapper.update(any())).thenReturn(1);
 
         store.retryFailedTask(task, 3);
@@ -59,6 +60,8 @@ class ReviewTaskTransitionStoreTest {
         assertQueuedAndCleared(task);
         assertThat(task.getMqRetries()).isEqualTo(3);
         assertThat(task.getCommitSha()).isEqualTo("old-commit");
+        assertThat(task.getFailureDetailsJson()).isNull();
+        assertThat(update.getSqlSet()).contains("failure_details_json");
         verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
     }
 
@@ -84,6 +87,7 @@ class ReviewTaskTransitionStoreTest {
     @Test
     void retryConflictReturnsConflictAndLeavesSnapshotUntouched() {
         ReviewTask task = staleFailedTask();
+        task.setFailureDetailsJson("previous-failure");
         when(reviewTaskMapper.update(any())).thenReturn(0);
 
         assertThatThrownBy(() -> store.retryFailedTask(task, 3))
@@ -96,6 +100,7 @@ class ReviewTaskTransitionStoreTest {
         assertThat(task.getLlmProvider()).isEqualTo("openai");
         assertThat(task.getHumanReviewNote()).isEqualTo("old decision");
         assertThat(task.getPublishClaimedBy()).isEqualTo("old-publisher");
+        assertThat(task.getFailureDetailsJson()).isEqualTo("previous-failure");
     }
 
     @Test

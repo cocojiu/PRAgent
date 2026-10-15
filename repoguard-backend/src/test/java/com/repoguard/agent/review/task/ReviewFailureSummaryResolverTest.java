@@ -3,12 +3,36 @@ package com.repoguard.agent.review.task;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.review.task.ReviewFailureSummaryResolver.ReviewFailureDetails;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class ReviewFailureSummaryResolverTest {
 
-    private final ReviewFailureSummaryResolver resolver = new ReviewFailureSummaryResolver();
+    private final ReviewFailureSummaryResolver resolver = new ReviewFailureSummaryResolver(new com.repoguard.agent.config.JacksonConfig().objectMapper());
+
+    @Test
+    void structuredSnapshotIgnoresPresentationTextAndKeepsRetryHint() {
+        ReviewTask task = task("FAILED");
+        task.setCurrentAttemptId(42L);
+        task.setFailureDetailsJson(new ReviewFailureDetails("llm_rate_limited", true, "LLM", 42L, "60").toJson(new com.repoguard.agent.config.JacksonConfig().objectMapper()));
+        var result = resolver.resolve(task, List.of("Renamed failure event", "Review failed: category=github_token_invalid"));
+        assertThat(result.category()).isEqualTo("llm_rate_limited");
+        assertThat(result.suggestion()).contains("60");
+    }
+
+    @Test
+    void unknownMalformedAndStaleSnapshotsDoNotReuseLegacyClassification() {
+        ReviewTask task = task("FAILED");
+        task.setCurrentAttemptId(42L);
+        for (String snapshot : List.of("not-json",
+            new ReviewFailureDetails("future_category", false, "REVIEW_EXECUTION", 42L, "").toJson(new com.repoguard.agent.config.JacksonConfig().objectMapper()),
+            new ReviewFailureDetails("llm_timeout", true, "LLM", 41L, "").toJson(new com.repoguard.agent.config.JacksonConfig().objectMapper()))) {
+            task.setFailureDetailsJson(snapshot);
+            assertThat(resolver.resolve(task, List.of("Review failed: category=github_token_invalid")).category())
+                .isEqualTo("review_execution_failed");
+        }
+    }
 
     @Test
     void returnsEmptySummaryForNonFailedTask() {

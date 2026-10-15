@@ -57,7 +57,8 @@ class ReviewQueryOptimizationMysqlIntegrationTest {
             .locations("classpath:db/migration").load().migrate();
         var configuration = new MybatisConfiguration(); configuration.setMapUnderscoreToCamelCase(true);
         for (Class<?> mapper : List.of(ChangedFileMapper.class, ReviewFindingMapper.class,
-            ReviewTaskMapper.class, ReviewTimelineMapper.class)) configuration.addMapper(mapper);
+            ReviewTaskMapper.class, ReviewTimelineMapper.class,
+            com.repoguard.agent.mapper.ReviewExecutionAttemptMapper.class)) configuration.addMapper(mapper);
         var tenancy = new TenantProperties(); tenancy.setEnabled(true);
         var factory = new MybatisSqlSessionFactoryBean(); factory.setDataSource(data);
         factory.setConfiguration(configuration);
@@ -141,6 +142,75 @@ class ReviewQueryOptimizationMysqlIntegrationTest {
     }
 
     @Test
+    void statusProjectionStaysBoundedWithThirtyThousandEventsAndPreservesTenantIsolation() {
+        var rows = java.util.stream.IntStream.range(0, 30000)
+            .mapToObj(index -> new Object[] {tenant, task, "event " + index, index}).toList();
+        jdbc.batchUpdate("insert into review_timeline(tenant_id,task_id,label,event_time,status,sort_order) "
+            + "values(?,?,?,utc_timestamp(),'DONE',?)", rows);
+        timeline(tenant, task, "Review failed: category=llm_timeout", 15000);
+        timeline(otherTenant, foreignTask, "foreign", 40000);
+        var tasks = session.getMapper(ReviewTaskMapper.class);
+        var timelines = new ReviewTimelineQueryService(session.getMapper(ReviewTimelineMapper.class));
+        var loader = new ReviewTaskQueryItemLoader(tasks, new ReviewFailureSummaryResolver(new com.repoguard.agent.config.JacksonConfig().objectMapper()), timelines, new ReviewTaskListItemAssembler());
+        try (TenantContext.Scope _ = TenantContext.withTenant(tenant)) {
+            var full = timelines.loadByTaskId(task);
+            var narrow = loader.loadStatusTask(task);
+            assertThat(full).hasSize(30001);
+            assertThat(timelines.loadLatestByTaskId(task, 1)).hasSize(1);
+            assertThat(loader.loadLatestTimelineItem(task).label()).isEqualTo("event 29999");
+            assertThat(loader.assembleStatus(narrow).failureCategory()).isEqualTo("llm_timeout");
+            assertThat(narrow.getLlmPromptSummary()).isNull();
+            assertThat(loader.loadStatusTask(foreignTask)).isNull();
+            assertThat(loader.loadLatestTimelineItem(foreignTask)).isNull();
+            long[] fullNanos = new long[10]; long[] boundedNanos = new long[10];
+            for (int index = 0; index < 10; index++) {
+                long start = System.nanoTime();
+                timelines.loadByTaskId(task);
+                fullNanos[index] = System.nanoTime() - start;
+                start = System.nanoTime();
+                loader.loadLatestTimelineItem(task); loader.assembleStatus(narrow);
+                boundedNanos[index] = System.nanoTime() - start;
+            }
+            java.util.Arrays.sort(fullNanos); java.util.Arrays.sort(boundedNanos);
+            System.out.printf("[status-fixture] rowsBefore=30001 rowsAfterAtMost=2 localReadP95BeforeMs=%.3f localReadP95AfterMs=%.3f%n",
+                fullNanos[9] / 1e6, boundedNanos[9] / 1e6);
+            System.out.println("[status-fixture-plan] " + jdbc.queryForList(
+                "EXPLAIN ANALYZE select * from review_timeline where tenant_id=? and task_id=? order by sort_order desc,id desc limit 1",
+                tenant, task));
+        }
+    }
+
+    @Test
+    void structuredFailureIsAtomicAndOldAttemptOrDuplicateCannotOverwriteIt() {
+        jdbc.update("update review_task set status='REVIEWING',current_attempt_id=?,review_claimed_by='fixture-claim' where id=?", attempt, task);
+        var tasks = session.getMapper(ReviewTaskMapper.class);
+        var claims = new com.repoguard.agent.worker.ReviewTaskClaimService(tasks,
+            new com.repoguard.agent.review.ReviewTaskStateMachine(),
+            session.getMapper(com.repoguard.agent.mapper.ReviewExecutionAttemptMapper.class));
+        try (TenantContext.Scope _ = TenantContext.withTenant(tenant)) {
+            var current = tasks.selectById(task);
+            current.setStatus("FAILED");
+            current.setFailureDetailsJson(new com.repoguard.agent.review.task.ReviewFailureSummaryResolver.ReviewFailureDetails(
+                "llm_timeout", true, "LLM", attempt, "").toJson(new com.repoguard.agent.config.JacksonConfig().objectMapper()));
+            var stale = tasks.selectById(task);
+            stale.setCurrentAttemptId(attempt + 999);
+            stale.setStatus("FAILED");
+            stale.setFailureDetailsJson(current.getFailureDetailsJson());
+            assertThat(claims.writeTerminalStateIfClaimOwned(stale, "fixture-claim")).isFalse();
+            assertThat(tasks.selectById(task).getFailureDetailsJson()).isNull();
+            assertThat(claims.writeTerminalStateIfClaimOwned(current, "fixture-claim")).isTrue();
+            var stored = tasks.selectById(task);
+            assertThat(stored.getStatus()).isEqualTo("FAILED");
+            assertThat(com.repoguard.agent.review.task.ReviewFailureSummaryResolver.ReviewFailureDetails.parse(stored.getFailureDetailsJson(), new com.repoguard.agent.config.JacksonConfig().objectMapper()).orElseThrow().attemptId())
+                .isEqualTo(attempt);
+            assertThat(claims.writeTerminalStateIfClaimOwned(current, "fixture-claim")).isFalse();
+            var loader = new ReviewTaskQueryItemLoader(tasks, new ReviewFailureSummaryResolver(new com.repoguard.agent.config.JacksonConfig().objectMapper()),
+                new ReviewTimelineQueryService(session.getMapper(ReviewTimelineMapper.class)), new ReviewTaskListItemAssembler());
+            assertThat(loader.assembleStatus(loader.loadStatusTask(task)).failureCategory()).isEqualTo("llm_timeout");
+        }
+    }
+
+    @Test
     void narrowListAndLatestFailureSummaryPreserveThePublicListItem() {
         jdbc.update("update review_task set llm_prompt_summary=?,llm_cost_snapshot_json=JSON_OBJECT('large',?) where id=?",
             "p".repeat(1000), "c".repeat(30000), task);
@@ -153,7 +223,7 @@ class ReviewQueryOptimizationMysqlIntegrationTest {
         var builder = new ReviewTaskListQueryBuilder(new ReviewTaskCursorCodec(auth));
         var tasks = session.getMapper(ReviewTaskMapper.class);
         var timelines = new ReviewTimelineQueryService(session.getMapper(ReviewTimelineMapper.class));
-        var loader = new ReviewTaskQueryItemLoader(tasks, new ReviewFailureSummaryResolver(), timelines, new ReviewTaskListItemAssembler());
+        var loader = new ReviewTaskQueryItemLoader(tasks, new ReviewFailureSummaryResolver(new com.repoguard.agent.config.JacksonConfig().objectMapper()), timelines, new ReviewTaskListItemAssembler());
         try (TenantContext.Scope _ = TenantContext.withTenant(tenant)) {
             ReviewTask full = tasks.selectById(task);
             ReviewTask narrow = tasks.selectList(builder.build(new ReviewQuery(1, 20, null, null, null, null, null, null))).getFirst();

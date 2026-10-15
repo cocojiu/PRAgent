@@ -20,7 +20,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
  * Exercises the supported rolling-upgrade path against a real MySQL instance.
  *
  * <p>The test is opt-in because local unit-test runs do not provision a database. CI enables it
- * with an isolated database and verifies the V76 expand state through the V106 safety state.
+ * with an isolated database and verifies V76 through the V107 structured failure state.
  */
 @EnabledIfEnvironmentVariable(named = "REPOGUARD_RUN_INTEGRATION_TESTS", matches = "true")
 class FlywayMigrationUpgradePathIntegrationTest {
@@ -417,6 +417,19 @@ class FlywayMigrationUpgradePathIntegrationTest {
                 assertThat(latestSuccessfulMigration(connection)).isEqualTo("106");
                 assertThat(columnExists(connection, "llm_model_release", "safety_revoked_at")).isTrue();
                 assertThat(columnExists(connection, "llm_model_release", "safety_revoke_reason")).isTrue();
+            }
+            migrateTo(url, username, password, "107");
+            try (Connection connection = open(url, username, password)) {
+                assertThat(latestSuccessfulMigration(connection)).isEqualTo("107");
+                assertThat(columnExists(connection, "review_task", "failure_details_json")).isTrue();
+                try (PreparedStatement legacy = connection.prepareStatement(
+                    "select failure_details_json from review_task where id=? and tenant_id=?")) {
+                    legacy.setLong(1, taskId); legacy.setLong(2, tenantId);
+                    try (ResultSet rows = legacy.executeQuery()) {
+                        assertThat(rows.next()).isTrue();
+                        assertThat(rows.getString(1)).isNull();
+                    }
+                }
             }
         } finally {
             cleanup(url, username, password, tenantId, taskId, attemptId);

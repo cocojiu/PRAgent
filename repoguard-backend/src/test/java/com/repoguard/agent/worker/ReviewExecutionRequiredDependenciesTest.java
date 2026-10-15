@@ -151,7 +151,8 @@ class ReviewExecutionRequiredDependenciesTest {
             null,
             null,
             null,
-            new ReviewExecutionFailureClassifier()
+            new ReviewExecutionFailureClassifier(),
+            new com.repoguard.agent.config.JacksonConfig().objectMapper()
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("taskTerminalWriter");
@@ -177,7 +178,8 @@ class ReviewExecutionRequiredDependenciesTest {
             null,
             null,
             null,
-            null
+            null,
+            new com.repoguard.agent.config.JacksonConfig().objectMapper()
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("failureClassifier");
@@ -241,7 +243,8 @@ class ReviewExecutionRequiredDependenciesTest {
             null,
             null,
             null,
-            new ReviewExecutionFailureClassifier()
+            new ReviewExecutionFailureClassifier(),
+            new com.repoguard.agent.config.JacksonConfig().objectMapper()
         );
     }
 
