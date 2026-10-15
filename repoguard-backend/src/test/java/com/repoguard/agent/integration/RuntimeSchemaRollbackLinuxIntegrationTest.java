@@ -102,7 +102,7 @@ class RuntimeSchemaRollbackLinuxIntegrationTest {
         await(() -> succeeds(List.of("docker", "exec", "--user", "rabbitmq", rabbit, "rabbitmq-diagnostics", "-q", "ping")), 90);
         // Internal bridges do not publish host ports; the trusted Linux host can use the owned bridge IP.
         JsonNode broker = inspect("container", rabbit).path("NetworkSettings");
-        assertThat(broker.path("Ports").path("5672/tcp").isNull()).isTrue();
+        assertThat(broker.path("Ports").findValues("HostPort")).isEmpty();
         JsonNode attachment = broker.path("Networks").path(OWNER);
         assertThat(attachment.path("NetworkID").asText()).isEqualTo(network);
         rabbitHost = attachment.path("IPAddress").asText();
