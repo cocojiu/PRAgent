@@ -18,6 +18,13 @@ class TenantScopedRuntimeKeyTest {
     }
 
     @Test
+    void missingContextCannotSelectAnExistingDefaultTenantCacheEntry() {
+        var entries = java.util.Map.of(new TenantScopedKey(1L, "same-key"), "private tenant data");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> entries.get(TenantScopedKey.current("same-key")))
+            .isInstanceOf(IllegalStateException.class).hasMessageContaining("Tenant context");
+    }
+
+    @Test
     void sameBusinessKeyDiffersAcrossTenants() {
         TenantScopedKey tenantTwo;
         TenantScopedKey tenantThree;

@@ -17,7 +17,7 @@ class GithubFeedbackEventStoreTest {
     @Test
     void duplicateDeliveriesAreIdempotentAndNeverStoreRawBodies() throws Exception {
         var jdbc = mock(JdbcTemplate.class);
-        var store = new GithubFeedbackEventStore(jdbc);
+        var store = new GithubFeedbackEventStore(jdbc, new com.repoguard.agent.tenancy.TenantProperties());
         var command = GithubFeedbackCommand.parse(GithubFeedbackServiceTest.payload());
         when(jdbc.update(contains("insert into github_feedback_event"), any(Object[].class)))
             .thenReturn(1).thenThrow(new DuplicateKeyException("duplicate"));
@@ -33,7 +33,7 @@ class GithubFeedbackEventStoreTest {
     @Test
     void retriesAreTenantScopedAndCannotReplayAppliedEvents() {
         var jdbc = mock(JdbcTemplate.class);
-        var store = new GithubFeedbackEventStore(jdbc);
+        var store = new GithubFeedbackEventStore(jdbc, new com.repoguard.agent.tenancy.TenantProperties());
         when(jdbc.update(contains("status = 'FAILED'"), any(Object[].class))).thenReturn(0);
         try (TenantContext.Scope _ = TenantContext.withTenant(42L)) {
             assertThat(store.retry(7)).isFalse();

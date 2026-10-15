@@ -117,7 +117,7 @@ public class CacheEvictionService {
     }
 
     public void evictDashboardReviewActivity() {
-        long tenantId = TenantContext.currentTenantIdOrDefault();
+        long tenantId = TenantContext.requireTenantId();
         DashboardDailySnapshotService snapshotService = dashboardSnapshotServiceSupplier.get();
         LocalDate latestReviewDate = snapshotService == null ? null : snapshotService.latestReviewDate();
         if (latestReviewDate == null) {
@@ -130,7 +130,7 @@ public class CacheEvictionService {
     }
 
     public void evictDashboardReviewActivity(LocalDate statDate) {
-        long tenantId = TenantContext.currentTenantIdOrDefault();
+        long tenantId = TenantContext.requireTenantId();
         LocalDate normalizedStatDate = Objects.requireNonNull(statDate, "statDate must not be null");
         markDashboardSnapshotDirty(service -> service.markReviewActivityDirty(normalizedStatDate));
         markQualityBaselineDirty();
@@ -161,7 +161,7 @@ public class CacheEvictionService {
     }
 
     public void evictDashboardFeedbackQuality() {
-        long tenantId = TenantContext.currentTenantIdOrDefault();
+        long tenantId = TenantContext.requireTenantId();
         DashboardDailySnapshotService snapshotService = dashboardSnapshotServiceSupplier.get();
         LocalDate latestReviewDate = snapshotService == null ? null : snapshotService.latestReviewDate();
         if (latestReviewDate == null) {
@@ -174,7 +174,7 @@ public class CacheEvictionService {
     }
 
     public void evictDashboardFeedbackQuality(LocalDate statDate) {
-        long tenantId = TenantContext.currentTenantIdOrDefault();
+        long tenantId = TenantContext.requireTenantId();
         LocalDate normalizedStatDate = Objects.requireNonNull(statDate, "statDate must not be null");
         markDashboardSnapshotDirty(service -> service.markLlmQualityDirty(normalizedStatDate));
         markQualityBaselineDirty();
@@ -199,7 +199,7 @@ public class CacheEvictionService {
 
     public void evictDashboardRules() {
         publishClusterInvalidation(
-            TenantContext.currentTenantIdOrDefault(),
+            TenantContext.requireTenantId(),
             ClusterCacheInvalidationType.DASHBOARD_RULES,
             null
         );
@@ -213,7 +213,7 @@ public class CacheEvictionService {
 
     public void evictDashboardOverviewCompatibility() {
         publishClusterInvalidation(
-            TenantContext.currentTenantIdOrDefault(),
+            TenantContext.requireTenantId(),
             ClusterCacheInvalidationType.DASHBOARD_OVERVIEW,
             null
         );
@@ -227,7 +227,7 @@ public class CacheEvictionService {
 
     public void evictGithubOpenPullRequests() {
         publishClusterInvalidation(
-            TenantContext.currentTenantIdOrDefault(),
+            TenantContext.requireTenantId(),
             ClusterCacheInvalidationType.GITHUB_OPEN_PULL_REQUESTS,
             null
         );
@@ -236,7 +236,7 @@ public class CacheEvictionService {
 
     public void evictReviewRules() {
         publishClusterInvalidation(
-            TenantContext.currentTenantIdOrDefault(),
+            TenantContext.requireTenantId(),
             ClusterCacheInvalidationType.REVIEW_RULES,
             null
         );
@@ -260,7 +260,7 @@ public class CacheEvictionService {
         }
         Object nativeCache = cache.getNativeCache();
         if (nativeCache instanceof com.github.benmanes.caffeine.cache.Cache<?, ?> caffeineCache) {
-            long tenantId = TenantContext.currentTenantIdOrDefault();
+            long tenantId = TenantContext.requireTenantId();
             caffeineCache.asMap().keySet().stream()
                 .filter(key -> !(key instanceof TenantScopedKey scopedKey) || scopedKey.belongsTo(tenantId))
                 .toList()

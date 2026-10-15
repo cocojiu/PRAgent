@@ -5,7 +5,6 @@ import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.config.CacheNames;
 import com.repoguard.agent.dto.ChangedFileDto;
-import com.repoguard.agent.dto.FindingSeverityCountsDto;
 import com.repoguard.agent.dto.MissingTestDto;
 import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.ReviewQuery;
@@ -24,14 +23,12 @@ import com.repoguard.agent.mapper.ReviewTaskMapper.ReviewTaskListSummaryStat;
 import com.repoguard.agent.review.ReviewRepositoryDimensionService;
 import com.repoguard.agent.review.ReviewTaskCursorCodec;
 import com.repoguard.agent.review.ReviewTaskDetailAssembler;
+import com.repoguard.agent.review.ReviewTaskArchiveAdapter;
 import com.repoguard.agent.service.ReviewTaskQueryService;
 import com.repoguard.agent.service.impl.ReviewTaskDetailDataLoader.ReviewTaskDetailData;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import org.springframework.cache.annotation.Cacheable;
@@ -41,7 +38,7 @@ import org.springframework.util.StringUtils;
 @Service
 public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
 
-    private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private final ReviewTaskArchiveAdapter archiveAdapter = new ReviewTaskArchiveAdapter();
 
     private final ReviewTaskMapper reviewTaskMapper;
     private final ReviewTaskArchiveSummaryMapper archiveSummaryMapper;
@@ -153,7 +150,7 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
     public ReviewTaskSummary getReviewDetail(Long id) {
         ReviewTask task = reviewTaskMapper.selectById(id);
         if (task == null) {
-            return getArchivedReviewDetail(id);
+            return archiveAdapter.summary(loadArchiveSummaryOrThrow(id), detailAssembler);
         }
         ReviewTaskDetailData detailData = detailDataLoader.loadSummary(id);
         ReviewTaskListItem item = queryItemLoader.assembleFromTimelineItems(
@@ -172,86 +169,6 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
             detailData.changedFileTotal(),
             detailData.findingSeverityCounts()
         ));
-    }
-
-    private ReviewTaskSummary getArchivedReviewDetail(Long id) {
-        ReviewTaskArchiveSummary archive = archiveSummaryMapper.selectByTaskId(id);
-        if (archive == null) {
-            throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + id);
-        }
-        ReviewTask task = archivedTask(archive);
-        ReviewTaskListItem item = archivedListItem(archive);
-        return ReviewTaskSummary.fromDetail(
-            detailAssembler.assemble(
-                task,
-                item,
-                List.of(),
-                List.of(),
-                List.of(),
-                List.of(),
-                longValue(archive.getFindingCount()),
-                longValue(archive.getMissingTestCount()),
-                longValue(archive.getChangedFileCount()),
-                FindingSeverityCountsDto.empty()
-            ),
-            true,
-            archive.getCleanupBatchId(),
-            archive.getBackupReference(),
-            formatDateTimeOrNull(archive.getArchivedAt())
-        );
-    }
-
-    private ReviewTask archivedTask(ReviewTaskArchiveSummary archive) {
-        ReviewTask task = new ReviewTask();
-        task.setId(archive.getTaskId());
-        task.setPrNumber(archive.getPrNumber());
-        task.setTitle(archive.getTitle());
-        task.setRepository(archive.getRepository());
-        task.setOrganization(archive.getOrganization());
-        task.setCommitSha(archive.getCommitSha());
-        task.setBranchName(archive.getBranchName());
-        task.setStatus(archive.getStatus());
-        task.setRiskLevel(archive.getRiskLevel());
-        task.setAssessmentStatus(archive.getAssessmentStatus());
-        task.setMqRetries(0);
-        task.setLlmStatus(archive.getStatus());
-        task.setSource(archive.getSource());
-        task.setTriggerSource(archive.getTriggerSource());
-        task.setCreatedAt(archive.getCreatedAt());
-        task.setFinishedAt(archive.getFinishedAt());
-        task.setDurationSeconds(archive.getDurationSeconds());
-        task.setHumanReviewRequired(false);
-        task.setHumanReviewStatus("NOT_REQUIRED");
-        return task;
-    }
-
-    private ReviewTaskListItem archivedListItem(ReviewTaskArchiveSummary archive) {
-        return new ReviewTaskListItem(
-            archive.getTaskId(),
-            archive.getPrNumber(),
-            archive.getTitle(),
-            archive.getRepository(),
-            archive.getOrganization(),
-            archive.getCommitSha(),
-            archive.getBranchName(),
-            lower(archive.getStatus()),
-            lower(archive.getRiskLevel()),
-            0,
-            lower(archive.getStatus()),
-            archive.getSource(),
-            archive.getTriggerSource(),
-            formatDateTimeOrNull(archive.getCreatedAt()),
-            formatDuration(archive.getDurationSeconds()),
-            null,
-            null,
-            null,
-            false,
-            "not_required",
-            null,
-            null,
-            null,
-            lower(archive.getAssessmentStatus())
-        );
     }
 
     @Override
@@ -327,7 +244,7 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
         }
         ReviewTaskArchiveSummary archive = archiveIfHotTaskMissing(id);
         if (archive != null) {
-            return List.of(archivedTimelineItem(archive));
+            return List.of(archiveAdapter.timeline(archive));
         }
         return result == null ? List.of() : result;
     }
@@ -338,9 +255,9 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
         if (task == null) {
             ReviewTaskArchiveSummary archive = loadArchiveSummaryOrThrow(id);
             return statusAssembler.assemble(
-                archivedTask(archive),
-                archivedListItem(archive),
-                archivedTimelineItem(archive)
+                archiveAdapter.task(archive),
+                archiveAdapter.item(archive),
+                archiveAdapter.timeline(archive)
             );
         }
         var latestTimeline = queryItemLoader.loadLatestTimelineItem(id);
@@ -367,29 +284,6 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
             throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + id);
         }
         return archive;
-    }
-
-    private ReviewTimelineItem archivedTimelineItem(ReviewTaskArchiveSummary archive) {
-        return new ReviewTimelineItem(
-            "Review task archived; summary restored from retention archive",
-            formatDateTimeOrNull(archive.getArchivedAt()),
-            "done"
-        );
-    }
-
-    private String formatDateTimeOrNull(LocalDateTime value) {
-        return value == null ? null : value.format(DATE_TIME_FORMATTER);
-    }
-
-    private String formatDuration(Integer durationSeconds) {
-        int totalSeconds = durationSeconds == null ? 0 : durationSeconds;
-        int minutes = totalSeconds / 60;
-        int seconds = totalSeconds % 60;
-        return minutes + " 分 " + seconds + " 秒";
-    }
-
-    private String lower(String value) {
-        return value == null ? null : value.toLowerCase(Locale.ROOT);
     }
 
     private long longValue(Integer value) {

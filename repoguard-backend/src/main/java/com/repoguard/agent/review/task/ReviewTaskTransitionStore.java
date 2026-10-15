@@ -12,6 +12,9 @@ import com.repoguard.agent.review.ReviewTaskStatus;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.LocalDateTime;
 import java.util.Objects;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.function.BiConsumer;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -49,22 +52,14 @@ public class ReviewTaskTransitionStore {
         }
         String observedStatus = task.getStatus();
         String observedCommitSha = task.getCommitSha();
-        UpdateWrapper<ReviewTask> update = resetForQueuedExecution(
-            new UpdateWrapper<ReviewTask>()
-                .eq("id", task.getId())
-                .eq("status", observedStatus)
-                .set("mq_retries", retryCount)
-                .set("commit_sha", replacementCommitSha.trim())
-        );
-        if (StringUtils.hasText(observedCommitSha)) {
-            update.eq("commit_sha", observedCommitSha);
-        } else {
-            update.isNull("commit_sha");
-        }
-        ensureTransitioned(reviewTaskMapper.update(update));
-        applyQueuedExecutionState(task);
-        task.setMqRetries(retryCount);
-        task.setCommitSha(replacementCommitSha.trim());
+        UpdateWrapper<ReviewTask> update = new UpdateWrapper<ReviewTask>()
+            .eq("id", task.getId()).eq("status", observedStatus);
+        if (StringUtils.hasText(observedCommitSha)) update.eq("commit_sha", observedCommitSha);
+        else update.isNull("commit_sha");
+        List<Change<?>> changes = new ArrayList<>(queuedChanges());
+        changes.add(change("mq_retries", retryCount, ReviewTask::setMqRetries));
+        changes.add(change("commit_sha", replacementCommitSha.trim(), ReviewTask::setCommitSha));
+        transition(task, update, changes).requireApplied();
     }
 
     public void completeHumanReview(
@@ -76,24 +71,18 @@ public class ReviewTaskTransitionStore {
         LocalDateTime reviewedAt
     ) {
         Objects.requireNonNull(task, "task");
-        int updated = reviewTaskMapper.update(
-            new UpdateWrapper<ReviewTask>()
-                .eq("id", task.getId())
-                .eq("status", reviewTaskStateMachine.statusAfterReviewCompleted(true))
-                .eq("human_review_required", true)
-                .eq("human_review_status", HumanReviewStatus.PENDING.code())
-                .set("status", taskStatus)
-                .set("human_review_status", humanReviewStatus)
-                .set("human_review_note", note)
-                .set("human_review_by", operator)
-                .set("human_reviewed_at", reviewedAt)
-        );
-        ensureTransitioned(updated);
-        task.setStatus(taskStatus);
-        task.setHumanReviewStatus(humanReviewStatus);
-        task.setHumanReviewNote(note);
-        task.setHumanReviewBy(operator);
-        task.setHumanReviewedAt(reviewedAt);
+        UpdateWrapper<ReviewTask> update = new UpdateWrapper<ReviewTask>()
+            .eq("id", task.getId())
+            .eq("status", reviewTaskStateMachine.statusAfterReviewCompleted(true))
+            .eq("human_review_required", true)
+            .eq("human_review_status", HumanReviewStatus.PENDING.code());
+        transition(task, update, List.of(
+            change("status", taskStatus, ReviewTask::setStatus),
+            change("human_review_status", humanReviewStatus, ReviewTask::setHumanReviewStatus),
+            change("human_review_note", note, ReviewTask::setHumanReviewNote),
+            change("human_review_by", operator, ReviewTask::setHumanReviewBy),
+            change("human_reviewed_at", reviewedAt, ReviewTask::setHumanReviewedAt)
+        )).requireApplied();
     }
 
     public boolean assignHumanReview(
@@ -102,7 +91,7 @@ public class ReviewTaskTransitionStore {
         LocalDateTime assignedAt,
         LocalDateTime slaDeadline
     ) {
-        int updated = reviewTaskMapper.update(new UpdateWrapper<ReviewTask>()
+        UpdateWrapper<ReviewTask> update = new UpdateWrapper<ReviewTask>()
             .eq("id", task.getId())
             .eq("status", ReviewTaskStatus.PENDING_HUMAN_REVIEW.code())
             .eq(task.getCurrentAttemptId() != null, "current_attempt_id", task.getCurrentAttemptId())
@@ -116,21 +105,14 @@ public class ReviewTaskTransitionStore {
             .eq(task.getReviewAssignedAt() != null, "review_assigned_at", task.getReviewAssignedAt())
             .isNull(task.getReviewAssignedAt() == null, "review_assigned_at")
             .eq(task.getReviewSlaDeadline() != null, "review_sla_deadline", task.getReviewSlaDeadline())
-            .isNull(task.getReviewSlaDeadline() == null, "review_sla_deadline")
-            .set("review_assignee", assignee)
-            .set("review_assigned_at", assignedAt)
-            .set("review_sla_deadline", slaDeadline)
-            .set("review_escalation_level", 0)
-            .set("review_last_escalated_at", null));
-        if (updated == 0) {
-            return false;
-        }
-        task.setReviewAssignee(assignee);
-        task.setReviewAssignedAt(assignedAt);
-        task.setReviewSlaDeadline(slaDeadline);
-        task.setReviewEscalationLevel(0);
-        task.setReviewLastEscalatedAt(null);
-        return true;
+            .isNull(task.getReviewSlaDeadline() == null, "review_sla_deadline");
+        return transition(task, update, List.of(
+            change("review_assignee", assignee, ReviewTask::setReviewAssignee),
+            change("review_assigned_at", assignedAt, ReviewTask::setReviewAssignedAt),
+            change("review_sla_deadline", slaDeadline, ReviewTask::setReviewSlaDeadline),
+            change("review_escalation_level", 0, ReviewTask::setReviewEscalationLevel),
+            change("review_last_escalated_at", null, ReviewTask::setReviewLastEscalatedAt)
+        )).applied();
     }
 
     public boolean escalateHumanReview(ReviewTask task, int observedLevel, LocalDateTime escalatedAt,
@@ -155,22 +137,17 @@ public class ReviewTaskTransitionStore {
             .isNull(task.getReviewAssignedAt() == null, "review_assigned_at")
             .eq(previous != null, "review_last_escalated_at", previous)
             .isNull(previous == null, "review_last_escalated_at")
-            .and(query -> query.isNull("review_last_escalated_at").or().le("review_last_escalated_at", cooldownBefore))
-            .set("review_escalation_level", observedLevel + 1)
-            .set("review_last_escalated_at", escalatedAt);
-        return reviewTaskMapper.update(update) > 0;
+            .and(query -> query.isNull("review_last_escalated_at").or().le("review_last_escalated_at", cooldownBefore));
+        return transition(task, update, List.of(
+            change("review_escalation_level", observedLevel + 1, ReviewTask::setReviewEscalationLevel),
+            change("review_last_escalated_at", escalatedAt, ReviewTask::setReviewLastEscalatedAt)
+        )).applied();
     }
 
     public void requeueForPublish(ReviewTask task) {
         Objects.requireNonNull(task, "task");
-        UpdateWrapper<ReviewTask> update = resetForQueuedExecution(
-            new UpdateWrapper<ReviewTask>()
-                .eq("id", task.getId())
-                .eq("status", task.getStatus())
-                .isNull("publish_claimed_at")
-        );
-        ensureTransitioned(reviewTaskMapper.update(update));
-        applyQueuedExecutionState(task);
+        transition(task, new UpdateWrapper<ReviewTask>().eq("id", task.getId())
+            .eq("status", task.getStatus()).isNull("publish_claimed_at"), queuedChanges()).requireApplied();
     }
 
     public void recalibrateAfterFindingFeedback(
@@ -187,119 +164,82 @@ public class ReviewTaskTransitionStore {
         String riskLevel = invalidAssessment ? "INFO" : recalculatedRiskLevel;
         boolean humanReviewRequired = !invalidAssessment && recalculatedHumanReviewRequired;
 
-        UpdateWrapper<ReviewTask> update = new UpdateWrapper<ReviewTask>()
-            .eq("id", task.getId())
-            .eq("status", task.getStatus())
-            .set("risk_level", riskLevel);
-        boolean reviewGateCanChange = observedStatus == ReviewTaskStatus.COMPLETED
-            || observedStatus == ReviewTaskStatus.PENDING_HUMAN_REVIEW;
-        if (reviewGateCanChange) {
-            update
-                .set("status", reviewTaskStateMachine.statusAfterReviewCompleted(humanReviewRequired))
-                .set("human_review_required", humanReviewRequired)
-                .set(
-                    "human_review_status",
-                    HumanReviewStatus.defaultForRequired(humanReviewRequired).code()
-                )
-                .set("human_review_note", null)
-                .set("human_review_by", null)
-                .set("human_reviewed_at", null);
+        List<Change<?>> changes = new ArrayList<>();
+        changes.add(change("risk_level", riskLevel, ReviewTask::setRiskLevel));
+        if (observedStatus == ReviewTaskStatus.COMPLETED || observedStatus == ReviewTaskStatus.PENDING_HUMAN_REVIEW) {
+            changes.addAll(List.of(
+                change("status", reviewTaskStateMachine.statusAfterReviewCompleted(humanReviewRequired), ReviewTask::setStatus),
+                change("human_review_required", humanReviewRequired, ReviewTask::setHumanReviewRequired),
+                change("human_review_status", HumanReviewStatus.defaultForRequired(humanReviewRequired).code(), ReviewTask::setHumanReviewStatus),
+                change("human_review_note", null, ReviewTask::setHumanReviewNote),
+                change("human_review_by", null, ReviewTask::setHumanReviewBy),
+                change("human_reviewed_at", null, ReviewTask::setHumanReviewedAt)
+            ));
         }
-        ensureTransitioned(reviewTaskMapper.update(update));
-
-        task.setRiskLevel(riskLevel);
-        if (reviewGateCanChange) {
-            task.setStatus(reviewTaskStateMachine.statusAfterReviewCompleted(humanReviewRequired));
-            task.setHumanReviewRequired(humanReviewRequired);
-            task.setHumanReviewStatus(HumanReviewStatus.defaultForRequired(humanReviewRequired).code());
-            task.setHumanReviewNote(null);
-            task.setHumanReviewBy(null);
-            task.setHumanReviewedAt(null);
-        }
+        transition(task, new UpdateWrapper<ReviewTask>().eq("id", task.getId()).eq("status", task.getStatus()), changes).requireApplied();
     }
 
-    private UpdateWrapper<ReviewTask> resetForQueuedExecution(UpdateWrapper<ReviewTask> update) {
-        return update
-            .set("status", reviewTaskStateMachine.statusWhenQueued())
-            .set("risk_level", "INFO")
-            .set("assessment_status", AssessmentStatus.PARTIAL.name())
-            .set("failure_details_json", null)
-            .set("publish_attempts", 0)
-            .set("next_publish_retry_at", null)
-            .set("last_publish_error", null)
-            .set("publish_claimed_at", null)
-            .set("publish_claimed_by", null)
-            .set("review_claimed_at", null)
-            .set("review_claimed_by", null)
-            .set("llm_status", LlmStatus.PENDING.code())
-            .set("llm_provider", null)
-            .set("llm_model", null)
-            .set("llm_duration_ms", null)
-            .set("llm_parse_status", null)
-            .set("llm_fallback_reason", null)
-            .set("llm_prompt_summary", null)
-            .set("llm_prompt_tokens", null)
-            .set("llm_completion_tokens", null)
-            .set("llm_total_tokens", null)
-            .set("llm_estimated_cost", null)
-            .set("llm_cost_snapshot_json", null)
-            .set("human_review_required", false)
-            .set("human_review_status", HumanReviewStatus.NOT_REQUIRED.code())
-            .set("human_review_note", null)
-            .set("human_review_by", null)
-            .set("human_reviewed_at", null)
-            .set("review_assignee", null)
-            .set("review_assigned_at", null)
-            .set("review_sla_deadline", null)
-            .set("review_escalation_level", 0)
-            .set("review_last_escalated_at", null)
-            .set("started_at", null)
-            .set("finished_at", null)
-            .set("duration_seconds", 0);
+    /** One definition drives both SQL and the in-memory state, after a successful CAS. */
+    private List<Change<?>> queuedChanges() {
+        return List.of(
+            change("status", reviewTaskStateMachine.statusWhenQueued(), ReviewTask::setStatus),
+            change("risk_level", "INFO", ReviewTask::setRiskLevel),
+            change("assessment_status", AssessmentStatus.PARTIAL.name(), ReviewTask::setAssessmentStatus),
+            change("failure_details_json", null, ReviewTask::setFailureDetailsJson),
+            change("publish_attempts", 0, ReviewTask::setPublishAttempts),
+            change("next_publish_retry_at", null, ReviewTask::setNextPublishRetryAt),
+            change("last_publish_error", null, ReviewTask::setLastPublishError),
+            change("publish_claimed_at", null, ReviewTask::setPublishClaimedAt),
+            change("publish_claimed_by", null, ReviewTask::setPublishClaimedBy),
+            change("review_claimed_at", null, ReviewTask::setReviewClaimedAt),
+            change("review_claimed_by", null, ReviewTask::setReviewClaimedBy),
+            change("llm_status", LlmStatus.PENDING.code(), ReviewTask::setLlmStatus),
+            change("llm_provider", null, ReviewTask::setLlmProvider),
+            change("llm_model", null, ReviewTask::setLlmModel),
+            change("llm_duration_ms", null, ReviewTask::setLlmDurationMs),
+            change("llm_parse_status", null, ReviewTask::setLlmParseStatus),
+            change("llm_fallback_reason", null, ReviewTask::setLlmFallbackReason),
+            change("llm_prompt_summary", null, ReviewTask::setLlmPromptSummary),
+            change("llm_prompt_tokens", null, ReviewTask::setLlmPromptTokens),
+            change("llm_completion_tokens", null, ReviewTask::setLlmCompletionTokens),
+            change("llm_total_tokens", null, ReviewTask::setLlmTotalTokens),
+            change("llm_estimated_cost", null, ReviewTask::setLlmEstimatedCost),
+            change("llm_cost_snapshot_json", null, ReviewTask::setLlmCostSnapshotJson),
+            change("human_review_required", false, ReviewTask::setHumanReviewRequired),
+            change("human_review_status", HumanReviewStatus.NOT_REQUIRED.code(), ReviewTask::setHumanReviewStatus),
+            change("human_review_note", null, ReviewTask::setHumanReviewNote),
+            change("human_review_by", null, ReviewTask::setHumanReviewBy),
+            change("human_reviewed_at", null, ReviewTask::setHumanReviewedAt),
+            change("review_assignee", null, ReviewTask::setReviewAssignee),
+            change("review_assigned_at", null, ReviewTask::setReviewAssignedAt),
+            change("review_sla_deadline", null, ReviewTask::setReviewSlaDeadline),
+            change("review_escalation_level", 0, ReviewTask::setReviewEscalationLevel),
+            change("review_last_escalated_at", null, ReviewTask::setReviewLastEscalatedAt),
+            change("started_at", null, ReviewTask::setStartedAt),
+            change("finished_at", null, ReviewTask::setFinishedAt),
+            change("duration_seconds", 0, ReviewTask::setDurationSeconds)
+        );
     }
 
-    private void applyQueuedExecutionState(ReviewTask task) {
-        task.setStatus(reviewTaskStateMachine.statusWhenQueued());
-        task.setRiskLevel("INFO");
-        task.setAssessmentStatus(AssessmentStatus.PARTIAL.name());
-        task.setFailureDetailsJson(null);
-        task.setPublishAttempts(0);
-        task.setNextPublishRetryAt(null);
-        task.setLastPublishError(null);
-        task.setPublishClaimedAt(null);
-        task.setPublishClaimedBy(null);
-        task.setReviewClaimedAt(null);
-        task.setReviewClaimedBy(null);
-        task.setLlmStatus(LlmStatus.PENDING.code());
-        task.setLlmProvider(null);
-        task.setLlmModel(null);
-        task.setLlmDurationMs(null);
-        task.setLlmParseStatus(null);
-        task.setLlmFallbackReason(null);
-        task.setLlmPromptSummary(null);
-        task.setLlmPromptTokens(null);
-        task.setLlmCompletionTokens(null);
-        task.setLlmTotalTokens(null);
-        task.setLlmEstimatedCost(null);
-        task.setLlmCostSnapshotJson(null);
-        task.setHumanReviewRequired(false);
-        task.setHumanReviewStatus(HumanReviewStatus.NOT_REQUIRED.code());
-        task.setHumanReviewNote(null);
-        task.setHumanReviewBy(null);
-        task.setHumanReviewedAt(null);
-        task.setReviewAssignee(null);
-        task.setReviewAssignedAt(null);
-        task.setReviewSlaDeadline(null);
-        task.setReviewEscalationLevel(0);
-        task.setReviewLastEscalatedAt(null);
-        task.setStartedAt(null);
-        task.setFinishedAt(null);
-        task.setDurationSeconds(0);
+    private TransitionResult transition(ReviewTask task, UpdateWrapper<ReviewTask> expected, List<Change<?>> changes) {
+        changes.forEach(change -> expected.set(change.column(), change.value()));
+        TransitionResult result = new TransitionResult(reviewTaskMapper.update(expected));
+        if (result.applied()) changes.forEach(change -> change.applyTo(task));
+        return result;
     }
 
-    private void ensureTransitioned(int updated) {
-        if (updated <= 0) {
-            throw new BusinessException(ErrorCode.CONFLICT, STATE_CHANGED_MESSAGE);
+    private static <T> Change<T> change(String column, T value, BiConsumer<ReviewTask, T> setter) {
+        return new Change<>(column, value, setter);
+    }
+
+    private record Change<T>(String column, T value, BiConsumer<ReviewTask, T> setter) {
+        void applyTo(ReviewTask task) { setter.accept(task, value); }
+    }
+
+    private record TransitionResult(int affectedRows) {
+        boolean applied() { return affectedRows == 1; }
+        void requireApplied() {
+            if (!applied()) throw new BusinessException(ErrorCode.CONFLICT, STATE_CHANGED_MESSAGE);
         }
     }
 }

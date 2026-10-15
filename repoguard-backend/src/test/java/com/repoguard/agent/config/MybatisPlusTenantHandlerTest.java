@@ -31,10 +31,23 @@ class MybatisPlusTenantHandlerTest {
     void enabledTenancyFailsClosedWithoutTenantContext() {
         properties.setEnabled(true);
 
-        assertThat(handler.ignoreTable("review_task")).isFalse();
+        assertThatThrownBy(() -> handler.ignoreTable("review_task")).isInstanceOf(IllegalStateException.class);
         assertThatThrownBy(handler::getTenantId)
             .isInstanceOf(IllegalStateException.class)
             .hasMessage("Tenant-scoped SQL requires an active tenant context");
+    }
+
+    @Test
+    void explicitTenantInsertStillRequiresTrustedContext() {
+        properties.setEnabled(true);
+        var interceptor = new com.baomidou.mybatisplus.extension.plugins.inner.TenantLineInnerInterceptor(handler);
+        assertThatThrownBy(() -> interceptor.parserMulti(
+            "insert into review_task (tenant_id,id) values (1,9)", null))
+            .isInstanceOf(IllegalStateException.class).hasMessageContaining("active tenant context");
+        try (var _ = TenantContext.withTenant(1L)) {
+            assertThat(interceptor.parserMulti("insert into review_task (tenant_id,id) values (1,9)", null))
+                .contains("tenant_id");
+        }
     }
 
     @Test

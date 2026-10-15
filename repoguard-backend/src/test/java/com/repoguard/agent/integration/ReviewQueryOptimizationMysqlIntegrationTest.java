@@ -86,6 +86,54 @@ class ReviewQueryOptimizationMysqlIntegrationTest {
     }
 
     @Test
+    void missingContextCannotInsertAnExplicitTenantId() {
+        var mapper = session.getMapper(ReviewTaskMapper.class);
+        ReviewTask candidate;
+        try (var _ = TenantContext.withTenant(tenant)) { candidate = mapper.selectById(task); }
+        candidate.setId(null);
+        long before = jdbc.queryForObject("select count(*) from review_task", Long.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> mapper.insertManualReview(candidate))
+            .hasRootCauseInstanceOf(IllegalStateException.class);
+        assertThat(jdbc.queryForObject("select count(*) from review_task", Long.class)).isEqualTo(before);
+    }
+
+    @Test
+    void concurrentHumanDecisionsCommitOnceAndLeaveTheLosingSnapshotUnchanged() throws Exception {
+        jdbc.update("update review_task set status='PENDING_HUMAN_REVIEW',human_review_required=1,human_review_status='PENDING' where id=?", task);
+        var store = new com.repoguard.agent.review.task.ReviewTaskTransitionStore(
+            session.getMapper(ReviewTaskMapper.class), new com.repoguard.agent.review.ReviewTaskStateMachine());
+        var ready = new java.util.concurrent.CountDownLatch(2);
+        var begin = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.Callable<Boolean> decide = () -> {
+            try (var _ = TenantContext.withTenant(tenant)) {
+                ReviewTask snapshot = store.findById(task);
+                ready.countDown();
+                if (!begin.await(5, java.util.concurrent.TimeUnit.SECONDS)) throw new AssertionError("decision start deadline");
+                try {
+                    store.completeHumanReview(snapshot, "APPROVED", "APPROVED", "fixture decision", "fixture reviewer", java.time.LocalDateTime.now());
+                    assertThat(snapshot.getStatus()).isEqualTo("APPROVED");
+                    return true;
+                } catch (com.repoguard.agent.common.BusinessException conflict) {
+                    assertThat(conflict.getErrorCode()).isEqualTo(com.repoguard.agent.common.ErrorCode.CONFLICT);
+                    assertThat(snapshot.getStatus()).isEqualTo("PENDING_HUMAN_REVIEW");
+                    return false;
+                }
+            }
+        };
+        try (var workers = java.util.concurrent.Executors.newFixedThreadPool(2)) {
+            var first = workers.submit(decide);
+            var second = workers.submit(decide);
+            try {
+                assertThat(ready.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+                begin.countDown();
+                assertThat(java.util.List.of(first.get(5, java.util.concurrent.TimeUnit.SECONDS),
+                    second.get(5, java.util.concurrent.TimeUnit.SECONDS))).containsExactlyInAnyOrder(true, false);
+            } finally { begin.countDown(); }
+        }
+        assertThat(jdbc.queryForObject("select status from review_task where id=?", String.class, task)).isEqualTo("APPROVED");
+    }
+
+    @Test
     void fullFindingCountsExcludeOldAttemptAndNonFindingsAndKeepEmptyFiles() {
         long file = file(tenant, task, attempt, "src/A.java");
         long empty = file(tenant, task, attempt, "src/Empty.java");

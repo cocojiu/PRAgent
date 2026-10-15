@@ -49,6 +49,17 @@ class SpringBeanConstructorSelectionTest {
     @Test
     void springManagedBeansWithMultipleConstructorsDeclareSingleAutowiredConstructor() throws ClassNotFoundException {
         List<Class<?>> springManagedTypes = List.of(
+            Class.forName("com.repoguard.agent.dashboard.FeedbackSummaryService"),
+            Class.forName("com.repoguard.agent.github.webhook.GithubFeedbackEventStore"),
+            Class.forName("com.repoguard.agent.review.quality.LlmModelReleaseMetricsRepository"),
+            Class.forName("com.repoguard.agent.review.quality.LlmModelReleaseService"),
+            Class.forName("com.repoguard.agent.review.quality.LlmModelReleaseMetricsService"),
+            Class.forName("com.repoguard.agent.review.quality.LlmModelReleaseDriftService"),
+            Class.forName("com.repoguard.agent.review.quality.LlmEvaluationReportLifecycleService"),
+            Class.forName("com.repoguard.agent.review.quality.LlmModelSafetyService"),
+            Class.forName("com.repoguard.agent.review.quality.LlmEvaluationRunService"),
+            Class.forName("com.repoguard.agent.review.progress.ReviewProgressStreamService"),
+            Class.forName("com.repoguard.agent.review.RepositorySuppressionService"),
             GithubPullRequestClientImpl.class,
             GithubPaginator.class,
             NotificationEventPublishCompensator.class,

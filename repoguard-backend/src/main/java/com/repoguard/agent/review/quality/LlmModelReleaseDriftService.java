@@ -12,10 +12,7 @@ import com.repoguard.agent.dto.LlmModelReleaseDriftDto.FindingDto;
 import com.repoguard.agent.dto.LlmModelReleaseDriftDto.ReleaseSummary;
 import com.repoguard.agent.dto.LlmModelReleaseDriftRepairDto;
 import com.repoguard.agent.dto.LlmModelReleaseDriftRepairRequest;
-import com.repoguard.agent.tenancy.TenantContext;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
+import com.repoguard.agent.tenancy.TenantProperties;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -43,6 +40,7 @@ public class LlmModelReleaseDriftService {
     private static final Set<String> REPAIR_ROLES = Set.of("ADMIN", "PLATFORM_ADMIN", "RULE_ADMIN");
     private static final Logger LOGGER = LoggerFactory.getLogger(LlmModelReleaseDriftService.class);
 
+    private final TenantProperties tenancy;
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
     private final LlmModelReleaseRepository releaseRepository;
@@ -52,13 +50,14 @@ public class LlmModelReleaseDriftService {
     public LlmModelReleaseDriftService(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper,
         LlmModelReleaseRepository releaseRepository, LlmModelReleaseDriftAuditRepository auditRepository) {
         this(jdbcTemplate, objectMapper, releaseRepository, auditRepository,
-            new LlmModelReleaseDriftFailureRecorder(auditRepository));
+            new LlmModelReleaseDriftFailureRecorder(auditRepository), new TenantProperties());
     }
 
     @Autowired
     public LlmModelReleaseDriftService(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper,
         LlmModelReleaseRepository releaseRepository, LlmModelReleaseDriftAuditRepository auditRepository,
-        LlmModelReleaseDriftFailureRecorder failureRecorder) {
+        LlmModelReleaseDriftFailureRecorder failureRecorder, TenantProperties tenancy) {
+        this.tenancy = tenancy;
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
         this.releaseRepository = releaseRepository;
@@ -69,7 +68,7 @@ public class LlmModelReleaseDriftService {
     /** Read-only tenant reconciliation; the returned fingerprint is the repair CAS token. */
     @Transactional(readOnly = true)
     public LlmModelReleaseDriftDto detect() {
-        return detectTenant(TenantContext.currentTenantIdOrDefault());
+        return detectTenant(tenancy.currentTenantId());
     }
 
     /** Applies one exact preview once. Replays return the durable outcome without new writes. */
@@ -77,7 +76,7 @@ public class LlmModelReleaseDriftService {
     public LlmModelReleaseDriftRepairDto repair(LlmModelReleaseDriftRepairRequest request,
         String operator, String role) {
         validateRequest(request, role);
-        long tenantId = TenantContext.currentTenantIdOrDefault();
+        long tenantId = tenancy.currentTenantId();
         String operationKey = request.idempotencyKey().trim();
         String fingerprint = request.previewFingerprint().trim().toLowerCase(Locale.ROOT);
         LlmModelReleaseDriftAuditRepository.StoredAudit existing = auditRepository.find(tenantId, operationKey);
@@ -361,16 +360,7 @@ public class LlmModelReleaseDriftService {
         }
     }
 
-    private String sha256(String value) {
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
-            StringBuilder result = new StringBuilder(64);
-            for (byte item : digest) result.append(String.format("%02x", item));
-            return result.toString();
-        } catch (NoSuchAlgorithmException ex) {
-            throw new IllegalStateException("SHA-256 is required for drift fingerprints", ex);
-        }
-    }
+    private String sha256(String value) { return LlmModelReleaseAuditService.sha256(value); }
 
     private int parseDesiredTraffic(String desired) {
         if (desired == null || !desired.contains(":")) return 0;

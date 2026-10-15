@@ -45,6 +45,7 @@ public class OperationalDataRetentionWorker {
     }
 
     public void cleanup() {
+        if (properties.isEnabled()) TenantContext.requireTenantId();
         cleanupGlobalData();
         cleanupTenantData();
     }
@@ -65,6 +66,7 @@ public class OperationalDataRetentionWorker {
         if (!properties.isEnabled()) {
             return;
         }
+        long tenantId = TenantContext.requireTenantId();
         int limit = properties.normalizedBatchSize();
         clean("system_setting_log", properties.getSystemSettingLogDays(), cutoff -> mapper.deleteSystemSettingLogs(cutoff, limit));
         clean("notification_delivery_log", properties.getNotificationLogDays(), cutoff -> mapper.deleteNotificationDeliveries(cutoff, limit));
@@ -72,9 +74,8 @@ public class OperationalDataRetentionWorker {
         clean(
             "tenant_quota_usage",
             properties.getTenantQuotaUsageDays(),
-            cutoff -> mapper.deleteTenantQuotaUsage(TenantContext.currentTenantIdOrDefault(), cutoff, limit)
+            cutoff -> mapper.deleteTenantQuotaUsage(tenantId, cutoff, limit)
         );
-        long tenantId = TenantContext.currentTenantIdOrDefault();
         if (properties.isFeedbackPayloadPurgeEnabled()) {
             clean("github_feedback_event_payload", properties.normalizedFeedbackPayloadDays(),
                 cutoff -> mapper.purgeFeedbackPayload(tenantId, cutoff, limit));

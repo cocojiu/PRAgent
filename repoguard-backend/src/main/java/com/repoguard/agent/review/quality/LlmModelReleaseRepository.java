@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.dto.LlmModelReleaseDto;
+import java.math.BigDecimal;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -113,7 +114,7 @@ public class LlmModelReleaseRepository {
             this::mapEvaluationReport, tenantId, reportKey);
         return reports.isEmpty() ? null : reports.getFirst();
     }
-    public LlmModelReleaseDto save(long tenantId, LlmModelReleaseService.NormalizedRelease release, String state,
+    public LlmModelReleaseDto save(long tenantId, NormalizedRelease release, String state,
         int trafficPercent, String operator, String rollbackReason) {
         if (Boolean.TRUE.equals(jdbcTemplate.queryForObject("select exists(select 1 from llm_model_release where tenant_id=? and release_key=? and safety_revoked_at is not null)", Boolean.class, tenantId, release.releaseKey()))) {
             throw new BusinessException(ErrorCode.CONFLICT, "安全撤销的发布版本不能再次启用；请使用新的评估版本");
@@ -405,4 +406,8 @@ public class LlmModelReleaseRepository {
 
     private record AuditQuery(String sql, Object[] args) {
     }
+    record NormalizedRelease(String releaseKey, String provider, String modelName, String promptVersion, String contextVersion, String schemaVersion, String datasetId, String datasetVersion, String datasetFingerprint, int trafficPercent, boolean qualityGatePassed, BigDecimal precisionRate, BigDecimal recallRate, BigDecimal anchorRate, BigDecimal duplicateRate, BigDecimal parseFailureRate, long p95LatencyMs, BigDecimal averageCost, long totalTokens, List<String> blockers, String operator, Long evaluationReportId) {
+        NormalizedRelease(String releaseKey, String provider, String modelName, String promptVersion, String contextVersion, String schemaVersion, String datasetId, String datasetVersion, String datasetFingerprint, int trafficPercent, boolean qualityGatePassed, BigDecimal precisionRate, BigDecimal recallRate, BigDecimal anchorRate, BigDecimal duplicateRate, BigDecimal parseFailureRate, long p95LatencyMs, BigDecimal averageCost, long totalTokens, List<String> blockers, String operator) { this(releaseKey, provider, modelName, promptVersion, contextVersion, schemaVersion, datasetId, datasetVersion, datasetFingerprint, trafficPercent, qualityGatePassed, precisionRate, recallRate, anchorRate, duplicateRate, parseFailureRate, p95LatencyMs, averageCost, totalTokens, blockers, operator, null); }
+    }
+
 }

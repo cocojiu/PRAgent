@@ -9,6 +9,7 @@ import com.repoguard.agent.dto.LlmModelReleaseDto;
 import com.repoguard.agent.review.LlmEvaluationBudget;
 import com.repoguard.agent.review.ReviewDeadline;
 import com.repoguard.agent.tenancy.TenantContext;
+import com.repoguard.agent.tenancy.TenantProperties;
 import jakarta.annotation.PostConstruct;
 import java.math.BigDecimal;
 import java.nio.file.Path;
@@ -47,6 +48,7 @@ public class LlmEvaluationRunService {
     private static final long MAX_RUN_TOKENS = 1_000_000L;
     private static final BigDecimal MAX_RUN_COST = new BigDecimal("999999999999.99999999");
 
+    private final TenantProperties tenancy;
     private final LlmEvaluationDatasetLoader datasetLoader;
     private final LlmEvaluationPreviewRunner previewRunner;
     private final LlmModelReleaseService modelReleaseService;
@@ -63,18 +65,17 @@ public class LlmEvaluationRunService {
         LlmEvaluationRunStore store,
         @Qualifier(LlmEvaluationRunExecutorConfig.EVALUATION_RUN_EXECUTOR) ExecutorService executor
     ) {
-        this(datasetLoader, previewRunner, modelReleaseService, store, executor, "unknown");
+        this(datasetLoader, previewRunner, modelReleaseService, store, executor, "unknown", new TenantProperties());
     }
 
     @Autowired
-    public LlmEvaluationRunService(
-        LlmEvaluationDatasetLoader datasetLoader,
+    public LlmEvaluationRunService(LlmEvaluationDatasetLoader datasetLoader,
         LlmEvaluationPreviewRunner previewRunner,
         LlmModelReleaseService modelReleaseService,
         LlmEvaluationRunStore store,
         @Qualifier(LlmEvaluationRunExecutorConfig.EVALUATION_RUN_EXECUTOR) ExecutorService executor,
-        @Value("${REPOGUARD_RUNTIME_REVISION:unknown}") String runtimeRevision
-    ) {
+        @Value("${REPOGUARD_RUNTIME_REVISION:unknown}") String runtimeRevision, TenantProperties tenancy) {
+        this.tenancy = tenancy;
         this.datasetLoader = datasetLoader;
         this.previewRunner = previewRunner;
         this.modelReleaseService = modelReleaseService;
@@ -108,7 +109,7 @@ public class LlmEvaluationRunService {
         }
         List<String> sampleIds = LlmEvaluationDiagnostics.validate(request.sampleIds());
         Path validatedDirectory = datasetLoader.validateDirectory(directory);
-        long tenantId = TenantContext.currentTenantIdOrDefault();
+        long tenantId = tenancy.currentTenantId();
         RunKey key = new RunKey(tenantId, runKey);
         LlmEvaluationRunState existing = byKey.get(key);
         if (existing != null) {
@@ -139,7 +140,7 @@ public class LlmEvaluationRunService {
         }
         byId.put(state.runId, state);
         try {
-            state.future = executor.submit(() -> execute(state));
+            state.future = executor.submit(TenantContext.wrap(() -> execute(state)));
         } catch (RejectedExecutionException ex) {
             state.fail("RUNNER_UNAVAILABLE");
             persist(state);
@@ -150,7 +151,7 @@ public class LlmEvaluationRunService {
 
     public LlmEvaluationRunDto get(String runId) {
         String normalizedRunId = normalizedRunId(runId);
-        long tenantId = TenantContext.currentTenantIdOrDefault();
+        long tenantId = tenancy.currentTenantId();
         LlmEvaluationRunState local = byId.get(normalizedRunId);
         if (local != null && local.tenantId == tenantId) {
             return local.dto();
@@ -164,7 +165,7 @@ public class LlmEvaluationRunService {
 
     public LlmEvaluationRunDto cancel(String runId) {
         String normalizedRunId = normalizedRunId(runId);
-        long tenantId = TenantContext.currentTenantIdOrDefault();
+        long tenantId = tenancy.currentTenantId();
         LlmEvaluationRunState state = byId.get(normalizedRunId);
         if (state == null || state.tenantId != tenantId) {
             LlmEvaluationRunStore.StoredRun stored = store.findByRunId(tenantId, normalizedRunId);

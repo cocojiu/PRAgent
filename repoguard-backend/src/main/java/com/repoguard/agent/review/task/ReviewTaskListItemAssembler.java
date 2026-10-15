@@ -17,6 +17,14 @@ public class ReviewTaskListItemAssembler {
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     public ReviewTaskListItem assemble(ReviewTask task, ReviewFailureSummary failureSummary) {
+        return assemble(task, failureSummary, false);
+    }
+
+    public ReviewTaskListItem assembleArchived(ReviewTask task) {
+        return assemble(task, new ReviewFailureSummary(null, null, null), true);
+    }
+
+    private ReviewTaskListItem assemble(ReviewTask task, ReviewFailureSummary failureSummary, boolean archived) {
         return new ReviewTaskListItem(
             task.getId(),
             task.getPrNumber(),
@@ -28,10 +36,10 @@ public class ReviewTaskListItemAssembler {
             lower(task.getStatus()),
             lower(task.getRiskLevel()),
             task.getMqRetries(),
-            lower(resolveLlmStatus(task)),
-            ReviewTaskSource.dtoCodeOrDefault(task.getSource()),
-            ReviewTaskSource.dtoCodeOrDefault(task.getTriggerSource()),
-            task.getCreatedAt().format(DATE_TIME_FORMATTER),
+            lower(archived ? task.getLlmStatus() : resolveLlmStatus(task)),
+            archived ? task.getSource() : ReviewTaskSource.dtoCodeOrDefault(task.getSource()),
+            archived ? task.getTriggerSource() : ReviewTaskSource.dtoCodeOrDefault(task.getTriggerSource()),
+            formatDateTimeOrNull(task.getCreatedAt()),
             formatDuration(task.getDurationSeconds()),
             failureSummary.category(),
             failureSummary.reason(),

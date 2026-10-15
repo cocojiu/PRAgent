@@ -14,6 +14,11 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 class SecretReEncryptionJobWorkerTest {
+    private TenantContext.Scope personalScope;
+    @org.junit.jupiter.api.BeforeEach
+    void personalEntry() { personalScope = TenantContext.withTenant(TenantContext.DEFAULT_TENANT_ID); }
+    @org.junit.jupiter.api.AfterEach
+    void clearPersonalEntry() { personalScope.close(); }
 
     private final SecretReEncryptionJobMapper jobMapper = Mockito.mock(SecretReEncryptionJobMapper.class);
     private final SecretReEncryptionJobService jobService = Mockito.mock(SecretReEncryptionJobService.class);

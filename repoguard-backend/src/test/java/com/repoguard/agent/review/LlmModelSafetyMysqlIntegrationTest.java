@@ -78,7 +78,7 @@ class LlmModelSafetyMysqlIntegrationTest {
         ObjectMapper json = new ObjectMapper();
         ledger = new LlmUsageBudgetLedger(jdbc, new DataSourceTransactionManager(data), json);
         releases = new LlmModelReleaseRepository(jdbc, json);
-        safety = new LlmModelSafetyService(jdbc, releases, json);
+        safety = new LlmModelSafetyService(jdbc, releases, json, new com.repoguard.agent.tenancy.TenantProperties());
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/chat/completions", exchange -> {
             exchange.getRequestBody().readAllBytes(); sent.incrementAndGet(); received.countDown();
@@ -232,6 +232,9 @@ class LlmModelSafetyMysqlIntegrationTest {
         try (var workers = Executors.newFixedThreadPool(1);
              var context = new org.springframework.context.annotation.AnnotationConfigApplicationContext()) {
             context.registerBean(JdbcTemplate.class, () -> jdbc);
+            context.registerBean(com.repoguard.agent.tenancy.TenantProperties.class, () -> {
+                var tenancy = new com.repoguard.agent.tenancy.TenantProperties(); tenancy.setEnabled(true); return tenancy;
+            });
             context.registerBean(ObjectMapper.class, () -> new JacksonConfig().objectMapper());
             context.registerBean(LlmModelReleaseRepository.class, () -> releases);
             context.registerBean(com.repoguard.agent.review.quality.LlmModelReleaseMetricsRepository.class, () -> snapshots);

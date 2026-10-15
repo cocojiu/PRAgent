@@ -1,6 +1,7 @@
 package com.repoguard.agent.review.quality;
 
 import com.repoguard.agent.review.quality.LlmModelReleaseRuntimeSupport.ReleaseQualityPolicy;
+import com.repoguard.agent.review.quality.LlmModelReleaseRepository.NormalizedRelease;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -20,11 +21,8 @@ import com.repoguard.agent.dto.LlmModelRollbackRequest;
 import com.repoguard.agent.dto.LlmQualityByModelDto;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.review.ReviewPolicySettings;
-import com.repoguard.agent.tenancy.TenantContext;
+import com.repoguard.agent.tenancy.TenantProperties;
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -43,6 +41,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class LlmModelReleaseService {
     private static final int MIN_CANARY_PERCENT = 1;
+    private final TenantProperties tenancy;
     private final LlmQualityComparisonProvider qualityComparisonProvider;
     private final LlmModelReleaseRepository releaseRepository;
     private final ObjectMapper objectMapper;
@@ -54,24 +53,24 @@ public class LlmModelReleaseService {
     public LlmModelReleaseService(JdbcTemplate jdbcTemplate, LlmQualityComparisonProvider qualityComparisonProvider,
         LlmModelReleaseRepository releaseRepository, ObjectMapper objectMapper) {
         this(jdbcTemplate, qualityComparisonProvider, releaseRepository, objectMapper,
-            new LlmEvaluationReportLifecycleService(jdbcTemplate, releaseRepository));
+            new LlmEvaluationReportLifecycleService(jdbcTemplate, releaseRepository), new TenantProperties());
     }
 
     @Autowired
     public LlmModelReleaseService(JdbcTemplate jdbcTemplate, LlmQualityComparisonProvider qualityComparisonProvider,
         LlmModelReleaseRepository releaseRepository, ObjectMapper objectMapper,
-        LlmEvaluationReportLifecycleService lifecycleService) {
-        Objects.requireNonNull(jdbcTemplate, "jdbcTemplate");
+        LlmEvaluationReportLifecycleService lifecycleService, TenantProperties tenancy) {
+        this.tenancy = tenancy;
         this.qualityComparisonProvider = Objects.requireNonNull(qualityComparisonProvider, "qualityComparisonProvider");
         this.releaseRepository = Objects.requireNonNull(releaseRepository, "releaseRepository");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
-        this.runtimeSupport = new LlmModelReleaseRuntimeSupport(jdbcTemplate, this.releaseRepository, this.objectMapper);
-        this.auditService = new LlmModelReleaseAuditService(this.releaseRepository, this.objectMapper);
+        this.runtimeSupport = new LlmModelReleaseRuntimeSupport(Objects.requireNonNull(jdbcTemplate, "jdbcTemplate"), this.releaseRepository, this.objectMapper);
+        this.auditService = new LlmModelReleaseAuditService(this.releaseRepository, this.objectMapper, tenancy);
         this.lifecycleService = Objects.requireNonNull(lifecycleService, "lifecycleService");
     }
     @Transactional(readOnly = true)
     public LlmModelReleaseCenterDto getCenter(Integer trendDays) {
-        long tenantId = TenantContext.currentTenantIdOrDefault();
+        long tenantId = tenancy.currentTenantId();
         int days = normalizeTrendDays(trendDays);
         Map<String, Object> configured = runtimeSupport.configuredModel(tenantId);
         List<LlmModelReleaseDto> releases = releaseRepository.findAll(tenantId);
@@ -105,23 +104,23 @@ public class LlmModelReleaseService {
         }
         LlmEvaluationReport report = LlmQualityEvaluator.evaluate(version, dataset, List.copyOf(observations), minimumSamples);
         return toEvaluationDto(releaseRepository.insertEvaluationReport(
-            TenantContext.currentTenantIdOrDefault(), reportKey(report), report,
+            tenancy.currentTenantId(), reportKey(report), report,
             normalizeOperator(operator), lifecycleService.defaultRetentionDays()
         ));
     }
     @Transactional(readOnly = true)
     public LlmModelReleaseDto.EvaluationReportDto getEvaluationReport(long reportId) {
-        return toEvaluationDto(releaseRepository.findEvaluationReport(TenantContext.currentTenantIdOrDefault(), reportId));
+        return toEvaluationDto(releaseRepository.findEvaluationReport(tenancy.currentTenantId(), reportId));
     }
     @Transactional(readOnly = true)
     public List<LlmModelReleaseDto.EvaluationReportDto> listEvaluationReports(int limit) {
-        return releaseRepository.findEvaluationReports(TenantContext.currentTenantIdOrDefault(), limit).stream().map(this::toEvaluationDto).toList();
+        return releaseRepository.findEvaluationReports(tenancy.currentTenantId(), limit).stream().map(this::toEvaluationDto).toList();
     }
 
     @Transactional(readOnly = true)
     public LlmModelReleaseDto.EvaluationReportComparisonDto compareEvaluationReports(long baselineReportId, long candidateReportId) {
-        LlmEvaluationReport baseline = releaseRepository.findEvaluationReport(TenantContext.currentTenantIdOrDefault(), baselineReportId).report();
-        LlmEvaluationReport candidate = releaseRepository.findEvaluationReport(TenantContext.currentTenantIdOrDefault(), candidateReportId).report();
+        LlmEvaluationReport baseline = releaseRepository.findEvaluationReport(tenancy.currentTenantId(), baselineReportId).report();
+        LlmEvaluationReport candidate = releaseRepository.findEvaluationReport(tenancy.currentTenantId(), candidateReportId).report();
         BigDecimal precisionDelta = candidate.precision().subtract(baseline.precision());
         BigDecimal recallDelta = candidate.recall().subtract(baseline.recall());
         BigDecimal anchorDelta = candidate.anchorRate().subtract(baseline.anchorRate());
@@ -168,7 +167,7 @@ public class LlmModelReleaseService {
 
     @Transactional
     public void reconcileCanaries() {
-        runtimeSupport.reconcileCanaries(TenantContext.currentTenantIdOrDefault());
+        runtimeSupport.reconcileCanaries(tenancy.currentTenantId());
     }
     @Transactional(readOnly = true)
     public com.repoguard.agent.dto.PageResponse<LlmModelReleaseAuditDto> listReleaseAudits(
@@ -198,7 +197,7 @@ public class LlmModelReleaseService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "影子发布流量必须为 0");
         }
         NormalizedRelease normalized = normalizeTrusted(request, operator, evidence, 0);
-        long tenantId = TenantContext.currentTenantIdOrDefault();
+        long tenantId = tenancy.currentTenantId();
         releaseRepository.lockTenant(tenantId);
         LlmModelReleaseDto before = releaseRepository.findByReleaseKey(tenantId, normalized.releaseKey());
         if (before != null && ("ACTIVE".equalsIgnoreCase(before.state()) || "CANARY".equalsIgnoreCase(before.state()))) {
@@ -218,7 +217,7 @@ public class LlmModelReleaseService {
         if (!blockers.isEmpty()) throw new BusinessException(ErrorCode.BAD_REQUEST, "模型发布未通过质量门禁: " + String.join(", ", blockers));
         trafficPercent = normalized.trafficPercent();
         String state = trafficPercent == 100 ? "ACTIVE" : "CANARY";
-        long tenantId = TenantContext.currentTenantIdOrDefault();
+        long tenantId = tenancy.currentTenantId();
         releaseRepository.lockTenant(tenantId);
         LlmModelReleaseDto before = releaseRepository.findByReleaseKey(tenantId, normalized.releaseKey());
         if (before != null && ("ACTIVE".equalsIgnoreCase(before.state()) || "ROLLED_BACK".equalsIgnoreCase(before.state()))) {
@@ -238,7 +237,7 @@ public class LlmModelReleaseService {
     @Transactional
     public LlmModelReleaseDto rollback(long releaseId, LlmModelRollbackRequest request, String operator) {
         if (releaseId < 1 || request == null || request.reason() == null || request.reason().isBlank()) throw new BusinessException(ErrorCode.BAD_REQUEST, "模型发布回滚参数不完整");
-        long tenantId = TenantContext.currentTenantIdOrDefault();
+        long tenantId = tenancy.currentTenantId();
         releaseRepository.lockTenant(tenantId);
         LlmModelReleaseDto before = releaseRepository.findById(tenantId, releaseId);
         String reason = truncate(request.reason().trim(), 512);
@@ -253,13 +252,13 @@ public class LlmModelReleaseService {
     @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public ReviewPolicySettings route(ReviewPolicySettings settings, ReviewTask task) {
         if (settings == null || task == null || !settings.enabled()) return settings;
-        return runtimeSupport.route(TenantContext.currentTenantIdOrDefault(), settings, task);
+        return runtimeSupport.route(tenancy.currentTenantId(), settings, task);
     }
 
     private LlmModelReleaseDto save(
         NormalizedRelease release, String state, int trafficPercent, String operator, String rollbackReason
     ) {
-        return releaseRepository.save(TenantContext.currentTenantIdOrDefault(), release, state, trafficPercent, operator, rollbackReason);
+        return releaseRepository.save(tenancy.currentTenantId(), release, state, trafficPercent, operator, rollbackReason);
     }
 
     private List<String> promotionBlockers(NormalizedRelease release) {
@@ -267,7 +266,7 @@ public class LlmModelReleaseService {
         blockers.addAll(ReleaseQualityPolicy.blockerCodes(new ReleaseQualityPolicy.Evidence(
             release.qualityGatePassed(), release.precisionRate(), release.recallRate(), release.anchorRate(),
             release.duplicateRate(), release.parseFailureRate(), release.p95LatencyMs())));
-        if (release.trafficPercent() < MIN_CANARY_PERCENT) blockers.add("TRAFFIC_PERCENT_MUST_BE_1_TO_100");
+        if (release.trafficPercent() < 1) blockers.add("TRAFFIC_PERCENT_MUST_BE_1_TO_100");
         return blockers.stream().distinct().toList();
     }
 
@@ -291,7 +290,7 @@ public class LlmModelReleaseService {
     }
     private LlmModelReleaseRepository.StoredEvaluationReport trustedEvaluation(LlmModelReleaseRequest request) {
         if (request == null || request.evaluationReportId() == null || request.evaluationReportId() < 1) throw new BusinessException(ErrorCode.BAD_REQUEST, "模型发布必须绑定服务端评估报告");
-        LlmModelReleaseRepository.StoredEvaluationReport evidence = releaseRepository.findEvaluationReport(TenantContext.currentTenantIdOrDefault(), request.evaluationReportId());
+        LlmModelReleaseRepository.StoredEvaluationReport evidence = releaseRepository.findEvaluationReport(tenancy.currentTenantId(), request.evaluationReportId());
         if (!"COMPLETED".equalsIgnoreCase(evidence.status())) throw new BusinessException(ErrorCode.BAD_REQUEST,
             "PROVISIONAL".equalsIgnoreCase(evidence.status()) ? "小样本验收报告不能用于模型发布" : "评估报告未完成，不能发布模型");
         if (!lifecycleService.usableForNewRelease(evidence, LocalDateTime.now())) {
@@ -389,16 +388,7 @@ public class LlmModelReleaseService {
             + report.totalCost() + "|" + report.blockers() + "|" + report.severityConfusion() + "|" + report.metrics());
     }
 
-    private String sha256(String value) {
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
-            StringBuilder result = new StringBuilder(64);
-            for (byte item : digest) result.append(String.format("%02x", item));
-            return result.toString();
-        } catch (NoSuchAlgorithmException ex) {
-            throw new IllegalStateException("SHA-256 is required for evaluation reports", ex);
-        }
-    }
+    private String sha256(String value) { return LlmModelReleaseAuditService.sha256(value); }
 
     private int required(Integer value, String field) {
         if (value == null) throw new BusinessException(ErrorCode.BAD_REQUEST, field + " 不能为空");
@@ -436,10 +426,6 @@ public class LlmModelReleaseService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "流量比例必须在 " + minimum + "%～100% 之间");
         }
         return value;
-    }
-
-    record NormalizedRelease(String releaseKey, String provider, String modelName, String promptVersion, String contextVersion, String schemaVersion, String datasetId, String datasetVersion, String datasetFingerprint, int trafficPercent, boolean qualityGatePassed, BigDecimal precisionRate, BigDecimal recallRate, BigDecimal anchorRate, BigDecimal duplicateRate, BigDecimal parseFailureRate, long p95LatencyMs, BigDecimal averageCost, long totalTokens, List<String> blockers, String operator, Long evaluationReportId) {
-        NormalizedRelease(String releaseKey, String provider, String modelName, String promptVersion, String contextVersion, String schemaVersion, String datasetId, String datasetVersion, String datasetFingerprint, int trafficPercent, boolean qualityGatePassed, BigDecimal precisionRate, BigDecimal recallRate, BigDecimal anchorRate, BigDecimal duplicateRate, BigDecimal parseFailureRate, long p95LatencyMs, BigDecimal averageCost, long totalTokens, List<String> blockers, String operator) { this(releaseKey, provider, modelName, promptVersion, contextVersion, schemaVersion, datasetId, datasetVersion, datasetFingerprint, trafficPercent, qualityGatePassed, precisionRate, recallRate, anchorRate, duplicateRate, parseFailureRate, p95LatencyMs, averageCost, totalTokens, blockers, operator, null); }
     }
 
     private record EvaluationInput(LlmEvaluationVersion version, LlmEvaluationDatasetMetadata dataset, List<LlmEvaluationObservation> observations, int minimumSamples) { }

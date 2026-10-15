@@ -151,8 +151,6 @@ public class ReviewWorkflowServiceImpl implements ReviewWorkflowService {
                 continue;
             }
             if (transitionStore.escalateHumanReview(task, level, now, cooldownBefore, limit)) {
-                task.setReviewEscalationLevel(level + 1);
-                task.setReviewLastEscalatedAt(now);
                 escalated++;
             } else {
                 skipped++;

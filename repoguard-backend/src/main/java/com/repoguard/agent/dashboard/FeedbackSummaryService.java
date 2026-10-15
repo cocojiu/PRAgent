@@ -1,6 +1,7 @@
 package com.repoguard.agent.dashboard;
 
-import com.repoguard.agent.tenancy.TenantContext;
+import org.springframework.beans.factory.annotation.Autowired;
+import com.repoguard.agent.tenancy.TenantProperties;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -15,8 +16,14 @@ import org.springframework.stereotype.Service;
 public class FeedbackSummaryService {
     static final int LIMIT = 1000;
     private final JdbcTemplate jdbc;
+    private final TenantProperties tenancy;
 
-    public FeedbackSummaryService(JdbcTemplate jdbc) { this.jdbc = jdbc; }
+    public FeedbackSummaryService(JdbcTemplate jdbc) { this(jdbc, new TenantProperties()); }
+
+    @Autowired
+    public FeedbackSummaryService(JdbcTemplate jdbc, TenantProperties tenancy) {
+        this.jdbc = jdbc; this.tenancy = tenancy;
+    }
 
     public FeedbackSummary summary() {
         LocalDateTime end = LocalDateTime.now();
@@ -36,7 +43,7 @@ public class FeedbackSummaryService {
                 rs.getString("feedback_status"), rs.getString("feedback_by"),
                 rs.getObject("feedback_at", LocalDateTime.class), rs.getString("organization"),
                 rs.getString("repository"), rs.getInt("pr_number"), rs.getString("commit_sha"),
-                rs.getString("task_source")), TenantContext.currentTenantIdOrDefault(), start, end);
+                rs.getString("task_source")), tenancy.currentTenantId(), start, end);
         return summarize(rows, start, end);
     }
 

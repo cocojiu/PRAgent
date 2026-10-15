@@ -27,7 +27,7 @@ class RepositorySuppressionServiceTest {
     private final ReviewRuleRegistry ruleRegistry = mock(ReviewRuleRegistry.class);
     private final RepositorySuppressionService service = new RepositorySuppressionService(
         repository, findingMapper, ruleRegistry
-    );
+    , new com.repoguard.agent.tenancy.TenantProperties());
 
     @Test
     void createsScopedProposalWithReplayCountAndMapsStoredResponse() {

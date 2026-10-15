@@ -58,28 +58,15 @@ public class ReviewPolicyProvider {
         if (config == null) {
             return ReviewPolicySettings.empty();
         }
-        return new ReviewPolicySettings(
-            true,
-            config.getLlmEnabled(),
-            config.getLlmProvider(),
-            config.getModelName(),
-            config.getBaseUrl(),
-            secretCryptoService.decrypt(config.getApiKeyValue()),
-            config.getTimeoutSeconds(),
-            config.getTemperature(),
-            config.getMaxTokens(),
-            config.getFallbackToRules(),
-            reviewQueueProperties.getWorkerConcurrency(),
-            config.getChunkFileThreshold(),
-            config.getChunkLineThreshold(),
-            config.getChunkMaxFiles(),
-            config.getChunkMaxLines(),
-            config.getInputTokenPricePerMillion(),
-            config.getOutputTokenPricePerMillion(),
-            strategyReleaseProvider == null
-                ? ReviewStrategyRelease.observeDefaults()
-                : strategyReleaseProvider.getActiveRelease(),
-            config.getCachedInputTokenPricePerMillion()
-        );
+        return new ReviewPolicySettings(true, config.getLlmEnabled(),
+            new ReviewPolicySettings.Connection(config.getLlmProvider(), config.getModelName(), config.getBaseUrl(),
+                secretCryptoService.decrypt(config.getApiKeyValue()), config.getTimeoutSeconds()),
+            new ReviewPolicySettings.Generation(config.getTemperature(), config.getMaxTokens()), config.getFallbackToRules(),
+            new ReviewPolicySettings.ChunkPolicy(reviewQueueProperties.getWorkerConcurrency(),
+                config.getChunkFileThreshold(), config.getChunkLineThreshold(), config.getChunkMaxFiles(), config.getChunkMaxLines()),
+            new ReviewPolicySettings.Pricing(config.getInputTokenPricePerMillion(), config.getOutputTokenPricePerMillion(),
+                config.getCachedInputTokenPricePerMillion()),
+            strategyReleaseProvider == null ? ReviewStrategyRelease.observeDefaults() : strategyReleaseProvider.getActiveRelease());
+
     }
 }

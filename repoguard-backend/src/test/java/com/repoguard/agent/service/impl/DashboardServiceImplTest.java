@@ -56,6 +56,11 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.cache.annotation.Cacheable;
 
 class DashboardServiceImplTest {
+    private com.repoguard.agent.tenancy.TenantContext.Scope personalScope;
+    @org.junit.jupiter.api.BeforeEach
+    void personalEntry() { personalScope = com.repoguard.agent.tenancy.TenantContext.withTenant(1L); }
+    @org.junit.jupiter.api.AfterEach
+    void clearPersonalEntry() { personalScope.close(); }
 
     private static final Clock FIXED_CLOCK = Clock.fixed(Instant.parse("2026-06-19T10:00:00Z"), ZoneId.of("UTC"));
 

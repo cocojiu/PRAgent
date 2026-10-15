@@ -8,7 +8,7 @@ import com.repoguard.agent.dto.LlmModelReleaseDto.LlmModelReleaseAuditDto;
 import com.repoguard.agent.dto.LlmModelReleaseDto.LlmModelReleaseAuditExportDto;
 import com.repoguard.agent.dto.LlmModelReleaseDto.LlmModelReleaseAuditVerificationDto;
 import com.repoguard.agent.dto.PageResponse;
-import com.repoguard.agent.tenancy.TenantContext;
+import com.repoguard.agent.tenancy.TenantProperties;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -26,10 +26,12 @@ final class LlmModelReleaseAuditService {
     private static final List<String> ACTIONS = List.of(
         "REGISTER_SHADOW", "PROMOTE", "REPLACE_ACTIVE", "ROLLBACK", "AUTO_ROLLBACK", "SAFETY_REVOKE");
 
+    private final TenantProperties tenancy;
     private final LlmModelReleaseRepository releaseRepository;
     private final ObjectMapper objectMapper;
 
-    LlmModelReleaseAuditService(LlmModelReleaseRepository releaseRepository, ObjectMapper objectMapper) {
+    LlmModelReleaseAuditService(LlmModelReleaseRepository releaseRepository, ObjectMapper objectMapper, TenantProperties tenancy) {
+        this.tenancy = tenancy;
         this.releaseRepository = releaseRepository;
         this.objectMapper = objectMapper;
     }
@@ -39,7 +41,7 @@ final class LlmModelReleaseAuditService {
         int safePage = normalizePage(page);
         int safePageSize = normalizePageSize(pageSize);
         LlmModelReleaseRepository.AuditFilter filter = auditFilter(releaseId, releaseKey, operator, action, from, to);
-        long tenantId = TenantContext.currentTenantIdOrDefault();
+        long tenantId = tenancy.currentTenantId();
         long total = releaseRepository.countAudits(tenantId, filter);
         long offsetLong = (long) (safePage - 1) * safePageSize;
         int offset = offsetLong > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) offsetLong;
@@ -53,7 +55,7 @@ final class LlmModelReleaseAuditService {
     LlmModelReleaseAuditVerificationDto verify(long auditId) {
         if (auditId < 1) throw new BusinessException(ErrorCode.BAD_REQUEST, "审计记录编号必须为正数");
         LlmModelReleaseRepository.ReleaseAudit audit = releaseRepository.findAuditById(
-            TenantContext.currentTenantIdOrDefault(), auditId);
+            tenancy.currentTenantId(), auditId);
         if (audit == null) throw new BusinessException(ErrorCode.BAD_REQUEST, "发布审计记录不存在");
         AuditHashCheck check = auditHash(audit);
         return new LlmModelReleaseAuditVerificationDto(audit.id(), audit.releaseId(), audit.releaseKey(),
@@ -64,7 +66,7 @@ final class LlmModelReleaseAuditService {
         String action, String from, String to, String format) {
         String normalizedFormat = normalizeExportFormat(format);
         LlmModelReleaseRepository.AuditFilter filter = auditFilter(releaseId, releaseKey, operator, action, from, to);
-        long tenantId = TenantContext.currentTenantIdOrDefault();
+        long tenantId = tenancy.currentTenantId();
         long total = releaseRepository.countAudits(tenantId, filter);
         if (total > MAX_EXPORT_ROWS) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "发布审计导出最多支持 1000 条，请缩小筛选范围");
@@ -201,7 +203,7 @@ final class LlmModelReleaseAuditService {
         }
     }
 
-    private static String sha256(String value) {
+    static String sha256(String value) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
             StringBuilder result = new StringBuilder(digest.length * 2);

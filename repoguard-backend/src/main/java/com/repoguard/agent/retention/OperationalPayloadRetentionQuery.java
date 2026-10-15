@@ -21,7 +21,7 @@ public class OperationalPayloadRetentionQuery {
 
     @Transactional(readOnly = true, timeout = 5)
     public List<OperationalPayloadRetentionPreview> preview() {
-        long tenantId = TenantContext.currentTenantIdOrDefault();
+        long tenantId = TenantContext.requireTenantId();
         LocalDateTime now = LocalDateTime.now();
         int feedbackDays = properties.normalizedFeedbackPayloadDays();
         int runDays = properties.normalizedEvaluationRunPayloadDays();

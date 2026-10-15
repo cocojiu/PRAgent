@@ -8,6 +8,11 @@ public class TenantProperties {
     private boolean enabled;
     private String headerName = "X-RepoGuard-Tenant";
 
+    /** Resolves the explicit personal default without weakening enterprise isolation. */
+    public long currentTenantId() {
+        return enabled ? TenantContext.requireTenantId() : TenantContext.currentTenantIdOrDefault();
+    }
+
     public boolean isEnabled() {
         return enabled;
     }

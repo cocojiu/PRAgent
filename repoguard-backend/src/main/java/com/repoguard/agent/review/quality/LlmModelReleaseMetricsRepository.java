@@ -1,5 +1,7 @@
 package com.repoguard.agent.review.quality;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import com.repoguard.agent.tenancy.TenantProperties;
 import java.math.BigDecimal;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -15,9 +17,13 @@ import org.springframework.stereotype.Repository;
 public class LlmModelReleaseMetricsRepository {
 
     private final JdbcTemplate jdbcTemplate;
+    private final TenantProperties tenancy;
 
-    public LlmModelReleaseMetricsRepository(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    public LlmModelReleaseMetricsRepository(JdbcTemplate jdbcTemplate) { this(jdbcTemplate, new TenantProperties()); }
+
+    @Autowired
+    public LlmModelReleaseMetricsRepository(JdbcTemplate jdbcTemplate, TenantProperties tenancy) {
+        this.jdbcTemplate = jdbcTemplate; this.tenancy = tenancy;
     }
 
     public RuntimeAggregate aggregate(long tenantId, String releaseKey, LocalDateTime start, LocalDateTime end) {
@@ -145,7 +151,7 @@ public class LlmModelReleaseMetricsRepository {
     }
 
     private long currentTenant() {
-        return com.repoguard.agent.tenancy.TenantContext.currentTenantIdOrDefault();
+        return tenancy.currentTenantId();
     }
 
     private long number(Object value) {
