@@ -7,6 +7,7 @@ on:
       - "config/observability/**"
       - "docker-compose.observability.yml"
       - "deploy/images/loki-security.Dockerfile"
+      - ".github/actions/verify-loki-candidate/**"
   push:
     branches:
       - main
@@ -15,10 +16,21 @@ on:
       - "config/observability/**"
       - "docker-compose.observability.yml"
       - "deploy/images/loki-security.Dockerfile"
+      - ".github/actions/verify-loki-candidate/**"
   workflow_dispatch:
     inputs:
       build_loki_candidate:
         description: Build and validate a fixed-source Loki security candidate without publishing or deploying
+        type: boolean
+        default: false
+        required: false
+      archive_loki_candidate:
+        description: Preserve the checked image and verify loading it on an independent runner
+        type: boolean
+        default: false
+        required: false
+      publish_loki_candidate:
+        description: Publish the exact checked image with source evidence; manual main only, no production deployment
         type: boolean
         default: false
         required: false
@@ -35,6 +47,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Validate explicit publication request
+        shell: bash
+        env:
+          PUBLISH_REQUESTED: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_loki_candidate && 'true' || 'false' }}
+        run: |
+          set -euo pipefail
+          if [ "${PUBLISH_REQUESTED}" = "true" ]; then
+            test "${GITHUB_REF}" = 'refs/heads/main' || {
+              echo "Loki source publication requires an explicit dispatch from main." >&2
+              exit 1
+            }
+          fi
 
       - name: Resolve pinned images
         id: images
@@ -211,7 +236,8 @@ jobs:
 
   loki-security-candidate:
     name: Isolated Loki security rebuild
-    if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.build_loki_candidate) }}
+    needs: resolve
+    if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && (inputs.build_loki_candidate || inputs.archive_loki_candidate || inputs.publish_loki_candidate)) }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -245,6 +271,14 @@ jobs:
           ignore-unfixed: false
           vuln-type: os,library
           severity: HIGH,CRITICAL
+
+      - name: Generate checked candidate SBOM
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: repoguard-loki-candidate:ci
+          format: cyclonedx
+          output: loki-candidate-evidence/sbom.cdx.json
 
       - name: Validate both deployed Loki configurations
         shell: bash
@@ -359,6 +393,14 @@ jobs:
                   docker(kind, 'rm', name)
           PY
 
+      - name: Archive exact checked image
+        if: ${{ github.event_name == 'workflow_dispatch' && (inputs.archive_loki_candidate || inputs.publish_loki_candidate) }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker image save repoguard-loki-candidate:ci --output loki-candidate-evidence/image.tar
+          (cd loki-candidate-evidence && sha256sum image.tar > image.tar.sha256)
+
       - name: Retain isolated candidate evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -367,3 +409,142 @@ jobs:
           path: loki-candidate-evidence/
           retention-days: 7
           if-no-files-found: error
+
+  loki-candidate-transfer:
+    name: Verify Loki image on a fresh runner
+    needs: loki-security-candidate
+    if: ${{ github.event_name == 'workflow_dispatch' && (inputs.archive_loki_candidate || inputs.publish_loki_candidate) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout release verification
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Download this run's checked candidate
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh run download "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}" \
+            --name "loki-security-candidate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" --dir loki-candidate-evidence
+      - name: Verify transferred candidate
+        uses: ./.github/actions/verify-loki-candidate
+        with:
+          directory: loki-candidate-evidence
+      - name: Preserve independent transfer verification
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: loki-candidate-transfer-${{ github.run_id }}-${{ github.run_attempt }}
+          path: loki-candidate-evidence/transfer-verification.json
+          if-no-files-found: error
+          retention-days: 7
+
+  loki-candidate-publish:
+    name: Publish checked Loki source image
+    needs: [resolve, loki-security-candidate, loki-candidate-transfer]
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_loki_candidate == true && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    steps:
+      - name: Checkout release verification
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Download this run's checked candidate
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh run download "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}" \
+            --name "loki-security-candidate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" --dir loki-candidate-evidence
+      - name: Verify transferred candidate
+        id: loaded
+        uses: ./.github/actions/verify-loki-candidate
+        with:
+          directory: loki-candidate-evidence
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Push and read back exact checked image
+        id: image
+        shell: bash
+        env:
+          CHECKED_IMAGE_ID: ${{ steps.loaded.outputs.image_id }}
+        run: |
+          set -euo pipefail
+          repository="ghcr.io/${GITHUB_REPOSITORY,,}-loki"
+          tag="3.7.8-repoguard.1-${GITHUB_SHA:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          image="${repository}:${tag}"
+          docker image tag "${CHECKED_IMAGE_ID}" "${image}"
+          docker image push "${image}"
+          digest="$(docker image inspect "${image}" | jq -er --arg prefix "${repository}@" \
+            '[.[0].RepoDigests[] | select(startswith($prefix)) | split("@")[1]] | unique | if length == 1 then .[0] else error("ambiguous pushed digest") end')"
+          [[ "${digest}" =~ ^sha256:[a-f0-9]{64}$ ]]
+          docker image pull "${repository}@${digest}"
+          test "$(docker image inspect --format '{{.Id}}' "${repository}@${digest}")" = "${CHECKED_IMAGE_ID}"
+          echo "repository=${repository}" >> "${GITHUB_OUTPUT}"
+          echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
+      - name: Attest exact image build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ steps.image.outputs.repository }}
+          subject-digest: ${{ steps.image.outputs.digest }}
+      - name: Attest checked SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ steps.image.outputs.repository }}
+          subject-digest: ${{ steps.image.outputs.digest }}
+          sbom-path: loki-candidate-evidence/sbom.cdx.json
+      - name: Create checked Loki source manifest
+        shell: bash
+        env:
+          SOURCE_REPOSITORY: ${{ steps.image.outputs.repository }}
+          SOURCE_DIGEST: ${{ steps.image.outputs.digest }}
+          CHECKED_IMAGE_ID: ${{ steps.loaded.outputs.image_id }}
+          CHECKED_ARCHIVE_SHA256: ${{ steps.loaded.outputs.archive_sha256 }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, re
+          root = pathlib.Path('loki-candidate-evidence')
+          digest = os.environ['SOURCE_DIGEST']
+          assert re.fullmatch(r'sha256:[a-f0-9]{64}', digest)
+          evidence = {}
+          for name in ('trivy.json', 'sbom.cdx.json', 'persistence-result.json', 'transfer-verification.json'):
+              evidence[name] = hashlib.sha256((root / name).read_bytes()).hexdigest()
+          manifest = {'formatVersion': 1, 'version': '3.7.8-repoguard.1',
+              'source': {'repository': os.environ['GITHUB_REPOSITORY'],
+                  'workflow': '.github/workflows/production-observability-security.yml',
+                  'gitSha': os.environ['GITHUB_SHA'], 'ref': os.environ['GITHUB_REF'],
+                  'runId': int(os.environ['GITHUB_RUN_ID']), 'runAttempt': int(os.environ['GITHUB_RUN_ATTEMPT'])},
+              'upstreamGitSha': '09e6ce2ff1bdc19763a10265b870c86f51c98655',
+              'image': {'repository': os.environ['SOURCE_REPOSITORY'], 'digest': digest,
+                  'imageId': os.environ['CHECKED_IMAGE_ID'], 'platform': 'linux/amd64'},
+              'checks': {'highCriticalCount': 0, 'configurationValidation': 'passed',
+                  'persistenceUpgradeRollback': 'passed', 'independentImageTransfer': 'passed',
+                  'imageProvenance': 'attested', 'sbom': 'attested'},
+              'archiveSha256': os.environ['CHECKED_ARCHIVE_SHA256'], 'evidenceSha256': evidence}
+          pathlib.Path('loki-source-manifest.json').write_text(json.dumps(manifest, indent=2))
+          PY
+      - name: Attest checked Loki source manifest
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: loki-source-manifest.json
+      - name: Preserve signed source manifest
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: loki-source-manifest-${{ github.run_id }}-${{ github.run_attempt }}
+          path: loki-source-manifest.json
+          if-no-files-found: error
+          retention-days: 90

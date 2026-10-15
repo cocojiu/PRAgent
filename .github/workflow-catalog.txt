@@ -29,7 +29,7 @@ Category | Workflow | Trigger | Primary action/script | Configuration/assets
 CI | .github/workflows/pr-quality.yml | pull_request: main, master, PRAgent-test | checkout, gitleaks, setup-java/node, trivy, Playwright; production-readiness-check.ps1 | Maven, npm, docker-compose*.yml, config/observability
 CI | .github/workflows/repository-governance.yml | push: main, master, PRAgent-test; workflow_dispatch | production-readiness-check.ps1 -Mode quick -SkipBackendTests | tracked-file policy and repository scripts
 CI | .github/workflows/auto-create-pr.yml | push: PRAgent-test | actions/github-script | branch head and main base
-CI | .github/workflows/production-observability-security.yml | observability path PR/push/manual | trivy, caddy validation | config/observability, docker-compose.observability.yml
+Release | .github/workflows/production-observability-security.yml | observability path CI; explicit manual main candidate publication | trivy, verify-loki-candidate, GHCR, SBOM and attestations; no production SSH | config/observability, docker-compose.observability.yml, deploy/images/loki-security.Dockerfile
 Release | .github/workflows/release-images.yml | push: main/master or v*; workflow_dispatch | Docker Buildx/login, SBOM, attestations, trivy; deploy-prod.sh | Dockerfiles, compose files, .env.prod.example, production SSH action
 Maintenance | .github/workflows/production-observation.yml | schedule; workflow_dispatch | curl endpoint probes and GitHub issue alerting | PRODUCTION_BASE_URL, liveness/readiness paths
 Maintenance | .github/workflows/production-mysql-backup.yml | schedule; workflow_dispatch | encrypted backup, restore rehearsal, AWS OIDC | backup scripts, MySQL compose and production environment
