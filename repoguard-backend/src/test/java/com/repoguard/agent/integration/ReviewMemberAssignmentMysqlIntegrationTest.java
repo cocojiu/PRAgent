@@ -30,6 +30,7 @@ import org.mybatis.spring.SqlSessionTemplate;
 import org.springframework.context.annotation.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
@@ -42,14 +43,24 @@ class ReviewMemberAssignmentMysqlIntegrationTest {
     private static AnnotationConfigApplicationContext context;
     private static DataSource dataSource;
     private static JdbcTemplate jdbc;
+    private static JdbcTemplate lockObserver;
     private static ReviewMemberAssignmentService service;
     private static ReviewWorkflowService workflow;
     private Fixture fixture;
     private record Fixture(long tenant, long otherTenant, long task, long attempt, long first, long second, long foreignMember) { }
 
-    @BeforeAll static void open() {
+    @BeforeAll static void open() throws Exception {
         dataSource = PreflightIntegrationDatabase.migrateFixture();
         jdbc = new JdbcTemplate(dataSource);
+        lockObserver = jdbc;
+        String diagnosticsPassword = System.getenv("REPOGUARD_MYSQL_DIAGNOSTICS_PASSWORD");
+        if (diagnosticsPassword != null) {
+            // Observe locks separately; application writes keep the ordinary CI database account.
+            try (var connection = dataSource.getConnection()) {
+                lockObserver = new JdbcTemplate(new DriverManagerDataSource(
+                    connection.getMetaData().getURL(), "root", diagnosticsPassword));
+            }
+        }
         context = new AnnotationConfigApplicationContext();
         context.registerBean(DataSource.class, () -> dataSource); context.register(FixtureConfiguration.class); context.refresh();
         service = context.getBean(ReviewMemberAssignmentService.class); workflow = context.getBean(ReviewWorkflowService.class);
@@ -223,7 +234,7 @@ class ReviewMemberAssignmentMysqlIntegrationTest {
     private static void awaitLockWaits(int minimum) throws InterruptedException {
         long end = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
         while (System.nanoTime() < end) {
-            var count = jdbc.queryForObject("""
+            var count = lockObserver.queryForObject("""
                 select count(*) from performance_schema.data_lock_waits w
                 join performance_schema.data_locks l on l.engine_lock_id=w.requesting_engine_lock_id
                 where l.object_schema=database()
