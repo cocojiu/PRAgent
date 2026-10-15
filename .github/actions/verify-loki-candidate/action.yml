@@ -1,0 +1,94 @@
+name: Verify checked Loki image transfer
+description: Verify the same-run archive, scan, SBOM and persistence evidence before loading the exact checked image.
+inputs:
+  directory:
+    description: Candidate artifact directory inside the checkout
+    required: true
+outputs:
+  image_id:
+    description: The exact image identity checked on the source runner
+    value: ${{ steps.load.outputs.image_id }}
+  archive_sha256:
+    description: SHA256 of the verified image archive
+    value: ${{ steps.load.outputs.archive_sha256 }}
+runs:
+  using: composite
+  steps:
+    - name: Verify evidence and load exact image
+      id: load
+      shell: bash
+      env:
+        CANDIDATE_DIRECTORY: ${{ inputs.directory }}
+      run: |
+        set -euo pipefail
+        python3 - <<'PY'
+        import hashlib, json, os, pathlib, re, subprocess
+
+        directory = pathlib.Path(os.environ['CANDIDATE_DIRECTORY']).resolve(strict=True)
+        assert directory.is_relative_to(pathlib.Path(os.environ['GITHUB_WORKSPACE']).resolve())
+
+        def read(name):
+            path = directory / name
+            assert path.is_file() and not path.is_symlink() and path.stat().st_size <= 32 * 1024 * 1024
+            return json.loads(path.read_text())
+
+        inspections = read('image.json')
+        assert len(inspections) == 1
+        image = inspections[0]
+        identity = image['Id']
+        assert re.fullmatch(r'sha256:[a-f0-9]{64}', identity)
+        assert image['Os'] == 'linux' and image['Architecture'] == 'amd64'
+        assert image['Config']['User'] == '10001'
+        labels = image['Config']['Labels']
+        assert labels['org.opencontainers.image.revision'] == '09e6ce2ff1bdc19763a10265b870c86f51c98655'
+        assert labels['org.opencontainers.image.version'] == '3.7.8-repoguard.1'
+
+        scan = read('trivy.json')
+        assert scan['SchemaVersion'] == 2 and scan['Metadata']['ImageID'] == identity
+        assert scan.get('Results')
+        assert not [v for result in scan['Results'] for v in result.get('Vulnerabilities') or []]
+        sbom = read('sbom.cdx.json')
+        assert sbom['bomFormat'] == 'CycloneDX'
+        components = sbom['components']
+        assert any(c['name'] == 'golang.org/x/net' and c.get('version') == 'v0.60.0' for c in components)
+        assert any(c['name'] == 'stdlib' and c.get('version') == 'v1.26.9' for c in components)
+
+        persistence = read('persistence-result.json')
+        assert persistence['productionConnections'] == persistence['publishedPorts'] == 0
+        runtime_config = pathlib.Path(os.environ['GITHUB_WORKSPACE']) / 'config/observability/loki-runtime-metrics.yml'
+        assert persistence['runtimeConfigSha256'] == hashlib.sha256(runtime_config.read_bytes()).hexdigest()
+        assert persistence['memoryLimitBytes'] == 384 * 1024 * 1024 and persistence['cpuLimit'] == 0.50
+        assert len(persistence['expectedRules']) >= 6
+        phases = persistence['phases']
+        assert [p['phase'] for p in phases] == ['baseline', 'candidate', 'rollback']
+        assert phases[1]['imageId'] == identity
+        assert len(phases[1]['retainedLogs']) == 2
+        assert phases[1]['retainedLogs'] == phases[2]['retainedLogs']
+        assert all(p['memoryLimitBytes'] == persistence['memoryLimitBytes'] for p in phases)
+        assert all(set(persistence['expectedRules']) <= set(p['loadedRules']) for p in phases)
+        assert set(phases[0]['retainedLogs']) <= set(phases[2]['retainedLogs'])
+
+        archive = directory / 'image.tar'
+        assert archive.is_file() and not archive.is_symlink() and 0 < archive.stat().st_size <= 512 * 1024 * 1024
+        checksum = (directory / 'image.tar.sha256').read_text()
+        match = re.fullmatch(r'([a-f0-9]{64})  image.tar\n?', checksum)
+        assert match
+        with archive.open('rb') as stream:
+            digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+        assert digest == match[1], 'candidate_archive_checksum_mismatch'
+        subprocess.run(['docker', 'image', 'load', '--input', str(archive)], check=True, timeout=120)
+        loaded = json.loads(subprocess.check_output(['docker', 'image', 'inspect', 'repoguard-loki-candidate:ci']))
+        assert len(loaded) == 1 and loaded[0]['Id'] == identity, 'candidate_image_identity_changed'
+        version = subprocess.check_output(['docker', 'run', '--rm', '--network', 'none', '--read-only',
+            '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', identity, '-version'],
+            text=True, stderr=subprocess.STDOUT, timeout=30)
+        assert '3.7.8-repoguard.1' in version and 'go1.26.9' in version
+        result = {'imageId': identity, 'archiveSha256': digest, 'highCriticalCount': 0,
+            'sameCheckedImage': True, 'persistedLogsRetainedAfterRollback': 2,
+            'runtimeConfigSha256': persistence['runtimeConfigSha256'],
+            'memoryLimitBytes': persistence['memoryLimitBytes'], 'runtimeRuleCount': len(persistence['expectedRules'])}
+        (directory / 'transfer-verification.json').write_text(json.dumps(result, indent=2))
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+            output.write('image_id=' + identity + '\narchive_sha256=' + digest + '\n')
+        print(json.dumps(result))
+        PY

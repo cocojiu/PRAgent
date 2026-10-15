@@ -362,7 +362,7 @@ $env:REPOGUARD_LOG_PATH = "../logs/backend"
 
 ## 镜像发布与回滚
 
-普通 PR 只进入 `Pull Request Quality` CI 主链路；镜像发布仅由 `main`/`master`、`v*` 标签或手动 `Release Images` 触发，`PRAgent-test` 推送不会发布镜像。生产部署默认关闭，不会因构建或测试自动连接服务器；需要时由维护者在 GitHub Actions 中手动启用，并在受保护环境配置凭据。各维护工作流的手动/定时入口和调用关系见 `.github/workflow-catalog.txt`。
+普通 PR 只进入 `Pull Request Quality` CI 主链路；应用镜像发布仅由 `main`/`master`、`v*` 标签或手动 `Release Images` 触发，`PRAgent-test` 推送不会发布镜像。生产部署默认关闭，不会因构建或测试自动连接服务器；需要时由维护者在 GitHub Actions 中手动启用，并在受保护环境配置凭据。各维护工作流的手动/定时入口和调用关系见 `.github/workflow-catalog.txt`。
 
 手动启用部署时应遵循以下边界：
 
@@ -381,6 +381,14 @@ $env:REPOGUARD_LOG_PATH = "../logs/backend"
 首次采用清单发布时，应先记录当前运行版本、镜像 ID 和配置备份，并验证旧应用对扩展后 schema 的兼容性。首次部署失败可尝试自动恢复先前运行镜像；成功部署后，尚无批准清单的历史版本不能通过 `deploy_existing_tag` 手动回滚，需要另行审阅的恢复方案。普通分支的手动构建仍执行质量与镜像扫描，但仅 main/master 和版本标签生成可复用的可信源清单。
 
 本项目按个人项目范围维护，不做生产环境验收；生产工作流保持默认关闭，代码和 CI 门禁不构成线上部署证明。
+
+### 可选 Loki 安全候选交付
+
+`Production Observability Image Security` 默认只验证镜像与配置。手动设置 `build_loki_candidate=true` 可从固定官方源码和修复依赖构建候选，要求 HIGH/CRITICAL 为零，并验证现有配置，以及384MiB/0.50CPU下运行指标规则的实际加载、持久日志升级和回退。设置 `archive_loki_candidate=true` 还会保存同一受检镜像，由独立 runner 核对归档校验和、镜像 ID、SBOM 和持久化证据后实际加载，归档与证据保留7天。
+
+只有在 `main` 手动设置 `publish_loki_candidate=true` 才会发布候选源镜像；该选项包含前述全部验证。发布作业加载经过验证的原镜像归档，不重新构建，再按不可变 digest 回读并核对镜像 ID，生成镜像来源证明、SBOM 证明及签名的 `loki-source-manifest`，清单保留90天。PR、push 和其他分支不能发布；该工作流不连接生产或修改 Compose 中的镜像。
+
+使用候选前先下载该运行的源清单，并使用 `gh attestation verify` 绑定预期仓库、`.github/workflows/production-observability-security.yml`、精确源码 SHA、`refs/heads/main` 和托管 runner，另外核对证明中的 run/attempt；不能仅凭标签或任务成功采用镜像。生产切换仍需单独备份 Loki 数据、检查配置和资源、准备批准的原 digest 及回退步骤，再按签名清单中的镜像 digest 操作。
 
 ## API 入口
 
