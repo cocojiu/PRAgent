@@ -225,15 +225,62 @@ class LlmModelSafetyMysqlIntegrationTest {
         }
     }
 
+    @Test
+    void metricCollectionExcludesConcurrentReleaseCommands() throws Exception {
+        var snapshots = org.mockito.Mockito.mock(com.repoguard.agent.review.quality.LlmModelReleaseMetricsRepository.class);
+        org.mockito.Mockito.when(snapshots.upsert(org.mockito.ArgumentMatchers.any())).thenAnswer(call -> call.getArgument(0));
+        try (var workers = Executors.newFixedThreadPool(1);
+             var context = new org.springframework.context.annotation.AnnotationConfigApplicationContext()) {
+            context.registerBean(JdbcTemplate.class, () -> jdbc);
+            context.registerBean(ObjectMapper.class, () -> new JacksonConfig().objectMapper());
+            context.registerBean(LlmModelReleaseRepository.class, () -> releases);
+            context.registerBean(com.repoguard.agent.review.quality.LlmModelReleaseMetricsRepository.class, () -> snapshots);
+            context.registerBean(com.repoguard.agent.observability.RepoGuardMetrics.class,
+                () -> org.mockito.Mockito.mock(com.repoguard.agent.observability.RepoGuardMetrics.class));
+            context.registerBean(com.repoguard.agent.review.quality.LlmModelReleaseAlertPublisher.class,
+                () -> org.mockito.Mockito.mock(com.repoguard.agent.review.quality.LlmModelReleaseAlertPublisher.class));
+            context.register(Class.forName("com.repoguard.agent.review.quality.LlmModelReleaseRuntimeSupport"),
+                com.repoguard.agent.review.quality.LlmModelReleaseMetricsService.class);
+            context.refresh();
+            org.mockito.Mockito.when(snapshots.aggregate(org.mockito.ArgumentMatchers.eq(tenant),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(call -> {
+                    int lockResult = workers.submit(() -> {
+                        try {
+                            new TransactionTemplate(new DataSourceTransactionManager(data)).execute(status ->
+                                jdbc.queryForObject("select id from tenant where id=? for update nowait", Long.class, tenant));
+                            return 0;
+                        } catch (org.springframework.dao.DataAccessException failure) {
+                            Throwable cause = org.springframework.core.NestedExceptionUtils.getMostSpecificCause(failure);
+                            if (cause instanceof java.sql.SQLException sql) return sql.getErrorCode();
+                            throw failure;
+                        }
+                    }).get(5, TimeUnit.SECONDS);
+                    assertThat(lockResult).as("competing release command must encounter the held tenant lock").isEqualTo(3572);
+                    return new com.repoguard.agent.review.quality.LlmModelReleaseMetricsRepository.RuntimeAggregate(
+                        0L, 0L, BigDecimal.ZERO, 0L, 0L, 0L);
+                });
+            var service = (com.repoguard.agent.review.quality.LlmModelReleaseMetricsService) transactionalProxy(
+                context.getBean(com.repoguard.agent.review.quality.LlmModelReleaseMetricsService.class));
+            try (TenantContext.Scope _ = TenantContext.withTenant(tenant)) {
+                assertThat(service.collectCurrentWindow()).hasSize(1);
+            }
+        }
+    }
+
     private LlmModelReleaseService releaseService(LlmModelReleaseRepository repository) {
         var target = new LlmModelReleaseService(jdbc, org.mockito.Mockito.mock(LlmQualityComparisonProvider.class),
             repository, new JacksonConfig().objectMapper());
+        return (LlmModelReleaseService) transactionalProxy(target);
+    }
+
+    private Object transactionalProxy(Object target) {
         var transaction = new org.springframework.transaction.interceptor.TransactionInterceptor();
         transaction.setTransactionManager(new DataSourceTransactionManager(data));
         transaction.setTransactionAttributeSource(new org.springframework.transaction.annotation.AnnotationTransactionAttributeSource());
         var factory = new org.springframework.aop.framework.ProxyFactory(target);
         factory.addAdvice(transaction);
-        return (LlmModelReleaseService) factory.getProxy();
+        return factory.getProxy();
     }
 
     private com.repoguard.agent.dto.LlmModelReleaseDto revoke() {

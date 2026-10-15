@@ -62,13 +62,13 @@ public class LlmModelReleaseMetricsService {
         LocalDateTime end = normalizeWindowEnd(windowEnd);
         LocalDateTime start = end.minusHours(1);
         long tenantId = TenantContext.currentTenantIdOrDefault();
+        releaseRepository.lockTenant(tenantId);
         List<LlmModelReleaseMetricDto> result = new ArrayList<>();
         for (LlmModelReleaseDto release : releaseRepository.findAll(tenantId)) {
             result.add(toDto(collectOne(tenantId, release, start, end)));
         }
         return List.copyOf(result);
     }
-
     @Transactional(readOnly = true)
     public List<LlmModelReleaseMetricDto> list(String releaseKey, int days, int limit) {
         String normalizedKey = normalizeKey(releaseKey);
