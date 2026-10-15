@@ -97,7 +97,8 @@ class RuntimeSchemaRollbackLinuxIntegrationTest {
         rabbit = container("rabbit", RABBIT_IMAGE, environment("rabbit", Map.of(
             "RABBITMQ_DEFAULT_USER", "repoguard", "RABBITMQ_DEFAULT_PASS", rabbitPassword,
             "RABBITMQ_DEFAULT_VHOST", VHOST)), List.of("--network-alias", "rabbitmq", "--publish", "127.0.0.1::5672"), List.of());
-        await(() -> succeeds(List.of("docker", "exec", rabbit, "rabbitmq-diagnostics", "-q", "ping")), 90);
+        // A root CLI probe can create a root-owned cookie before the entrypoint drops privileges.
+        await(() -> succeeds(List.of("docker", "exec", "--user", "rabbitmq", rabbit, "rabbitmq-diagnostics", "-q", "ping")), 90);
         JsonNode binding = inspect("container", rabbit).path("NetworkSettings").path("Ports").path("5672/tcp");
         assertThat(binding.size()).isEqualTo(1); assertThat(binding.get(0).path("HostIp").asText()).isEqualTo("127.0.0.1");
         rabbitPort = Integer.parseInt(binding.get(0).path("HostPort").asText());
@@ -210,7 +211,7 @@ class RuntimeSchemaRollbackLinuxIntegrationTest {
     }
 
     private static JsonNode queues() throws Exception {
-        return JSON.readTree(checked(List.of("docker", "exec", rabbit, "rabbitmqctl", "--formatter", "json", "list_queues", "-p", VHOST,
+        return JSON.readTree(checked(List.of("docker", "exec", "--user", "rabbitmq", rabbit, "rabbitmqctl", "--formatter", "json", "list_queues", "-p", VHOST,
             "name", "messages_ready", "messages_unacknowledged", "consumers"), Duration.ofSeconds(15)));
     }
     private static JsonNode queue() throws Exception {
