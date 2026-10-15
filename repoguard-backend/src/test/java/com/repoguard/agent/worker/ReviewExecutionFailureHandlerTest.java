@@ -52,8 +52,8 @@ class ReviewExecutionFailureHandlerTest {
     @Test
     void diagnosticTimelineRedactsSecretsBeforeTruncation() {
         String label = new ReviewExecutionTimelineLabelFormatter().reviewFailed(
-            new IllegalStateException("api_key=fixture-secret-value " + "x".repeat(200)));
-        assertThat(label).startsWith("Review failed:").doesNotContain("fixture-secret-value");
+            new IllegalStateException("api_key=test-secret-value " + "x".repeat(200)));
+        assertThat(label).startsWith("Review failed:").doesNotContain("test-secret-value");
         assertThat(label.length()).isLessThanOrEqualTo(120);
     }
 }
