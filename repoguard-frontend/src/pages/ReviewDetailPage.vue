@@ -365,6 +365,7 @@ const {
   publishingComments,
   writebackCheck,
   errorMessage,
+  progressConnectionState,
   currentPollIntervalSeconds,
   lastRefreshedAt,
   loading,
@@ -465,6 +466,7 @@ const retryTooltip = computed(() => {
 });
 const refreshStatusText = computed(() => {
   return mapRefreshStatusText({
+    connectionState: progressConnectionState.value,
     currentPollIntervalSeconds: currentPollIntervalSeconds.value,
     lastRefreshedAt: lastRefreshedAt.value,
     pollErrorMessage: pollErrorMessage.value,

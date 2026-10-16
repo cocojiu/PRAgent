@@ -10,6 +10,7 @@ import type {
 } from "@/types";
 import type { HumanReviewRequest } from "@/api/generated/reviewDetailTypes";
 import { riskText } from "@/utils/risk";
+import type { ReviewProgressConnectionState } from "./composables/useReviewDetailPolling";
 
 export const chunkAggregateRiskText = (risk?: RiskLevel | string) => riskText((risk || "info") as RiskLevel);
 
@@ -297,6 +298,7 @@ export const publicationMessageText = (message: string | undefined, status: stri
 };
 
 export const refreshStatusText = ({
+  connectionState,
   currentPollIntervalSeconds,
   lastRefreshedAt,
   pollErrorMessage,
@@ -306,6 +308,7 @@ export const refreshStatusText = ({
   silentRefreshing,
   maxPollFailures
 }: {
+  connectionState: ReviewProgressConnectionState;
   currentPollIntervalSeconds: number;
   lastRefreshedAt: string;
   pollErrorMessage: string;
@@ -316,16 +319,24 @@ export const refreshStatusText = ({
   maxPollFailures: number;
 }) => {
   if (shouldPollTask) {
+    if (pollErrorMessage && pollFailureCount >= maxPollFailures) {
+      return "自动刷新已暂停，请手动刷新";
+    }
+    if (connectionState === "paused") {
+      return "自动更新已暂停，恢复页面或网络连接后继续";
+    }
+    if (connectionState === "disposed") {
+      return "自动更新已停止，请刷新页面";
+    }
     if (silentRefreshing) {
       return "正在自动刷新任务状态...";
     }
     if (pollErrorMessage) {
-      if (pollFailureCount >= maxPollFailures) {
-        return "自动刷新已暂停，请手动刷新";
-      }
       return `自动刷新上次失败，将在 ${currentPollIntervalSeconds} 秒后重试`;
     }
-    return `自动刷新中，每 ${currentPollIntervalSeconds} 秒更新一次`;
+    return connectionState === "connected"
+      ? "任务状态自动更新中"
+      : `自动刷新中，每 ${currentPollIntervalSeconds} 秒更新一次`;
   }
   if (selectedTaskStatus === "failed") {
     return lastRefreshedAt ? `任务失败，最后更新 ${lastRefreshedAt}` : "任务失败";

@@ -58,6 +58,7 @@ export const useReviewDetailSession = ({ getTaskId }: { getTaskId: () => number 
   return {
     ...comments, ...loader, ...sections,
     isTerminalTask, isArchivedTask, isSupersededTask, canLoadGithubComments,
+    progressConnectionState: polling.connectionState,
     currentPollIntervalSeconds: computed(() => currentPollIntervalMs.value / 1000),
     attemptComparisonAttempts: comparison.attempts,
     attemptComparisonResult: comparison.comparison,
