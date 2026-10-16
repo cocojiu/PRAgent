@@ -8,6 +8,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 import org.yaml.snakeyaml.Yaml;
 
@@ -45,6 +48,91 @@ class ProductionObservabilityWorkflowContractTest {
                 .as("workflow size ratchet for %s", workflowPath)
                 .isLessThan(1_400);
         }
+    }
+
+    @Test
+    void productionEmbeddedPythonParsesBeforeAnyWorkflowCanReachProduction() throws Exception {
+        Map<String, Object> workflow = new Yaml().load(read(repositoryRoot()
+            .resolve(".github/workflows/production-loki-security-release.yml")));
+        String python = System.getProperty("repoguard.python.executable",
+            System.getProperty("os.name").startsWith("Windows") ? "python" : "python3");
+        Pattern heredoc = Pattern.compile("(?s)<<'PY'[^\\n]*\\n(.*?)\\nPY(?:\\n|$)");
+        int verified = 0;
+        for (Object job : mapping(workflow.get("jobs")).values()) {
+            for (Map<String, Object> step : steps(mapping(job))) {
+                Matcher matcher = heredoc.matcher(String.valueOf(step.getOrDefault("run", "")));
+                while (matcher.find()) {
+                    Process process = new ProcessBuilder(python, "-B", "-c", "import ast,sys; ast.parse(sys.stdin.read())")
+                        .redirectErrorStream(true).start();
+                    try (var input = process.getOutputStream()) {
+                        input.write(matcher.group(1).getBytes(StandardCharsets.UTF_8));
+                    }
+                    boolean completed = process.waitFor(15, TimeUnit.SECONDS);
+                    if (!completed) process.destroyForcibly();
+                    assertThat(completed).isTrue();
+                    String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+                    assertThat(process.exitValue()).withFailMessage(output).isZero();
+                    verified++;
+                }
+            }
+        }
+        assertThat(verified).isEqualTo(5);
+    }
+
+    @Test
+    void lokiProductionRequiresVerifiedSourceAndCurrentStrictScanBeforeEnvironmentAccess() throws IOException {
+        Map<String, Object> workflow = new Yaml().load(read(repositoryRoot()
+            .resolve(".github/workflows/production-loki-security-release.yml")));
+        assertThat(mapping(workflow.get("permissions"))).isEqualTo(Map.of("contents", "read"));
+        Map<String, Object> jobs = mapping(workflow.get("jobs"));
+        Map<String, Object> source = mapping(jobs.get("source"));
+        assertThat(source).doesNotContainKeys("environment", "secrets");
+        assertThat(mapping(source.get("permissions"))).isEqualTo(Map.of("actions", "read", "contents", "read"));
+        Map<String, Object> scan = steps(source).stream()
+            .filter(step -> String.valueOf(step.get("name")).startsWith("Enforce current zero"))
+            .map(step -> mapping(step.get("with"))).findFirst().orElseThrow();
+        assertThat(scan.get("exit-code")).isEqualTo("1");
+        assertThat(scan.get("ignore-unfixed")).isEqualTo(false);
+        assertThat(scan.get("severity")).isEqualTo("HIGH,CRITICAL");
+        assertThat(scan.get("image-ref")).isEqualTo("${{ steps.identity.outputs.image_reference }}");
+        Map<String, Object> production = mapping(jobs.get("production"));
+        assertThat(production.get("needs")).isEqualTo("source");
+        assertThat(production.get("if")).isEqualTo(
+            "${{ github.event_name == 'workflow_dispatch' && (inputs.action == 'preflight' || github.ref == 'refs/heads/main') }}");
+        assertThat(production.get("environment")).isEqualTo("production");
+        assertThat(mapping(production.get("permissions"))).isEqualTo(Map.of(
+            "actions", "read", "contents", "read", "attestations", "write", "id-token", "write"));
+    }
+
+    @Test
+    void lokiPreflightKeepsProductionReadOnlyAndWritesRequireExplicitMainConfirmation() throws IOException {
+        Map<String, Object> workflow = new Yaml().load(read(repositoryRoot()
+            .resolve(".github/workflows/production-loki-security-release.yml")));
+        Map<String, Object> jobs = mapping(workflow.get("jobs"));
+        String validation = String.valueOf(steps(mapping(jobs.get("source"))).stream()
+            .filter(step -> "Validate explicit request".equals(step.get("name"))).findFirst().orElseThrow().get("run"));
+        assertThat(validation).contains("os.environ['GITHUB_REF'] == 'refs/heads/main'",
+            "UPGRADE_LOKI_SECURITY", "ROLLBACK_LOKI_SECURITY");
+        List<Map<String, Object>> production = steps(mapping(jobs.get("production")));
+        Map<String, Object> preflight = production.stream()
+            .filter(step -> "Read production preflight without installing files".equals(step.get("name")))
+            .findFirst().orElseThrow();
+        assertThat(String.valueOf(preflight.get("run"))).contains("production_preflight", "python3 -")
+            .doesNotContain("scp ", "mkdir ", "docker pull", "docker run");
+        Map<String, Object> operation = production.stream()
+            .filter(step -> "operation".equals(step.get("id"))).findFirst().orElseThrow();
+        assertThat(operation.get("if")).isEqualTo("inputs.action != 'preflight'");
+        assertThat(String.valueOf(operation.get("run"))).contains(
+            "test \"${GITHUB_REF}\" = 'refs/heads/main'", "upgrade:UPGRADE_LOKI_SECURITY",
+            "rollback:ROLLBACK_LOKI_SECURITY", "scripts/loki-deploy.py", "--manifest-sha '${MANIFEST_SHA}'");
+        Map<String, Object> recovery = mapping(mapping(new Yaml().load(read(repositoryRoot()
+            .resolve(".github/workflows/production-observability-security.yml")))).get("jobs"));
+        Map<String, Object> rehearsal = mapping(recovery.get("loki-recovery-rehearsal"));
+        Map<String, Object> fixtureScan = steps(rehearsal).stream()
+            .filter(step -> String.valueOf(step.get("name")).startsWith("Enforce zero HIGH"))
+            .map(step -> mapping(step.get("with"))).findFirst().orElseThrow();
+        assertThat(fixtureScan.get("exit-code")).isEqualTo("1");
+        assertThat(fixtureScan.get("ignore-unfixed")).isEqualTo(false);
     }
 
     @Test

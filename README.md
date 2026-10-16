@@ -392,6 +392,10 @@ $env:REPOGUARD_LOG_PATH = "../logs/backend"
 
 在目标机执行该工具的 `preflight` 子命令时，显式提供上述源身份、清单路径、清单 SHA256 和 run attempt。只读预检核对当前 Loki/Alloy、实际 Compose 文件、数据卷、运行规则、资源上限及备份密钥权限。`verify_loki_recovery=true` 可手动运行托管隔离恢复门禁，实际验证加密卷快照、原卷保留、日志和真实 Alloy 游标的升级/回退；此门禁不连接生产。
 
+已经运行 Loki 3.7.8 与 Alloy 的目标机使用 `Production Loki Security Release`，默认动作是只读 `preflight`。显式提供受检源的完整 SHA 和运行编号；工作流独立验签后按当前漏洞库执行零 HIGH/CRITICAL 扫描。`upgrade` 和 `rollback` 仅允许 main、受保护 production 环境及对应的 `UPGRADE_LOKI_SECURITY` / `ROLLBACK_LOKI_SECURITY` 确认口令；回退还需提供原生产 release ID。
+
+升级流程持有现有部署锁，短暂停止 Alloy/Loki，以既有 root0600 密码文件生成一致的加密快照，在新卷恢复并逐文件校验，再隔离验证历史心跳日志和运行规则。切换只更改 Loki 镜像和两份活跃数据卷引用，保留原卷、快照及既有资源限制。失败时以旧二进制和恢复后的活跃卷、游标回退，保留候选运行期间已接收的日志。生产结果保留源身份和实际 Compose 覆盖文件路径并签名；后续 Compose 运维须保留该覆盖文件，当前文件列表也可从容器标签读取。升级和回退不会清理原卷或备份。
+
 
 使用候选前先下载该运行的源清单，并使用 `gh attestation verify` 绑定预期仓库、`.github/workflows/production-observability-security.yml`、精确源码 SHA、`refs/heads/main` 和托管 runner，另外核对证明中的 run/attempt；不能仅凭标签或任务成功采用镜像。生产切换仍需单独备份 Loki 数据、检查配置和资源、准备批准的原 digest 及回退步骤，再按签名清单中的镜像 digest 操作。
 

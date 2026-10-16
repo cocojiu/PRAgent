@@ -107,7 +107,7 @@ def validate(manifest, target=False):
 
 
 def inspection(image, reference):
-    metadata = json.loads(subprocess.check_output(["docker", "image", "inspect", reference], text=True))[0]
+    metadata = json.loads(subprocess.check_output(["docker", "image", "inspect", reference], text=True, timeout=15))[0]
     repository = reference.split("@", 1)[0] if "@" in reference else reference.rsplit(":", 1)[0]
     require(IMAGE_REPOSITORY.fullmatch(repository), "Invalid inspected image repository")
     digests = {ref for ref in metadata["RepoDigests"] if ref.startswith(repository + "@")}
@@ -118,7 +118,7 @@ def inspection(image, reference):
     require("@" not in reference or reference == immutable, "Local image differs from requested digest")
     platform = {"os": metadata["Os"], "architecture": metadata["Architecture"]}
     require(platform == {"os": "linux", "architecture": "amd64"}, "Unsupported inspected image platform")
-    verbose = json.loads(subprocess.check_output(["docker", "manifest", "inspect", "--verbose", immutable], text=True))
+    verbose = json.loads(subprocess.check_output(["docker", "manifest", "inspect", "--verbose", immutable], text=True, timeout=45))
     entries = verbose if isinstance(verbose, list) else [verbose]
     matching = [entry for entry in entries if entry["Descriptor"].get("platform") == platform]
     require(len(matching) == 1, "Registry platform image is missing or ambiguous")
