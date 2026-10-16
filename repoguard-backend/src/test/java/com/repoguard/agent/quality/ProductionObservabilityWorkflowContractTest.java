@@ -53,7 +53,7 @@ class ProductionObservabilityWorkflowContractTest {
     @Test
     void productionEmbeddedPythonParsesBeforeAnyWorkflowCanReachProduction() throws Exception {
         Map<String, Object> workflow = new Yaml().load(read(repositoryRoot()
-            .resolve(".github/workflows/production-loki-security-release.yml")));
+            .resolve(".github/workflows/production-observability-log-stack-upgrade.yml")));
         String python = System.getProperty("repoguard.python.executable",
             System.getProperty("os.name").startsWith("Windows") ? "python" : "python3");
         Pattern heredoc = Pattern.compile("(?s)<<'PY'[^\\n]*\\n(.*?)\\nPY(?:\\n|$)");
@@ -82,7 +82,7 @@ class ProductionObservabilityWorkflowContractTest {
     @Test
     void lokiProductionRequiresVerifiedSourceAndCurrentStrictScanBeforeEnvironmentAccess() throws IOException {
         Map<String, Object> workflow = new Yaml().load(read(repositoryRoot()
-            .resolve(".github/workflows/production-loki-security-release.yml")));
+            .resolve(".github/workflows/production-observability-log-stack-upgrade.yml")));
         assertThat(mapping(workflow.get("permissions"))).isEqualTo(Map.of("contents", "read"));
         Map<String, Object> jobs = mapping(workflow.get("jobs"));
         Map<String, Object> source = mapping(jobs.get("source"));
@@ -107,7 +107,7 @@ class ProductionObservabilityWorkflowContractTest {
     @Test
     void lokiPreflightKeepsProductionReadOnlyAndWritesRequireExplicitMainConfirmation() throws IOException {
         Map<String, Object> workflow = new Yaml().load(read(repositoryRoot()
-            .resolve(".github/workflows/production-loki-security-release.yml")));
+            .resolve(".github/workflows/production-observability-log-stack-upgrade.yml")));
         Map<String, Object> jobs = mapping(workflow.get("jobs"));
         String validation = String.valueOf(steps(mapping(jobs.get("source"))).stream()
             .filter(step -> "Validate explicit request".equals(step.get("name"))).findFirst().orElseThrow().get("run"));

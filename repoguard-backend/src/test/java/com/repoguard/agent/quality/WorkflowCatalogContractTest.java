@@ -30,7 +30,7 @@ class WorkflowCatalogContractTest {
                 .toList();
         }
 
-        assertThat(workflowNames).hasSize(16).contains("production-loki-security-release.yml");
+        assertThat(workflowNames).hasSize(15);
         assertThat(catalog).contains("CI |", "Release |", "Maintenance |");
         for (String workflowName : workflowNames) {
             assertThat(catalog)

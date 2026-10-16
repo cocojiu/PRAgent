@@ -239,7 +239,15 @@ def source_from_args(args):
     return validate_source(manifest, args.repository, args.source_sha, args.run_id, args.run_attempt)
 
 
-def production_preflight(manifest, root=Path('/opt/repoguard'), host=None):
+def validate_running_image(role, reference, manifest, allow_candidate=False):
+    require(role in ('loki', 'alloy'), 'unexpected_runtime_role')
+    allowed = {BASELINE_IMAGE if role == 'loki' else ALLOY_IMAGE}
+    if role == 'loki' and allow_candidate:
+        allowed.add(manifest['image']['repository'] + '@' + manifest['image']['digest'])
+    require(reference in allowed, 'unexpected_' + role + '_baseline')
+
+
+def production_preflight(manifest, root=Path('/opt/repoguard'), host=None, allow_candidate=False):
     """Read current state; do not pull images, create locks, stop services, or copy data."""
     host = host or DockerHost()
     root = Path(root)
@@ -247,11 +255,12 @@ def production_preflight(manifest, root=Path('/opt/repoguard'), host=None):
     loki = host.inspect('repoguard-loki')
     alloy = host.inspect('repoguard-alloy')
     containers = {'loki': loki, 'alloy': alloy}
-    for role, expected_image, expected_user in [('loki', BASELINE_IMAGE, '10001'), ('alloy', ALLOY_IMAGE, '473:473')]:
+    for role, expected_user in [('loki', '10001'), ('alloy', '473:473')]:
         container = containers[role]
         labels = container['Config'].get('Labels') or {}
+        validate_running_image(role, container['Config']['Image'], manifest, allow_candidate)
         require(container['State']['Status'] == 'running' and not container['State'].get('OOMKilled')
-            and container['Config']['Image'] == expected_image and container['Config']['User'] == expected_user,
+            and container['Config']['User'] == expected_user,
             'unexpected_' + role + '_baseline')
         require(labels.get('com.docker.compose.project') == 'repoguard-observability'
             and labels.get('com.docker.compose.project.working_dir') == str(root), 'unexpected_compose_project')
@@ -298,7 +307,7 @@ def production_preflight(manifest, root=Path('/opt/repoguard'), host=None):
 
 def preflight_command(args):
     manifest = source_from_args(args)
-    print(json.dumps(production_preflight(manifest)))
+    print(json.dumps(production_preflight(manifest, allow_candidate=True)))
 
 
 def source_arguments(parser):

@@ -289,7 +289,7 @@ jobs:
           python3 - <<'PY'
           import json, pathlib, xml.etree.ElementTree as ET
           root = pathlib.Path('repoguard-backend/target')
-          expected = {'quality.LokiReleaseManifestTest': 8, 'quality.LokiSnapshotSafetyTest': 6,
+          expected = {'quality.LokiReleaseManifestTest': 9, 'quality.LokiSnapshotSafetyTest': 6,
               'quality.LokiDeploymentSafetyTest': 7,
               'quality.ProductionObservabilityWorkflowContractTest': 8,
               'integration.LokiSnapshotLinuxIntegrationTest': 1}
@@ -316,6 +316,7 @@ jobs:
             repoguard-backend/target/loki-recovery-trivy.json
             repoguard-backend/target/loki-fixture-diagnostics/
             repoguard-backend/target/surefire-reports/*Loki*Test*
+            repoguard-backend/target/surefire-reports/*ProductionObservabilityWorkflowContractTest*
           if-no-files-found: error
           retention-days: 7
 

@@ -15,7 +15,7 @@ class LokiReleaseManifestTest {
     @TempDir Path temporaryDirectory;
 
     @ParameterizedTest
-    @ValueSource(strings = {"identity", "checks", "runtime", "types", "attestation", "untrusted-run", "existing-output", "output-race"})
+    @ValueSource(strings = {"identity", "checks", "runtime", "types", "readonly-profile", "attestation", "untrusted-run", "existing-output", "output-race"})
     void rejectsUntrustedSourcesAndPreservesExistingAssets(String scenario) throws Exception {
         Path root = Path.of("").toAbsolutePath();
         while (root != null && !Files.isRegularFile(root.resolve("scripts/loki-release.py"))) root = root.getParent();
@@ -83,6 +83,13 @@ class LokiReleaseManifestTest {
                 rejected(lambda:validate(value),'unsupported_loki_release')
             value=manifest();value['runtime']['cpuLimit']=True
             rejected(lambda:validate(value),'runtime_resource_gate_missing')
+        elif scenario=='readonly-profile':
+            value=manifest();reference=value['image']['repository']+'@'+value['image']['digest']
+            m.validate_running_image('loki',m.BASELINE_IMAGE,value)
+            m.validate_running_image('loki',reference,value,allow_candidate=True)
+            rejected(lambda:m.validate_running_image('loki',reference,value),'unexpected_loki_baseline')
+            rejected(lambda:m.validate_running_image('alloy',reference,value,allow_candidate=True),'unexpected_alloy_baseline')
+            rejected(lambda:m.validate_running_image('loki','unapproved-image',value,allow_candidate=True),'unexpected_loki_baseline')
         elif scenario=='attestation':
             statement=dict(predicateType='https://slsa.dev/provenance/v1',predicate=dict(runDetails=dict(metadata=dict(invocationId=invocation))))
             verified=[dict(verificationResult=dict(signature=dict(certificate=dict(runInvocationUri=invocation)),statement=statement))]
