@@ -282,7 +282,8 @@ jobs:
               assert all(int(suite.get(key, '0')) == 0 for key in ('failures', 'errors', 'skipped'))
           result = json.loads((root / 'loki-recovery-evidence.json').read_text())
           assert result['state'] == 'verified' and result['encryptedBackupRestored']
-          assert result['realAlloyCursorRetained'] and result['persistedLogsAfterRollback'] == 2
+          assert result['realAlloyCursorRetained'] and result['persistedLogsAfterRollback'] == 3
+          assert result['previousLogsRetained'] == 2 and result['collectorWroteAfterRollback']
           assert result['originalVolumesUnchanged'] and result['productionWrites'] == result['publishedPorts'] == 0
           PY
       - name: Preserve isolated recovery evidence

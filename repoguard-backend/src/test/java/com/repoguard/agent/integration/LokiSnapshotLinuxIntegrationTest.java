@@ -107,6 +107,10 @@ class LokiSnapshotLinuxIntegrationTest {
                 '-v',str(events)+':/fixture/events.log:ro',collector,'run','--storage.path=/var/lib/alloy/data',
                 '--server.http.listen-addr=0.0.0.0:12345','--disable-reporting','/etc/alloy/config.alloy')
             containers.append(alloy)
+            alloy_state=inspect(alloy)
+            alloy_base='http://'+alloy_state['NetworkSettings']['Networks'][network]['IPAddress']+':12345'
+            wait(lambda:http(alloy_base,'/-/ready')[0]==200,phase+' Alloy readiness')
+            wait(lambda:http(alloy_base,'/-/healthy')[0]==200,phase+' Alloy component health')
             return (loki,alloy),base
         def messages(base):
             query=urllib.parse.urlencode(dict(query='{job="repoguard-recovery-fixture"}',start=query_start,end=time.time_ns(),limit=100))
@@ -118,7 +122,7 @@ class LokiSnapshotLinuxIntegrationTest {
             original={role:new_volume('original-'+role) for role in ('loki','alloy')}
             for role,uid in [('loki',10001),('alloy',473)]:os.chown(original[role][1],uid,uid)
             pair,base=start_pair('baseline',baseline,original)
-            first='baseline-'+owner;second='candidate-'+owner
+            first='baseline-'+owner;second='candidate-'+owner;third='rollback-'+owner
             with events.open('a') as output:output.write(first+'\\n')
             wait(lambda:messages(base)[first]==1,'baseline collector delivery')
             stop_pair(pair)
@@ -138,10 +142,13 @@ class LokiSnapshotLinuxIntegrationTest {
             stop_pair(pair2)
             pair3,base3=start_pair('rollback',baseline,cloned)
             wait(lambda:messages(base3)==collections.Counter({first:1,second:1}),'rollback persisted logs and collector cursor')
+            with events.open('a') as output:output.write(third+'\\n')
+            wait(lambda:messages(base3)==collections.Counter({first:1,second:1,third:1}),'rollback collector new log delivery')
             stop_pair(pair3)
             assert m.catalog(sources)==before,'original snapshot volumes changed'
             evidence=dict(state='verified',encryptedBackupRestored=True,realAlloyCursorRetained=True,
-                persistedLogsAfterRollback=2,originalVolumesUnchanged=True,productionWrites=0,
+                persistedLogsAfterRollback=3,previousLogsRetained=2,collectorWroteAfterRollback=True,
+                originalVolumesUnchanged=True,productionWrites=0,
                 publishedPorts=0,archiveSha256=snapshot['archiveSha256'],restoredFiles=restored['restoredFiles'])
             (root/'repoguard-backend/target/loki-recovery-evidence.json').write_text(json.dumps(evidence,indent=2))
             print(json.dumps(evidence));print('LOKI_RECOVERY_FIXTURE_PASSED')
