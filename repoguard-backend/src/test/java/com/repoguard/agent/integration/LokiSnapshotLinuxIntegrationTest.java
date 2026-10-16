@@ -23,12 +23,14 @@ class LokiSnapshotLinuxIntegrationTest {
         while (root != null && !Files.isRegularFile(root.resolve("scripts/loki_snapshot.py"))) root = root.getParent();
         assertThat(root).isNotNull();
         String python = System.getProperty("repoguard.python.executable", "python3");
+        Path nativeOutput = temporaryDirectory.resolve("native-output.log");
         Process process = new ProcessBuilder("sudo", "-n", python, "-B", "-c", CONTRACT,
-            root.toString(), temporaryDirectory.toString()).directory(root.toFile()).redirectErrorStream(true).start();
+            root.toString(), temporaryDirectory.toString()).directory(root.toFile()).redirectErrorStream(true)
+            .redirectOutput(nativeOutput.toFile()).start();
         boolean completed = process.waitFor(480, TimeUnit.SECONDS);
         if (!completed) process.destroyForcibly();
         assertThat(completed).as("bounded isolated Loki backup and recovery").isTrue();
-        String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        String output = Files.readString(nativeOutput, StandardCharsets.UTF_8);
         assertThat(process.exitValue()).withFailMessage(output).isZero();
         assertThat(output).contains("LOKI_RECOVERY_FIXTURE_PASSED");
     }
@@ -70,7 +72,12 @@ class LokiSnapshotLinuxIntegrationTest {
             return all(inspect(name)['State']['Status']=='exited' and inspect(name)['State']['ExitCode']==0
                 and not inspect(name)['State']['OOMKilled'] for name in names)
         def stop_pair(pair):
-            for name in reversed(pair):docker('stop','--time','45',name)
+            for name in reversed(pair):
+                docker('stop','--time','45',name)
+                state=inspect(name)['State']
+                summary={key:state.get(key) for key in ('Status','ExitCode','OOMKilled','Error')}
+                assert summary['Status']=='exited' and summary['ExitCode']==0 and not summary['OOMKilled'], (
+                    name+' unclean shutdown: '+json.dumps(summary)+' '+docker('logs','--tail','40',name)[-4000:])
             assert stopped(pair)
         config=fixture/'collector.alloy'
         config.write_text('logging { level = "warn" }\\n'
@@ -139,8 +146,12 @@ class LokiSnapshotLinuxIntegrationTest {
             (root/'repoguard-backend/target/loki-recovery-evidence.json').write_text(json.dumps(evidence,indent=2))
             print(json.dumps(evidence));print('LOKI_RECOVERY_FIXTURE_PASSED')
         finally:
+            diagnostics=root/'repoguard-backend/target/loki-fixture-diagnostics'
+            diagnostics.mkdir(parents=True,exist_ok=True)
             for name in reversed(containers):
                 state=inspect(name);assert state['Config']['Labels'].get('repoguard.loki-fixture-owner')==owner
+                (diagnostics/(name+'.json')).write_text(json.dumps({key:state['State'].get(key) for key in ('Status','ExitCode','OOMKilled','Error')},indent=2))
+                (diagnostics/(name+'.log')).write_text(docker('logs','--tail','100',name)[-16000:])
                 docker('rm','-f',name)
             for name in volumes:
                 metadata=json.loads(docker('volume','inspect',name))[0]

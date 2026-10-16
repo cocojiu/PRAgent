@@ -292,6 +292,7 @@ jobs:
           name: loki-encrypted-recovery-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             repoguard-backend/target/loki-recovery-evidence.json
+            repoguard-backend/target/loki-fixture-diagnostics/
             repoguard-backend/target/surefire-reports/*Loki*Test*
           if-no-files-found: error
           retention-days: 7
