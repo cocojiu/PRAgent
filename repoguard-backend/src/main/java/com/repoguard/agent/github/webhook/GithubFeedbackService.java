@@ -92,9 +92,9 @@ public class GithubFeedbackService {
             metrics.counter("repoguard.github.feedback", "outcome", "ignored").increment();
             return;
         }
-        feedback.updateFindingFeedback(event.taskId(), event.findingId(),
+        feedback.applyVerifiedGithubFeedback(event.taskId(), event.findingId(),
             new FindingFeedbackRequest(event.command().feedbackStatus(), event.command().note()),
-            "github:" + event.command().actor());
+            event.command().actor(), event.command().createdAt());
         ScheduledJobLeaseContext.assertHeld();
         store.finish(event.id(), "APPLIED", null);
         metrics.counter("repoguard.github.feedback", "outcome", "applied").increment();
