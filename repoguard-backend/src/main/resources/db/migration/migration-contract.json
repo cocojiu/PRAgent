@@ -7,7 +7,7 @@
     "externalDatabaseSupported": true,
     "publishedMigrationPolicy": "IMMUTABLE",
     "newInstallationStrategy": "VALIDATED_SCHEMA_SNAPSHOT_THEN_BASELINE",
-    "candidateVersion": 107,
+    "candidateVersion": 108,
     "requiredEvidence": [
       "empty database migration to the candidate version",
       "schema structure diff against the supported production shape",
@@ -16,9 +16,9 @@
     ],
     "decisionEvidence": [
       "application-prod.yml requires an externally supplied datasource",
-      "FlywayMigrationUpgradePathIntegrationTest verifies the supported incremental upgrade path through V103"
+      "FlywayMigrationUpgradePathIntegrationTest verifies the supported incremental upgrade path through V108"
     ],
-    "reconsiderWhen": "A V103 schema snapshot and all required rehearsal evidence are versioned together.",
+    "reconsiderWhen": "A V108 schema snapshot and all required rehearsal evidence are versioned together.",
     "rollbackStrategy": "restore a validated backup and apply a forward fix; never rewrite or delete a published migration"
   },
   "defaults": {
@@ -450,6 +450,19 @@
       "compatibilityNote": "old workers leave the column null and readers retain the legacy timeline adapter; new workers persist snapshots with terminal-state claim and attempt fences",
       "interruptedRecovery": "inspect Flyway and column existence before a reviewed retry or forward repair; do not blindly repeat DDL",
       "rollbackStrategy": "roll back application while retaining the nullable column and captured failure evidence; no column drop or historical rewrite"
+    },
+    {
+      "version": 108,
+      "file": "V108__index_legacy_timeline_failure.sql",
+      "phase": "EXPAND",
+      "estimatedRows": "all review_timeline rows classified while building one secondary index; virtual column does not backfill application payloads",
+      "lockType": "brief metadata locks plus online secondary-index build; INPLACE and LOCK=NONE are required explicitly",
+      "maxDurationSeconds": 300,
+      "maxDiskMegabytes": 256,
+      "nMinusOneCompatible": true,
+      "compatibilityNote": "old writers omit the generated column; binary label matching and task/tenant ordering remain unchanged; task-first prefix supports personal and enterprise modes",
+      "interruptedRecovery": "inspect Flyway history, the generated column and index after either DDL statement; use a reviewed forward repair or validated backup restore, never blind retry or checksum repair",
+      "rollbackStrategy": "roll back application while retaining the additive virtual column and index; no column/index drop or historical label rewrite"
     }
   ]
 }
