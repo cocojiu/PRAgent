@@ -114,7 +114,7 @@ public class GithubFeedbackEventStore {
 
     private long tenant() { return tenancy.currentTenantId(); }
     private static LocalDateTime time(ResultSet rs, String name) throws SQLException {
-        return rs.getTimestamp(name) == null ? null : rs.getTimestamp(name).toLocalDateTime();
+        return rs.getObject(name, LocalDateTime.class);
     }
 
     public record Target(long taskId, long findingId, long attemptId, LocalDateTime feedbackAt, String feedbackStatus) { }

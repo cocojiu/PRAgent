@@ -63,6 +63,26 @@ class FindingFeedbackServiceImplTest {
     }
 
     @Test
+    void verifiedGithubFeedbackPreservesOccurrenceTimeAndActor() {
+        var tasks = mock(ReviewTaskMapper.class);
+        var findings = mock(ReviewFindingMapper.class);
+        var risk = mock(ReviewFindingRiskRecalibrator.class);
+        var task = new ReviewTask(); task.setId(1L); task.setCreatedAt(LocalDateTime.of(2026, 9, 21, 0, 0));
+        var finding = new ReviewFinding(); finding.setId(2L); finding.setTaskId(1L);
+        finding.setCategory("FINDING"); finding.setCurrentAttempt(true);
+        when(tasks.selectById(1L)).thenReturn(task); when(findings.selectById(2L)).thenReturn(finding);
+        when(risk.recalculate(1L)).thenReturn(new ReviewFindingRiskRecalibrator.Outcome("LOW", false));
+        var service = new FindingFeedbackServiceImpl(tasks, findings, mock(ReviewTimelineAppender.class),
+            mock(CacheEvictionService.class), risk, mock(ReviewTaskTransitionStore.class));
+        LocalDateTime occurredAt = LocalDateTime.of(2026, 9, 21, 1, 2, 3, 900_000_000);
+        var response = service.applyVerifiedGithubFeedback(1L, 2L,
+            new FindingFeedbackRequest("false_positive", "verified reason"), "alice", occurredAt);
+        assertThat(finding.getFeedbackAt()).isEqualTo(occurredAt.withNano(0));
+        assertThat(response.feedbackAt()).isEqualTo("2026-09-21 01:02:03");
+        assertThat(response.feedbackBy()).isEqualTo("github:alice");
+    }
+
+    @Test
     void constructorRejectsMissingCacheEvictionService() {
         assertThatThrownBy(() -> new FindingFeedbackServiceImpl(
             org.mockito.Mockito.mock(ReviewTaskMapper.class),

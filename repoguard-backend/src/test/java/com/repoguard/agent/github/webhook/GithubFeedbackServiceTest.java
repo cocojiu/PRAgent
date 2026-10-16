@@ -84,7 +84,8 @@ class GithubFeedbackServiceTest {
         when(tx.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
         service.processDue();
         service.processDue();
-        verify(feedback, times(1)).updateFindingFeedback(eq(2L), eq(3L), argThat(r -> r.status().equals("false_positive")), eq("github:alice"));
+        verify(feedback, times(1)).applyVerifiedGithubFeedback(eq(2L), eq(3L),
+            argThat(r -> r.status().equals("false_positive")), eq("alice"), eq(command.createdAt()));
         verify(store).finish(1, "APPLIED", null);
     }
 

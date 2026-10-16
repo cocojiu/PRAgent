@@ -21,6 +21,7 @@ import com.repoguard.agent.timeline.ReviewTimelineStatus;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Objects;
+import java.util.function.Supplier;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
@@ -112,6 +113,31 @@ public class FindingFeedbackServiceImpl implements FindingFeedbackService {
         FindingFeedbackRequest request,
         String operator
     ) {
+        return applyFindingFeedback(taskId, findingId, request, operator, LocalDateTime::now);
+    }
+
+    @Override
+    @Transactional
+    public FindingFeedbackResponse applyVerifiedGithubFeedback(
+        Long taskId,
+        Long findingId,
+        FindingFeedbackRequest request,
+        String actor,
+        LocalDateTime occurredAt
+    ) {
+        Objects.requireNonNull(occurredAt, "occurredAt");
+        return applyFindingFeedback(taskId, findingId, request,
+            "github:" + Objects.requireNonNull(actor, "actor"),
+            () -> occurredAt);
+    }
+
+    private FindingFeedbackResponse applyFindingFeedback(
+        Long taskId,
+        Long findingId,
+        FindingFeedbackRequest request,
+        String operator,
+        Supplier<LocalDateTime> decisionTime
+    ) {
         ReviewTask task = reviewTaskMapper.selectById(taskId);
         if (task == null) {
             throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + taskId);
@@ -125,7 +151,7 @@ public class FindingFeedbackServiceImpl implements FindingFeedbackService {
         }
 
         FindingFeedbackStatus status = normalizeFindingFeedbackStatus(request.status());
-        LocalDateTime feedbackAt = LocalDateTime.now().withNano(0);
+        LocalDateTime feedbackAt = decisionTime.get().withNano(0);
         finding.setFeedbackStatus(status.code());
         finding.setFeedbackNote(cleanNote(request.note()));
         finding.setFeedbackBy(cleanOperator(operator));

@@ -331,7 +331,7 @@ jobs:
           cache: maven
       - name: Run supported upgrade path and durable accounting tests
         working-directory: repoguard-backend
-        run: ./mvnw -B -Dsurefire.runOrder=alphabetical -Dtest=FlywayMigrationUpgradePathIntegrationTest,LlmUsageBudgetMysqlIntegrationTest,LlmModelSafetyMysqlIntegrationTest,ReviewQueryOptimizationMysqlIntegrationTest test
+        run: ./mvnw -B -Dsurefire.runOrder=alphabetical -Dtest=FlywayMigrationUpgradePathIntegrationTest,LlmUsageBudgetMysqlIntegrationTest,LlmModelSafetyMysqlIntegrationTest,ReviewQueryOptimizationMysqlIntegrationTest,GithubFeedbackMysqlIntegrationTest test
 
   scheduled-backup-integration:
     name: Linux backup restore, SSE transport and schema rollback
