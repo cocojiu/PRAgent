@@ -18,7 +18,7 @@ public interface ReviewTimelineMapper extends BaseMapper<ReviewTimeline> {
             <foreach collection="taskIds" item="taskId" open="(" separator="," close=")">
                 #{taskId}
             </foreach>
-              and (cast(label as binary) = 'Review failed' or cast(label as binary) like 'Review failed:%')
+              and legacy_failure_event = 1
         ) failures
         where failure_rank = 1
         </script>

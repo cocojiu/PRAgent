@@ -190,7 +190,7 @@ class ReviewQueryOptimizationMysqlIntegrationTest {
     }
 
     @Test
-    void statusProjectionStaysBoundedWithThirtyThousandEventsAndPreservesTenantIsolation() {
+    void statusProjectionStaysBoundedWithThirtyThousandEventsAndPreservesTenantIsolation() throws Exception {
         var rows = java.util.stream.IntStream.range(0, 30000)
             .mapToObj(index -> new Object[] {tenant, task, "event " + index, index}).toList();
         jdbc.batchUpdate("insert into review_timeline(tenant_id,task_id,label,event_time,status,sort_order) "
@@ -222,9 +222,69 @@ class ReviewQueryOptimizationMysqlIntegrationTest {
             java.util.Arrays.sort(fullNanos); java.util.Arrays.sort(boundedNanos);
             System.out.printf("[status-fixture] rowsBefore=30001 rowsAfterAtMost=2 localReadP95BeforeMs=%.3f localReadP95AfterMs=%.3f%n",
                 fullNanos[9] / 1e6, boundedNanos[9] / 1e6);
+            assertThat(session.getMapper(ReviewTimelineMapper.class).selectLatestFailures(List.of(task)))
+                .extracting(com.repoguard.agent.entity.ReviewTimeline::getLabel)
+                .containsExactly("Review failed: category=llm_timeout");
+            String failurePlan = jdbc.queryForObject("""
+                EXPLAIN ANALYZE select task_id,label from (
+                    select task_id,label,row_number() over(partition by task_id order by sort_order desc,id desc) failure_rank
+                    from review_timeline where tenant_id=? and task_id=? and legacy_failure_event=1
+                ) failures where failure_rank=1
+                """, String.class, tenant, task);
+            assertThat(failurePlan).contains("idx_review_timeline_legacy_failure")
+                .containsPattern("(?s)Index lookup on review_timeline.*?rows=1 loops=1");
+            System.out.println("[legacy-failure-index-plan] " + failurePlan);
             System.out.println("[status-fixture-plan] " + jdbc.queryForList(
                 "EXPLAIN ANALYZE select * from review_timeline where tenant_id=? and task_id=? order by sort_order desc,id desc limit 1",
                 tenant, task));
+        }
+        // Personal mode has no tenant predicate; its lookup must use the same index prefix.
+        var personalConfiguration = new MybatisConfiguration();
+        personalConfiguration.setMapUnderscoreToCamelCase(true);
+        personalConfiguration.addMapper(ReviewTimelineMapper.class);
+        var personalFactory = new MybatisSqlSessionFactoryBean();
+        personalFactory.setDataSource(jdbc.getDataSource());
+        personalFactory.setConfiguration(personalConfiguration);
+        personalFactory.setPlugins(new MybatisPlusConfig().mybatisPlusInterceptor(new TenantProperties()));
+        var personal = new SqlSessionTemplate(personalFactory.getObject()).getMapper(ReviewTimelineMapper.class);
+        assertThat(personal.selectLatestFailures(List.of(task)))
+            .extracting(com.repoguard.agent.entity.ReviewTimeline::getLabel)
+            .containsExactly("Review failed: category=llm_timeout");
+        String personalPlan = jdbc.queryForObject("""
+            EXPLAIN ANALYZE select task_id,label from (
+                select task_id,label,row_number() over(partition by task_id order by sort_order desc,id desc) failure_rank
+                from review_timeline where task_id=? and legacy_failure_event=1
+            ) failures where failure_rank=1
+            """, String.class, task);
+        assertThat(personalPlan).contains("idx_review_timeline_legacy_failure")
+            .containsPattern("(?s)Index lookup on review_timeline.*?rows=1 loops=1");
+        System.out.println("[personal-legacy-failure-index-plan] " + personalPlan);
+    }
+
+    @Test
+    void legacyFailureIndexPreservesBinaryLabelsTiesAndOldWriterUpdates() {
+        List<String> labels = List.of("Review failed", "Review failed: original", "review failed: wrong-case",
+            "Review Failed: wrong-case", "Review failed ", "Review failedness", "Review failed:\nreason");
+        for (int index = 0; index < labels.size(); index++) timeline(tenant, task, labels.get(index), index);
+        assertThat(jdbc.queryForList("select legacy_failure_event from review_timeline where tenant_id=? and task_id=? order by sort_order,id",
+            Integer.class, tenant, task)).containsExactly(1, 1, 0, 0, 0, 0, 1);
+        timeline(tenant, task, "Review failed: tied-first", 20);
+        timeline(tenant, task, "Review failed: tied-last", 20);
+        timeline(otherTenant, foreignTask, "Review failed: foreign", 100);
+        var mapper = session.getMapper(ReviewTimelineMapper.class);
+        try (var _ = TenantContext.withTenant(tenant)) {
+            assertThat(mapper.selectLatestFailures(List.of(task, foreignTask)))
+                .extracting(com.repoguard.agent.entity.ReviewTimeline::getLabel).containsExactly("Review failed: tied-last");
+            jdbc.update("update review_timeline set label='ordinary' where tenant_id=? and task_id=? and label='Review failed: tied-last'", tenant, task);
+            assertThat(mapper.selectLatestFailures(List.of(task)))
+                .extracting(com.repoguard.agent.entity.ReviewTimeline::getLabel).containsExactly("Review failed: tied-first");
+            jdbc.update("delete from review_timeline where tenant_id=? and task_id=? and label='Review failed: tied-first'", tenant, task);
+            assertThat(mapper.selectLatestFailures(List.of(task)))
+                .extracting(com.repoguard.agent.entity.ReviewTimeline::getLabel).containsExactly("Review failed:\nreason");
+            jdbc.update("update review_timeline set label='Review failed: updated' where tenant_id=? and task_id=? and label='ordinary'", tenant, task);
+            assertThat(mapper.selectLatestFailures(List.of(task)))
+                .extracting(com.repoguard.agent.entity.ReviewTimeline::getLabel).containsExactly("Review failed: updated");
+            assertThat(mapper.selectLatestFailures(List.of(foreignTask))).isEmpty();
         }
     }
 

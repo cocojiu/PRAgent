@@ -20,7 +20,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
  * Exercises the supported rolling-upgrade path against a real MySQL instance.
  *
  * <p>The test is opt-in because local unit-test runs do not provision a database. CI enables it
- * with an isolated database and verifies V76 through the V107 structured failure state.
+ * with an isolated database and verifies V76 through the V108 indexed legacy failure state.
  */
 @EnabledIfEnvironmentVariable(named = "REPOGUARD_RUN_INTEGRATION_TESTS", matches = "true")
 class FlywayMigrationUpgradePathIntegrationTest {
@@ -430,6 +430,41 @@ class FlywayMigrationUpgradePathIntegrationTest {
                         assertThat(rows.getString(1)).isNull();
                     }
                 }
+                try (PreparedStatement oldWriter = connection.prepareStatement("""
+                    insert into review_timeline(tenant_id,task_id,label,event_time,status,sort_order)
+                    values(?,?,'Review failed: retained',now(),'DONE',1)
+                    """)) {
+                    oldWriter.setLong(1, tenantId); oldWriter.setLong(2, taskId); oldWriter.executeUpdate();
+                }
+            }
+            migrateTo(url, username, password, "108");
+            try (Connection connection = open(url, username, password)) {
+                assertThat(latestSuccessfulMigration(connection)).isEqualTo("108");
+                assertThat(columnExists(connection, "review_timeline", "legacy_failure_event")).isTrue();
+                try (PreparedStatement retained = connection.prepareStatement(
+                    "select label,legacy_failure_event from review_timeline where tenant_id=? and task_id=?")) {
+                    retained.setLong(1, tenantId); retained.setLong(2, taskId);
+                    try (ResultSet rows = retained.executeQuery()) {
+                        assertThat(rows.next()).isTrue();
+                        assertThat(rows.getString(1)).isEqualTo("Review failed: retained");
+                        assertThat(rows.getInt(2)).isEqualTo(1);
+                        assertThat(rows.next()).isFalse();
+                    }
+                }
+                // The prior writer can omit the new virtual column after the additive migration.
+                try (PreparedStatement oldWriter = connection.prepareStatement("""
+                    insert into review_timeline(tenant_id,task_id,label,event_time,status,sort_order)
+                    values(?,?,'Review failed: after-upgrade',now(),'DONE',2)
+                    """)) {
+                    oldWriter.setLong(1, tenantId); oldWriter.setLong(2, taskId); oldWriter.executeUpdate();
+                }
+                try (PreparedStatement classified = connection.prepareStatement(
+                    "select count(*) from review_timeline where tenant_id=? and task_id=? and legacy_failure_event=1")) {
+                    classified.setLong(1, tenantId); classified.setLong(2, taskId);
+                    try (ResultSet rows = classified.executeQuery()) {
+                        assertThat(rows.next()).isTrue(); assertThat(rows.getInt(1)).isEqualTo(2);
+                    }
+                }
             }
         } finally {
             cleanup(url, username, password, tenantId, taskId, attemptId);
@@ -824,6 +859,10 @@ class FlywayMigrationUpgradePathIntegrationTest {
             changedFiles.setLong(1, tenantId);
             changedFiles.setLong(2, taskId);
             changedFiles.executeUpdate();
+            try (PreparedStatement timelines = connection.prepareStatement(
+                "delete from review_timeline where tenant_id=? and task_id=?")) {
+                timelines.setLong(1, tenantId); timelines.setLong(2, taskId); timelines.executeUpdate();
+            }
             if (attemptId != null) {
                 try (PreparedStatement attempts = connection.prepareStatement(
                     "delete from review_execution_attempt where tenant_id = ? and id = ?"
