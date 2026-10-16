@@ -388,6 +388,11 @@ $env:REPOGUARD_LOG_PATH = "../logs/backend"
 
 只有在 `main` 手动设置 `publish_loki_candidate=true` 才会发布候选源镜像；该选项包含前述全部验证。发布作业加载经过验证的原镜像归档，不重新构建，再按不可变 digest 回读并核对镜像 ID，生成镜像来源证明、SBOM 证明及签名的 `loki-source-manifest`，清单保留90天。PR、push 和其他分支不能发布；该工作流不连接生产或修改 Compose 中的镜像。
 
+发布前使用正式客户端 `python3 scripts/loki-release.py fetch --repository <owner/repo> --source-sha <main-sha> --run-id <source-run-id> --output <new-directory>` 下载源清单，并独立核验清单、镜像来源和 CycloneDX SBOM 签名。客户端要求手动 main 来源、全部源门禁成功、精确工作流/SHA/run/attempt及托管 runner，输出目录必须不存在，保留验签原件供发布审批。
+
+在目标机执行该工具的 `preflight` 子命令时，显式提供上述源身份、清单路径、清单 SHA256 和 run attempt。只读预检核对当前 Loki/Alloy、实际 Compose 文件、数据卷、运行规则、资源上限及备份密钥权限。`verify_loki_recovery=true` 可手动运行托管隔离恢复门禁，实际验证加密卷快照、原卷保留、日志和真实 Alloy 游标的升级/回退；此门禁不连接生产。
+
+
 使用候选前先下载该运行的源清单，并使用 `gh attestation verify` 绑定预期仓库、`.github/workflows/production-observability-security.yml`、精确源码 SHA、`refs/heads/main` 和托管 runner，另外核对证明中的 run/attempt；不能仅凭标签或任务成功采用镜像。生产切换仍需单独备份 Loki 数据、检查配置和资源、准备批准的原 digest 及回退步骤，再按签名清单中的镜像 digest 操作。
 
 ## API 入口

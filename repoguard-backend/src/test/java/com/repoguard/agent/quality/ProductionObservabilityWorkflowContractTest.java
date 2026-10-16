@@ -48,6 +48,25 @@ class ProductionObservabilityWorkflowContractTest {
     }
 
     @Test
+    void encryptedRecoveryRunsWithoutProductionAccessAndRequiresActualEvidence() throws IOException {
+        String content = read(repositoryRoot().resolve(".github/workflows/production-observability-security.yml"));
+        Map<String, Object> workflow = new Yaml().load(content);
+        Map<String, Object> recovery = mapping(mapping(workflow.get("jobs")).get("loki-recovery-rehearsal"));
+        assertThat(mapping(recovery.get("permissions"))).isEqualTo(Map.of("contents", "read"));
+        assertThat(recovery).doesNotContainKeys("environment", "secrets");
+        assertThat(recovery.get("needs")).isEqualTo("resolve");
+        assertThat(recovery.get("if")).isEqualTo(
+            "${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.verify_loki_recovery) }}"
+        );
+        String scripts = steps(recovery).stream().map(step -> String.valueOf(step.getOrDefault("run", "")))
+            .reduce("", (left, right) -> left + right);
+        assertThat(scripts).contains("LokiSnapshotLinuxIntegrationTest", "('failures', 'errors', 'skipped')",
+            "result['encryptedBackupRestored']", "result['realAlloyCursorRetained']",
+            "result['originalVolumesUnchanged']", "result['productionWrites'] == result['publishedPorts'] == 0")
+            .doesNotContain("ssh ", "DEPLOY_HOST", "docker compose up");
+    }
+
+    @Test
     void lokiPublicationKeepsWritesBehindManualMainAndIndependentValidation() throws IOException {
         Map<String, Object> workflow = new Yaml().load(read(repositoryRoot()
             .resolve(".github/workflows/production-observability-security.yml")));

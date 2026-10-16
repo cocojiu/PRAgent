@@ -8,6 +8,9 @@ on:
       - "docker-compose.observability.yml"
       - "deploy/images/loki-security.Dockerfile"
       - ".github/actions/verify-loki-candidate/**"
+      - "scripts/loki*.py"
+      - "repoguard-backend/src/test/java/com/repoguard/agent/quality/Loki*Test.java"
+      - "repoguard-backend/src/test/java/com/repoguard/agent/integration/LokiSnapshotLinuxIntegrationTest.java"
   push:
     branches:
       - main
@@ -17,6 +20,9 @@ on:
       - "docker-compose.observability.yml"
       - "deploy/images/loki-security.Dockerfile"
       - ".github/actions/verify-loki-candidate/**"
+      - "scripts/loki*.py"
+      - "repoguard-backend/src/test/java/com/repoguard/agent/quality/Loki*Test.java"
+      - "repoguard-backend/src/test/java/com/repoguard/agent/integration/LokiSnapshotLinuxIntegrationTest.java"
   workflow_dispatch:
     inputs:
       build_loki_candidate:
@@ -26,6 +32,11 @@ on:
         required: false
       archive_loki_candidate:
         description: Preserve the checked image and verify loading it on an independent runner
+        type: boolean
+        default: false
+        required: false
+      verify_loki_recovery:
+        description: Verify encrypted volume recovery and real collector cursor upgrade and rollback on an isolated runner
         type: boolean
         default: false
         required: false
@@ -233,6 +244,58 @@ jobs:
             echo "- HIGH/CRITICAL findings are reported while the staged supported-version upgrade is evaluated."
             echo "- Enforcement will be enabled after the upgraded production images pass the observation window."
           } >> "${GITHUB_STEP_SUMMARY}"
+
+  loki-recovery-rehearsal:
+    name: Isolated Loki encrypted backup and recovery
+    needs: resolve
+    if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.verify_loki_recovery) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      REPOGUARD_LOKI_RECOVERY_REHEARSAL: 'true'
+    steps:
+      - name: Checkout recovery implementation
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Run formal Loki release and recovery contracts
+        working-directory: repoguard-backend
+        run: ./mvnw -B -Dtest=LokiReleaseManifestTest,LokiSnapshotSafetyTest,LokiSnapshotLinuxIntegrationTest test
+      - name: Require actual execution and a verified recovery result
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, pathlib, xml.etree.ElementTree as ET
+          root = pathlib.Path('repoguard-backend/target')
+          expected = {'quality.LokiReleaseManifestTest': 8, 'quality.LokiSnapshotSafetyTest': 6,
+              'integration.LokiSnapshotLinuxIntegrationTest': 1}
+          for name, count in expected.items():
+              suite = ET.parse(root / ('surefire-reports/TEST-com.repoguard.agent.' + name + '.xml')).getroot()
+              assert int(suite.get('tests')) == count
+              assert all(int(suite.get(key, '0')) == 0 for key in ('failures', 'errors', 'skipped'))
+          result = json.loads((root / 'loki-recovery-evidence.json').read_text())
+          assert result['state'] == 'verified' and result['encryptedBackupRestored']
+          assert result['realAlloyCursorRetained'] and result['persistedLogsAfterRollback'] == 2
+          assert result['originalVolumesUnchanged'] and result['productionWrites'] == result['publishedPorts'] == 0
+          PY
+      - name: Preserve isolated recovery evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: loki-encrypted-recovery-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            repoguard-backend/target/loki-recovery-evidence.json
+            repoguard-backend/target/surefire-reports/*Loki*Test*
+          if-no-files-found: error
+          retention-days: 7
+
 
   loki-security-candidate:
     name: Isolated Loki security rebuild
