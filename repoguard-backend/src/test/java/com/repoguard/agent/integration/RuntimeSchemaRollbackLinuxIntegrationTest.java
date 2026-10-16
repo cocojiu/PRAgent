@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.ConnectionFactory;
 import com.repoguard.agent.review.task.ReviewFailureSummaryResolver.ReviewFailureDetails;
+import com.repoguard.agent.config.SchemaVersionProperties;
 import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -53,6 +54,8 @@ class RuntimeSchemaRollbackLinuxIntegrationTest {
     private static String network;
     private static String mysql;
     private static String rabbit;
+    private static int previousSchema;
+    private static int upgradeSchema;
     private static String previousImage;
     private static String upgradeImage;
     private static String previousRevision;
@@ -65,6 +68,11 @@ class RuntimeSchemaRollbackLinuxIntegrationTest {
         assertThat(System.getenv("GITHUB_ACTIONS")).isEqualTo("true");
         assertThat(System.getenv("RUNNER_ENVIRONMENT")).isEqualTo("github-hosted");
         assertThat(System.getenv("GITHUB_RUN_ID")).matches("[1-9][0-9]*");
+        String previousVersion = System.getenv("REPOGUARD_ROLLBACK_PREVIOUS_SCHEMA_VERSION");
+        assertThat(previousVersion).matches("[1-9][0-9]{0,5}");
+        previousSchema = Integer.parseInt(previousVersion);
+        upgradeSchema = new SchemaVersionProperties().getExpectedVersion();
+        assertThat(previousSchema).isLessThan(upgradeSchema);
         previousImage = image("REPOGUARD_ROLLBACK_PREVIOUS_IMAGE");
         upgradeImage = image("REPOGUARD_ROLLBACK_UPGRADE_IMAGE");
         previousRevision = revision("REPOGUARD_ROLLBACK_PREVIOUS_REVISION");
@@ -74,6 +82,8 @@ class RuntimeSchemaRollbackLinuxIntegrationTest {
         PROOF.put("startedAt", Instant.now().toString());
         PROOF.put("runId", System.getenv("GITHUB_RUN_ID"));
         PROOF.put("productionWrites", 0);
+        PROOF.put("expectedPreviousSchema", previousSchema);
+        PROOF.put("expectedUpgradeSchema", upgradeSchema);
         PROOF.put("externalEgress", false);
         PROOF.put("naturalBusinessReplay", false);
         PROOF.put("previousImage", previousImage);
@@ -131,22 +141,27 @@ class RuntimeSchemaRollbackLinuxIntegrationTest {
     }
 
     @Test @Timeout(value = 15, unit = TimeUnit.MINUTES)
-    void upgradesTo107AndRollsBothRolesBackTo106WithoutLosingDataOrMessages() throws Exception {
+    void upgradesToRequiredSchemaAndRollsBothRolesBackWithoutLosingDataOrMessages() throws Exception {
         String baseline = application("baseline-api", previousImage, previousRevision, "api");
-        assertThat(schema()).isEqualTo("106");
-        PROOF.put("baselineSchema", 106); saveProof();
+        assertThat(schema()).isEqualTo(Integer.toString(previousSchema));
+        PROOF.put("baselineSchema", previousSchema); saveProof();
         sql("UPDATE review_policy_config SET llm_enabled=0; " +
             "INSERT INTO review_task (id,tenant_id,organization,repository,pr_number,title,commit_sha,branch_name,status,risk_level,llm_status,assessment_status,created_at,finished_at) " +
             "VALUES (7001,1,'rollback-fixture','retained',1,'Terminal duplicate fixture','" + "a".repeat(40) + "','main','COMPLETED','LOW','SKIPPED','COMPLETE',NOW(),NOW());");
         String retainedBefore = sql("SELECT CONCAT(id,':',status,':',commit_sha) FROM review_task WHERE id=7001");
+        sql("INSERT INTO review_timeline (id,tenant_id,task_id,label,event_time,status,sort_order) " +
+            "VALUES (7801,1,7001,'Review failed: retained legacy fixture',NOW(),'DONE',1)");
+        String timelineBefore = sql("SELECT CONCAT(id,':',task_id,':',label) FROM review_timeline WHERE id=7801");
         stop(baseline);
 
         String upgradedApi = application("upgrade-api", upgradeImage, upgradeRevision, "api");
-        assertThat(schema()).isEqualTo("107");
+        assertThat(schema()).isEqualTo(Integer.toString(upgradeSchema));
         sql("INSERT INTO review_task (id,tenant_id,organization,repository,pr_number,title,commit_sha,branch_name,status,risk_level,llm_status,assessment_status,created_at,finished_at,failure_details_json) " +
             "VALUES (7002,1,'rollback-fixture','retained',2,'Structured failure fixture','" + "b".repeat(40) + "','main','FAILED','UNKNOWN','FAILED','FAILED',NOW(),NOW(),JSON_OBJECT('category','review_timeout','retryable',CAST('true' AS JSON),'stage','REVIEW_EXECUTION','attemptId',NULL,'retryAfter',''));");
         String structuredBefore = sql("SELECT failure_details_json FROM review_task WHERE id=7002");
         assertThat(ReviewFailureDetails.parse(structuredBefore, JSON)).isPresent();
+        assertLegacyFailureIndex();
+        assertThat(sql("SELECT legacy_failure_event FROM review_timeline WHERE id=7801")).isEqualTo("1");
         String upgradedWorker = application("upgrade-worker", upgradeImage, upgradeRevision, "worker");
         assertConcurrentRoles(upgradedApi, upgradedWorker);
         PROOF.put("upgrade", Map.of("schema", schema(), "apiAndWorkerReady", true, "reviewConsumers", 1)); saveProof();
@@ -154,7 +169,7 @@ class RuntimeSchemaRollbackLinuxIntegrationTest {
         await(() -> { try { return queue().path("consumers").asInt(-1) == 0; } catch (Exception e) { return false; } }, 30);
 
         String rollbackApi = application("rollback-api", previousImage, previousRevision, "api");
-        assertThat(schema()).isEqualTo("107");
+        assertThat(schema()).isEqualTo(Integer.toString(upgradeSchema));
         assertThat(queue().path("consumers").asInt()).isZero();
         publishTerminalDuplicate();
         assertThat(queue().path("messages_ready").asInt()).isEqualTo(1);
@@ -169,6 +184,13 @@ class RuntimeSchemaRollbackLinuxIntegrationTest {
         assertThat(sql("SELECT COUNT(*) FROM review_execution_attempt")).isEqualTo("0");
         assertThat(sql("SELECT SUM(llm_enabled) FROM review_policy_config")).isEqualTo("0");
         for (JsonNode q : queues()) if (q.path("name").asText().endsWith(".dlq")) assertThat(q.path("messages_ready").asInt()).isZero();
+        assertLegacyFailureIndex();
+        assertThat(sql("SELECT CONCAT(id,':',task_id,':',label) FROM review_timeline WHERE id=7801")).isEqualTo(timelineBefore);
+        sql("INSERT INTO review_timeline (id,tenant_id,task_id,label,event_time,status,sort_order) " +
+            "VALUES (7802,1,7001,'Review failed: rollback writer',NOW(),'DONE',2)");
+        assertThat(sql("SELECT SUM(legacy_failure_event) FROM review_timeline WHERE task_id=7001")).isEqualTo("2");
+        PROOF.put("legacyTimeline", Map.of("originalRowPreserved", true, "virtualClassification", true,
+            "indexRetained", true, "oldSqlInsertAccepted", true, "rows", 2));
         PROOF.put("rollback", Map.of("schema", schema(), "apiAndWorkerReady", true, "reviewConsumers", 1,
             "terminalDuplicateAcknowledged", true, "retainedRows", 2, "structuredJsonPreserved", true,
             "businessExecutions", 0, "llmEnabled", false));
@@ -190,7 +212,14 @@ class RuntimeSchemaRollbackLinuxIntegrationTest {
     private static void assertConcurrentRoles(String api, String worker) throws Exception {
         assertThat(ready(api)).isTrue(); assertThat(ready(worker)).isTrue();
         assertThat(queue().path("consumers").asInt()).isEqualTo(1);
-        assertThat(sql("SELECT MAX(CAST(version AS UNSIGNED)) FROM flyway_schema_history WHERE success=1")).isEqualTo("107");
+        assertThat(sql("SELECT MAX(CAST(version AS UNSIGNED)) FROM flyway_schema_history WHERE success=1")).isEqualTo(Integer.toString(upgradeSchema));
+    }
+
+    private static void assertLegacyFailureIndex() throws Exception {
+        assertThat(sql("SELECT GROUP_CONCAT(column_name ORDER BY seq_in_index SEPARATOR ',') " +
+            "FROM information_schema.statistics WHERE table_schema='" + DATABASE + "' " +
+            "AND table_name='review_timeline' AND index_name='idx_review_timeline_legacy_failure'"))
+            .isEqualTo("task_id,legacy_failure_event,tenant_id,sort_order,id");
     }
 
     private static boolean ready(String container) {
