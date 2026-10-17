@@ -72,7 +72,7 @@ class RuntimeSchemaRollbackLinuxIntegrationTest {
         assertThat(previousVersion).matches("[1-9][0-9]{0,5}");
         previousSchema = Integer.parseInt(previousVersion);
         upgradeSchema = new SchemaVersionProperties().getExpectedVersion();
-        assertThat(previousSchema).isLessThan(upgradeSchema);
+        assertThat(previousSchema).as("Rollback baseline cannot be ahead of the candidate schema").isLessThanOrEqualTo(upgradeSchema);
         previousImage = image("REPOGUARD_ROLLBACK_PREVIOUS_IMAGE");
         upgradeImage = image("REPOGUARD_ROLLBACK_UPGRADE_IMAGE");
         previousRevision = revision("REPOGUARD_ROLLBACK_PREVIOUS_REVISION");
@@ -141,10 +141,11 @@ class RuntimeSchemaRollbackLinuxIntegrationTest {
     }
 
     @Test @Timeout(value = 15, unit = TimeUnit.MINUTES)
-    void upgradesToRequiredSchemaAndRollsBothRolesBackWithoutLosingDataOrMessages() throws Exception {
+    void runsCandidateAndRollsBothRolesBackWithoutLosingDataOrMessages() throws Exception {
         String baseline = application("baseline-api", previousImage, previousRevision, "api");
         assertThat(schema()).isEqualTo(Integer.toString(previousSchema));
         PROOF.put("baselineSchema", previousSchema); saveProof();
+        String baselineHistory = migrationHistory();
         sql("UPDATE review_policy_config SET llm_enabled=0; " +
             "INSERT INTO review_task (id,tenant_id,organization,repository,pr_number,title,commit_sha,branch_name,status,risk_level,llm_status,assessment_status,created_at,finished_at) " +
             "VALUES (7001,1,'rollback-fixture','retained',1,'Terminal duplicate fixture','" + "a".repeat(40) + "','main','COMPLETED','LOW','SKIPPED','COMPLETE',NOW(),NOW());");
@@ -156,6 +157,10 @@ class RuntimeSchemaRollbackLinuxIntegrationTest {
 
         String upgradedApi = application("upgrade-api", upgradeImage, upgradeRevision, "api");
         assertThat(schema()).isEqualTo(Integer.toString(upgradeSchema));
+        String candidateHistory = migrationHistory();
+        if (previousSchema == upgradeSchema) {
+            assertThat(candidateHistory).as("Same-schema release must not alter Flyway history").isEqualTo(baselineHistory);
+        }
         sql("INSERT INTO review_task (id,tenant_id,organization,repository,pr_number,title,commit_sha,branch_name,status,risk_level,llm_status,assessment_status,created_at,finished_at,failure_details_json) " +
             "VALUES (7002,1,'rollback-fixture','retained',2,'Structured failure fixture','" + "b".repeat(40) + "','main','FAILED','UNKNOWN','FAILED','FAILED',NOW(),NOW(),JSON_OBJECT('category','review_timeout','retryable',CAST('true' AS JSON),'stage','REVIEW_EXECUTION','attemptId',NULL,'retryAfter',''));");
         String structuredBefore = sql("SELECT failure_details_json FROM review_task WHERE id=7002");
@@ -194,6 +199,11 @@ class RuntimeSchemaRollbackLinuxIntegrationTest {
         PROOF.put("rollback", Map.of("schema", schema(), "apiAndWorkerReady", true, "reviewConsumers", 1,
             "terminalDuplicateAcknowledged", true, "retainedRows", 2, "structuredJsonPreserved", true,
             "businessExecutions", 0, "llmEnabled", false));
+        String rollbackHistory = migrationHistory();
+        assertThat(rollbackHistory).as("Application rollback must preserve the candidate migration history").isEqualTo(candidateHistory);
+        PROOF.put("migrationHistory", Map.of("sameSchemaRelease", previousSchema == upgradeSchema,
+            "baselineSha256", historyDigest(baselineHistory), "candidateSha256", historyDigest(candidateHistory),
+            "rollbackSha256", historyDigest(rollbackHistory), "unchangedOnRollback", true));
         PROOF.put("finishedAt", Instant.now().toString()); PROOF.put("passed", true); saveProof();
     }
 
@@ -252,6 +262,14 @@ class RuntimeSchemaRollbackLinuxIntegrationTest {
     private static JsonNode queue() throws Exception {
         for (JsonNode queue : queues()) if (queue.path("name").asText().equals(QUEUE)) return queue;
         throw new AssertionError("Review queue absent on owned broker");
+    }
+    private static String migrationHistory() throws Exception {
+        assertThat(Integer.parseInt(sql("SELECT COUNT(*) FROM flyway_schema_history"))).isBetween(1, 512);
+        return sql("SELECT installed_rank, version, description, type, script, checksum, installed_by, installed_on, execution_time, success " +
+            "FROM flyway_schema_history ORDER BY installed_rank LIMIT 512");
+    }
+    private static String historyDigest(String history) throws Exception {
+        return HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(history.getBytes(StandardCharsets.UTF_8)));
     }
     private static String schema() throws Exception { return sql("SELECT MAX(CAST(version AS UNSIGNED)) FROM flyway_schema_history WHERE success=1"); }
     private static String sql(String sql) throws Exception {
