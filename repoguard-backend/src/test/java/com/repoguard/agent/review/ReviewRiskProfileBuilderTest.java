@@ -92,7 +92,8 @@ class ReviewRiskProfileBuilderTest {
             humanReviewRequired ? "pending" : "not_required",
             null,
             null,
-            null
+            null,
+            "complete"
         );
     }
 }

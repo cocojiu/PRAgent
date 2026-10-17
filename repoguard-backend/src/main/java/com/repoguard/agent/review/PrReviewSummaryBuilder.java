@@ -52,6 +52,7 @@ public class PrReviewSummaryBuilder {
         long missingTestTotal,
         long changedFileTotal
     ) {
+        ReviewConclusionEligibility eligibility = ReviewConclusionEligibility.forTask(task);
         FindingSeverityCountsDto effectiveCounts = severityCounts == null
             ? FindingSeverityCountsDto.fromFindings(findings)
             : severityCounts;
@@ -61,17 +62,19 @@ public class PrReviewSummaryBuilder {
         String overallRisk = riskProfile == null ? "info" : riskProfile.level();
         boolean humanReviewRequired = Boolean.TRUE.equals(task.humanReviewRequired())
             || Boolean.TRUE.equals(riskProfile == null ? false : riskProfile.recommendHumanReview());
-        boolean recommendMerge = criticalCount == 0 && highCount == 0 && !humanReviewRequired;
-        String mergeRecommendation = mergeRecommendation(
+        boolean recommendMerge = eligibility.usable() && criticalCount == 0 && highCount == 0 && !humanReviewRequired;
+        String mergeRecommendation = eligibility.usable() ? mergeRecommendation(
             recommendMerge,
             criticalCount,
             highCount,
             mediumCount,
             humanReviewRequired
-        );
-        List<String> keyRisks = buildKeyRisks(riskProfile, missingTestTotal, criticalCount, highCount, mediumCount);
+        ) : eligibility.explanation();
+        List<String> keyRisks = buildKeyRisks(riskProfile, missingTestTotal, criticalCount, highCount, mediumCount, eligibility);
         List<String> focusFiles = buildFocusFiles(riskProfile, changedFiles);
-        String summary = "本次 PR 综合风险为" + riskText(overallRisk)
+        String summary = (eligibility.usable()
+            ? "本次 PR 综合风险为" + riskText(overallRisk)
+            : "当前审查结论暂不能作为合并依据")
             + "，包含 " + changedFileTotal + " 个变更文件、" + findingTotal + " 条审查发现"
             + (missingTestTotal == 0 ? "" : "、" + missingTestTotal + " 条缺失测试建议")
             + "。";
@@ -116,9 +119,13 @@ public class PrReviewSummaryBuilder {
         long missingTestTotal,
         int criticalCount,
         int highCount,
-        int mediumCount
+        int mediumCount,
+        ReviewConclusionEligibility eligibility
     ) {
         List<String> risks = new java.util.ArrayList<>();
+        if (!eligibility.usable()) {
+            risks.add(eligibility.explanation());
+        }
         if (criticalCount > 0) {
             risks.add("包含 " + criticalCount + " 条严重风险发现");
         }

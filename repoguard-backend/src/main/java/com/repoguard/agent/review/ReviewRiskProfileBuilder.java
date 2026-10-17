@@ -22,6 +22,7 @@ public class ReviewRiskProfileBuilder {
         List<ReviewFindingDto> findings,
         List<ChangedFileDto> changedFiles
     ) {
+        ReviewConclusionEligibility eligibility = ReviewConclusionEligibility.forTask(task);
         List<ReviewFindingDto> effectiveFindings = findings.stream()
             .filter(finding -> !"false_positive".equalsIgnoreCase(finding.feedbackStatus()))
             .filter(finding -> !"observe".equalsIgnoreCase(finding.enforcementMode()))
@@ -49,6 +50,9 @@ public class ReviewRiskProfileBuilder {
         String level = scoreToRiskLevel(score, task.riskLevel());
 
         List<String> signals = new java.util.ArrayList<>();
+        if (!eligibility.usable()) {
+            signals.add(eligibility.explanation());
+        }
         if (criticalCount + highCount > 0) {
             signals.add("包含 " + (criticalCount + highCount) + " 条高危以上发现");
         }
@@ -69,9 +73,10 @@ public class ReviewRiskProfileBuilder {
         }
 
         boolean recommendHumanReview = score >= 55 || Boolean.TRUE.equals(task.humanReviewRequired());
-        String humanReviewReason = recommendHumanReview
-            ? "风险分达到 " + score + "，建议人工复核后再回写或合并。"
-            : "风险分较低，可按常规自动审查流程推进。";
+        String humanReviewReason = !eligibility.usable() ? eligibility.explanation()
+            : recommendHumanReview
+                ? "风险分达到 " + score + "，建议人工复核后再回写或合并。"
+                : "风险分较低，可按常规自动审查流程推进。";
         List<PrRiskFileDto> highRiskFiles = changedFiles.stream()
             .map(file -> toRiskFile(file, findingCountByFile.getOrDefault(file.path(), 0L).intValue()))
             .filter(file -> file.score() > 0)
@@ -82,7 +87,9 @@ public class ReviewRiskProfileBuilder {
         return new PrRiskProfileDto(
             score,
             level,
-            buildRiskSummary(level, score, effectiveFindings.size(), changedFiles.size(), totalChurn),
+            eligibility.usable()
+                ? buildRiskSummary(level, score, effectiveFindings.size(), changedFiles.size(), totalChurn)
+                : eligibility.explanation(),
             recommendHumanReview,
             humanReviewReason,
             signals,
@@ -96,6 +103,7 @@ public class ReviewRiskProfileBuilder {
         long findingTotal,
         long changedFileTotal
     ) {
+        ReviewConclusionEligibility eligibility = ReviewConclusionEligibility.forTask(task);
         FindingSeverityCountsDto effectiveCounts = severityCounts == null ? FindingSeverityCountsDto.empty() : severityCounts;
         long criticalCount = effectiveCounts.criticalOrZero();
         long highCount = effectiveCounts.highOrZero();
@@ -111,6 +119,9 @@ public class ReviewRiskProfileBuilder {
         ));
         String level = scoreToRiskLevel(score, task.riskLevel());
         List<String> signals = new java.util.ArrayList<>();
+        if (!eligibility.usable()) {
+            signals.add(eligibility.explanation());
+        }
         if (criticalCount + highCount > 0) {
             signals.add("包含 " + (criticalCount + highCount) + " 条高危以上发现");
         }
@@ -127,13 +138,16 @@ public class ReviewRiskProfileBuilder {
         boolean recommendHumanReview = criticalCount + highCount > 0
             || score >= 55
             || Boolean.TRUE.equals(task.humanReviewRequired());
-        String humanReviewReason = recommendHumanReview
-            ? "风险分达到 " + score + "，建议人工复核后再回写或合并。"
-            : "风险分较低，可按常规自动审查流程推进。";
+        String humanReviewReason = !eligibility.usable() ? eligibility.explanation()
+            : recommendHumanReview
+                ? "风险分达到 " + score + "，建议人工复核后再回写或合并。"
+                : "风险分较低，可按常规自动审查流程推进。";
         return new PrRiskProfileDto(
             score,
             level,
-            buildSummaryRiskText(level, score, findingTotal, changedFileTotal),
+            eligibility.usable()
+                ? buildSummaryRiskText(level, score, findingTotal, changedFileTotal)
+                : eligibility.explanation(),
             recommendHumanReview,
             humanReviewReason,
             signals,

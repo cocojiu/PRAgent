@@ -41,7 +41,7 @@
       <div class="pr-summary-head">
         <span class="risk-profile-eyebrow">PR 总评</span>
         <span :class="`status-pill ${task.prSummary.recommendMerge ? 'success' : 'warning'}`">
-          {{ task.prSummary.recommendMerge ? "可按流程合并" : "建议复核后合并" }}
+          {{ task.prSummary.recommendMerge ? "可按流程合并" : "暂不建议合并" }}
         </span>
       </div>
       <p>{{ task.prSummary.summary }}</p>
