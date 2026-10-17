@@ -343,12 +343,12 @@ jobs:
       packages: read
     env:
       REPOGUARD_RUN_LINUX_BACKUP_INTEGRATION: 'true'
-      REPOGUARD_ROLLBACK_PREVIOUS_SCHEMA_VERSION: '107'
-      # Signed release-source manifests: candidate run 38940468018; production rollback run 38776629865.
-      REPOGUARD_ROLLBACK_UPGRADE_IMAGE: ghcr.io/cocojiu/pragent-backend@sha256:497b7acfd1ccf441302cdc5aac2e42e1bc74c63748d0ffde3afeb1229f847d55
-      REPOGUARD_ROLLBACK_UPGRADE_REVISION: d9099f1505ed0cfdeb9608c317bf318cddae8d72
-      REPOGUARD_ROLLBACK_PREVIOUS_IMAGE: ghcr.io/cocojiu/pragent-backend@sha256:128974e473ca500e4a4806b4deb025afbba5b027621ddf5d38da8927cc362ea6
-      REPOGUARD_ROLLBACK_PREVIOUS_REVISION: 8b23ee30cdd1eb2582fa9cdd75ed5903e3f35af0
+      REPOGUARD_ROLLBACK_PREVIOUS_SCHEMA_VERSION: '108'
+      # Signed release-source manifests: candidate run 39022353214; current production rollback run 38940468018.
+      REPOGUARD_ROLLBACK_UPGRADE_IMAGE: ghcr.io/cocojiu/pragent-backend@sha256:ff1c61bcec73255767caecc5292f27696ae6201b54ad682c596153e9bd254517
+      REPOGUARD_ROLLBACK_UPGRADE_REVISION: 268aa8b7f71063aa0b23816a10c0f7fa1e03be02
+      REPOGUARD_ROLLBACK_PREVIOUS_IMAGE: ghcr.io/cocojiu/pragent-backend@sha256:497b7acfd1ccf441302cdc5aac2e42e1bc74c63748d0ffde3afeb1229f847d55
+      REPOGUARD_ROLLBACK_PREVIOUS_REVISION: d9099f1505ed0cfdeb9608c317bf318cddae8d72
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
