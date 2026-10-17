@@ -10,6 +10,7 @@ import com.repoguard.agent.dto.ReviewFindingDto;
 import com.repoguard.agent.dto.ReviewTaskListItem;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.Locale;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -52,7 +53,7 @@ public class PrReviewSummaryBuilder {
         long missingTestTotal,
         long changedFileTotal
     ) {
-        ReviewConclusionEligibility eligibility = ReviewConclusionEligibility.forTask(task);
+        Optional<String> conclusionBlock = AssessmentStatus.conclusionBlockReason(task);
         FindingSeverityCountsDto effectiveCounts = severityCounts == null
             ? FindingSeverityCountsDto.fromFindings(findings)
             : severityCounts;
@@ -62,17 +63,17 @@ public class PrReviewSummaryBuilder {
         String overallRisk = riskProfile == null ? "info" : riskProfile.level();
         boolean humanReviewRequired = Boolean.TRUE.equals(task.humanReviewRequired())
             || Boolean.TRUE.equals(riskProfile == null ? false : riskProfile.recommendHumanReview());
-        boolean recommendMerge = eligibility.usable() && criticalCount == 0 && highCount == 0 && !humanReviewRequired;
-        String mergeRecommendation = eligibility.usable() ? mergeRecommendation(
+        boolean recommendMerge = conclusionBlock.isEmpty() && criticalCount == 0 && highCount == 0 && !humanReviewRequired;
+        String mergeRecommendation = conclusionBlock.isEmpty() ? mergeRecommendation(
             recommendMerge,
             criticalCount,
             highCount,
             mediumCount,
             humanReviewRequired
-        ) : eligibility.explanation();
-        List<String> keyRisks = buildKeyRisks(riskProfile, missingTestTotal, criticalCount, highCount, mediumCount, eligibility);
+        ) : conclusionBlock.orElseThrow();
+        List<String> keyRisks = buildKeyRisks(riskProfile, missingTestTotal, criticalCount, highCount, mediumCount, conclusionBlock);
         List<String> focusFiles = buildFocusFiles(riskProfile, changedFiles);
-        String summary = (eligibility.usable()
+        String summary = (conclusionBlock.isEmpty()
             ? "本次 PR 综合风险为" + riskText(overallRisk)
             : "当前审查结论暂不能作为合并依据")
             + "，包含 " + changedFileTotal + " 个变更文件、" + findingTotal + " 条审查发现"
@@ -120,11 +121,11 @@ public class PrReviewSummaryBuilder {
         int criticalCount,
         int highCount,
         int mediumCount,
-        ReviewConclusionEligibility eligibility
+        Optional<String> conclusionBlock
     ) {
         List<String> risks = new java.util.ArrayList<>();
-        if (!eligibility.usable()) {
-            risks.add(eligibility.explanation());
+        if (!conclusionBlock.isEmpty()) {
+            risks.add(conclusionBlock.orElseThrow());
         }
         if (criticalCount > 0) {
             risks.add("包含 " + criticalCount + " 条严重风险发现");

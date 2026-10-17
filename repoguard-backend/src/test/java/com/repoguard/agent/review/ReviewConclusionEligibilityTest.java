@@ -103,6 +103,26 @@ class ReviewConclusionEligibilityTest {
         assertThat(summaries.build(task, List.of(), List.of(), List.of(), profile).recommendMerge()).isFalse();
     }
 
+    @ParameterizedTest
+    @MethodSource("riskModes")
+    void preservesFullAndSummaryHumanReviewSemantics(String severity, int score, boolean summaryHumanReview) {
+        ReviewTaskListItem task = task("completed", "complete", "not_required", false);
+        List<ReviewFindingDto> findings = List.of(new ReviewFindingDto(severity, "src/Plain.java", 1, "risk", "fix"));
+        PrRiskProfileDto full = profiles.build(task, findings, List.of());
+        PrRiskProfileDto summary = profiles.buildSummary(task, FindingSeverityCountsDto.fromFindings(findings), 1, 0);
+        assertThat(full.score()).isEqualTo(score);
+        assertThat(summary.score()).isEqualTo(score);
+        assertThat(full.recommendHumanReview()).isFalse();
+        assertThat(summary.recommendHumanReview()).isEqualTo(summaryHumanReview);
+        assertThat(full.summary()).contains("0 个变更文件、0 行增删，审查发现 1 条");
+        assertThat(summary.summary()).contains("0 个变更文件，审查发现 1 条").doesNotContain("行增删");
+    }
+
+    static Stream<Arguments> riskModes() {
+        return Stream.of(Arguments.of("critical", 35, true), Arguments.of("high", 25, true),
+            Arguments.of("medium", 12, false), Arguments.of("low", 4, false));
+    }
+
     private ReviewTaskListItem task(String status, String assessment, String humanStatus, boolean humanRequired) {
         return new ReviewTaskListItem(109796L, 134, "existing expired review", "PRAgent", "cocojiu",
             "aea73e8", "main", status, "info", 0, "completed", "github", "github",

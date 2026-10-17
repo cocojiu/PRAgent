@@ -902,7 +902,9 @@ class ReviewServiceImplTest {
 
     @Test
     void getReviewDetailReturnsSummaryWithoutInitialDetailCollections() {
-        when(reviewTaskMapper.selectById(521L)).thenReturn(task());
+        ReviewTask completed = task();
+        completed.setAssessmentStatus("COMPLETE");
+        when(reviewTaskMapper.selectById(521L)).thenReturn(completed);
         mockDetailPages(List.of(
             changedFile("repoguard-backend/src/main/resources/db/migration/V22__unsafe_change.sql", "ADD", 180, 20),
             changedFile("repoguard-backend/src/main/java/com/repoguard/agent/security/AuthTokenFilter.java", "MODIFY", 90, 15),
