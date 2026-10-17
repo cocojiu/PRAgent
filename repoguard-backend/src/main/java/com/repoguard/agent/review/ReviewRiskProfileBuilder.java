@@ -8,6 +8,7 @@ import com.repoguard.agent.dto.ReviewFindingDto;
 import com.repoguard.agent.dto.ReviewTaskListItem;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -18,9 +19,7 @@ import org.springframework.util.StringUtils;
 public class ReviewRiskProfileBuilder {
 
     public PrRiskProfileDto build(
-        ReviewTaskListItem task,
-        List<ReviewFindingDto> findings,
-        List<ChangedFileDto> changedFiles
+        ReviewTaskListItem task, List<ReviewFindingDto> findings, List<ChangedFileDto> changedFiles
     ) {
         List<ReviewFindingDto> effectiveFindings = findings.stream()
             .filter(finding -> !"false_positive".equalsIgnoreCase(finding.feedbackStatus()))
@@ -29,116 +28,73 @@ public class ReviewRiskProfileBuilder {
         Map<String, Long> findingCountByFile = effectiveFindings.stream()
             .filter(finding -> StringUtils.hasText(finding.file()))
             .collect(Collectors.groupingBy(ReviewFindingDto::file, Collectors.counting()));
-        int criticalCount = countSeverity(effectiveFindings, "critical");
-        int highCount = countSeverity(effectiveFindings, "high");
-        int mediumCount = countSeverity(effectiveFindings, "medium");
-        int lowCount = countSeverity(effectiveFindings, "low");
-        int totalChurn = changedFiles.stream()
-            .mapToInt(file -> safeInt(file.additions()) + safeInt(file.deletions()))
-            .sum();
-        int sensitiveFileCount = (int) changedFiles.stream().filter(file -> !riskReasons(file).isEmpty()).count();
-
-        int score = criticalCount * 35
-            + highCount * 25
-            + mediumCount * 12
-            + lowCount * 4
-            + Math.min(changedFiles.size() * 2, 20)
-            + Math.min(totalChurn / 50, 20)
-            + Math.min(sensitiveFileCount * 8, 24);
-        score = Math.min(score, 100);
-        String level = scoreToRiskLevel(score, task.riskLevel());
-
-        List<String> signals = new java.util.ArrayList<>();
-        if (criticalCount + highCount > 0) {
-            signals.add("包含 " + (criticalCount + highCount) + " 条高危以上发现");
-        }
-        if (mediumCount > 0) {
-            signals.add("包含 " + mediumCount + " 条中风险发现");
-        }
-        if (changedFiles.size() >= 8) {
-            signals.add("变更文件较多：" + changedFiles.size() + " 个文件");
-        }
-        if (totalChurn >= 300) {
-            signals.add("变更规模较大：" + totalChurn + " 行增删");
-        }
-        if (sensitiveFileCount > 0) {
-            signals.add("触及 " + sensitiveFileCount + " 个敏感文件");
-        }
-        if (signals.isEmpty()) {
-            signals.add("未发现明显放大风险的变更信号");
-        }
-
-        boolean recommendHumanReview = score >= 55 || Boolean.TRUE.equals(task.humanReviewRequired());
-        String humanReviewReason = recommendHumanReview
-            ? "风险分达到 " + score + "，建议人工复核后再回写或合并。"
-            : "风险分较低，可按常规自动审查流程推进。";
+        FindingSeverityCountsDto counts = new FindingSeverityCountsDto(
+            (long) countSeverity(effectiveFindings, "critical"), (long) countSeverity(effectiveFindings, "high"),
+            (long) countSeverity(effectiveFindings, "medium"), (long) countSeverity(effectiveFindings, "low"), 0L
+        );
+        ChangeRisk change = new ChangeRisk(changedFiles.size(), changedFiles.stream()
+            .mapToInt(file -> safeInt(file.additions()) + safeInt(file.deletions())).sum(),
+            (int) changedFiles.stream().filter(file -> !riskReasons(file).isEmpty()).count(), false);
         List<PrRiskFileDto> highRiskFiles = changedFiles.stream()
             .map(file -> toRiskFile(file, findingCountByFile.getOrDefault(file.path(), 0L).intValue()))
             .filter(file -> file.score() > 0)
             .sorted(Comparator.comparing(PrRiskFileDto::score).reversed())
             .limit(5)
             .toList();
-
-        return new PrRiskProfileDto(
-            score,
-            level,
-            buildRiskSummary(level, score, effectiveFindings.size(), changedFiles.size(), totalChurn),
-            recommendHumanReview,
-            humanReviewReason,
-            signals,
-            highRiskFiles
-        );
+        return buildProfile(task, counts, effectiveFindings.size(), change, highRiskFiles);
     }
 
     public PrRiskProfileDto buildSummary(
-        ReviewTaskListItem task,
-        FindingSeverityCountsDto severityCounts,
-        long findingTotal,
-        long changedFileTotal
+        ReviewTaskListItem task, FindingSeverityCountsDto severityCounts, long findingTotal, long changedFileTotal
     ) {
-        FindingSeverityCountsDto effectiveCounts = severityCounts == null ? FindingSeverityCountsDto.empty() : severityCounts;
-        long criticalCount = effectiveCounts.criticalOrZero();
-        long highCount = effectiveCounts.highOrZero();
-        long mediumCount = effectiveCounts.mediumOrZero();
-        long lowCount = effectiveCounts.lowOrZero();
-        int score = Math.toIntExact(Math.min(
-            criticalCount * 35
-                + highCount * 25
-                + mediumCount * 12
-                + lowCount * 4
-                + Math.min(changedFileTotal * 2, 20),
-            100
-        ));
+        return buildProfile(task, severityCounts == null ? FindingSeverityCountsDto.empty() : severityCounts,
+            findingTotal, new ChangeRisk(changedFileTotal, 0, 0, true), List.of());
+    }
+
+    private PrRiskProfileDto buildProfile(
+        ReviewTaskListItem task, FindingSeverityCountsDto counts, long findingTotal,
+        ChangeRisk change, List<PrRiskFileDto> highRiskFiles
+    ) {
+        Optional<String> conclusionBlock = AssessmentStatus.conclusionBlockReason(task);
+        long blockingCount = counts.criticalOrZero() + counts.highOrZero();
+        int score = Math.toIntExact(Math.min(counts.criticalOrZero() * 35 + counts.highOrZero() * 25
+            + counts.mediumOrZero() * 12 + counts.lowOrZero() * 4 + Math.min(change.files() * 2, 20)
+            + Math.min(change.churn() / 50, 20) + Math.min(change.sensitiveFiles() * 8, 24), 100));
         String level = scoreToRiskLevel(score, task.riskLevel());
         List<String> signals = new java.util.ArrayList<>();
-        if (criticalCount + highCount > 0) {
-            signals.add("包含 " + (criticalCount + highCount) + " 条高危以上发现");
+        if (!conclusionBlock.isEmpty()) {
+            signals.add(conclusionBlock.orElseThrow());
         }
-        if (mediumCount > 0) {
-            signals.add("包含 " + mediumCount + " 条中风险发现");
+        if (blockingCount > 0) {
+            signals.add("包含 " + blockingCount + " 条高危以上发现");
         }
-        if (changedFileTotal >= 8) {
-            signals.add("变更文件较多：" + changedFileTotal + " 个文件");
+        if (counts.mediumOrZero() > 0) {
+            signals.add("包含 " + counts.mediumOrZero() + " 条中风险发现");
+        }
+        if (change.files() >= 8) {
+            signals.add("变更文件较多：" + change.files() + " 个文件");
+        }
+        if (change.churn() >= 300) {
+            signals.add("变更规模较大：" + change.churn() + " 行增删");
+        }
+        if (change.sensitiveFiles() > 0) {
+            signals.add("触及 " + change.sensitiveFiles() + " 个敏感文件");
         }
         if (signals.isEmpty()) {
             signals.add("未发现明显放大风险的变更信号");
         }
+        boolean recommendHumanReview = (change.summaryOnly() && blockingCount > 0)
+            || score >= 55 || Boolean.TRUE.equals(task.humanReviewRequired());
+        String reason = !conclusionBlock.isEmpty() ? conclusionBlock.orElseThrow() : recommendHumanReview
+            ? "风险分达到 " + score + "，建议人工复核后再回写或合并。" : "风险分较低，可按常规自动审查流程推进。";
+        String summary = conclusionBlock.isEmpty()
+            ? "本次 PR 综合风险为 " + level + "（" + score + "/100），覆盖 " + change.files() + " 个变更文件"
+                + (change.summaryOnly() ? "" : "、" + change.churn() + " 行增删") + "，审查发现 " + findingTotal + " 条。"
+            : conclusionBlock.orElseThrow();
+        return new PrRiskProfileDto(score, level, summary, recommendHumanReview, reason, signals, highRiskFiles);
+    }
 
-        boolean recommendHumanReview = criticalCount + highCount > 0
-            || score >= 55
-            || Boolean.TRUE.equals(task.humanReviewRequired());
-        String humanReviewReason = recommendHumanReview
-            ? "风险分达到 " + score + "，建议人工复核后再回写或合并。"
-            : "风险分较低，可按常规自动审查流程推进。";
-        return new PrRiskProfileDto(
-            score,
-            level,
-            buildSummaryRiskText(level, score, findingTotal, changedFileTotal),
-            recommendHumanReview,
-            humanReviewReason,
-            signals,
-            List.of()
-        );
+    private record ChangeRisk(long files, int churn, int sensitiveFiles, boolean summaryOnly) {
     }
 
     private PrRiskFileDto toRiskFile(ChangedFileDto file, int findingCount) {
@@ -198,21 +154,4 @@ public class ReviewRiskProfileBuilder {
         return "info";
     }
 
-    private String buildRiskSummary(String level, int score, int findingCount, int fileCount, int totalChurn) {
-        return "本次 PR 综合风险为 " + lower(level)
-            + "（" + score + "/100），覆盖 "
-            + fileCount + " 个变更文件、" + totalChurn + " 行增删，审查发现 "
-            + findingCount + " 条。";
-    }
-
-    private String buildSummaryRiskText(String level, int score, long findingTotal, long changedFileTotal) {
-        return "本次 PR 综合风险为 " + lower(level)
-            + "（" + score + "/100），覆盖 "
-            + changedFileTotal + " 个变更文件，审查发现 "
-            + findingTotal + " 条。";
-    }
-
-    private String lower(String value) {
-        return value == null ? null : value.toLowerCase(Locale.ROOT);
-    }
 }

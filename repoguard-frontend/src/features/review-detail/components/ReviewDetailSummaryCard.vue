@@ -19,10 +19,10 @@
         </div>
         <span :class="`risk-pill ${riskProfile.level}`">{{ riskText(riskProfile.level) }}</span>
       </div>
-      <p>{{ riskProfile.summary }}</p>
+      <p v-if="riskProfile.summary !== riskProfile.humanReviewReason">{{ riskProfile.summary }}</p>
       <p class="risk-profile-review">{{ riskProfile.humanReviewReason }}</p>
-      <div class="risk-profile-signals">
-        <span v-for="signal in riskProfile.signals" :key="signal">{{ signal }}</span>
+      <div v-if="profileSignals.length" class="risk-profile-signals">
+        <span v-for="signal in profileSignals" :key="signal">{{ signal }}</span>
       </div>
       <div v-if="riskProfile.highRiskFiles.length" class="risk-file-list">
         <div v-for="file in riskProfile.highRiskFiles" :key="file.file" class="risk-file-item">
@@ -41,13 +41,13 @@
       <div class="pr-summary-head">
         <span class="risk-profile-eyebrow">PR 总评</span>
         <span :class="`status-pill ${task.prSummary.recommendMerge ? 'success' : 'warning'}`">
-          {{ task.prSummary.recommendMerge ? "可按流程合并" : "建议复核后合并" }}
+          {{ task.prSummary.recommendMerge ? "可按流程合并" : "暂不建议合并" }}
         </span>
       </div>
       <p>{{ task.prSummary.summary }}</p>
       <p class="risk-profile-review">{{ task.prSummary.mergeRecommendation }}</p>
-      <div class="risk-profile-signals">
-        <span v-for="risk in task.prSummary.keyRisks" :key="risk">{{ risk }}</span>
+      <div v-if="summaryRisks.length" class="risk-profile-signals">
+        <span v-for="risk in summaryRisks" :key="risk">{{ risk }}</span>
       </div>
       <div v-if="task.prSummary.focusFiles.length" class="pr-summary-files">
         <code v-for="file in task.prSummary.focusFiles" :key="file">{{ file }}</code>
@@ -57,9 +57,10 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue";
 import type { PrRiskProfileViewModel, ReviewTaskDetail, ReviewStatus, RiskLevel } from "@/types";
 
-defineProps<{
+const props = defineProps<{
   task: ReviewTaskDetail;
   findingCount: number;
   findingCounts: Record<RiskLevel, number>;
@@ -68,4 +69,11 @@ defineProps<{
   riskText: (risk: RiskLevel) => string;
   changeTypeText: (changeType: string) => string;
 }>();
+
+const profileSignals = computed(() => (props.riskProfile?.signals ?? []).filter(
+  signal => signal !== props.riskProfile?.summary && signal !== props.riskProfile?.humanReviewReason
+));
+const summaryRisks = computed(() => (props.task.prSummary?.keyRisks ?? []).filter(
+  risk => risk !== props.task.prSummary?.summary && risk !== props.task.prSummary?.mergeRecommendation
+));
 </script>

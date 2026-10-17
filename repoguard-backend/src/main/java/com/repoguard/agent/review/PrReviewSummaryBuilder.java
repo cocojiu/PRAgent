@@ -10,6 +10,7 @@ import com.repoguard.agent.dto.ReviewFindingDto;
 import com.repoguard.agent.dto.ReviewTaskListItem;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.Locale;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -52,6 +53,7 @@ public class PrReviewSummaryBuilder {
         long missingTestTotal,
         long changedFileTotal
     ) {
+        Optional<String> conclusionBlock = AssessmentStatus.conclusionBlockReason(task);
         FindingSeverityCountsDto effectiveCounts = severityCounts == null
             ? FindingSeverityCountsDto.fromFindings(findings)
             : severityCounts;
@@ -61,17 +63,19 @@ public class PrReviewSummaryBuilder {
         String overallRisk = riskProfile == null ? "info" : riskProfile.level();
         boolean humanReviewRequired = Boolean.TRUE.equals(task.humanReviewRequired())
             || Boolean.TRUE.equals(riskProfile == null ? false : riskProfile.recommendHumanReview());
-        boolean recommendMerge = criticalCount == 0 && highCount == 0 && !humanReviewRequired;
-        String mergeRecommendation = mergeRecommendation(
+        boolean recommendMerge = conclusionBlock.isEmpty() && criticalCount == 0 && highCount == 0 && !humanReviewRequired;
+        String mergeRecommendation = conclusionBlock.isEmpty() ? mergeRecommendation(
             recommendMerge,
             criticalCount,
             highCount,
             mediumCount,
             humanReviewRequired
-        );
-        List<String> keyRisks = buildKeyRisks(riskProfile, missingTestTotal, criticalCount, highCount, mediumCount);
+        ) : conclusionBlock.orElseThrow();
+        List<String> keyRisks = buildKeyRisks(riskProfile, missingTestTotal, criticalCount, highCount, mediumCount, conclusionBlock);
         List<String> focusFiles = buildFocusFiles(riskProfile, changedFiles);
-        String summary = "本次 PR 综合风险为" + riskText(overallRisk)
+        String summary = (conclusionBlock.isEmpty()
+            ? "本次 PR 综合风险为" + riskText(overallRisk)
+            : "当前审查结论暂不能作为合并依据")
             + "，包含 " + changedFileTotal + " 个变更文件、" + findingTotal + " 条审查发现"
             + (missingTestTotal == 0 ? "" : "、" + missingTestTotal + " 条缺失测试建议")
             + "。";
@@ -116,9 +120,13 @@ public class PrReviewSummaryBuilder {
         long missingTestTotal,
         int criticalCount,
         int highCount,
-        int mediumCount
+        int mediumCount,
+        Optional<String> conclusionBlock
     ) {
         List<String> risks = new java.util.ArrayList<>();
+        if (!conclusionBlock.isEmpty()) {
+            risks.add(conclusionBlock.orElseThrow());
+        }
         if (criticalCount > 0) {
             risks.add("包含 " + criticalCount + " 条严重风险发现");
         }
