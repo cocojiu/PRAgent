@@ -277,6 +277,53 @@ class FrontendPerformanceObservationServiceImplTest {
         }
     }
 
+    @Test
+    void logsHttpOutcomesForEachTraceWithoutInventingMissingStatus() {
+        Logger logger = (Logger) LoggerFactory.getLogger(FrontendPerformanceObservationServiceImpl.class);
+        Level previousLevel = logger.getLevel();
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            logger.setLevel(Level.INFO);
+            service.record(new FrontendPerformanceReportRequest(
+                "tasks",
+                List.of(
+                    new FrontendApiWaterfallItemDto(
+                        "fetchReviews", "/api/v1/reviews", "GET", 200, "success", "trace-ok", 0L, 2L, 24L
+                    ),
+                    new FrontendApiWaterfallItemDto(
+                        "saveFeedback", "/api/v1/config/feedback", "POST", 503, "failed", "trace-http-failure", 42L, 1L, 31L
+                    ),
+                    new FrontendApiWaterfallItemDto(
+                        "fetchReviewFindings", "/api/v1/reviews/123/findings?token=must-not-leak", "GET", null,
+                        "failed", "trace-network-failure", null, 3L, 40L
+                    ),
+                    new FrontendApiWaterfallItemDto(
+                        "fetchReviewStatus", "/api/v1/reviews/123/status", null, null, null, "trace-missing", null, 4L, 12L
+                    )
+                ),
+                List.of()
+            ));
+
+            assertThat(appender.list).hasSize(1);
+            String message = appender.list.getFirst().getFormattedMessage();
+            assertThat(message).contains("waterfall=" + String.join(",",
+                "saveFeedback@/api/v1/config/feedback:31ms:42bytes:trace=trace-http-failure:method=POST:status=503:result=failed",
+                "fetchReviews@/api/v1/reviews:24ms:0bytes:trace=trace-ok:method=GET:status=200:result=success",
+                "fetchReviewFindings@/api/v1/reviews/id/findings:40ms:unknownbytes:trace=trace-network-failure:method=GET:status=unknown:result=failed",
+                "fetchReviewStatus@/api/v1/reviews/id/status:12ms:unknownbytes:trace=trace-missing:method=unknown:status=unknown:result=unknown"
+            ));
+            assertThat(message).doesNotContain("must-not-leak", "/reviews/123/");
+            assertThat(meterRegistry.get("repoguard.frontend.api.waterfall.request").counters().stream()
+                .mapToDouble(counter -> counter.count()).sum()).isEqualTo(4.0);
+        } finally {
+            logger.setLevel(previousLevel);
+            logger.detachAppender(appender);
+            appender.stop();
+        }
+    }
+
     private static Stream<Arguments> responseByteObservations() {
         return Stream.of(
             Arguments.of(null, "unknown"),
