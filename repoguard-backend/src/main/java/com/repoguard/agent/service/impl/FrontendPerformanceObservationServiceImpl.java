@@ -97,7 +97,13 @@ public class FrontendPerformanceObservationServiceImpl implements FrontendPerfor
                 + safeBytes(item.responseBytes())
                 + "bytes"
                 + ":trace="
-                + safeText(item.traceId()))
+                + safeText(item.traceId())
+                + ":method="
+                + safeText(item.method())
+                + ":status="
+                + status(item.status())
+                + ":result="
+                + safeText(item.result()))
             .collect(Collectors.joining(","));
         String longTaskRegions = longTasks.stream()
             .sorted(Comparator.comparingLong(item -> safeMillis(item.startedAtMs())))
