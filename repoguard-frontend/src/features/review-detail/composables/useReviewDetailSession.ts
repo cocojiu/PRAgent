@@ -1,4 +1,4 @@
-import { computed, onScopeDispose, watch } from "vue";
+import { computed, nextTick, onScopeDispose, onWatcherCleanup, watch } from "vue";
 import { activeTenant } from "@/stores/tenantContext";
 import { useReviewDetailGithubComments } from "./useReviewDetailGithubComments";
 import { useReviewDetailLoader } from "./useReviewDetailLoader";
@@ -48,10 +48,14 @@ export const useReviewDetailSession = ({ getTaskId }: { getTaskId: () => number 
     sections.resetDetailSections();
     comparison.reset();
   };
-  watch([getTaskId, activeTenant], () => {
+  watch([getTaskId, activeTenant], async ([taskId]) => {
+    let current = true;
+    onWatcherCleanup(() => { current = false; });
     cancelSession();
     selectedTask.value = null;
-    void loader.loadDetail();
+    // Route params can disappear before the departing component is disposed.
+    if (!Number.isFinite(taskId)) await nextTick();
+    if (current) void loader.loadDetail();
   }, { immediate: true, flush: "sync" });
   onScopeDispose(() => { cancelSession(); polling.cleanupPolling(); });
 
