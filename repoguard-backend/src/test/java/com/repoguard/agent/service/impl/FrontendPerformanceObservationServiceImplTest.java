@@ -3,6 +3,10 @@ package com.repoguard.agent.service.impl;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.repoguard.agent.dto.FrontendApiWaterfallItemDto;
 import com.repoguard.agent.dto.FrontendLongTaskItemDto;
 import com.repoguard.agent.dto.FrontendPerformanceReportRequest;
@@ -13,7 +17,12 @@ import com.repoguard.agent.observability.RepoGuardMetrics;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.slf4j.LoggerFactory;
 
 class FrontendPerformanceObservationServiceImplTest {
 
@@ -231,6 +240,50 @@ class FrontendPerformanceObservationServiceImplTest {
         assertFrontendThresholdExceeded("task-detail", "task-detail_fetchroutedata_api_v1_task-detail");
         assertFrontendThresholdExceeded("message-queue", "message-queue_fetchroutedata_api_v1_message-queue");
         assertFrontendThresholdExceeded("notification-ops", "notification-ops_fetchroutedata_api_v1_notification-ops");
+    }
+
+    @ParameterizedTest
+    @MethodSource("responseByteObservations")
+    void distinguishesUnavailableAndMeasuredResponseBytes(Long responseBytes, String expectedBytes) {
+        Logger logger = (Logger) LoggerFactory.getLogger(FrontendPerformanceObservationServiceImpl.class);
+        Level previousLevel = logger.getLevel();
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            logger.setLevel(Level.INFO);
+            service.record(new FrontendPerformanceReportRequest(
+                "tasks",
+                List.of(new FrontendApiWaterfallItemDto(
+                    "fetchReviews", "/api/v1/reviews", "GET", 200, "success", "trace-bytes",
+                    responseBytes, 0L, 24L
+                )),
+                List.of(new FrontendLongTaskItemDto(
+                    25L, 5L, "review-list.items", "fetchReviews", 8, 372,
+                    "/api/v1/reviews", "trace-bytes", responseBytes, 24L
+                ))
+            ));
+
+            assertThat(appender.list).hasSize(1);
+            assertThat(appender.list.getFirst().getFormattedMessage())
+                .contains("fetchReviews@/api/v1/reviews:24ms:" + expectedBytes + "bytes:trace=trace-bytes")
+                .contains(":api=/api/v1/reviews:24ms:" + expectedBytes + "bytes:trace=trace-bytes");
+            assertThat(meterRegistry.get("repoguard.frontend.api.waterfall.request").counter().count())
+                .isEqualTo(1.0);
+        } finally {
+            logger.setLevel(previousLevel);
+            logger.detachAppender(appender);
+            appender.stop();
+        }
+    }
+
+    private static Stream<Arguments> responseByteObservations() {
+        return Stream.of(
+            Arguments.of(null, "unknown"),
+            Arguments.of(-1L, "unknown"),
+            Arguments.of(0L, "0"),
+            Arguments.of(2048L, "2048")
+        );
     }
 
     private void recordSlowFrontendRoute(

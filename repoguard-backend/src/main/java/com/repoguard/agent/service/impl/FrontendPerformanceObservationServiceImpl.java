@@ -157,11 +157,8 @@ public class FrontendPerformanceObservationServiceImpl implements FrontendPerfor
         return millis;
     }
 
-    private static long safeBytes(Long bytes) {
-        if (bytes == null || bytes < 0) {
-            return 0;
-        }
-        return bytes;
+    private static String safeBytes(Long bytes) {
+        return bytes == null || bytes < 0 ? UNKNOWN : Long.toString(bytes);
     }
 
     private static int safeCount(Integer count) {
