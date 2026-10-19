@@ -47,6 +47,8 @@ final class IsolatedReviewRuntime implements AutoCloseable {
     final List<String> secrets = new ArrayList<>();
     final String adminKey = secret();
     final String password = "Ci!9-" + secret();
+    final String githubToken = secret();
+    final String llmApiKey = secret();
     private final List<String> containers = new ArrayList<>();
     private String network;
     String mysql;
@@ -169,16 +171,20 @@ final class IsolatedReviewRuntime implements AutoCloseable {
         sql("UPDATE user_account SET role='ADMIN' WHERE username='acceptance'");
         token = request("POST", "/api/v1/auth/login", Map.of("account", "acceptance", "password", password), null).path("accessToken").asText();
         assertThat(token).isNotBlank(); secrets.add(token);
-        request("PUT", "/api/v1/config/integrations/github", Map.of("baseUrl", "https://supplier.test:18443", "token", secret(), "defaultOwner", "fixture", "defaultRepo", "sample"), token);
+        request("PUT", "/api/v1/config/integrations/github", Map.of("baseUrl", "https://supplier.test:18443", "token", githubToken, "defaultOwner", "fixture", "defaultRepo", "sample"), token);
+        configureReviewPolicy(120, true);
+        worker = application("worker", "worker");
+        proof.put("schema", 108); proof.put("rolesSimultaneouslyReady", true); save();
+    }
+
+    void configureReviewPolicy(int seconds, boolean fallback) throws Exception {
         var policy = new LinkedHashMap<String, Object>();
         policy.put("llmEnabled", true); policy.put("llmProvider", "openai-compatible"); policy.put("modelName", "isolated-stub");
-        policy.put("baseUrl", "https://supplier.test:18443/v1"); policy.put("apiKey", secret()); policy.put("timeoutSeconds", 120);
-        policy.put("temperature", 0); policy.put("maxTokens", 2048); policy.put("fallbackToRules", true); policy.put("workerConcurrency", 1);
+        policy.put("baseUrl", "https://supplier.test:18443/v1"); policy.put("apiKey", llmApiKey); policy.put("timeoutSeconds", seconds);
+        policy.put("temperature", 0); policy.put("maxTokens", 2048); policy.put("fallbackToRules", fallback); policy.put("workerConcurrency", 1);
         policy.put("chunkFileThreshold", 10); policy.put("chunkLineThreshold", 1000); policy.put("chunkMaxFiles", 10); policy.put("chunkMaxLines", 1000);
         policy.put("inputTokenPricePerMillion", 0); policy.put("outputTokenPricePerMillion", 0);
         request("PUT", "/api/v1/config/review-policy", policy, token);
-        worker = application("worker", "worker");
-        proof.put("schema", 108); proof.put("rolesSimultaneouslyReady", true); save();
     }
 
     private String application(String name, String role) throws Exception {
@@ -266,7 +272,7 @@ final class IsolatedReviewRuntime implements AutoCloseable {
     }
 
     String sql(String query) throws Exception {
-        return command(List.of("docker", "exec", "-i", mysql, "sh", "-ec", "MYSQL_PWD=\"$MYSQL_ROOT_PASSWORD\" exec mysql --protocol=TCP -h127.0.0.1 -uroot --batch --skip-column-names review_acceptance"),
+        return command(List.of("docker", "exec", "-i", mysql, "sh", "-ec", "MYSQL_PWD=\"$MYSQL_ROOT_PASSWORD\" exec mysql --protocol=TCP -h127.0.0.1 -uroot --batch --raw --skip-column-names review_acceptance"),
             query.getBytes(StandardCharsets.UTF_8), Duration.ofSeconds(30));
     }
     void save() throws Exception { Files.writeString(evidence.resolve("result.json"), JSON.writerWithDefaultPrettyPrinter().writeValueAsString(proof)); }

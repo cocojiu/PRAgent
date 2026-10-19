@@ -26,6 +26,14 @@ final class SupplierStub implements AutoCloseable {
     static final String COMMIT = "a".repeat(40);
     final List<Map<String, Object>> requests = new CopyOnWriteArrayList<>();
     final AtomicInteger llmCalls = new AtomicInteger();
+    final AtomicInteger transientGithubFailures = new AtomicInteger();
+    final AtomicInteger githubFailuresServed = new AtomicInteger();
+    final java.util.concurrent.atomic.AtomicBoolean timeoutModel = new java.util.concurrent.atomic.AtomicBoolean();
+    final AtomicInteger delayedModelRequests = new AtomicInteger();
+    final AtomicInteger lateModelResponses = new AtomicInteger();
+    final CountDownLatch releaseTimedOutModel = new CountDownLatch(1);
+    String expectedGithubToken;
+    String expectedLlmKey;
     final CountDownLatch llmEntered = new CountDownLatch(1);
     final CountDownLatch releaseLlm = new CountDownLatch(1);
     private final List<Map<String, Object>> publishedComments = new CopyOnWriteArrayList<>();
@@ -68,10 +76,23 @@ final class SupplierStub implements AutoCloseable {
                 byte[] body = exchange.getRequestBody().readNBytes(262145);
                 if (body.length > 262144 || requests.size() >= 256) { exchange.sendResponseHeaders(413, -1); return; }
                 requests.add(Map.of("method", method, "path", path, "at", java.time.Instant.now().toString(), "bodyBytes", body.length));
+                String expectedToken = path.startsWith("/v1/") ? expectedLlmKey : expectedGithubToken;
+                String authorization = java.util.Objects.toString(exchange.getRequestHeaders().getFirst("Authorization"), "");
+                if (expectedToken == null || !java.security.MessageDigest.isEqual(authorization.getBytes(StandardCharsets.UTF_8), ("Bearer " + expectedToken).getBytes(StandardCharsets.UTF_8))) {
+                    exchange.sendResponseHeaders(401, -1); return;
+                }
+                if (path.equals("/repos/fixture/sample/pulls/3") && transientGithubFailures.compareAndSet(1, 0)) {
+                    githubFailuresServed.incrementAndGet(); exchange.sendResponseHeaders(503, -1); return;
+                }
                 Object result;
                 if (method.equals("POST") && path.equals("/v1/chat/completions")) {
                     llmCalls.incrementAndGet(); llmEntered.countDown();
                     if (!releaseLlm.await(110, TimeUnit.SECONDS)) { exchange.sendResponseHeaders(504, -1); return; }
+                    if (timeoutModel.get()) {
+                        delayedModelRequests.incrementAndGet();
+                        if (!releaseTimedOutModel.await(110, TimeUnit.SECONDS)) { exchange.sendResponseHeaders(504, -1); return; }
+                        lateModelResponses.incrementAndGet();
+                    }
                     String content = IsolatedReviewRuntime.JSON.writeValueAsString(Map.of("riskLevel", "LOW", "findings", List.of(
                         Map.of("severity", "LOW", "filePath", "src/Example.java", "lineNumber", 2, "message", "Isolated finding", "recommendation", "Add validation"))));
                     result = Map.of("choices", List.of(Map.of("finish_reason", "stop", "message", Map.of("content", content))),
@@ -111,5 +132,5 @@ final class SupplierStub implements AutoCloseable {
         });
         server.start();
     }
-    @Override public void close() { releaseLlm.countDown(); server.stop(0); executor.shutdownNow(); }
+    @Override public void close() { releaseLlm.countDown(); releaseTimedOutModel.countDown(); server.stop(0); executor.shutdownNow(); }
 }

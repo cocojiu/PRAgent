@@ -29,6 +29,8 @@ final class IsolatedReadPerformanceMatrix {
             csv.write("shape,timeline_count,concurrency,endpoint,index,http_status,valid,duration_nanos,application_bytes,error,trace_id\n");
             int ordinal = 0;
             for (String shape : List.of("completed", "failed-legacy", "failed-structured", "archived")) {
+                runtime.token = runtime.request("POST", "/api/v1/auth/login", Map.of("account", "acceptance", "password", runtime.password), null).path("accessToken").asText();
+                runtime.secrets.add(runtime.token);
                 long task = 900001L + ordinal++;
                 seedTask(task, shape);
                 int previous = 0;

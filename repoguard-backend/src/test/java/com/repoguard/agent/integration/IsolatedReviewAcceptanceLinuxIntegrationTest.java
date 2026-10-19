@@ -2,8 +2,6 @@ package com.repoguard.agent.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.microsoft.playwright.Browser;
-import com.microsoft.playwright.BrowserType;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.options.AriaRole;
@@ -46,6 +44,7 @@ class IsolatedReviewAcceptanceLinuxIntegrationTest {
         runtime.prepare();
         supplier = new SupplierStub(temporary, runtime.trustPassword(), runtime.gateway);
         runtime.startApplications();
+        supplier.expectedGithubToken = runtime.githubToken; supplier.expectedLlmKey = runtime.llmApiKey;
         runtime.enableSqlObservation();
     }
 
@@ -67,12 +66,12 @@ class IsolatedReviewAcceptanceLinuxIntegrationTest {
         var transport = Collections.synchronizedList(new ArrayList<Map<String, Object>>());
         try (var firstSubscriber = new IsolatedSseSubscriber(runtime, taskId, subscriberToken, "0");
              var futureCursorSubscriber = new IsolatedSseSubscriber(runtime, taskId, subscriberToken, Long.toString(Long.MAX_VALUE));
-             Playwright playwright = Playwright.create(); Browser browser = playwright.chromium().launch(new BrowserType.LaunchOptions().setHeadless(false))) {
+             Playwright playwright = Playwright.create(); NativeHeadedBrowser nativeBrowser = new NativeHeadedBrowser(playwright, temporary, runtime.evidence)) {
             firstSubscriber.awaitProgress(); futureCursorSubscriber.awaitProgress();
-            var context = browser.newContext(new Browser.NewContextOptions().setIgnoreHTTPSErrors(true));
+            var context = nativeBrowser.browser.contexts().getFirst();
             // Listen to genuine events only: no property replacement and no synthetic dispatch.
             context.addInitScript("window.acceptanceVisibility = [{state:document.visibilityState,at:Date.now()}]; document.addEventListener('visibilitychange',()=>window.acceptanceVisibility.push({state:document.visibilityState,at:Date.now()}));");
-            Page page = context.newPage();
+            Page page = context.newPage(); page.bringToFront();
             page.onRequest(request -> {
                 if (request.url().contains("/events") || request.url().contains("/status")) transport.add(Map.of("event", "request", "path", URI.create(request.url()).getPath(), "at", Instant.now().toString()));
             });
@@ -86,12 +85,8 @@ class IsolatedReviewAcceptanceLinuxIntegrationTest {
             page.waitForURL("**/repoguard/**");
             page.navigate(runtime.baseUrl + "/repoguard/tasks/" + taskId);
             page.waitForCondition(() -> transport.stream().anyMatch(row -> row.get("event").equals("response") && row.get("path").toString().endsWith("/events") && row.get("status").equals(200)));
-            // Playwright enables focused-page emulation by default (crPage.ts _initialize).
-            // Disable that override so subsequent tab activation emits genuine browser visibility events.
-            var nativeFocus = new com.google.gson.JsonObject(); nativeFocus.addProperty("enabled", false);
-            context.newCDPSession(page).send("Emulation.setFocusEmulationEnabled", nativeFocus);
+            // The plain browser was attached with noDefaults; tab activation now changes native visibility.
             Page background = context.newPage(); background.navigate("about:blank");
-            context.newCDPSession(background).send("Emulation.setFocusEmulationEnabled", nativeFocus);
             background.bringToFront();
             page.waitForCondition(() -> "hidden".equals(page.evaluate("document.visibilityState")));
             page.waitForTimeout(12_000); // At least two real five-second sampling periods.
@@ -122,7 +117,7 @@ class IsolatedReviewAcceptanceLinuxIntegrationTest {
             page.screenshot(new Page.ScreenshotOptions().setPath(runtime.evidence.resolve("completed-review.png")));
             assertThat(page.locator("body").innerText()).contains("Isolated long review");
             page.navigate(runtime.baseUrl + "/repoguard/tasks"); page.waitForTimeout(6_000);
-            context.close();
+            // NativeHeadedBrowser owns and closes the entire isolated default context/process.
         } finally {
             supplier.releaseLlm.countDown();
             Files.writeString(runtime.evidence.resolve("browser-transport.json"), IsolatedReviewRuntime.JSON.writeValueAsString(transport));
@@ -143,6 +138,7 @@ class IsolatedReviewAcceptanceLinuxIntegrationTest {
         runtime.proof.put("longReview", Map.of("passed", true, "heldMilliseconds", heldMillis, "llmCalls", supplier.llmCalls.get(), "duplicateTaskReused", true));
         runtime.captureReadCounters("stream-after", taskId);
         runtime.proof.put("browser", Map.of("headed", true, "genuineVisibilityEvents", true, "focusEmulationDisabled", true, "offlineRecovery", true)); runtime.save();
+        new IsolatedFailureScenarios(runtime, supplier).run();
     }
 
     @Test @Order(2) @Timeout(value = 20, unit = TimeUnit.MINUTES)
