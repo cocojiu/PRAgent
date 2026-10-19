@@ -55,6 +55,7 @@ final class IsolatedReviewRuntime implements AutoCloseable {
     String worker;
     String edge;
     String gateway;
+    private String edgeIp;
     String baseUrl;
     String token;
     HttpClient http;
@@ -83,6 +84,12 @@ final class IsolatedReviewRuntime implements AutoCloseable {
         assertThat(state.path("Internal").asBoolean()).isTrue();
         gateway = state.path("IPAM").path("Config").get(0).path("Gateway").asText();
         assertThat(gateway).matches("[0-9.]+");
+        byte[] address = java.net.InetAddress.getByName(gateway).getAddress();
+        assertThat(address.length).isEqualTo(4);
+        assertThat(Byte.toUnsignedInt(address[3])).isEqualTo(1);
+        address[3] = 10;
+        edgeIp = java.net.InetAddress.getByAddress(address).getHostAddress();
+        proof.put("edgeAddress", edgeIp);
         proof.put("internalNetwork", true);
         String databasePassword = secret(); String brokerPassword = secret();
         mysql = container("mysql", MYSQL, environment("mysql", Map.of("MYSQL_ROOT_PASSWORD", secret(),
@@ -105,7 +112,7 @@ final class IsolatedReviewRuntime implements AutoCloseable {
         env.put("REPOGUARD_SECURITY_ENCRYPTION_KEY", "Ci!9-" + secret()); env.put("REPOGUARD_SECURITY_ENCRYPTION_KEY_ID", "isolated-ci");
         env.put("REPOGUARD_SECURITY_ENCRYPTION_SALT", secret()); env.put("REPOGUARD_AUTH_TOKEN_SECRET", secret());
         env.put("REPOGUARD_ADMIN_API_KEY", adminKey); env.put("REPOGUARD_DEPLOYMENT_MODE", "split");
-        env.put("REPOGUARD_AUTH_REGISTRATION_ENABLED", "true"); env.put("APP_CORS_ALLOWED_ORIGINS", "https://localhost");
+        env.put("REPOGUARD_AUTH_REGISTRATION_ENABLED", "true"); env.put("APP_CORS_ALLOWED_ORIGINS", "https://" + edgeIp);
         env.put("REPOGUARD_GITHUB_WEBHOOK_ENABLED", "false"); env.put("REPOGUARD_GITHUB_FEEDBACK_ENABLED", "false");
         env.put("REPOGUARD_GITHUB_CHECK_RUN_ENABLED", "false");
         env.put("REPOGUARD_OUTBOUND_GITHUB_ALLOWED_HOSTS", "supplier.test"); env.put("REPOGUARD_OUTBOUND_LLM_ALLOWED_HOSTS", "supplier.test");
@@ -113,6 +120,9 @@ final class IsolatedReviewRuntime implements AutoCloseable {
         env.put("REPOGUARD_OUTBOUND_PRIVATE_NETWORK_ALLOWED_HOSTS", "mysql,rabbitmq,supplier.test");
         storePassword = secret();
         SupplierStub.createCertificates(temporary, storePassword);
+        command(List.of("openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "2", "-subj", "/CN=" + edgeIp,
+            "-addext", "subjectAltName=IP:" + edgeIp, "-keyout", temporary.resolve("edge.key").toString(), "-out", temporary.resolve("edge.crt").toString()));
+        Files.setPosixFilePermissions(temporary.resolve("edge.key"), PosixFilePermissions.fromString("rw-------"));
         env.put("JAVA_TOOL_OPTIONS", "-Xms64m -Xmx384m -Djavax.net.ssl.trustStore=/ci-trust.p12 -Djavax.net.ssl.trustStorePassword=" + storePassword);
         applicationEnvironment = environment("application", env);
         proof.put("stubTrustStorePassword", "[redacted]");
@@ -129,20 +139,21 @@ final class IsolatedReviewRuntime implements AutoCloseable {
         Path repository = Path.of(System.getenv("GITHUB_WORKSPACE"));
         String product = Files.readString(repository.resolve("Caddyfile"));
         Path config = temporary.resolve("Caddyfile");
-        Files.writeString(config, product.replace("{$REPOGUARD_FRONTEND_SERVER_NAME} {", "{$REPOGUARD_FRONTEND_SERVER_NAME} {\n    tls internal"));
-        edge = container("edge", CADDY, environment("edge", Map.of("REPOGUARD_FRONTEND_SERVER_NAME", "localhost")),
-            List.of("--entrypoint", "caddy", "--publish", "127.0.0.1::443", "--volume", config + ":/etc/caddy/Caddyfile:ro"),
+        Files.writeString(config, product.replace("{$REPOGUARD_FRONTEND_SERVER_NAME} {", "{$REPOGUARD_FRONTEND_SERVER_NAME} {\n    tls /ci-edge.crt /ci-edge.key"));
+        edge = container("edge", CADDY, environment("edge", Map.of("REPOGUARD_FRONTEND_SERVER_NAME", edgeIp)),
+            List.of("--entrypoint", "caddy", "--ip", edgeIp, "--volume", config + ":/etc/caddy/Caddyfile:ro",
+                "--volume", temporary.resolve("edge.crt") + ":/ci-edge.crt:ro", "--volume", temporary.resolve("edge.key") + ":/ci-edge.key:ro"),
             List.of("run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"));
-        await(() -> succeeds(List.of("docker", "exec", edge, "test", "-f", "/data/caddy/pki/authorities/local/root.crt")), 30);
-        byte[] certificate = command(List.of("docker", "exec", edge, "cat", "/data/caddy/pki/authorities/local/root.crt")).getBytes(StandardCharsets.US_ASCII);
+        assertThat(inspect("container", edge).path("NetworkSettings").path("Networks").path(owner).path("IPAddress").asText()).isEqualTo(edgeIp);
+        byte[] certificate = Files.readAllBytes(temporary.resolve("edge.crt"));
         var keys = KeyStore.getInstance(KeyStore.getDefaultType()); keys.load(null, null);
         keys.setCertificateEntry("edge", CertificateFactory.getInstance("X.509").generateCertificate(new ByteArrayInputStream(certificate)));
         var managers = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm()); managers.init(keys);
         var tls = SSLContext.getInstance("TLS"); tls.init(null, managers.getTrustManagers(), null);
         http = HttpClient.newBuilder().sslContext(tls).connectTimeout(Duration.ofSeconds(3)).build();
-        String binding = command(List.of("docker", "port", edge, "443/tcp"));
-        assertThat(binding).matches("127\\.0\\.0\\.1:[1-9][0-9]*");
-        baseUrl = "https://localhost:" + binding.substring(binding.lastIndexOf(':') + 1);
+        // Internal bridges deliberately do not publish ports. The trusted hosted runner uses the owned bridge address.
+        baseUrl = "https://" + edgeIp;
+        await(() -> succeeds(List.of("docker", "exec", edge, "wget", "--no-check-certificate", "-qO-", "https://" + edgeIp + "/healthz")), 20);
         request("POST", "/api/v1/auth/register", Map.of("username", "acceptance", "email", "acceptance@example.test", "password", password, "confirmPassword", password), null);
         sql("UPDATE user_account SET role='ADMIN' WHERE username='acceptance'");
         token = request("POST", "/api/v1/auth/login", Map.of("account", "acceptance", "password", password), null).path("accessToken").asText();
@@ -240,7 +251,7 @@ final class IsolatedReviewRuntime implements AutoCloseable {
             try {
                 var state = inspect("container", id);
                 assertThat(state.path("Config").path("Labels").path(LABEL).asText()).isEqualTo(owner);
-                assertThat(state.path("HostConfig").path("NetworkMode").asText()).isEqualTo(network);
+                assertThat(state.path("HostConfig").path("NetworkMode").asText()).isIn(network, owner);
                 String name = state.path("Name").asText().substring(1);
                 try {
                     String logs = command(List.of("docker", "logs", "--tail", "120", id));
