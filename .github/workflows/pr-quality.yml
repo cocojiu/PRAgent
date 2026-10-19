@@ -3,6 +3,11 @@ name: Pull Request Quality
 on:
   workflow_call:
     inputs:
+      isolated_review_acceptance:
+        description: Exercise immutable application images with owned infrastructure and HTTPS supplier stubs
+        required: false
+        default: false
+        type: boolean
       linux_backup_integration:
         description: Validate scheduled backups, SSE proxy transport and immutable schema rollback on a fresh hosted runner
         required: false
@@ -391,6 +396,54 @@ jobs:
             repoguard-backend/target/surefire-reports/*ReviewProgressTransportIntegrationTest*
             repoguard-backend/target/surefire-reports/*RuntimeSchemaRollbackLinuxIntegrationTest*
             repoguard-backend/target/runtime-rollback/
+          if-no-files-found: warn
+          retention-days: 7
+
+  isolated-review-acceptance:
+    name: Isolated long review and browser recovery
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.isolated_review_acceptance == true }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: read
+    env:
+      REPOGUARD_RUN_ISOLATED_REVIEW_ACCEPTANCE: 'true'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install isolated Chromium test runtime
+        working-directory: repoguard-backend
+        run: ./mvnw -B test-compile org.codehaus.mojo:exec-maven-plugin:3.6.3:java -Dexec.mainClass=com.microsoft.playwright.CLI -Dexec.classpathScope=test -Dexec.args="install --with-deps chromium"
+      - name: Run real application acceptance in headed Chromium
+        working-directory: repoguard-backend
+        run: xvfb-run --auto-servernum ./mvnw -B -Dtest=IsolatedReviewAcceptanceLinuxIntegrationTest test
+      - name: Require all acceptance scenarios without skips
+        shell: pwsh
+        working-directory: repoguard-backend
+        run: |
+          [xml]$report = Get-Content -LiteralPath target/surefire-reports/TEST-com.repoguard.agent.integration.IsolatedReviewAcceptanceLinuxIntegrationTest.xml -Raw
+          $suite = $report.testsuite
+          if ([int]$suite.tests -ne 3 -or [int]$suite.skipped -ne 0 -or [int]$suite.failures -ne 0 -or [int]$suite.errors -ne 0) {
+            throw "Isolated review acceptance must execute all three scenarios without skipping."
+          }
+      - name: Upload bounded acceptance results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: isolated-review-acceptance-${{ github.run_id }}
+          path: |
+            repoguard-backend/target/surefire-reports/*IsolatedReviewAcceptanceLinuxIntegrationTest*
+            repoguard-backend/target/isolated-review-acceptance/
           if-no-files-found: warn
           retention-days: 7
 
