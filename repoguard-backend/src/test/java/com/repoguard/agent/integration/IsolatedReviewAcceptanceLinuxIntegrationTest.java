@@ -66,7 +66,7 @@ class IsolatedReviewAcceptanceLinuxIntegrationTest {
         var transport = Collections.synchronizedList(new ArrayList<Map<String, Object>>());
         try (var firstSubscriber = new IsolatedSseSubscriber(runtime, taskId, subscriberToken, "0");
              var futureCursorSubscriber = new IsolatedSseSubscriber(runtime, taskId, subscriberToken, Long.toString(Long.MAX_VALUE));
-             Playwright playwright = Playwright.create(); NativeHeadedBrowser nativeBrowser = new NativeHeadedBrowser(playwright, temporary, runtime.evidence)) {
+             Playwright playwright = Playwright.create(); NativeHeadedBrowser nativeBrowser = new NativeHeadedBrowser(playwright, temporary, runtime.evidence, runtime.baseUrl)) {
             firstSubscriber.awaitProgress(); futureCursorSubscriber.awaitProgress();
             var context = nativeBrowser.browser.contexts().getFirst();
             // Listen to genuine events only: no property replacement and no synthetic dispatch.
@@ -138,15 +138,20 @@ class IsolatedReviewAcceptanceLinuxIntegrationTest {
         runtime.proof.put("longReview", Map.of("passed", true, "heldMilliseconds", heldMillis, "llmCalls", supplier.llmCalls.get(), "duplicateTaskReused", true));
         runtime.captureReadCounters("stream-after", taskId);
         runtime.proof.put("browser", Map.of("headed", true, "genuineVisibilityEvents", true, "focusEmulationDisabled", true, "offlineRecovery", true)); runtime.save();
+
+    }
+
+    @Test @Order(2) @Timeout(value = 3, unit = TimeUnit.MINUTES)
+    void recoversTransientFailureAndPreservesRetryAfterLateSupplierResponses() throws Exception {
         new IsolatedFailureScenarios(runtime, supplier).run();
     }
 
-    @Test @Order(2) @Timeout(value = 20, unit = TimeUnit.MINUTES)
+    @Test @Order(3) @Timeout(value = 20, unit = TimeUnit.MINUTES)
     void recordsCurrentReadBaselineAtFixedTimelineSizes() throws Exception {
         new IsolatedReadPerformanceMatrix(runtime).run();
     }
 
-    @Test @Order(3)
+    @Test @Order(4)
     void persistsSyntheticFeedbackAndPublishesOnlyToTheIdempotentGithubStub() throws Exception {
         assertThat(taskId).isPositive();
         runtime.token = runtime.request("POST", "/api/v1/auth/login", Map.of("account", "acceptance", "password", runtime.password), null).path("accessToken").asText();

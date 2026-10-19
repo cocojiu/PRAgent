@@ -435,8 +435,8 @@ jobs:
         run: |
           [xml]$report = Get-Content -LiteralPath target/surefire-reports/TEST-com.repoguard.agent.integration.IsolatedReviewAcceptanceLinuxIntegrationTest.xml -Raw
           $suite = $report.testsuite
-          if ([int]$suite.tests -ne 3 -or [int]$suite.skipped -ne 0 -or [int]$suite.failures -ne 0 -or [int]$suite.errors -ne 0) {
-            throw "Isolated review acceptance must execute all three scenarios without skipping."
+          if ([int]$suite.tests -ne 4 -or [int]$suite.skipped -ne 0 -or [int]$suite.failures -ne 0 -or [int]$suite.errors -ne 0) {
+            throw "Isolated review acceptance must execute all four scenarios without skipping."
           }
       - name: Upload bounded acceptance results
         if: always()
