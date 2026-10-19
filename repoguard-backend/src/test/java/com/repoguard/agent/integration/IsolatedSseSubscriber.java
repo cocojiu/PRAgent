@@ -30,7 +30,8 @@ final class IsolatedSseSubscriber implements AutoCloseable {
         var response = runtime.http.send(request, HttpResponse.BodyHandlers.ofInputStream());
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.headers().firstValue("Content-Type").orElse("")).startsWith("text/event-stream");
-        assertThat(response.headers().firstValue("X-Accel-Buffering").orElse("")).isEqualTo("no");
+        // Nginx consumes X-Accel-* internally. Assert delivery before completion via awaitProgress instead.
+        assertThat(response.headers().firstValue("Cache-Control").orElse("")).contains("no-store");
         input = response.body();
         Thread.ofVirtual().name("isolated-sse-observer").start(() -> {
             try (var reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))) {

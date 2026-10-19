@@ -94,6 +94,11 @@ final class SupplierStub implements AutoCloseable {
                 } else if (method.equals("GET") && path.matches("/repos/fixture/sample/pulls/[0-9]+")) {
                     result = Map.of("number", 1, "updated_at", "2026-10-19T00:00:00Z", "title", "Isolated acceptance", "state", "open", "head", Map.of("sha", COMMIT, "ref", "acceptance"),
                         "base", Map.of("sha", "b".repeat(40), "ref", "main"));
+                } else if (method.equals("GET") && path.equals("/repos/fixture/sample")) {
+                    result = Map.of("default_branch", "main", "full_name", "fixture/sample");
+                } else if (method.equals("GET") && path.equals("/repos/fixture/sample/contents/src/Example.java")) {
+                    String content = "class Example {\n int value = " + (java.util.Objects.toString(exchange.getRequestURI().getRawQuery(), "").contains(COMMIT) ? "1" : "0") + ";\n}\n";
+                    result = Map.of("type", "file", "encoding", "base64", "content", java.util.Base64.getEncoder().encodeToString(content.getBytes(StandardCharsets.UTF_8)));
                 } else if (method.equals("GET") && (path.contains("/contents") || path.contains("/git/trees/"))) {
                     result = path.contains("/git/trees/") ? Map.of("tree", List.of(), "truncated", false) : List.of();
                 } else {

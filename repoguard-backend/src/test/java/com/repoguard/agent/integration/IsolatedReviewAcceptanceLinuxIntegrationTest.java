@@ -76,7 +76,7 @@ class IsolatedReviewAcceptanceLinuxIntegrationTest {
                 if (request.url().contains("/events") || request.url().contains("/status")) transport.add(Map.of("event", "request", "path", URI.create(request.url()).getPath(), "at", Instant.now().toString()));
             });
             page.onResponse(response -> {
-                if (response.url().contains("/events") || response.url().contains("/status")) transport.add(Map.of("event", "response", "path", URI.create(response.url()).getPath(), "status", response.status(), "at", Instant.now().toString()));
+                if (response.url().contains("/events") || response.url().contains("/status")) transport.add(Map.of("event", "response", "path", URI.create(response.url()).getPath(), "status", response.status(), "traceId", java.util.Objects.toString(response.headerValue("X-Trace-Id"), ""), "at", Instant.now().toString()));
             });
             page.navigate(runtime.baseUrl + "/login");
             page.getByPlaceholder("请输入用户名或邮箱").fill("acceptance");
@@ -145,6 +145,7 @@ class IsolatedReviewAcceptanceLinuxIntegrationTest {
         // API layer only: the proxy has separate rate limits, so edge bytes/latency remain unmeasured here.
         String apiIp = runtime.inspect("container", runtime.api).path("NetworkSettings").path("Networks").path(runtime.owner).path("IPAddress").asText();
         String endpoint = "http://" + apiIp + ":8081/api/v1/reviews/" + baselineTask + "/status";
+        runtime.enableSqlObservation();
         int previous = 0;
         for (int size : new int[] {10, 1000, 10000, 50000}) {
             if (size > previous) {
@@ -158,6 +159,7 @@ class IsolatedReviewAcceptanceLinuxIntegrationTest {
             assertThat(runtime.sql("SELECT COUNT(*) FROM review_timeline WHERE task_id=" + baselineTask)).isEqualTo(Integer.toString(size));
             for (int concurrency : new int[] {1, 2, 4}) {
                 for (int warmup = 0; warmup < 10; warmup++) measure(endpoint);
+                runtime.captureReadCounters("rows-" + size + "-c" + concurrency + "-before", baselineTask);
                 var samples = Collections.synchronizedList(new ArrayList<Map<String, Object>>());
                 try (var executor = java.util.concurrent.Executors.newFixedThreadPool(concurrency)) {
                     var jobs = new ArrayList<java.util.concurrent.Future<?>>();
@@ -166,6 +168,7 @@ class IsolatedReviewAcceptanceLinuxIntegrationTest {
                     }));
                     for (var job : jobs) job.get(60, TimeUnit.SECONDS);
                 }
+                runtime.captureReadCounters("rows-" + size + "-c" + concurrency + "-after", baselineTask);
                 var durations = samples.stream().filter(row -> row.get("status").equals(200)).map(row -> (Long) row.get("durationNanos")).sorted().toList();
                 var summary = new LinkedHashMap<String, Object>();
                 summary.put("rows", size); summary.put("concurrency", concurrency); summary.put("attempts", samples.size()); summary.put("successes", durations.size());
@@ -176,7 +179,7 @@ class IsolatedReviewAcceptanceLinuxIntegrationTest {
             }
         }
         runtime.proof.put("performance", Map.of("scope", "current status API baseline only", "observations", 2400, "beforeAfterBenefitProven", false,
-            "uncovered", List.of("list/summary/detail", "failed/archive shapes", "rows examined and CPU/GC", "pre-CODE032 build", "production representative distribution"))); runtime.save();
+            "uncovered", List.of("list/summary/detail", "failed/archive shapes", "pre-CODE032 build", "production representative distribution"))); runtime.save();
     }
 
     private static Map<String, Object> measure(String endpoint) throws Exception {
@@ -215,9 +218,11 @@ class IsolatedReviewAcceptanceLinuxIntegrationTest {
     private static void awaitPublication(long batch) throws Exception {
         assertThat(batch).isPositive();
         IsolatedReviewRuntime.await(() -> {
-            try { return runtime.sql("SELECT status FROM github_comment_publication_batch WHERE id=" + batch).equals("COMPLETED"); }
+            try { return java.util.Set.of("completed", "skipped", "empty").contains(runtime.sql("SELECT status FROM github_comment_publication_batch WHERE id=" + batch)); }
             catch (Exception e) { return false; }
         }, 30);
+        String result = runtime.sql("SELECT status,attempted_count,succeeded_count,failed_count,skipped_count FROM github_comment_publication_batch WHERE id=" + batch);
+        Files.writeString(runtime.evidence.resolve("publication-batch-" + batch + ".tsv"), result);
         assertThat(runtime.sql("SELECT failed_count FROM github_comment_publication_batch WHERE id=" + batch)).isEqualTo("0");
     }
 

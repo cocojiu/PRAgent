@@ -61,6 +61,7 @@ final class IsolatedReviewRuntime implements AutoCloseable {
     String token;
     HttpClient http;
     private Path applicationEnvironment;
+    private final List<Map<String, Object>> httpRequests = new ArrayList<>();
     private String storePassword;
 
     IsolatedReviewRuntime(Path temporary) { this.temporary = temporary; }
@@ -194,11 +195,43 @@ final class IsolatedReviewRuntime implements AutoCloseable {
         var request = HttpRequest.newBuilder(URI.create(baseUrl + path)).timeout(Duration.ofSeconds(15)).header("Content-Type", "application/json");
         if (bearer != null) request.header("Authorization", "Bearer " + bearer).header("X-RepoGuard-Admin-Key", adminKey);
         request.method(method, body == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(JSON.writeValueAsString(body)));
+        long started = System.nanoTime();
         var response = http.send(request.build(), HttpResponse.BodyHandlers.ofString());
+        httpRequests.add(Map.of("method", method, "path", path, "status", response.statusCode(),
+            "traceId", response.headers().firstValue("X-Trace-Id").orElse(""), "durationNanos", System.nanoTime() - started));
+        Files.writeString(evidence.resolve("http-request-metadata.json"), JSON.writeValueAsString(httpRequests));
         assertThat(response.statusCode()).as("HTTP %s %s; response body withheld", method, path).isEqualTo(200);
         JsonNode root = JSON.readTree(response.body());
         assertThat(root.path("success").asBoolean()).as("Application response code %s", root.path("code").asText()).isTrue();
         return root.path("data");
+    }
+
+    void enableSqlObservation() throws Exception {
+        sql("UPDATE performance_schema.setup_consumers SET ENABLED='YES' WHERE NAME='events_statements_history_long'");
+    }
+
+    void captureReadCounters(String name, long task) throws Exception {
+        String digests = sql("SELECT DIGEST,DIGEST_TEXT,COUNT_STAR,SUM_ROWS_EXAMINED,SUM_ROWS_SENT,SUM_TIMER_WAIT "
+            + "FROM performance_schema.events_statements_summary_by_digest WHERE SCHEMA_NAME='review_acceptance' "
+            + "AND DIGEST_TEXT LIKE 'SELECT%' AND (DIGEST_TEXT LIKE '%review_task%' OR DIGEST_TEXT LIKE '%review_timeline%') "
+            + "AND DIGEST_TEXT NOT LIKE '%performance_schema%' ORDER BY DIGEST LIMIT 100");
+        Files.writeString(evidence.resolve(name + "-sql-digests.tsv"), digests);
+        var args = new ArrayList<>(List.of("docker", "stats", "--no-stream", "--format", "{{json .}}")); args.addAll(containers);
+        Files.writeString(evidence.resolve(name + "-container-stats.jsonl"), command(args));
+        String apiIp = inspect("container", api).path("NetworkSettings").path("Networks").path(owner).path("IPAddress").asText();
+        var metrics = http.send(HttpRequest.newBuilder(URI.create("http://" + apiIp + ":8081/actuator/prometheus"))
+            .timeout(Duration.ofSeconds(5)).header("Authorization", "Bearer " + token).header("X-RepoGuard-Admin-Key", adminKey).GET().build(), HttpResponse.BodyHandlers.ofString());
+        String boundedMetrics = metrics.statusCode() == 200 ? String.join("\n", metrics.body().lines()
+            .filter(line -> line.matches("^(jvm_gc_|process_cpu_|system_cpu_|jvm_memory_).*")).limit(200).toList())
+            : "unavailable HTTP " + metrics.statusCode();
+        Files.writeString(evidence.resolve(name + "-jvm-metrics.txt"), boundedMetrics);
+        String actual = sql("SELECT SQL_TEXT FROM performance_schema.events_statements_history_long WHERE CURRENT_SCHEMA='review_acceptance' "
+            + "AND DIGEST_TEXT LIKE 'SELECT%FROM%review_timeline%' AND DIGEST_TEXT NOT LIKE '%performance_schema%' "
+            + "AND SQL_TEXT LIKE '%" + task + "%' ORDER BY EVENT_ID DESC LIMIT 1");
+        if (!actual.isBlank() && !actual.contains("?") && !actual.contains(";") && actual.stripLeading().toUpperCase(java.util.Locale.ROOT).startsWith("SELECT")) {
+            Files.writeString(evidence.resolve(name + "-actual-timeline.sql.txt"), actual);
+            Files.writeString(evidence.resolve(name + "-timeline-explain-analyze.txt"), sql("EXPLAIN ANALYZE " + actual));
+        }
     }
 
     void publishTerminalDuplicate(long task) throws Exception {
