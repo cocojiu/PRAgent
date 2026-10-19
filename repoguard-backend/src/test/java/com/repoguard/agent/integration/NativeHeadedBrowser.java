@@ -33,7 +33,7 @@ final class NativeHeadedBrowser implements AutoCloseable {
         process = new ProcessBuilder(playwright.chromium().executablePath(), "--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0",
             "--user-data-dir=" + profile, "--no-sandbox", "--no-first-run", "--no-default-browser-check", "--ignore-certificate-errors", "--disable-dev-shm-usage",
             "--disable-background-networking", "--disable-component-update", "--disable-sync", "--dns-prefetch-disable",
-            "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost",
+            "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE " + edgeHost,
             "--proxy-server=http://127.0.0.1:" + denyProxy.getLocalPort(), "--proxy-bypass-list=" + edgeHost, "about:blank")
             .redirectErrorStream(true).redirectOutput(log.toFile()).start();
             IsolatedReviewRuntime.await(() -> Files.exists(profile.resolve("DevToolsActivePort")) && process.isAlive(), 15);
