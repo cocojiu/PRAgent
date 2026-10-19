@@ -109,24 +109,10 @@ final class GithubSupersededSummaryPublisher {
         healthReporter.recordExternalFailure(classified);
         String message = healthReporter.conciseError(classified);
         List<GithubReviewCommentResult> results = drafts.stream()
-            .map(draft -> failedResult(draft, message))
+            .map(draft -> GithubReviewCommentResult.failed(draft, message, classified))
             .toList();
         healthReporter.markChecked(settings, message);
         return new GithubCommentBatchResult(results, drafts.size());
-    }
-
-    private GithubReviewCommentResult failedResult(GithubReviewCommentDraft draft, String message) {
-        return new GithubReviewCommentResult(
-            draft.findingId(),
-            draft.path(),
-            draft.line(),
-            draft.targetType(),
-            false,
-            GithubCommentPublicationStatus.FAILED.code(),
-            message,
-            null,
-            null
-        );
     }
 
     private String shortCommit(String commitSha) {

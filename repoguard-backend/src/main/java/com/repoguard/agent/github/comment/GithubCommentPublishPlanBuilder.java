@@ -48,7 +48,9 @@ public class GithubCommentPublishPlanBuilder {
                 Boolean.TRUE.equals(item.published()),
                 Boolean.TRUE.equals(item.published())
                     ? GithubCommentPublicationStatus.ALREADY_PUBLISHED.code()
-                    : GithubCommentPublicationStatus.SKIPPED.code(),
+                    : GithubCommentPublicationStatus.OUTCOME_UNKNOWN.code().equals(item.publicationStatus())
+                        ? GithubCommentPublicationStatus.OUTCOME_UNKNOWN.code()
+                        : GithubCommentPublicationStatus.SKIPPED.code(),
                 Boolean.TRUE.equals(item.published()) ? "GitHub comment already published" : item.reason(),
                 null,
                 null,

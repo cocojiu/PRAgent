@@ -144,6 +144,35 @@ class GithubCommentPreviewItemBuilderTest {
         return finding;
     }
 
+
+    @Test
+    void ambiguousPublicationBlocksFindingAndSummaryOnEverySubsequentPlan() {
+        GithubCommentPublication publication = publication(1L, "line");
+        publication.setSuccess(false);
+        publication.setStatus("outcome_unknown");
+        publication.setGithubUrl(null);
+        publication.setPublishedAt(null);
+        var findingItem = builder.buildFindingItem(
+            finding("HIGH", "src/App.java", 12, "Check", "Fix", null),
+            changedFile("src/App.java", "MODIFY"), publication);
+        var summary = new PrReviewSummaryDto("high", "summary", "check", false, true, List.of(), List.of(), "body");
+        var summaryItem = builder.buildPrSummaryItem(summary, publication);
+
+        for (var item : List.of(findingItem, summaryItem)) {
+            assertThat(item.commentable()).isFalse();
+            assertThat(item.published()).isFalse();
+            assertThat(item.publicationStatus()).isEqualTo("outcome_unknown");
+            assertThat(item.reason()).contains("核验");
+        }
+        var plan = new GithubCommentPublishPlanBuilder().build(List.of(findingItem, summaryItem));
+        assertThat(plan.drafts()).isEmpty();
+        assertThat(plan.skippedItems()).extracting("status").containsExactly("outcome_unknown", "outcome_unknown");
+        var failure = new com.repoguard.agent.github.GithubWritebackFailureClassifier()
+            .classify("outcome_unknown", false, null);
+        assertThat(failure.category()).isEqualTo("github_write_outcome_unknown");
+        assertThat(failure.suggestion()).contains("核验前不会再次发布");
+    }
+
     private ChangedFile changedFile(String path, String changeType) {
         ChangedFile file = new ChangedFile();
         file.setFilePath(path);

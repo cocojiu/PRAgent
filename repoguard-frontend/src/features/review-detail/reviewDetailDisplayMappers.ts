@@ -229,6 +229,7 @@ export const findingFeedbackPromptTitle = (status: FindingFeedbackStatus) => {
 
 export const publishStatusText = (status: string) => {
   const labels: Record<string, string> = {
+    outcome_unknown: "结果待核验",
     published: "已发布",
     failed: "失败",
     skipped: "跳过",
@@ -270,7 +271,8 @@ export const publicationItemStatusClass = (status: string) => {
     downgraded_to_pr_comment: "success",
     already_published: "skipped",
     skipped: "skipped",
-    failed: "failed"
+    failed: "failed",
+    outcome_unknown: "failed"
   };
   return classes[status] ?? "skipped";
 };
@@ -292,7 +294,8 @@ export const publicationMessageText = (message: string | undefined, status: stri
     downgraded_to_pr_comment: "GitHub 行评论定位失败，已降级为 PR 总评评论。",
     already_published: "该审查发现此前已经发布，本次已跳过。",
     skipped: "本次未回写该审查发现。",
-    failed: "GitHub 评论回写失败。"
+    failed: "GitHub 评论回写失败。",
+    outcome_unknown: "请求可能已成功，请先核对 GitHub 评论和 Review，核验前不会再次发布。"
   };
   return fallbackLabels[status] ?? status;
 };

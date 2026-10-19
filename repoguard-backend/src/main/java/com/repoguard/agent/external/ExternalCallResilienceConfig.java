@@ -43,7 +43,9 @@ public class ExternalCallResilienceConfig {
             .slidingWindowSize(Math.max(2, properties.getCircuitBreakerSlidingWindowSize()))
             .minimumNumberOfCalls(Math.max(1, properties.getCircuitBreakerMinimumCalls()))
             .waitDurationInOpenState(Duration.ofSeconds(Math.max(1, properties.getCircuitBreakerWaitOpenSeconds())))
-            .recordException(throwable -> isRetryable(classifier, throwable))
+            .recordException(throwable -> isRetryable(classifier, throwable)
+                || throwable instanceof ExternalCallException failure
+                    && "github_write_outcome_unknown".equals(failure.getCategory()))
             .ignoreException(ExternalRetryTiming::localDecline)
             .build();
         return CircuitBreaker.of("repoguard-" + name, config);

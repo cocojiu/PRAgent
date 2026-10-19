@@ -1,5 +1,6 @@
 package com.repoguard.agent.github;
 
+import com.repoguard.agent.external.ExternalCallException;
 import com.repoguard.agent.external.ExternalCallResilience;
 import com.repoguard.agent.external.ExternalHttpJsonResponseReader;
 import com.repoguard.agent.external.ExternalHttpResponseProfile;
@@ -35,7 +36,7 @@ final class GithubCommentPublicationGateway {
         GithubIntegrationSettings settings,
         ExternalCallResilience resilience
     ) {
-        return executeGithub("publish_pull_request_comment", resilience, () -> restClient.post()
+        return executeGithubWrite("publish_pull_request_comment", resilience, () -> restClient.post()
             .uri(prCommentUrl)
             .headers(headers -> applyGithubHeaders(headers, settings))
             .body(Map.of("body", body))
@@ -53,7 +54,7 @@ final class GithubCommentPublicationGateway {
         GithubIntegrationSettings settings,
         ExternalCallResilience resilience
     ) {
-        return executeGithub("publish_line_comment", resilience, () -> restClient.post()
+        return executeGithubWrite("publish_line_comment", resilience, () -> restClient.post()
             .uri(lineCommentUrl)
             .headers(headers -> applyGithubHeaders(headers, settings))
             .body(Map.of(
@@ -85,7 +86,7 @@ final class GithubCommentPublicationGateway {
                 "body", draft.body()
             ))
             .toList();
-        return executeGithub("publish_pull_request_review", resilience, () -> restClient.post()
+        return executeGithubWrite("publish_pull_request_review", resilience, () -> restClient.post()
             .uri(reviewUrl)
             .headers(headers -> applyGithubHeaders(headers, settings))
             .body(Map.of(
@@ -106,7 +107,7 @@ final class GithubCommentPublicationGateway {
         GithubIntegrationSettings settings,
         ExternalCallResilience resilience
     ) {
-        return executeGithub("list_pull_request_review_comments", resilience, () -> restClient.get()
+        return resilience.github("list_pull_request_review_comments", () -> restClient.get()
             .uri(url)
             .headers(headers -> applyGithubHeaders(headers, settings))
             .exchange((request, response) -> readJsonResponse(
@@ -140,12 +141,53 @@ final class GithubCommentPublicationGateway {
         Class<T> responseType,
         String operation
     ) throws IOException {
-        return jsonResponseReader.readSuccessfulJson(
+        T result = jsonResponseReader.readSuccessfulJson(
             response,
             responseType,
             "GitHub " + operation + " failed",
             ExternalHttpResponseProfile.GITHUB
         );
+        if (responseType == GithubCommentResponse.class) {
+            GithubCommentResponse comment = (GithubCommentResponse) result;
+            requirePublicationIdentity(comment == null ? null : comment.id(), comment == null ? null : comment.htmlUrl());
+        } else if (responseType == GithubReviewResponse.class) {
+            GithubReviewResponse review = (GithubReviewResponse) result;
+            requirePublicationIdentity(review == null ? null : review.id(), review == null ? null : review.htmlUrl());
+        }
+        return result;
+    }
+
+    private void requirePublicationIdentity(Long id, String url) {
+        if (id == null || id <= 0 || !StringUtils.hasText(url)) {
+            throw unknownOutcome(null);
+        }
+    }
+
+    private <T> T executeGithubWrite(
+        String operation,
+        ExternalCallResilience resilience,
+        java.util.function.Supplier<T> supplier
+    ) {
+        // A failed response cannot prove a non-idempotent POST was rejected.
+        // Classify inside the retry decorator so it never repeats an ambiguous write.
+        return resilience.github(operation, () -> {
+            try {
+                return supplier.get();
+            } catch (RuntimeException ex) {
+                if (ex instanceof RestClientResponseException responseException) {
+                    int status = responseException.getStatusCode().value();
+                    if (status >= 400 && status < 500 && status != 408) {
+                        throw ex;
+                    }
+                }
+                throw unknownOutcome(ex);
+            }
+        });
+    }
+
+    private ExternalCallException unknownOutcome(RuntimeException cause) {
+        return new ExternalCallException("GitHub", "github_write_outcome_unknown", false, null,
+            GithubCommentPublicationStatus.VERIFICATION_MESSAGE, cause);
     }
 
     private boolean containsUnresolvableLineSignal(String value) {
@@ -160,11 +202,4 @@ final class GithubCommentPublicationGateway {
         }
     }
 
-    private <T> T executeGithub(
-        String operation,
-        ExternalCallResilience resilience,
-        java.util.function.Supplier<T> supplier
-    ) {
-        return resilience.github(operation, supplier);
-    }
 }

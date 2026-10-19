@@ -5,6 +5,7 @@ import com.repoguard.agent.dto.PrReviewSummaryDto;
 import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.GithubCommentPublication;
 import com.repoguard.agent.entity.ReviewFinding;
+import com.repoguard.agent.github.GithubCommentPublicationStatus;
 import com.repoguard.agent.github.GithubCommentTargetType;
 import com.repoguard.agent.review.FindingFeedbackStatus;
 import java.time.format.DateTimeFormatter;
@@ -29,6 +30,7 @@ public class GithubCommentPreviewItemBuilder {
         GithubCommentTargetType targetType = resolveCommentTargetType(finding, changedFile);
         String reason = resolveCommentReason(targetType, finding, changedFile);
         boolean published = isPublished(publication);
+        boolean unknown = isUnknown(publication);
         boolean actionable = isActionableFinding(finding);
         return new GithubCommentPreviewItem(
             finding.getId(),
@@ -38,9 +40,10 @@ public class GithubCommentPreviewItemBuilder {
             finding.getMessage(),
             finding.getRecommendation(),
             buildGithubCommentBody(finding, targetType),
-            !published && actionable,
+            !published && !unknown && actionable,
             targetType.code(),
-            published ? "GitHub comment already published" : actionable ? reason : feedbackSkipReason(finding),
+            published ? "GitHub comment already published" : unknown ? GithubCommentPublicationStatus.VERIFICATION_MESSAGE
+                : actionable ? reason : feedbackSkipReason(finding),
             published,
             publication == null ? null : publication.getStatus(),
             publication == null ? null : publication.getGithubUrl(),
@@ -57,6 +60,7 @@ public class GithubCommentPreviewItemBuilder {
         GithubCommentPublication publication
     ) {
         boolean published = isPublished(publication);
+        boolean unknown = isUnknown(publication);
         return new GithubCommentPreviewItem(
             null,
             summary.overallRisk(),
@@ -65,9 +69,9 @@ public class GithubCommentPreviewItemBuilder {
             summary.summary(),
             summary.mergeRecommendation(),
             summary.githubCommentBody(),
-            !published,
+            !published && !unknown,
             GithubCommentTargetType.PULL_REQUEST.code(),
-            published ? "GitHub comment already published" : null,
+            published ? "GitHub comment already published" : unknown ? GithubCommentPublicationStatus.VERIFICATION_MESSAGE : null,
             published,
             publication == null ? null : publication.getStatus(),
             publication == null ? null : publication.getGithubUrl(),
@@ -77,6 +81,10 @@ public class GithubCommentPreviewItemBuilder {
                 : publication.getPublishedAt().format(DATE_TIME_FORMATTER),
             "valid"
         );
+    }
+
+    private boolean isUnknown(GithubCommentPublication publication) {
+        return publication != null && GithubCommentPublicationStatus.OUTCOME_UNKNOWN.code().equals(publication.getStatus());
     }
 
     private boolean isPublished(GithubCommentPublication publication) {

@@ -39,6 +39,30 @@ class GithubCommentPublicationRecorderTest {
         when(batchItemMapper.insertBatch(any())).thenAnswer(invocation -> ((List<?>) invocation.getArgument(0)).size());
     }
 
+
+    @Test
+    void persistsUnknownResultAndDoesNotClearItWithALaterDefinitiveFailure() {
+        when(publicationMapper.selectOne(any())).thenReturn(null);
+        var unknown = recorder.recordPublication(521L, new GithubReviewCommentResult(
+            1L, "src/App.java", 8, "line", false, "outcome_unknown", "verification required", null, null));
+        assertThat(unknown.getStatus()).isEqualTo("outcome_unknown");
+        assertThat(unknown.getSuccess()).isFalse();
+        assertThat(unknown.getPublishedAt()).isNull();
+        verify(publicationMapper).insert(unknown);
+        when(publicationMapper.selectOne(any())).thenReturn(unknown);
+
+        var retained = recorder.recordPublication(521L, new GithubReviewCommentResult(
+            1L, "src/App.java", 8, "line", false, "failed", "later request rejected", null, null));
+        assertThat(retained.getStatus()).isEqualTo("outcome_unknown");
+        assertThat(retained.getMessage()).isEqualTo("verification required");
+        org.mockito.Mockito.verify(publicationMapper, org.mockito.Mockito.never()).updateById(any(GithubCommentPublication.class));
+
+        var confirmed = recorder.recordPublication(521L, new GithubReviewCommentResult(
+            1L, "src/App.java", 8, "line", true, "published", "confirmed", "https://example.invalid/1", 1L));
+        assertThat(confirmed.getStatus()).isEqualTo("published");
+        assertThat(confirmed.getPublishedAt()).isNotNull();
+    }
+
     @Test
     void recordPublicationInsertsNewFindingPublication() {
         when(publicationMapper.selectOne(any())).thenReturn(null);
