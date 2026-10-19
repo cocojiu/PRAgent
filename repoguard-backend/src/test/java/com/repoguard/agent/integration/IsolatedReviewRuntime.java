@@ -70,9 +70,9 @@ final class IsolatedReviewRuntime implements AutoCloseable {
         assertThat(System.getenv("GITHUB_RUN_ID")).matches("[1-9][0-9]*");
         Files.createDirectories(evidence);
         long memory = Long.parseLong(command(List.of("docker", "info", "--format", "{{.MemTotal}}")));
-        assertThat(memory).as("Hosted acceptance needs at least 5 GiB for five bounded services and Chromium").isGreaterThanOrEqualTo(5L * 1024 * 1024 * 1024);
+        assertThat(memory).as("Hosted acceptance needs at least 7 GiB for six bounded services and Chromium").isGreaterThanOrEqualTo(7L * 1024 * 1024 * 1024);
         proof.put("dockerHostMemoryBytes", memory);
-        proof.put("serviceLimits", Map.of("containers", 5, "memoryBytesEach", 768L * 1024 * 1024, "cpusEach", 1, "pidsEach", 256));
+        proof.put("serviceLimits", Map.of("containers", 6, "memoryBytesEach", 768L * 1024 * 1024, "cpusEach", 1, "pidsEach", 256));
         proof.put("revision", REVISION); proof.put("backend", BACKEND); proof.put("frontend", FRONTEND);
         proof.put("productionWrites", 0); proof.put("realProviderCalls", 0); proof.put("naturalBusinessReplay", false);
         proof.put("runId", System.getenv("GITHUB_RUN_ID"));
