@@ -25,7 +25,7 @@ class GithubCommentDraftPublisherTest {
     );
     private final GithubCommentDraftPublisher publisher = new GithubCommentDraftPublisher(
         githubPullRequestClient,
-        publicationRecorder,
+            com.repoguard.agent.testsupport.GithubPublicationProtocolFixture.protocol(publicationRecorder),
         new GithubWritebackFailureClassifier()
     );
 
@@ -71,9 +71,9 @@ class GithubCommentDraftPublisherTest {
 
         assertThat(result).hasSize(2);
         assertThat(result).extracting("success").containsExactly(false, false);
-        assertThat(result).extracting("status").containsExactly("failed", "failed");
-        assertThat(result.getFirst().message()).isEqualTo("403 Resource not accessible by integration");
-        assertThat(result.getFirst().failureCategory()).isEqualTo("github_permission_denied");
+        assertThat(result).extracting("status").containsExactly("outcome_unknown", "outcome_unknown");
+        assertThat(result.getFirst().message()).contains("待核验");
+        assertThat(result.getFirst().failureCategory()).isEqualTo("github_write_outcome_unknown");
         assertThat(result.getFirst().publishedAt()).isNull();
     }
 
@@ -87,7 +87,7 @@ class GithubCommentDraftPublisherTest {
             new GithubReviewCommentDraft(11L, "src/App.java", 42, "body", "line")
         ));
 
-        assertThat(result.getFirst().message()).isEqualTo("RuntimeException");
+        assertThat(result.getFirst().message()).contains("待核验");
     }
 
     private ReviewTask task() {

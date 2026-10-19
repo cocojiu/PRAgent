@@ -42,7 +42,7 @@ public class GithubCommentPreviewItemBuilder {
             buildGithubCommentBody(finding, targetType),
             !published && !unknown && actionable,
             targetType.code(),
-            published ? "GitHub comment already published" : unknown ? GithubCommentPublicationStatus.VERIFICATION_MESSAGE
+            published ? "GitHub comment already published" : unknown ? blockedReason(publication)
                 : actionable ? reason : feedbackSkipReason(finding),
             published,
             publication == null ? null : publication.getStatus(),
@@ -71,7 +71,7 @@ public class GithubCommentPreviewItemBuilder {
             summary.githubCommentBody(),
             !published && !unknown,
             GithubCommentTargetType.PULL_REQUEST.code(),
-            published ? "GitHub comment already published" : unknown ? GithubCommentPublicationStatus.VERIFICATION_MESSAGE : null,
+            published ? "GitHub comment already published" : unknown ? blockedReason(publication) : null,
             published,
             publication == null ? null : publication.getStatus(),
             publication == null ? null : publication.getGithubUrl(),
@@ -83,8 +83,12 @@ public class GithubCommentPreviewItemBuilder {
         );
     }
 
+    private String blockedReason(GithubCommentPublication publication) {
+        return "closed".equals(publication.getStatus()) ? "已人工关闭，不再回写。" : GithubCommentPublicationStatus.VERIFICATION_MESSAGE;
+    }
+
     private boolean isUnknown(GithubCommentPublication publication) {
-        return publication != null && GithubCommentPublicationStatus.OUTCOME_UNKNOWN.code().equals(publication.getStatus());
+        return publication != null && Set.of("outcome_unknown", "closed").contains(publication.getStatus());
     }
 
     private boolean isPublished(GithubCommentPublication publication) {

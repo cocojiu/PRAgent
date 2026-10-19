@@ -6,6 +6,7 @@ bindEnterpriseTenantRepository -> enterpriseTenantControllerPutRepository // PUT
 cancelLlmEvaluationRun -> reviewCalibrationControllerCancelEvaluationRun // POST /api/v1/config/review-calibration/evaluation-runs/{runId}/cancel
 changePassword -> authControllerChangePassword // POST /api/v1/auth/password/change
 cleanupDataRetention -> dataRetentionControllerCleanup // POST /api/v1/config/data-retention/cleanup
+closeGithubPublication -> githubPublicationResolutionControllerClose // POST /api/v1/reviews/{taskId}/github-comments/resolutions/{publicationId}/close
 compareLlmEvaluationReports -> reviewCalibrationControllerCompareEvaluationReports // GET /api/v1/config/review-calibration/evaluation-reports/{reportId}/compare/{candidateReportId}
 confirmReviewMemberAssignment -> reviewMemberAssignmentControllerConfirm // POST /api/v1/review-workflow/tasks/{taskId}/assignment/confirm
 createEnterpriseTenant -> enterpriseTenantControllerCreate // POST /api/v1/enterprise/tenants
@@ -56,6 +57,7 @@ fetchNotificationEvents -> notificationIntegrationControllerListEvents // GET /a
 fetchNotificationReadKeys -> notificationControllerReadKeys // GET /api/v1/notifications/read
 fetchNotificationReport -> notificationControllerReport // GET /api/v1/notifications/reports
 fetchNotifications -> notificationControllerGetNotifications // GET /api/v1/notifications
+fetchPendingGithubPublications -> githubPublicationResolutionControllerList // GET /api/v1/reviews/{taskId}/github-comments/resolutions
 fetchRabbitMqIntegrationConfig -> systemConfigControllerGetRabbitMqIntegration // GET /api/v1/config/integrations/rabbitmq
 fetchRepositoryPolicyPreview -> repositoryPolicyControllerPreview // GET /api/v1/config/repository-policy/preview
 fetchRepositorySuppressions -> repositoryPolicyControllerListSuppressions // GET /api/v1/config/repository-policy/suppressions
@@ -135,4 +137,5 @@ updateReviewStrategyEnforcement -> systemConfigControllerPromoteReviewStrategy /
 updateSystemSettings -> systemConfigControllerUpdateSystemSettings // PUT /api/v1/config/system-settings
 updateUserRole -> userManagementControllerUpdateRole // PUT /api/v1/users/{id}/role
 updateUserStatus -> userManagementControllerUpdateStatus // PUT /api/v1/users/{id}/status
+verifyGithubPublication -> githubPublicationResolutionControllerVerify // POST /api/v1/reviews/{taskId}/github-comments/resolutions/{publicationId}/verify
 verifyLlmModelReleaseAudit -> reviewCalibrationControllerVerifyModelReleaseAudit // GET /api/v1/config/review-calibration/release-center/audits/{auditId}/verify

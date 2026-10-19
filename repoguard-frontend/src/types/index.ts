@@ -17,3 +17,5 @@ export type { ManagedUser, UserCreateRequest, UserOperationAudit } from "../api/
 export * from "./codeowners";
 
 export * from "./reviewAssignment";
+
+export type { PendingGithubPublication, GithubPublicationVerifyRequest, GithubPublicationCloseRequest } from "../api/githubPublicationTypes";

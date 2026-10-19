@@ -27,6 +27,7 @@ const migratedOperationPrefixes = [
   "codeownersRecommendationController",
   "reviewMemberAssignmentController",
   "githubCommentHistoryController",
+  "githubPublicationResolutionController",
   "ciSarifSetupController",
   "ciSarifControllerIssueCredential",
   "githubFeedbackController",
