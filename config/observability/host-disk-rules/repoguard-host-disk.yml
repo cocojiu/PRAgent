@@ -1,0 +1,30 @@
+# Install into the active ruler directory only when host disk telemetry is enabled.
+groups:
+  - name: repoguard-host-disk
+    interval: 1m
+    rules:
+      - alert: RepoGuardHostDiskWarning
+        expr: |
+          (max by (mount) (max_over_time({job="repoguard-host-disk"} | json | event="host_disk_capacity" | unwrap usedPercent | __error__="" [3m])) >= 80)
+          or (min by (mount) (min_over_time({job="repoguard-host-disk"} | json | event="host_disk_capacity" | unwrap availableBytes | __error__="" [3m])) < 10737418240)
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Host disk usage is at least 80% or available space is below 10 GiB
+      - alert: RepoGuardHostDiskCritical
+        expr: |
+          (max by (mount) (max_over_time({job="repoguard-host-disk"} | json | event="host_disk_capacity" | unwrap usedPercent | __error__="" [3m])) >= 90)
+          or (min by (mount) (min_over_time({job="repoguard-host-disk"} | json | event="host_disk_capacity" | unwrap availableBytes | __error__="" [3m])) < 5368709120)
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Host disk usage is at least 90% or available space is below 5 GiB
+      - alert: RepoGuardHostDiskTelemetryMissing
+        expr: absent_over_time({job="repoguard-host-disk"} [5m])
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Host disk capacity samples are missing

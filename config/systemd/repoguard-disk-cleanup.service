@@ -1,0 +1,22 @@
+[Unit]
+Description=Apply explicitly enabled RepoGuard image retention policy
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=root
+UMask=0077
+WorkingDirectory=/opt/repoguard
+ExecStart=/usr/bin/python3 /opt/repoguard/scripts/disk-maintenance.py --root /opt/repoguard cleanup --apply
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=tmpfs
+# Retention verifies registry recovery using existing Docker authentication.
+BindReadOnlyPaths=-/root/.docker/config.json
+ReadWritePaths=/opt/repoguard/.deploy-state /opt/repoguard/.deploy.lock
+MemoryMax=192M
+CPUQuota=25%
+Nice=10
+TimeoutStartSec=20min

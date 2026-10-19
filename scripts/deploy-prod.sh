@@ -987,6 +987,11 @@ deploy_services="mysql rabbitmq backend frontend caddy"
 if has_compose_service backend-worker; then
   deploy_services="mysql rabbitmq backend backend-worker frontend caddy"
 fi
+disk_maintenance() {
+  # The maintenance child verifies the inherited descriptor against this exact lock.
+  python3 scripts/disk-maintenance.py --root "$(pwd -P)" --deployment-lock-held "$@"
+}
+disk_maintenance capacity
 compose pull $deploy_services
 preflight_release_images
 validate_backend_secret_mounts
@@ -1048,5 +1053,12 @@ if [ "$MIGRATE_LEGACY_SECRET_FILES" = "true" ]; then
     DEPLOY_STATE_DIR="$DEPLOY_STATE_DIR" \
     INITIALIZE_MISSING_ENCRYPTION_SALT="$INITIALIZE_MISSING_ENCRYPTION_SALT" \
     sh scripts/migrate-prod-secret-files.sh finalize
+fi
+if disk_maintenance record-release --manifest "$RELEASE_MANIFEST"; then
+  if ! disk_maintenance cleanup --apply; then
+    echo "WARNING: deployment is healthy, but disk maintenance failed; inspect its result before the next release." >&2
+  fi
+else
+  echo "WARNING: successful release history could not be recorded; skipping automatic image retention." >&2
 fi
 echo "RepoGuard deployment is healthy: $HEALTH_URL"

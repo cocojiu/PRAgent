@@ -52,5 +52,11 @@ the next ten PR runs and move slow, non-blocking checks to maintenance.
 
 Review rule
 -----------
+Host disk maintenance is implemented by scripts/disk-maintenance.py and the
+opt-in config/systemd/repoguard-disk-*.service/timer units. Release Images uploads
+the helper and checks capacity before image transfer; deploy-prod.sh repeats
+admission before pull and records paired successful releases after health checks.
+Daily cleanup and one-minute telemetry require a separately approved host install.
+
 Before deleting or merging a workflow, record the replacement caller, the
 last observed run, and the rollback commit in optimization-progress.txt.

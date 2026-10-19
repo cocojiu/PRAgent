@@ -707,6 +707,8 @@ jobs:
           run_transfer Caddyfile "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/Caddyfile"
           run_transfer scripts/deploy-prod.sh "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/scripts/deploy-prod.sh"
           run_transfer scripts/release-manifest.py "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/scripts/release-manifest.py"
+          run_transfer scripts/prune-prod-images.py "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/scripts/prune-prod-images.py"
+          run_transfer scripts/disk-maintenance.py "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/scripts/disk-maintenance.py"
           run_transfer scripts/migrate-prod-secret-files.sh "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/scripts/migrate-prod-secret-files.sh"
           run_transfer \
             performance/remote/run-isolated-real-chain-smoke.sh \
@@ -716,6 +718,9 @@ jobs:
             "chmod 0700 '${DEPLOY_PATH}/scripts/migrate-prod-secret-files.sh' \
                         '${DEPLOY_PATH}/performance/remote/run-isolated-real-chain-smoke.sh' \
                         '${DEPLOY_PATH}/performance/remote/run-real-chain-smoke.sh'"
+          # Check before chunk transfer/docker load, not only before the later compose pull.
+          run_remote "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "cd '${DEPLOY_PATH}' && python3 scripts/disk-maintenance.py --root '${DEPLOY_PATH}' capacity"
 
       - name: Mirror checked images to Aliyun ACR over VPC
         if: ${{ env.RELEASE_MANIFEST_KIND == 'source' }}

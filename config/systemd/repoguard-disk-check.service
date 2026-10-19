@@ -1,0 +1,16 @@
+[Unit]
+Description=Publish bounded RepoGuard host disk capacity samples
+
+[Service]
+Type=oneshot
+User=root
+UMask=0022
+ExecStart=/usr/bin/python3 /opt/repoguard/scripts/disk-maintenance.py --root /opt/repoguard check --publish
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/repoguard/disk-status
+MemoryMax=128M
+CPUQuota=10%
+TimeoutStartSec=30
