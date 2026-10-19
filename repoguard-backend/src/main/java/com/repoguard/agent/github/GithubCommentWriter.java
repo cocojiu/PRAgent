@@ -307,7 +307,7 @@ public class GithubCommentWriter {
         healthReporter.recordExternalFailure(classified);
         String message = healthReporter.conciseError(classified);
         List<GithubReviewCommentResult> failedResults = drafts.stream()
-            .map(draft -> failedResult(draft, message))
+            .map(draft -> GithubReviewCommentResult.failed(draft, message, classified))
             .toList();
         healthReporter.markChecked(settings, message);
         return new GithubCommentBatchResult(failedResults, drafts.size());
@@ -340,23 +340,9 @@ public class GithubCommentWriter {
         healthReporter.recordGithubApiRequest(startedAt, "publish_pull_request_comments", "failed", classified);
         healthReporter.recordExternalFailure(classified);
         String message = healthReporter.conciseError(classified);
-        GithubReviewCommentResult result = failedResult(draft, message);
+        GithubReviewCommentResult result = GithubReviewCommentResult.failed(draft, message, classified);
         healthReporter.markChecked(settings, message);
         return result;
-    }
-
-    private GithubReviewCommentResult failedResult(GithubReviewCommentDraft draft, String message) {
-        return new GithubReviewCommentResult(
-            draft.findingId(),
-            draft.path(),
-            draft.line(),
-            draft.targetType(),
-            false,
-            GithubCommentPublicationStatus.FAILED.code(),
-            message,
-            null,
-            null
-        );
     }
 
     private String fetchCurrentHeadSha(

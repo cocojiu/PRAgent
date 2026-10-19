@@ -11,6 +11,10 @@ public class GithubWritebackFailureClassifier {
     private static final FailureSummary NO_FAILURE = new FailureSummary(null, null, null);
 
     public FailureSummary classify(String status, Boolean success, String message) {
+        if (!Boolean.TRUE.equals(success) && GithubCommentPublicationStatus.OUTCOME_UNKNOWN.code().equalsIgnoreCase(status)) {
+            return failure("github_write_outcome_unknown", "GitHub 回写结果待核验",
+                GithubCommentPublicationStatus.VERIFICATION_MESSAGE);
+        }
         if (Boolean.TRUE.equals(success) || !"failed".equalsIgnoreCase(status)) {
             return NO_FAILURE;
         }

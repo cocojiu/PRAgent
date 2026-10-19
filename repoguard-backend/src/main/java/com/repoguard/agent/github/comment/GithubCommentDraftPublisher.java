@@ -46,23 +46,9 @@ public class GithubCommentDraftPublisher {
         } catch (RuntimeException ex) {
             String message = StringUtils.hasText(ex.getMessage()) ? ex.getMessage() : ex.getClass().getSimpleName();
             return drafts.stream()
-                .map(draft -> toGithubCommentPublishItem(task.getId(), failedResult(draft, message)))
+                .map(draft -> toGithubCommentPublishItem(task.getId(), GithubReviewCommentResult.failed(draft, message, ex)))
                 .toList();
         }
-    }
-
-    private GithubReviewCommentResult failedResult(GithubReviewCommentDraft draft, String message) {
-        return new GithubReviewCommentResult(
-            draft.findingId(),
-            draft.path(),
-            draft.line(),
-            draft.targetType(),
-            false,
-            "failed",
-            message,
-            null,
-            null
-        );
     }
 
     private GithubCommentPublishItem toGithubCommentPublishItem(Long taskId, GithubReviewCommentResult result) {

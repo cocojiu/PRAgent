@@ -9,6 +9,7 @@ import com.repoguard.agent.entity.GithubCommentPublication;
 import com.repoguard.agent.entity.GithubCommentPublicationBatch;
 import com.repoguard.agent.entity.GithubCommentPublicationBatchItem;
 import com.repoguard.agent.github.GithubCommentPublicationBatchStatus;
+import com.repoguard.agent.github.GithubCommentPublicationStatus;
 import com.repoguard.agent.github.GithubReviewCommentResult;
 import com.repoguard.agent.mapper.GithubCommentPublicationBatchItemMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationBatchMapper;
@@ -64,6 +65,11 @@ public class GithubCommentPublicationRecorder {
         boolean alreadyPublished = Boolean.TRUE.equals(publication.getSuccess())
             && StringUtils.hasText(publication.getGithubUrl());
         boolean currentSucceeded = Boolean.TRUE.equals(result.success());
+        // A later failed attempt cannot prove a preceding ambiguous write was absent.
+        if (GithubCommentPublicationStatus.OUTCOME_UNKNOWN.code().equals(publication.getStatus())
+            && !currentSucceeded && !GithubCommentPublicationStatus.OUTCOME_UNKNOWN.code().equals(result.status())) {
+            return publication;
+        }
         publication.setTargetType(result.targetType());
         if (!alreadyPublished || currentSucceeded) {
             publication.setStatus(result.status());
