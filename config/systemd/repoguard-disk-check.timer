@@ -1,0 +1,11 @@
+[Unit]
+Description=Sample RepoGuard host disk capacity every minute
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+AccuracySec=5s
+Unit=repoguard-disk-check.service
+
+[Install]
+WantedBy=timers.target

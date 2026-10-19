@@ -1,0 +1,8 @@
+{
+  "formatVersion": 1,
+  "enabled": false,
+  "minimumAgeDays": 7,
+  "maximumImages": 20,
+  "pinnedRevisions": [],
+  "pruneBuildCache": false
+}

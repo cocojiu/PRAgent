@@ -1,0 +1,11 @@
+[Unit]
+Description=Run approved RepoGuard retention each night
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 Asia/Shanghai
+RandomizedDelaySec=5min
+Persistent=true
+Unit=repoguard-disk-cleanup.service
+
+[Install]
+WantedBy=timers.target

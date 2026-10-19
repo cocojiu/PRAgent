@@ -1,0 +1,6 @@
+# Opt-in overlay after docker-compose.runtime-metrics.yml; prepare disk-status first.
+services:
+  alloy:
+    volumes:
+      - ./disk-status:/var/log/repoguard-host:ro
+      - ./config/observability/alloy/host-disk.alloy:/etc/alloy/host-disk.alloy:ro
