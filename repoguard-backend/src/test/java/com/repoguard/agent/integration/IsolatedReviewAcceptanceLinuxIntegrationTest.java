@@ -60,8 +60,14 @@ class IsolatedReviewAcceptanceLinuxIntegrationTest {
         assertThat(runtime.sql("SELECT COUNT(*) FROM review_execution_attempt WHERE task_id=" + taskId)).isEqualTo("1");
         String attempt = runtime.sql("SELECT current_attempt_id FROM review_task WHERE id=" + taskId);
         runtime.proof.put("taskId", taskId); runtime.proof.put("attemptId", attempt); runtime.save();
+        runtime.request("POST", "/api/v1/auth/register", Map.of("username", "subscriber", "email", "subscriber@example.test", "password", runtime.password, "confirmPassword", runtime.password), null);
+        String subscriberToken = runtime.request("POST", "/api/v1/auth/login", Map.of("account", "subscriber", "password", runtime.password), null).path("accessToken").asText();
+        runtime.secrets.add(subscriberToken);
         var transport = Collections.synchronizedList(new ArrayList<Map<String, Object>>());
-        try (Playwright playwright = Playwright.create(); Browser browser = playwright.chromium().launch(new BrowserType.LaunchOptions().setHeadless(false))) {
+        try (var firstSubscriber = new IsolatedSseSubscriber(runtime, taskId, subscriberToken, "0");
+             var futureCursorSubscriber = new IsolatedSseSubscriber(runtime, taskId, subscriberToken, Long.toString(Long.MAX_VALUE));
+             Playwright playwright = Playwright.create(); Browser browser = playwright.chromium().launch(new BrowserType.LaunchOptions().setHeadless(false))) {
+            firstSubscriber.awaitProgress(); futureCursorSubscriber.awaitProgress();
             var context = browser.newContext(new Browser.NewContextOptions().setIgnoreHTTPSErrors(true));
             // Listen to genuine events only: no property replacement and no synthetic dispatch.
             context.addInitScript("window.acceptanceVisibility = [{state:document.visibilityState,at:Date.now()}]; document.addEventListener('visibilitychange',()=>window.acceptanceVisibility.push({state:document.visibilityState,at:Date.now()}));");
@@ -87,6 +93,12 @@ class IsolatedReviewAcceptanceLinuxIntegrationTest {
             assertThat(page.evaluate("navigator.onLine")).isEqualTo(false);
             context.setOffline(false); page.waitForCondition(() -> Boolean.TRUE.equals(page.evaluate("navigator.onLine")));
             page.waitForTimeout(6_000);
+            String replacement = "Ci!9-" + runtime.secret();
+            runtime.request("POST", "/api/v1/auth/password/change", Map.of("currentPassword", runtime.password, "newPassword", replacement, "confirmPassword", replacement), subscriberToken);
+            firstSubscriber.awaitRevoked(); futureCursorSubscriber.awaitRevoked();
+            try (var unaffected = new IsolatedSseSubscriber(runtime, taskId, runtime.token, "0")) { unaffected.awaitProgress(); }
+            runtime.proof.put("subscriberAuthorization", Map.of("revoked", List.of(firstSubscriber.summary(), futureCursorSubscriber.summary()),
+                "otherUserStillAuthorized", true, "futureCursorResynchronized", true)); runtime.save();
             var visibility = page.evaluate("window.acceptanceVisibility");
             Files.writeString(runtime.evidence.resolve("visibility.json"), IsolatedReviewRuntime.JSON.writeValueAsString(visibility));
             assertThat(IsolatedReviewRuntime.JSON.writeValueAsString(visibility)).contains("hidden", "visible");
@@ -115,6 +127,10 @@ class IsolatedReviewAcceptanceLinuxIntegrationTest {
         assertThat(Integer.parseInt(runtime.sql("SELECT COUNT(*) FROM review_finding WHERE task_id=" + taskId + " AND source='LLM'"))).isPositive();
         var duplicate = runtime.request("POST", "/api/v1/reviews/manual", Map.of("organization", "fixture", "repository", "sample",
             "prNumber", 1, "title", "Isolated long review", "commit", SupplierStub.COMMIT, "branch", "acceptance", "source", "MANUAL"), runtime.token);
+        runtime.publishTerminalDuplicate(taskId);
+        assertThat(runtime.sql("SELECT COUNT(*) FROM review_execution_attempt WHERE task_id=" + taskId)).isEqualTo("1");
+        assertThat(supplier.llmCalls.get()).isEqualTo(1);
+        runtime.proof.put("rabbitDuplicate", Map.of("publisherConfirmed", true, "queueDrained", true, "executionAttempts", 1, "llmCalls", 1));
         assertThat(duplicate.path("existing").asBoolean()).isTrue(); assertThat(duplicate.path("taskId").asLong()).isEqualTo(taskId);
         runtime.proof.put("longReview", Map.of("passed", true, "heldSeconds", Duration.between(heldAt, Instant.now()).toSeconds(), "llmCalls", supplier.llmCalls.get(), "duplicateTaskReused", true));
         runtime.proof.put("browser", Map.of("headed", true, "genuineVisibilityEvents", true, "offlineRecovery", true)); runtime.save();

@@ -56,6 +56,7 @@ final class IsolatedReviewRuntime implements AutoCloseable {
     String edge;
     String gateway;
     private String edgeIp;
+    private String brokerPassword;
     String baseUrl;
     String token;
     HttpClient http;
@@ -83,6 +84,15 @@ final class IsolatedReviewRuntime implements AutoCloseable {
         JsonNode state = inspect("network", network);
         assertThat(state.path("Internal").asBoolean()).isTrue();
         gateway = state.path("IPAM").path("Config").get(0).path("Gateway").asText();
+        String allocatedSubnet = state.path("IPAM").path("Config").get(0).path("Subnet").asText();
+        assertThat(allocatedSubnet).matches("[0-9.]+/[0-9]{1,2}");
+        // Reserve a daemon-allocated, non-overlapping subnet, then declare that exact IPAM range.
+        // Docker accepts a static edge address only on a network with an explicitly configured subnet.
+        command(List.of("docker", "network", "rm", network)); network = null;
+        network = command(List.of("docker", "network", "create", "--internal", "--driver", "bridge", "--subnet", allocatedSubnet,
+            "--gateway", gateway, "--label", LABEL + "=" + owner, owner));
+        assertThat(inspect("network", network).path("Internal").asBoolean()).isTrue();
+        proof.put("subnet", allocatedSubnet);
         assertThat(gateway).matches("[0-9.]+");
         byte[] address = java.net.InetAddress.getByName(gateway).getAddress();
         assertThat(address.length).isEqualTo(4);
@@ -91,7 +101,7 @@ final class IsolatedReviewRuntime implements AutoCloseable {
         edgeIp = java.net.InetAddress.getByAddress(address).getHostAddress();
         proof.put("edgeAddress", edgeIp);
         proof.put("internalNetwork", true);
-        String databasePassword = secret(); String brokerPassword = secret();
+        String databasePassword = secret(); brokerPassword = secret();
         mysql = container("mysql", MYSQL, environment("mysql", Map.of("MYSQL_ROOT_PASSWORD", secret(),
             "MYSQL_DATABASE", "review_acceptance", "MYSQL_USER", "repoguard", "MYSQL_PASSWORD", databasePassword)),
             List.of("--network-alias", "mysql"), List.of());
@@ -189,6 +199,33 @@ final class IsolatedReviewRuntime implements AutoCloseable {
         JsonNode root = JSON.readTree(response.body());
         assertThat(root.path("success").asBoolean()).as("Application response code %s", root.path("code").asText()).isTrue();
         return root.path("data");
+    }
+
+    void publishTerminalDuplicate(long task) throws Exception {
+        var factory = new com.rabbitmq.client.ConnectionFactory();
+        factory.setHost(inspect("container", rabbit).path("NetworkSettings").path("Networks").path(owner).path("IPAddress").asText());
+        factory.setPort(5672); factory.setUsername("repoguard"); factory.setPassword(brokerPassword);
+        factory.setVirtualHost("/review-acceptance"); factory.setConnectionTimeout(5000); factory.setAutomaticRecoveryEnabled(false);
+        try (var connection = factory.newConnection(); var channel = connection.createChannel()) {
+            channel.confirmSelect();
+            byte[] payload = JSON.writeValueAsBytes(Map.of("taskId", task, "tenantId", 1, "organization", "fixture", "repository", "sample",
+                "prNumber", 1, "commit", SupplierStub.COMMIT, "priority", 4));
+            channel.basicPublish("", "repoguard.review.queue.v3", true,
+                new com.rabbitmq.client.AMQP.BasicProperties.Builder().contentType("application/json").deliveryMode(2).build(), payload);
+            channel.waitForConfirmsOrDie(5000);
+        }
+        await(() -> {
+            try { var queue = reviewQueue(); return queue.path("messages_ready").asInt(-1) == 0 && queue.path("messages_unacknowledged").asInt(-1) == 0; }
+            catch (Exception e) { return false; }
+        }, 30);
+        assertThat(reviewQueue().path("consumers").asInt()).isEqualTo(1);
+    }
+
+    private JsonNode reviewQueue() throws Exception {
+        var queues = JSON.readTree(command(List.of("docker", "exec", "--user", "rabbitmq", rabbit, "rabbitmqctl", "--formatter", "json", "list_queues",
+            "-p", "/review-acceptance", "name", "messages_ready", "messages_unacknowledged", "consumers")));
+        for (var queue : queues) if (queue.path("name").asText().equals("repoguard.review.queue.v3")) return queue;
+        throw new AssertionError("Owned review queue absent");
     }
 
     String sql(String query) throws Exception {
