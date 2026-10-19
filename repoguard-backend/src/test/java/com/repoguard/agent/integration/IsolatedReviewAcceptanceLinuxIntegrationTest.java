@@ -146,9 +146,15 @@ class IsolatedReviewAcceptanceLinuxIntegrationTest {
                 try { return runtime.sql("SELECT status FROM review_task WHERE id=" + taskId).matches("COMPLETED|PENDING_HUMAN_REVIEW"); }
                 catch (Exception e) { return false; }
             }, 45);
-            page.waitForTimeout(6_000);
+            Instant databaseCompletedAt = Instant.now();
+            // An initial resync can reset the shared sample's age between fixed-delay ticks.
+            // Wait for the actual UI conclusion across two sampling periods, rather than sleeping one period.
+            page.waitForCondition(() -> page.locator("body").innerText().contains("本次任务当前状态为 已完成"),
+                new Page.WaitForConditionOptions().setTimeout(20_000));
+            runtime.proof.put("terminalSynchronization", Map.of("databaseCompletedAt", databaseCompletedAt.toString(),
+                "browserObservedAt", Instant.now().toString(), "maximumWaitMilliseconds", 20_000, "actualCompletedState", true)); runtime.save();
             page.screenshot(new Page.ScreenshotOptions().setPath(runtime.evidence.resolve("completed-review.png")));
-            assertThat(page.locator("body").innerText()).contains("Isolated long review", "已完成");
+            assertThat(page.locator("body").innerText()).contains("Isolated long review", "本次任务当前状态为 已完成");
             page.navigate(runtime.baseUrl + "/repoguard/tasks"); page.waitForCondition(activeStreams::isEmpty); page.waitForTimeout(6_000);
             assertThat(activeStreams).as("Leaving the detail releases all browser stream requests").isEmpty();
             // NativeHeadedBrowser owns and closes the entire isolated default context/process.
