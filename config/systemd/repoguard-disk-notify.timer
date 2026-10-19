@@ -1,0 +1,11 @@
+[Unit]
+Description=Check RepoGuard disk alert notifications each minute
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+AccuracySec=5s
+Unit=repoguard-disk-notify.service
+
+[Install]
+WantedBy=timers.target

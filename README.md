@@ -460,6 +460,8 @@ Grafana继续通过已有SSH入口访问。`RepoGuard Runtime Baseline` 显示AP
 
 磁盘采样另由 `repoguard-disk-check.service/timer` 每分钟执行。安装前创建root所有、0755的 `/opt/repoguard/disk-status`，日志保留最多3份、每份约1MiB；采样只包含文件系统路径、数值与级别。审批后在观测栈现有文件列表末尾叠加 `config/observability/docker-compose.host-disk.yml`，该覆盖文件明确使用 `/etc/alloy` 目录加载两个采集配置，并沿用现有Loki和本地ruler；同时把 `config/observability/host-disk-rules/repoguard-host-disk.yml` 安装到活动规则目录的 `fake/repoguard-host-disk.yml`，默认规则目录不预装该文件。磁盘规则覆盖80%或可用低于10 GiB的持续10分钟预警、90%或低于5 GiB的持续5分钟紧急告警，以及采样中断告警。`check` 不会发送外部通知；现有ruler的外部接收器为空时仅显示规则状态，通知目标必须另行配置、验证和授权，不能把规则存在当作通知已送达。回退时停止两个timer，移除宿主机磁盘覆盖文件及对应规则，保留原有观测栈覆盖文件、日志和数据卷。
 
+钉钉磁盘告警由可选的 `scripts/disk-notify.py` 转发现有Loki规则状态，无需额外容器。把 `config/disk-notification.example.json` 复制为 `/opt/repoguard/.deploy-state/disk-notification.json`，由root所有并设为0600，填入已授权复用的机器人Webhook及签名密钥，确认后设置 `enabled=true`；真实地址和密钥不能进入Git。配置保留来源绑定ID，后续在审查通知中更换机器人或轮换签名密钥时，应同步此私密配置。运行 `python3 scripts/disk-notify.py --root /opt/repoguard` 只预演，`--apply --test` 向配置的机器人发送明确标注的通道测试。验证接收后安装 `config/systemd/repoguard-disk-notify.service/timer` 并启用timer，每分钟检查磁盘规则。只发送已达到持续时间的firing告警、状态变化和恢复通知；相同预警最多每4小时提醒一次，紧急告警最多每小时提醒一次，同一磁盘的紧急告警抑制重复预警。Loki不可达或规则异常时任务失败，不把查询失败当作恢复；投递失败保留上次状态，后续轮询重试。可用 `systemctl status repoguard-disk-notify.service` 查看结果，停用timer并关闭私密配置即可停止外发。
+
 ## 指定样本诊断
 
 在质量评估工作台开启“指定样本诊断”，输入受控数据集中的样本 ID（逗号或换行分隔），再设置并发、token、人民币估算费用和时长预算。接口沿用评估运行请求，传入非空 `sampleIds` 数组开启诊断；省略该字段仍执行正式评估。样本 ID 去重后最多 100 个，必须属于当前已授权数据集，不接受文件路径。
