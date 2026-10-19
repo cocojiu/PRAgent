@@ -458,7 +458,7 @@ Grafana继续通过已有SSH入口访问。`RepoGuard Runtime Baseline` 显示AP
 
 检查计划、固定回滚范围并批准后，才能把策略的 `enabled` 改为 `true`，安装并启用 `config/systemd/repoguard-disk-cleanup.service` 和同名timer。每天北京时间03:30加最多5分钟随机延迟执行，错过后补执行一次；与部署共用锁，锁冲突时本次失败并保留镜像，下一次再试。发布后的清理失败只报告维护失败，不回滚健康的应用。该流程不删除容器、数据卷、业务数据或备份。关闭策略并停用timer即可停止新增清理；已删除镜像需要从仓库重新拉取。
 
-磁盘采样另由 `repoguard-disk-check.service/timer` 每分钟执行。安装前创建root所有、0755的 `/opt/repoguard/disk-status`，日志保留最多3份、每份约1MiB；采样只包含文件系统路径、数值与级别。审批后在观测栈现有文件列表末尾叠加 `config/observability/docker-compose.host-disk.yml`，沿用现有 `/etc/alloy` 目录加载、Loki和本地ruler；同时把 `config/observability/host-disk-rules/repoguard-host-disk.yml` 安装到活动规则目录的 `fake/repoguard-host-disk.yml`，默认规则目录不预装该文件。磁盘规则覆盖80%或可用低于10 GiB的持续10分钟预警、90%或低于5 GiB的持续5分钟紧急告警，以及采样中断告警。`check` 不会发送外部通知；现有ruler的外部接收器为空时仅显示规则状态，通知目标必须另行配置、验证和授权，不能把规则存在当作通知已送达。回退时停止两个timer，移除宿主机磁盘覆盖文件及对应规则，保留原有观测栈覆盖文件、日志和数据卷。
+磁盘采样另由 `repoguard-disk-check.service/timer` 每分钟执行。安装前创建root所有、0755的 `/opt/repoguard/disk-status`，日志保留最多3份、每份约1MiB；采样只包含文件系统路径、数值与级别。审批后在观测栈现有文件列表末尾叠加 `config/observability/docker-compose.host-disk.yml`，该覆盖文件明确使用 `/etc/alloy` 目录加载两个采集配置，并沿用现有Loki和本地ruler；同时把 `config/observability/host-disk-rules/repoguard-host-disk.yml` 安装到活动规则目录的 `fake/repoguard-host-disk.yml`，默认规则目录不预装该文件。磁盘规则覆盖80%或可用低于10 GiB的持续10分钟预警、90%或低于5 GiB的持续5分钟紧急告警，以及采样中断告警。`check` 不会发送外部通知；现有ruler的外部接收器为空时仅显示规则状态，通知目标必须另行配置、验证和授权，不能把规则存在当作通知已送达。回退时停止两个timer，移除宿主机磁盘覆盖文件及对应规则，保留原有观测栈覆盖文件、日志和数据卷。
 
 ## 指定样本诊断
 

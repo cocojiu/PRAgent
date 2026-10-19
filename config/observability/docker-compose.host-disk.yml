@@ -1,6 +1,13 @@
 # Opt-in overlay after docker-compose.runtime-metrics.yml; prepare disk-status first.
 services:
   alloy:
+    # Older security overlays selected config.alloy; load both mounted files.
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - --disable-reporting
+      - /etc/alloy
     volumes:
       - ./disk-status:/var/log/repoguard-host:ro
       - ./config/observability/alloy/host-disk.alloy:/etc/alloy/host-disk.alloy:ro
