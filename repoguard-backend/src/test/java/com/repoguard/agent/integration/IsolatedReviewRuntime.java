@@ -131,7 +131,7 @@ final class IsolatedReviewRuntime implements AutoCloseable {
         Path config = temporary.resolve("Caddyfile");
         Files.writeString(config, product.replace("{$REPOGUARD_FRONTEND_SERVER_NAME} {", "{$REPOGUARD_FRONTEND_SERVER_NAME} {\n    tls internal"));
         edge = container("edge", CADDY, environment("edge", Map.of("REPOGUARD_FRONTEND_SERVER_NAME", "localhost")),
-            List.of("--publish", "127.0.0.1::443", "--volume", config + ":/etc/caddy/Caddyfile:ro"),
+            List.of("--entrypoint", "caddy", "--publish", "127.0.0.1::443", "--volume", config + ":/etc/caddy/Caddyfile:ro"),
             List.of("run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"));
         await(() -> succeeds(List.of("docker", "exec", edge, "test", "-f", "/data/caddy/pki/authorities/local/root.crt")), 30);
         byte[] certificate = command(List.of("docker", "exec", edge, "cat", "/data/caddy/pki/authorities/local/root.crt")).getBytes(StandardCharsets.US_ASCII);
@@ -203,9 +203,9 @@ final class IsolatedReviewRuntime implements AutoCloseable {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(seconds);
         while (!condition.getAsBoolean()) { if (System.nanoTime() >= deadline) throw new AssertionError("Isolated business acceptance deadline"); Thread.sleep(250); }
     }
-    static boolean succeeds(List<String> args) { try { command(args, null, Duration.ofSeconds(8)); return true; } catch (Exception | AssertionError e) { return false; } }
-    static String command(List<String> args) throws Exception { return command(args, null, Duration.ofSeconds(40)); }
-    static String command(List<String> args, byte[] input, Duration timeout) throws Exception {
+    boolean succeeds(List<String> args) { try { command(args, null, Duration.ofSeconds(8)); return true; } catch (Exception | AssertionError e) { return false; } }
+    String command(List<String> args) throws Exception { return command(args, null, Duration.ofSeconds(40)); }
+    String command(List<String> args, byte[] input, Duration timeout) throws Exception {
         Process process = new ProcessBuilder(args).redirectErrorStream(true).start();
         var output = CompletableFuture.supplyAsync(() -> {
             try { return process.getInputStream().readNBytes(1024 * 1024 + 1); } catch (Exception e) { throw new IllegalStateException(e); }
@@ -214,18 +214,33 @@ final class IsolatedReviewRuntime implements AutoCloseable {
             if (input != null) process.getOutputStream().write(input); process.getOutputStream().close();
             assertThat(process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS)).as("Owned command deadline").isTrue();
             byte[] bytes = output.get(5, TimeUnit.SECONDS); assertThat(bytes.length).isLessThanOrEqualTo(1024 * 1024);
-            assertThat(process.exitValue()).as("Owned command exit; raw output withheld").isZero();
+            if (process.exitValue() != 0) {
+                String diagnostic = new String(bytes, StandardCharsets.UTF_8);
+                for (String value : secrets) diagnostic = diagnostic.replace(value, "[redacted]");
+                diagnostic = diagnostic.replaceAll("(?i)(bearer\\s+)[^\\s\"]+", "$1[redacted]");
+                Files.writeString(evidence.resolve("last-owned-command-failure.log"), diagnostic.substring(0, Math.min(8192, diagnostic.length())));
+            }
+            assertThat(process.exitValue()).as("Owned command exit; redacted diagnostic saved separately").isZero();
             return new String(bytes, StandardCharsets.UTF_8).strip();
         } finally { process.descendants().forEach(ProcessHandle::destroyForcibly); if (process.isAlive()) process.destroyForcibly(); }
     }
     @Override public void close() throws Exception {
         var failures = new ArrayList<Throwable>();
         if (http != null) http.shutdownNow();
+        // docker run can create a container before failing to start its entrypoint.
+        // Discover those partial starts by exact owner label so cleanup includes them.
+        if (network != null) {
+            String owned = command(List.of("docker", "ps", "--all", "--no-trunc", "--filter", "label=" + LABEL + "=" + owner, "--format", "{{.ID}}"));
+            for (String id : owned.lines().filter(value -> !value.isBlank()).toList()) {
+                assertThat(id).matches("[a-f0-9]{64}");
+                if (!containers.contains(id)) containers.add(id);
+            }
+        }
         for (String id : containers.reversed()) {
             try {
                 var state = inspect("container", id);
                 assertThat(state.path("Config").path("Labels").path(LABEL).asText()).isEqualTo(owner);
-                assertThat(state.path("NetworkSettings").path("Networks").has(owner)).isTrue();
+                assertThat(state.path("HostConfig").path("NetworkMode").asText()).isEqualTo(network);
                 String name = state.path("Name").asText().substring(1);
                 try {
                     String logs = command(List.of("docker", "logs", "--tail", "120", id));
