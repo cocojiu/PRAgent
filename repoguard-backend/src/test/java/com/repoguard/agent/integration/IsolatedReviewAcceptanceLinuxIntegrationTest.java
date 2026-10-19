@@ -8,8 +8,6 @@ import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.options.AriaRole;
 import java.net.URI;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -48,6 +46,7 @@ class IsolatedReviewAcceptanceLinuxIntegrationTest {
         runtime.prepare();
         supplier = new SupplierStub(temporary, runtime.trustPassword(), runtime.gateway);
         runtime.startApplications();
+        runtime.enableSqlObservation();
     }
 
     @Test @Order(1) @Timeout(value = 5, unit = TimeUnit.MINUTES)
@@ -57,9 +56,11 @@ class IsolatedReviewAcceptanceLinuxIntegrationTest {
         assertThat(taskId).isPositive();
         assertThat(supplier.llmEntered.await(45, TimeUnit.SECONDS)).as("Real worker must reach the isolated HTTPS model boundary").isTrue();
         Instant heldAt = Instant.now();
+        long heldMillis = 0;
         assertThat(runtime.sql("SELECT COUNT(*) FROM review_execution_attempt WHERE task_id=" + taskId)).isEqualTo("1");
         String attempt = runtime.sql("SELECT current_attempt_id FROM review_task WHERE id=" + taskId);
         runtime.proof.put("taskId", taskId); runtime.proof.put("attemptId", attempt); runtime.save();
+        runtime.captureReadCounters("stream-before", taskId);
         runtime.request("POST", "/api/v1/auth/register", Map.of("username", "subscriber", "email", "subscriber@example.test", "password", runtime.password, "confirmPassword", runtime.password), null);
         String subscriberToken = runtime.request("POST", "/api/v1/auth/login", Map.of("account", "subscriber", "password", runtime.password), null).path("accessToken").asText();
         runtime.secrets.add(subscriberToken);
@@ -85,7 +86,13 @@ class IsolatedReviewAcceptanceLinuxIntegrationTest {
             page.waitForURL("**/repoguard/**");
             page.navigate(runtime.baseUrl + "/repoguard/tasks/" + taskId);
             page.waitForCondition(() -> transport.stream().anyMatch(row -> row.get("event").equals("response") && row.get("path").toString().endsWith("/events") && row.get("status").equals(200)));
-            Page background = context.newPage(); background.navigate("about:blank"); background.bringToFront();
+            // Playwright enables focused-page emulation by default (crPage.ts _initialize).
+            // Disable that override so subsequent tab activation emits genuine browser visibility events.
+            var nativeFocus = new com.google.gson.JsonObject(); nativeFocus.addProperty("enabled", false);
+            context.newCDPSession(page).send("Emulation.setFocusEmulationEnabled", nativeFocus);
+            Page background = context.newPage(); background.navigate("about:blank");
+            context.newCDPSession(background).send("Emulation.setFocusEmulationEnabled", nativeFocus);
+            background.bringToFront();
             page.waitForCondition(() -> "hidden".equals(page.evaluate("document.visibilityState")));
             page.waitForTimeout(12_000); // At least two real five-second sampling periods.
             page.bringToFront(); page.waitForCondition(() -> "visible".equals(page.evaluate("document.visibilityState")));
@@ -105,6 +112,7 @@ class IsolatedReviewAcceptanceLinuxIntegrationTest {
             long remaining = 65_000 - Duration.between(heldAt, Instant.now()).toMillis();
             if (remaining > 0) page.waitForTimeout(remaining);
             assertThat(Duration.between(heldAt, Instant.now())).isGreaterThanOrEqualTo(Duration.ofSeconds(60));
+            heldMillis = Duration.between(heldAt, Instant.now()).toMillis();
             supplier.releaseLlm.countDown();
             IsolatedReviewRuntime.await(() -> {
                 try { return runtime.sql("SELECT status FROM review_task WHERE id=" + taskId).matches("COMPLETED|PENDING_HUMAN_REVIEW"); }
@@ -132,67 +140,21 @@ class IsolatedReviewAcceptanceLinuxIntegrationTest {
         assertThat(supplier.llmCalls.get()).isEqualTo(1);
         runtime.proof.put("rabbitDuplicate", Map.of("publisherConfirmed", true, "queueDrained", true, "executionAttempts", 1, "llmCalls", 1));
         assertThat(duplicate.path("existing").asBoolean()).isTrue(); assertThat(duplicate.path("taskId").asLong()).isEqualTo(taskId);
-        runtime.proof.put("longReview", Map.of("passed", true, "heldSeconds", Duration.between(heldAt, Instant.now()).toSeconds(), "llmCalls", supplier.llmCalls.get(), "duplicateTaskReused", true));
-        runtime.proof.put("browser", Map.of("headed", true, "genuineVisibilityEvents", true, "offlineRecovery", true)); runtime.save();
+        runtime.proof.put("longReview", Map.of("passed", true, "heldMilliseconds", heldMillis, "llmCalls", supplier.llmCalls.get(), "duplicateTaskReused", true));
+        runtime.captureReadCounters("stream-after", taskId);
+        runtime.proof.put("browser", Map.of("headed", true, "genuineVisibilityEvents", true, "focusEmulationDisabled", true, "offlineRecovery", true)); runtime.save();
     }
 
-    @Test @Order(2) @Timeout(value = 8, unit = TimeUnit.MINUTES)
+    @Test @Order(2) @Timeout(value = 20, unit = TimeUnit.MINUTES)
     void recordsCurrentReadBaselineAtFixedTimelineSizes() throws Exception {
-        long baselineTask = 900001;
-        runtime.sql("INSERT INTO review_task(id,tenant_id,organization,repository,pr_number,title,commit_sha,branch_name,status,risk_level,llm_status,created_at,finished_at) "
-            + "VALUES (900001,1,'fixture','baseline',900001,'Synthetic read baseline','" + SupplierStub.COMMIT + "','main','COMPLETED','LOW','SKIPPED',UTC_TIMESTAMP(),UTC_TIMESTAMP())");
-        var all = new ArrayList<Map<String, Object>>();
-        // API layer only: the proxy has separate rate limits, so edge bytes/latency remain unmeasured here.
-        String apiIp = runtime.inspect("container", runtime.api).path("NetworkSettings").path("Networks").path(runtime.owner).path("IPAddress").asText();
-        String endpoint = "http://" + apiIp + ":8081/api/v1/reviews/" + baselineTask + "/status";
-        runtime.enableSqlObservation();
-        int previous = 0;
-        for (int size : new int[] {10, 1000, 10000, 50000}) {
-            if (size > previous) {
-                StringBuilder sql = new StringBuilder("INSERT INTO review_timeline(tenant_id,task_id,label,event_time,status,sort_order) VALUES ");
-                for (int index = previous; index < size; index++) {
-                    if (index > previous) sql.append(',');
-                    sql.append("(1,").append(baselineTask).append(",'isolated scale event',UTC_TIMESTAMP(),'DONE',").append(index).append(')');
-                }
-                runtime.sql(sql.toString()); previous = size;
-            }
-            assertThat(runtime.sql("SELECT COUNT(*) FROM review_timeline WHERE task_id=" + baselineTask)).isEqualTo(Integer.toString(size));
-            for (int concurrency : new int[] {1, 2, 4}) {
-                for (int warmup = 0; warmup < 10; warmup++) measure(endpoint);
-                runtime.captureReadCounters("rows-" + size + "-c" + concurrency + "-before", baselineTask);
-                var samples = Collections.synchronizedList(new ArrayList<Map<String, Object>>());
-                try (var executor = java.util.concurrent.Executors.newFixedThreadPool(concurrency)) {
-                    var jobs = new ArrayList<java.util.concurrent.Future<?>>();
-                    for (int index = 0; index < 200; index++) jobs.add(executor.submit(() -> {
-                        try { samples.add(measure(endpoint)); } catch (Exception e) { samples.add(Map.of("status", 0, "error", e.getClass().getSimpleName())); }
-                    }));
-                    for (var job : jobs) job.get(60, TimeUnit.SECONDS);
-                }
-                runtime.captureReadCounters("rows-" + size + "-c" + concurrency + "-after", baselineTask);
-                var durations = samples.stream().filter(row -> row.get("status").equals(200)).map(row -> (Long) row.get("durationNanos")).sorted().toList();
-                var summary = new LinkedHashMap<String, Object>();
-                summary.put("rows", size); summary.put("concurrency", concurrency); summary.put("attempts", samples.size()); summary.put("successes", durations.size());
-                if (!durations.isEmpty()) { summary.put("p50Ms", durations.get((durations.size() - 1) / 2) / 1_000_000.0); summary.put("p95Ms", durations.get((int) Math.ceil(durations.size() * .95) - 1) / 1_000_000.0); }
-                summary.put("samples", samples); all.add(summary);
-                Files.writeString(runtime.evidence.resolve("status-api-baseline.json"), IsolatedReviewRuntime.JSON.writeValueAsString(all));
-                assertThat(samples).hasSize(200); assertThat(durations).hasSize(200);
-            }
-        }
-        runtime.proof.put("performance", Map.of("scope", "current status API baseline only", "observations", 2400, "beforeAfterBenefitProven", false,
-            "uncovered", List.of("list/summary/detail", "failed/archive shapes", "pre-CODE032 build", "production representative distribution"))); runtime.save();
-    }
-
-    private static Map<String, Object> measure(String endpoint) throws Exception {
-        long started = System.nanoTime();
-        var response = runtime.http.send(HttpRequest.newBuilder(URI.create(endpoint)).timeout(Duration.ofSeconds(10))
-            .header("Authorization", "Bearer " + runtime.token).GET().build(), HttpResponse.BodyHandlers.ofByteArray());
-        long elapsed = System.nanoTime() - started;
-        return Map.of("status", response.statusCode(), "durationNanos", elapsed, "applicationBytes", response.body().length);
+        new IsolatedReadPerformanceMatrix(runtime).run();
     }
 
     @Test @Order(3)
     void persistsSyntheticFeedbackAndPublishesOnlyToTheIdempotentGithubStub() throws Exception {
         assertThat(taskId).isPositive();
+        runtime.token = runtime.request("POST", "/api/v1/auth/login", Map.of("account", "acceptance", "password", runtime.password), null).path("accessToken").asText();
+        runtime.secrets.add(runtime.token);
         long finding = Long.parseLong(runtime.sql("SELECT id FROM review_finding WHERE task_id=" + taskId + " AND source='LLM' ORDER BY id LIMIT 1"));
         var feedback = runtime.request("POST", "/api/v1/reviews/" + taskId + "/findings/" + finding + "/feedback",
             Map.of("status", "valid", "note", "Synthetic engineering fixture; not a human quality label"), runtime.token);

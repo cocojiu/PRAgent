@@ -426,6 +426,8 @@ jobs:
         run: ./mvnw -B test-compile org.codehaus.mojo:exec-maven-plugin:3.6.3:java -Dexec.mainClass=com.microsoft.playwright.CLI -Dexec.classpathScope=test -Dexec.args="install --with-deps chromium"
       - name: Run real application acceptance in headed Chromium
         working-directory: repoguard-backend
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
         run: xvfb-run --auto-servernum ./mvnw -B -Dtest=IsolatedReviewAcceptanceLinuxIntegrationTest test
       - name: Require all acceptance scenarios without skips
         shell: pwsh

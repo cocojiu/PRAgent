@@ -210,12 +210,16 @@ final class IsolatedReviewRuntime implements AutoCloseable {
         sql("UPDATE performance_schema.setup_consumers SET ENABLED='YES' WHERE NAME='events_statements_history_long'");
     }
 
-    void captureReadCounters(String name, long task) throws Exception {
+    void captureSqlCounters(String name) throws Exception {
         String digests = sql("SELECT DIGEST,DIGEST_TEXT,COUNT_STAR,SUM_ROWS_EXAMINED,SUM_ROWS_SENT,SUM_TIMER_WAIT "
             + "FROM performance_schema.events_statements_summary_by_digest WHERE SCHEMA_NAME='review_acceptance' "
             + "AND DIGEST_TEXT LIKE 'SELECT%' AND (DIGEST_TEXT LIKE '%review_task%' OR DIGEST_TEXT LIKE '%review_timeline%') "
             + "AND DIGEST_TEXT NOT LIKE '%performance_schema%' ORDER BY DIGEST LIMIT 100");
         Files.writeString(evidence.resolve(name + "-sql-digests.tsv"), digests);
+    }
+
+    void captureReadCounters(String name, long task) throws Exception {
+        captureSqlCounters(name);
         var args = new ArrayList<>(List.of("docker", "stats", "--no-stream", "--format", "{{json .}}")); args.addAll(containers);
         Files.writeString(evidence.resolve(name + "-container-stats.jsonl"), command(args));
         String apiIp = inspect("container", api).path("NetworkSettings").path("Networks").path(owner).path("IPAddress").asText();
