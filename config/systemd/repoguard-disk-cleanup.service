@@ -12,7 +12,9 @@ ExecStart=/usr/bin/python3 /opt/repoguard/scripts/disk-maintenance.py --root /op
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ProtectHome=true
+ProtectHome=tmpfs
+# Retention verifies registry recovery using existing Docker authentication.
+BindReadOnlyPaths=-/root/.docker/config.json
 ReadWritePaths=/opt/repoguard/.deploy-state /opt/repoguard/.deploy.lock
 MemoryMax=192M
 CPUQuota=25%
