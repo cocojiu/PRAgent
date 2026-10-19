@@ -241,9 +241,15 @@ def recoverable(image):
             return {}
     reference = references[0]
     remote = inspect(reference)
-    if remote.get("config", {}).get("digest") == image["id"]:
+    # Classic Docker uses the config digest as Id; the containerd image store
+    # uses the immutable manifest/index digest. Either must be proved remotely.
+    manifest_identity = reference.rsplit("@", 1)[-1] == image["id"]
+    def matches_config(value):
+        return isinstance(value, str) and IDENTITY.fullmatch(value) \
+            and (value == image["id"] or manifest_identity)
+    if matches_config(remote.get("config", {}).get("digest")):
         return True
-    # An index digest alone does not prove its linux/amd64 config is the local image.
+    # An index must also expose a restorable linux/amd64 manifest.
     variants = remote.get("manifests", [])
     if not isinstance(variants, list) or len(variants) > 32:
         return False
@@ -252,7 +258,7 @@ def recoverable(image):
                 and variant.get("platform", {}).get("architecture") == "amd64" \
                 and IDENTITY.fullmatch(variant.get("digest", "")):
             child = inspect(pruner.repository(reference) + "@" + variant["digest"])
-            if child.get("config", {}).get("digest") == image["id"]:
+            if matches_config(child.get("config", {}).get("digest")):
                 return True
     return False
 
