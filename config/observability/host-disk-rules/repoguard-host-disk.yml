@@ -1,3 +1,4 @@
+# Install into the active ruler directory only when host disk telemetry is enabled.
 groups:
   - name: repoguard-host-disk
     interval: 1m
