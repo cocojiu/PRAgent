@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
+import com.microsoft.playwright.Request;
 import com.microsoft.playwright.options.AriaRole;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -64,6 +65,8 @@ class IsolatedReviewAcceptanceLinuxIntegrationTest {
         String subscriberToken = runtime.request("POST", "/api/v1/auth/login", Map.of("account", "subscriber", "password", runtime.password), null).path("accessToken").asText();
         runtime.secrets.add(subscriberToken);
         var transport = Collections.synchronizedList(new ArrayList<Map<String, Object>>());
+        var activeStreams = java.util.concurrent.ConcurrentHashMap.<Request>newKeySet();
+        var statusRequests = new java.util.concurrent.atomic.AtomicInteger();
         try (var firstSubscriber = new IsolatedSseSubscriber(runtime, taskId, subscriberToken, "0");
              var futureCursorSubscriber = new IsolatedSseSubscriber(runtime, taskId, subscriberToken, Long.toString(Long.MAX_VALUE));
              Playwright playwright = Playwright.create(); NativeHeadedBrowser nativeBrowser = new NativeHeadedBrowser(playwright, temporary, runtime.evidence, runtime.baseUrl)) {
@@ -73,8 +76,17 @@ class IsolatedReviewAcceptanceLinuxIntegrationTest {
             context.addInitScript("window.acceptanceVisibility = [{state:document.visibilityState,at:Date.now()}]; document.addEventListener('visibilitychange',()=>window.acceptanceVisibility.push({state:document.visibilityState,at:Date.now()}));");
             Page page = context.newPage(); page.bringToFront();
             page.onRequest(request -> {
+                if (request.url().endsWith("/events")) activeStreams.add(request);
+                if (request.url().endsWith("/status")) statusRequests.incrementAndGet();
                 if (request.url().contains("/events") || request.url().contains("/status")) transport.add(Map.of("event", "request", "path", URI.create(request.url()).getPath(), "at", Instant.now().toString()));
             });
+            java.util.function.Consumer<Request> streamEnded = request -> {
+                if (request.url().endsWith("/events")) {
+                    activeStreams.remove(request);
+                    transport.add(Map.of("event", "ended", "path", URI.create(request.url()).getPath(), "at", Instant.now().toString()));
+                }
+            };
+            page.onRequestFinished(streamEnded); page.onRequestFailed(streamEnded);
             page.onResponse(response -> {
                 if (response.url().contains("/events") || response.url().contains("/status")) transport.add(Map.of("event", "response", "path", URI.create(response.url()).getPath(), "status", response.status(), "traceId", java.util.Objects.toString(response.headerValue("X-Trace-Id"), ""), "at", Instant.now().toString()));
             });
@@ -89,21 +101,42 @@ class IsolatedReviewAcceptanceLinuxIntegrationTest {
             Page background = context.newPage(); background.navigate("about:blank");
             background.bringToFront();
             page.waitForCondition(() -> "hidden".equals(page.evaluate("document.visibilityState")));
+            page.waitForCondition(activeStreams::isEmpty);
+            page.waitForTimeout(1000); int hiddenRequests = statusRequests.get();
             page.waitForTimeout(12_000); // At least two real five-second sampling periods.
+            assertThat(statusRequests.get()).as("Hidden page must pause status polling").isEqualTo(hiddenRequests);
             page.bringToFront(); page.waitForCondition(() -> "visible".equals(page.evaluate("document.visibilityState")));
-            context.setOffline(true); page.waitForTimeout(6_000);
+            page.waitForCondition(() -> activeStreams.size() == 1);
+            context.setOffline(true); page.waitForCondition(activeStreams::isEmpty);
+            page.waitForTimeout(1000); int offlineRequests = statusRequests.get(); page.waitForTimeout(6_000);
             assertThat(page.evaluate("navigator.onLine")).isEqualTo(false);
+            assertThat(statusRequests.get()).as("Offline page must pause status polling").isEqualTo(offlineRequests);
             context.setOffline(false); page.waitForCondition(() -> Boolean.TRUE.equals(page.evaluate("navigator.onLine")));
-            page.waitForTimeout(6_000);
+            page.waitForCondition(() -> activeStreams.size() == 1); page.waitForTimeout(6_000);
             String replacement = "Ci!9-" + runtime.secret();
             runtime.request("POST", "/api/v1/auth/password/change", Map.of("currentPassword", runtime.password, "newPassword", replacement, "confirmPassword", replacement), subscriberToken);
             firstSubscriber.awaitRevoked(); futureCursorSubscriber.awaitRevoked();
             try (var unaffected = new IsolatedSseSubscriber(runtime, taskId, runtime.token, "0")) { unaffected.awaitProgress(); }
             runtime.proof.put("subscriberAuthorization", Map.of("revoked", List.of(firstSubscriber.summary(), futureCursorSubscriber.summary()),
                 "otherUserStillAuthorized", true, "futureCursorResynchronized", true)); runtime.save();
+            var rejectedStreams = new java.util.concurrent.atomic.AtomicInteger();
+            String eventRoute = "**/api/v1/reviews/" + taskId + "/events";
+            page.route(eventRoute, route -> { rejectedStreams.incrementAndGet(); route.abort("failed"); });
+            context.setOffline(true); page.waitForCondition(activeStreams::isEmpty); context.setOffline(false);
+            page.waitForCondition(() -> rejectedStreams.get() >= 3, new Page.WaitForConditionOptions().setTimeout(95_000));
+            page.waitForCondition(activeStreams::isEmpty);
+            int beforeFallbackPoll = statusRequests.get(); page.waitForTimeout(6500);
+            assertThat(rejectedStreams.get()).as("SSE failures must stop at the product retry budget").isEqualTo(3);
+            assertThat(statusRequests.get()).as("Polling must continue after SSE retry exhaustion").isGreaterThan(beforeFallbackPoll);
+            assertThat(page.locator("body").innerText()).contains("自动刷新中，每 5 秒更新一次");
+            page.unroute(eventRoute);
             var visibility = page.evaluate("window.acceptanceVisibility");
             Files.writeString(runtime.evidence.resolve("visibility.json"), IsolatedReviewRuntime.JSON.writeValueAsString(visibility));
             assertThat(IsolatedReviewRuntime.JSON.writeValueAsString(visibility)).contains("hidden", "visible");
+            runtime.proof.put("browserRecovery", Map.of("hiddenPollingPaused", true, "offlinePollingPaused", true,
+                "oneStreamAfterResume", true, "rejectedStreams", rejectedStreams.get(), "pollingAfterBudget", true)); runtime.save();
+            page.navigate(runtime.baseUrl + "/repoguard/tasks"); page.waitForCondition(activeStreams::isEmpty);
+            page.navigate(runtime.baseUrl + "/repoguard/tasks/" + taskId); page.waitForCondition(() -> activeStreams.size() == 1);
             long remaining = 65_000 - Duration.between(heldAt, Instant.now()).toMillis();
             if (remaining > 0) page.waitForTimeout(remaining);
             assertThat(Duration.between(heldAt, Instant.now())).isGreaterThanOrEqualTo(Duration.ofSeconds(60));
@@ -115,8 +148,9 @@ class IsolatedReviewAcceptanceLinuxIntegrationTest {
             }, 45);
             page.waitForTimeout(6_000);
             page.screenshot(new Page.ScreenshotOptions().setPath(runtime.evidence.resolve("completed-review.png")));
-            assertThat(page.locator("body").innerText()).contains("Isolated long review");
-            page.navigate(runtime.baseUrl + "/repoguard/tasks"); page.waitForTimeout(6_000);
+            assertThat(page.locator("body").innerText()).contains("Isolated long review", "已完成");
+            page.navigate(runtime.baseUrl + "/repoguard/tasks"); page.waitForCondition(activeStreams::isEmpty); page.waitForTimeout(6_000);
+            assertThat(activeStreams).as("Leaving the detail releases all browser stream requests").isEmpty();
             // NativeHeadedBrowser owns and closes the entire isolated default context/process.
         } finally {
             supplier.releaseLlm.countDown();

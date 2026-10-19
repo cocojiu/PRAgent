@@ -87,7 +87,7 @@ final class SupplierStub implements AutoCloseable {
                 Object result;
                 if (method.equals("POST") && path.equals("/v1/chat/completions")) {
                     llmCalls.incrementAndGet(); llmEntered.countDown();
-                    if (!releaseLlm.await(110, TimeUnit.SECONDS)) { exchange.sendResponseHeaders(504, -1); return; }
+                    if (!releaseLlm.await(180, TimeUnit.SECONDS)) { exchange.sendResponseHeaders(504, -1); return; }
                     if (timeoutModel.get()) {
                         delayedModelRequests.incrementAndGet();
                         if (!releaseTimedOutModel.await(110, TimeUnit.SECONDS)) { exchange.sendResponseHeaders(504, -1); return; }

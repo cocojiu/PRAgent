@@ -172,7 +172,7 @@ final class IsolatedReviewRuntime implements AutoCloseable {
         token = request("POST", "/api/v1/auth/login", Map.of("account", "acceptance", "password", password), null).path("accessToken").asText();
         assertThat(token).isNotBlank(); secrets.add(token);
         request("PUT", "/api/v1/config/integrations/github", Map.of("baseUrl", "https://supplier.test:18443", "token", githubToken, "defaultOwner", "fixture", "defaultRepo", "sample"), token);
-        configureReviewPolicy(120, true);
+        configureReviewPolicy(180, true);
         worker = application("worker", "worker");
         proof.put("schema", 108); proof.put("rolesSimultaneouslyReady", true); save();
     }
