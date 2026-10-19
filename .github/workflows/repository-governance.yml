@@ -8,6 +8,11 @@ on:
       - PRAgent-test
   workflow_dispatch:
     inputs:
+      isolated_review_acceptance:
+        description: Also run isolated long review, browser recovery and status API baseline (no production access)
+        required: false
+        default: false
+        type: boolean
       linux_quality:
         description: Run the existing Linux quality suite on this ref without creating a PR or deploying
         required: false
@@ -35,11 +40,12 @@ jobs:
 
   linux-quality:
     name: Isolated Linux quality
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.linux_quality == true }}
+    if: ${{ github.event_name == 'workflow_dispatch' && (inputs.linux_quality == true || inputs.isolated_review_acceptance == true) }}
     needs: guard
     permissions:
       contents: read
       packages: read
     uses: ./.github/workflows/pr-quality.yml
     with:
-      linux_backup_integration: true
+      linux_backup_integration: ${{ inputs.linux_quality }}
+      isolated_review_acceptance: ${{ inputs.isolated_review_acceptance }}
