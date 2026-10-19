@@ -28,6 +28,7 @@ final class SupplierStub implements AutoCloseable {
     final AtomicInteger llmCalls = new AtomicInteger();
     final CountDownLatch llmEntered = new CountDownLatch(1);
     final CountDownLatch releaseLlm = new CountDownLatch(1);
+    private final List<Map<String, Object>> publishedComments = new CopyOnWriteArrayList<>();
     private final HttpsServer server;
     private final java.util.concurrent.ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
@@ -75,6 +76,18 @@ final class SupplierStub implements AutoCloseable {
                         Map.of("severity", "LOW", "filePath", "src/Example.java", "lineNumber", 2, "message", "Isolated finding", "recommendation", "Add validation"))));
                     result = Map.of("choices", List.of(Map.of("finish_reason", "stop", "message", Map.of("content", content))),
                         "usage", Map.of("prompt_tokens", 100, "completion_tokens", 25, "total_tokens", 125));
+                } else if (method.equals("POST") && path.matches("/repos/fixture/sample/pulls/[0-9]+/reviews")) {
+                    var review = IsolatedReviewRuntime.JSON.readTree(body);
+                    assertThat(review.path("commit_id").asText()).isEqualTo(COMMIT);
+                    assertThat(review.path("event").asText()).isEqualTo("COMMENT");
+                    for (var comment : review.path("comments")) publishedComments.add(Map.of("id", 1000 + publishedComments.size(),
+                        "path", comment.path("path").asText(), "line", comment.path("line").asInt(), "body", comment.path("body").asText(),
+                        "html_url", "https://supplier.test:18443/fixtures/review/1"));
+                    result = Map.of("id", 1, "html_url", "https://supplier.test:18443/fixtures/review/1");
+                } else if (method.equals("GET") && path.matches("/repos/fixture/sample/pulls/[0-9]+/reviews/1/comments")) {
+                    result = List.copyOf(publishedComments);
+                } else if (method.equals("POST") && path.matches("/repos/fixture/sample/issues/[0-9]+/comments")) {
+                    result = Map.of("id", 2001, "html_url", "https://supplier.test:18443/fixtures/summary/2001");
                 } else if (method.equals("GET") && path.matches("/repos/fixture/sample/pulls/[0-9]+/files")) {
                     result = List.of(Map.of("filename", "src/Example.java", "status", "modified", "additions", 1, "deletions", 1, "changes", 2,
                         "patch", "@@ -1,3 +1,3 @@\n class Example {\n- int value = 0;\n+ int value = 1;\n }"));

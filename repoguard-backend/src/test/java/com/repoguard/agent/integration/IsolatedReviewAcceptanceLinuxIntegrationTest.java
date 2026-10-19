@@ -172,7 +172,7 @@ class IsolatedReviewAcceptanceLinuxIntegrationTest {
     }
 
     @Test @Order(3)
-    void persistsHumanFeedbackOnTheStubFindingWithoutExternalPublication() throws Exception {
+    void persistsSyntheticFeedbackAndPublishesOnlyToTheIdempotentGithubStub() throws Exception {
         assertThat(taskId).isPositive();
         long finding = Long.parseLong(runtime.sql("SELECT id FROM review_finding WHERE task_id=" + taskId + " AND source='LLM' ORDER BY id LIMIT 1"));
         var feedback = runtime.request("POST", "/api/v1/reviews/" + taskId + "/findings/" + finding + "/feedback",
@@ -180,11 +180,38 @@ class IsolatedReviewAcceptanceLinuxIntegrationTest {
         assertThat(feedback.path("findingId").asLong()).isEqualTo(finding);
         assertThat(feedback.path("feedbackStatus").asText()).isEqualToIgnoringCase("VALID");
         assertThat(supplier.requests).noneMatch(row -> row.get("method").equals("POST") && row.get("path").toString().startsWith("/repos/"));
-        runtime.proof.put("feedback", Map.of("persisted", true, "actualHumanLabels", 0, "externalGithubPosts", 0, "stubGithubPublicationValidated", false)); runtime.save();
+        long firstBatch = runtime.request("POST", "/api/v1/reviews/" + taskId + "/github-comments", null, runtime.token).path("batchId").asLong();
+        awaitPublication(firstBatch);
+        assertThat(Integer.parseInt(runtime.sql("SELECT succeeded_count FROM github_comment_publication_batch WHERE id=" + firstBatch))).isPositive();
+        int posts = githubStubPosts();
+        assertThat(posts).isPositive();
+        long secondBatch = runtime.request("POST", "/api/v1/reviews/" + taskId + "/github-comments", null, runtime.token).path("batchId").asLong();
+        awaitPublication(secondBatch);
+        assertThat(githubStubPosts()).as("Repeated publication must reuse durable publication identities").isEqualTo(posts);
+        runtime.proof.put("feedback", Map.of("persisted", true, "actualHumanLabels", 0, "externalGithubPosts", 0,
+            "stubGithubPublicationValidated", true, "stubGithubPosts", posts, "duplicatePosts", 0)); runtime.save();
+    }
+
+    private static int githubStubPosts() {
+        return (int) supplier.requests.stream().filter(row -> row.get("method").equals("POST") && row.get("path").toString().startsWith("/repos/")).count();
+    }
+
+    private static void awaitPublication(long batch) throws Exception {
+        assertThat(batch).isPositive();
+        IsolatedReviewRuntime.await(() -> {
+            try { return runtime.sql("SELECT status FROM github_comment_publication_batch WHERE id=" + batch).equals("COMPLETED"); }
+            catch (Exception e) { return false; }
+        }, 30);
+        assertThat(runtime.sql("SELECT failed_count FROM github_comment_publication_batch WHERE id=" + batch)).isEqualTo("0");
     }
 
     @AfterAll static void cleanup() throws Exception {
-        try { if (supplier != null) supplier.close(); }
+        try {
+            if (supplier != null) {
+                Files.writeString(runtime.evidence.resolve("supplier-requests.json"), IsolatedReviewRuntime.JSON.writeValueAsString(supplier.requests));
+                supplier.close();
+            }
+        }
         finally { if (runtime != null) runtime.close(); }
     }
 }
