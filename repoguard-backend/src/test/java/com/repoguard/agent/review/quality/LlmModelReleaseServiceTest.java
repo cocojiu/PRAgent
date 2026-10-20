@@ -522,7 +522,7 @@ class LlmModelReleaseServiceTest {
         assertThat(json.content()).contains("release-7", "eventHash", "calculatedHash", hash)
             .doesNotContain("modelName", "security, incident", "detailsJson", "provider", "promptVersion");
         assertThat(csv.format()).isEqualTo("csv");
-        assertThat(csv.content()).contains("id,releaseId,releaseKey", "calculatedHash", hash)
+        assertThat(csv.content()).startsWith("\ufeffid,releaseId,releaseKey").contains("calculatedHash", hash)
             .doesNotContain("security, incident", "detailsJson", "modelName", "provider");
 
         when(repository.countAudits(eq(42L), any())).thenReturn(1_001L);
@@ -549,7 +549,8 @@ class LlmModelReleaseServiceTest {
         var csv = service.exportReleaseAudits(null, null, null, null, null, null, "csv");
         var json = service.exportReleaseAudits(null, null, null, null, null, null, "json");
         assertThat(csv.content().split("\n")[1]).startsWith("\"94\",\"7\",\"\t");
-        assertThat(csv.content()).contains("\"\t").doesNotContain("private reason", "\u0000", "\ufeff");
+        assertThat(csv.content()).startsWith("\ufeffid,").contains("\"\t").doesNotContain("private reason", "\u0000");
+        assertThat(csv.content().substring(1)).doesNotContain("\ufeff");
         var row = new JacksonConfig().objectMapper().readTree(json.content()).get(0);
         assertThat(row.get("releaseKey").asText()).isEqualTo(value);
         assertThat(row.get("operator").asText()).isEqualTo(value);
