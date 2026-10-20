@@ -4,6 +4,7 @@ import com.repoguard.agent.dto.GithubCommentPublishItem;
 import com.repoguard.agent.entity.GithubCommentPublication;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.github.GithubPullRequestClient;
+import com.repoguard.agent.github.GithubPublicationIntent;
 import com.repoguard.agent.github.GithubReviewCommentDraft;
 import com.repoguard.agent.github.GithubReviewCommentResult;
 import com.repoguard.agent.github.GithubWritebackFailureClassifier;
@@ -44,9 +45,11 @@ public class GithubCommentDraftPublisher {
                         draft.targetType(), false, "outcome_unknown", "GitHub 回写结果待核验，已阻止再次发布。", null, null));
                 publication = protocol.finish(claim, result);
             }
-            var failure = classifier.classify(publication.getStatus(), publication.getSuccess(), publication.getMessage());
+            String status = GithubPublicationIntent.status(publication.getStatus(), publication.getMessage());
+            String message = GithubPublicationIntent.displayMessage(publication.getMessage());
+            var failure = classifier.classify(status, publication.getSuccess(), message);
             items.add(new GithubCommentPublishItem(draft.findingId(), draft.path(), draft.line(), publication.getTargetType(),
-                publication.getSuccess(), publication.getStatus(), publication.getMessage(), failure.category(), failure.reason(),
+                publication.getSuccess(), status, message, failure.category(), failure.reason(),
                 failure.suggestion(), publication.getGithubUrl(), publication.getGithubCommentId(), publication.getPublishedAt() == null
                     ? null : publication.getPublishedAt().format(DATE_TIME_FORMATTER)));
         }

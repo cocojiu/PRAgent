@@ -87,4 +87,38 @@ class GithubPublicationProtocolTest {
         assertThat(protocol.claim(task(), List.of(draft())).getFirst().granted()).isFalse();
         verifyNoInteractions(recorder);
     }
+    @Test
+    void compatibleClosedIntentBlocksBothOldReadersAndCurrentPublishers() {
+        fixture(); var claim = protocol.claim(task(), List.of(draft())).getFirst();
+        durable.get().setMessage(GithubPublicationIntent.CLOSED_PREFIX + claim.expectedMessage());
+        assertThat(durable.get().getStatus()).isEqualTo("outcome_unknown");
+        assertThat(GithubPublicationIntent.pending(durable.get().getStatus(), durable.get().getMessage())).isFalse();
+        var client = mock(GithubPullRequestClient.class);
+        var publisher = new GithubCommentDraftPublisher(client, protocol, new GithubWritebackFailureClassifier());
+        assertThat(publisher.publish(task(), List.of(draft())).getFirst().status()).isEqualTo("closed");
+        assertThatThrownBy(() -> protocol.resolve(1L, 42L, GithubPublicationProtocol.version(durable.get()),
+            new GithubReviewCommentResult(null, null, null, "pull_request", true, "published", "late", null, null)))
+            .hasMessageContaining("changed");
+        protocol.finish(claim, new GithubReviewCommentResult(null, null, null, "pull_request", true, "published", "late", null, null));
+        verifyNoInteractions(client); verify(mapper, never()).update(any());
+    }
+    @Test
+    void closedProjectionHidesMetadataAndCannotEnterAnotherPublicationPlan() {
+        fixture(); var value = protocol.claim(task(), List.of(draft())).getFirst().publication();
+        value.setMessage(GithubPublicationIntent.CLOSED_PREFIX + value.getMessage());
+        var preview = new GithubCommentPreviewItemBuilder().buildPrSummaryItem(
+            mock(com.repoguard.agent.dto.PrReviewSummaryDto.class), value);
+        assertThat(preview.commentable()).isFalse(); assertThat(preview.publicationStatus()).isEqualTo("closed");
+        assertThat(preview.reason()).contains("不再回写");
+        assertThat(preview.publicationMessage()).doesNotContain("<!--");
+        assertThat(new GithubCommentPublishPlanBuilder().build(List.of(preview)).drafts()).isEmpty();
+    }
+    @Test
+    void untrustedDiagnosticTextCannotForgeTheAnchoredClosureMetadata() {
+        String diagnostic = GithubPublicationIntent.message(GithubPublicationIntent.create("sha", "body"),
+            "remote failure containing " + GithubPublicationIntent.CLOSED_PREFIX);
+        assertThat(GithubPublicationIntent.pending("outcome_unknown", diagnostic)).isTrue();
+        assertThat(GithubPublicationIntent.status("outcome_unknown", null)).isEqualTo("outcome_unknown");
+    }
+
 }

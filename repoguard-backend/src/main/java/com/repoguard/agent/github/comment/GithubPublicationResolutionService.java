@@ -22,7 +22,7 @@ public class GithubPublicationResolutionService {
     public PendingGithubPublication verify(Long taskId, Long publicationId, String version, String kind, long remoteId) {
         var task = protocol.task(taskId);
         var publication = protocol.load(taskId, publicationId);
-        if (!"outcome_unknown".equals(publication.getStatus()) || !GithubPublicationProtocol.version(publication).equals(version))
+        if (!GithubPublicationIntent.pending(publication.getStatus(), publication.getMessage()) || !GithubPublicationProtocol.version(publication).equals(version))
             throw new BusinessException(ErrorCode.CONFLICT, "Publication changed; reload first");
         var evidence = verifier.verify(task, GithubPublicationIntent.marker(publication.getMessage()), kind, remoteId);
         var result = new GithubReviewCommentResult(publication.getFindingId(), null, null, evidence.targetType(), true,
@@ -41,8 +41,8 @@ public class GithubPublicationResolutionService {
         static PendingGithubPublication from(GithubCommentPublication value) {
             String message = value.getMessage();
             String marker = GithubPublicationIntent.marker(message);
-            return new PendingGithubPublication(value.getId(), value.getFindingId(), value.getTargetType(), value.getStatus(),
-                GithubPublicationProtocol.version(value), marker != null, marker == null ? message : message.replace(marker, "").strip(), value.getGithubUrl());
+            return new PendingGithubPublication(value.getId(), value.getFindingId(), value.getTargetType(), GithubPublicationIntent.status(value.getStatus(), message),
+                GithubPublicationProtocol.version(value), marker != null, GithubPublicationIntent.displayMessage(message), value.getGithubUrl());
         }
     }
 }

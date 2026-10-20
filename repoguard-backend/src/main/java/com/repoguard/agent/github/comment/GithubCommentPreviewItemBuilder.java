@@ -6,6 +6,7 @@ import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.GithubCommentPublication;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.github.GithubCommentPublicationStatus;
+import com.repoguard.agent.github.GithubPublicationIntent;
 import com.repoguard.agent.github.GithubCommentTargetType;
 import com.repoguard.agent.review.FindingFeedbackStatus;
 import java.time.format.DateTimeFormatter;
@@ -45,9 +46,9 @@ public class GithubCommentPreviewItemBuilder {
             published ? "GitHub comment already published" : unknown ? blockedReason(publication)
                 : actionable ? reason : feedbackSkipReason(finding),
             published,
-            publication == null ? null : publication.getStatus(),
+            publication == null ? null : GithubPublicationIntent.status(publication.getStatus(), publication.getMessage()),
             publication == null ? null : publication.getGithubUrl(),
-            publication == null ? null : publication.getMessage(),
+            publication == null ? null : GithubPublicationIntent.displayMessage(publication.getMessage()),
             publication == null || publication.getPublishedAt() == null
                 ? null
                 : publication.getPublishedAt().format(DATE_TIME_FORMATTER),
@@ -73,9 +74,9 @@ public class GithubCommentPreviewItemBuilder {
             GithubCommentTargetType.PULL_REQUEST.code(),
             published ? "GitHub comment already published" : unknown ? blockedReason(publication) : null,
             published,
-            publication == null ? null : publication.getStatus(),
+            publication == null ? null : GithubPublicationIntent.status(publication.getStatus(), publication.getMessage()),
             publication == null ? null : publication.getGithubUrl(),
-            publication == null ? null : publication.getMessage(),
+            publication == null ? null : GithubPublicationIntent.displayMessage(publication.getMessage()),
             publication == null || publication.getPublishedAt() == null
                 ? null
                 : publication.getPublishedAt().format(DATE_TIME_FORMATTER),
@@ -84,7 +85,7 @@ public class GithubCommentPreviewItemBuilder {
     }
 
     private String blockedReason(GithubCommentPublication publication) {
-        return "closed".equals(publication.getStatus()) ? "已人工关闭，不再回写。" : GithubCommentPublicationStatus.VERIFICATION_MESSAGE;
+        return "closed".equals(GithubPublicationIntent.status(publication.getStatus(), publication.getMessage())) ? "已人工关闭，不再回写。" : GithubCommentPublicationStatus.VERIFICATION_MESSAGE;
     }
 
     private boolean isUnknown(GithubCommentPublication publication) {
