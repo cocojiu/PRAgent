@@ -313,7 +313,7 @@ class ReviewProgressTransportIntegrationTest {
             URI httpBase = proxyHttpBase(edge);
             var redirected = client.send(HttpRequest.newBuilder(httpBase.resolve("/api/v1/reviews/9/github-comments"))
                 .timeout(Duration.ofSeconds(5)).POST(HttpRequest.BodyPublishers.noBody()).build(), HttpResponse.BodyHandlers.discarding());
-            assertThat(redirected.statusCode()).isEqualTo(308);
+            assertThat(redirected.statusCode()).isEqualTo(301);
             assertThat(redirected.headers().firstValue("Location")).contains("https://localhost/api/v1/reviews/9/github-comments");
             assertThat(deploymentGuard(repository, edge, compose, "", false)).isZero();
             assertThat(deploymentGuard(repository, edge, compose, "", true)).as("Missing marker must fail preflight").isNotZero();
@@ -358,7 +358,7 @@ class ReviewProgressTransportIntegrationTest {
                 "candidateConfigRetainedDuringRollback", true, "legacyConfigRejected", true, "markerAbsentRejected", true,
                 "changedRuntimeVolumeRejected", true, "replacementComposeVolumeRejected", true, "defaultOffAndReleaseForwarded", true));
         }
-        proof.put("httpCanonicalRedirect", 308); proof.put("httpMaintenanceStatus", 503); proof.put("httpHealthDuringMaintenance", 200);
+        proof.put("httpCanonicalRedirect", 301); proof.put("httpMaintenanceStatus", 503); proof.put("httpHealthDuringMaintenance", 200);
         proof.put("runId", System.getenv("GITHUB_RUN_ID")); proof.put("revision", System.getenv("GITHUB_SHA"));
         proof.put("caddy", CADDY); proof.put("volume", volume);
         proof.put("caddyfileSha256", java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(repository.resolve("Caddyfile")))));
