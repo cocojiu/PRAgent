@@ -57,7 +57,7 @@ public class GithubPublicationProtocol {
     public GithubCommentPublication finish(Claim claim, GithubReviewCommentResult result) {
         lock(claim.taskId());
         var publication = load(claim.taskId(), claim.publication().getId());
-        if (!"outcome_unknown".equals(publication.getStatus()) || !Objects.equals(publication.getMessage(), claim.expectedMessage())) return publication;
+        if (!GithubPublicationIntent.pending(publication.getStatus(), publication.getMessage()) || !Objects.equals(publication.getMessage(), claim.expectedMessage())) return publication;
         return write(publication, result, claim.expectedMessage());
     }
     public ReviewTask task(Long taskId) {
@@ -73,7 +73,7 @@ public class GithubPublicationProtocol {
     public List<GithubCommentPublication> unresolved(Long taskId, long afterId, int limit) {
         task(taskId);
         return publications.selectList(new QueryWrapper<GithubCommentPublication>().eq("task_id", taskId)
-            .eq("status", "outcome_unknown").gt("id", afterId).orderByAsc("id").last("limit " + Math.max(1, Math.min(50, limit))));
+            .eq("status", "outcome_unknown").and(query -> query.isNull("message").or().notLikeRight("message", GithubPublicationIntent.CLOSED_PREFIX)).gt("id", afterId).orderByAsc("id").last("limit " + Math.max(1, Math.min(50, limit))));
     }
     public static String version(GithubCommentPublication publication) {
         return GithubPublicationIntent.hash(publication.getId() + ":" + publication.getStatus() + ":" + publication.getMessage());
@@ -82,7 +82,7 @@ public class GithubPublicationProtocol {
     public GithubCommentPublication resolve(Long taskId, Long publicationId, String expectedVersion, GithubReviewCommentResult result) {
         lock(taskId);
         var publication = load(taskId, publicationId);
-        if (!"outcome_unknown".equals(publication.getStatus()) || !version(publication).equals(expectedVersion))
+        if (!GithubPublicationIntent.pending(publication.getStatus(), publication.getMessage()) || !version(publication).equals(expectedVersion))
             throw new BusinessException(ErrorCode.CONFLICT, "Publication changed; reload before resolving");
         return write(publication, result, publication.getMessage());
     }
@@ -95,11 +95,17 @@ public class GithubPublicationProtocol {
         String marker = GithubPublicationIntent.marker(expectedMessage);
         String message = "outcome_unknown".equals(result.status())
             ? GithubPublicationIntent.message(marker, result.message()) : result.message();
+        String storedStatus = result.status();
+        if ("closed".equals(storedStatus)) {
+            storedStatus = "outcome_unknown";
+            message = GithubPublicationIntent.CLOSED_PREFIX + GithubPublicationIntent.message(marker, result.message());
+            message = message.substring(0, Math.min(message.length(), 1024));
+        }
         LocalDateTime now = LocalDateTime.now();
         int changed = publications.update(new UpdateWrapper<GithubCommentPublication>().eq("id", publication.getId())
             .eq("task_id", publication.getTaskId()).eq("status", "outcome_unknown")
-            .apply("cast(message as binary) = cast({0} as binary)", expectedMessage)
-            .set("status", result.status()).set("success", result.success()).set("target_type", result.targetType())
+            .apply("cast(message as binary) <=> cast({0} as binary)", expectedMessage)
+            .set("status", storedStatus).set("success", result.success()).set("target_type", result.targetType())
             .set("github_comment_id", result.commentId()).set("github_url", result.url()).set("message", message)
             .set("published_at", Boolean.TRUE.equals(result.success()) ? now : null).set("updated_at", now));
         if (changed != 1) throw new BusinessException(ErrorCode.CONFLICT, "Publication ownership changed");
