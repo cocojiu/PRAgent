@@ -69,6 +69,7 @@ class ControllerAuthorizationContractTest {
         "RepositoryPolicyController#preview",
         "RepositoryPolicyController#listSuppressions",
         "GithubFeedbackController#diagnostics",
+        "GithubPublicationResolutionController#list",
         "FeedbackSummaryController#summary"
     );
 

@@ -6,6 +6,7 @@ bindEnterpriseTenantRepository -> enterpriseTenantControllerPutRepository(input:
 cancelLlmEvaluationRun -> reviewCalibrationControllerCancelEvaluationRun(input: { path: { runId: string } }): Promise<LlmEvaluationRun>; // POST /api/v1/config/review-calibration/evaluation-runs/{runId}/cancel
 changePassword -> authControllerChangePassword(input: { body: AuthPasswordChangeRequest }): Promise<void>; // POST /api/v1/auth/password/change
 cleanupDataRetention -> dataRetentionControllerCleanup(input?: { body?: DataRetentionCleanupRequest }): Promise<DataRetentionCleanupResponse>; // POST /api/v1/config/data-retention/cleanup
+closeGithubPublication -> githubPublicationResolutionControllerClose(input: { path: { publicationId: number; taskId: number }; body: GithubPublicationCloseRequest }): Promise<PendingGithubPublication>; // POST /api/v1/reviews/{taskId}/github-comments/resolutions/{publicationId}/close
 compareLlmEvaluationReports -> reviewCalibrationControllerCompareEvaluationReports(input: { path: { candidateReportId: number; reportId: number } }): Promise<LlmEvaluationReportComparison>; // GET /api/v1/config/review-calibration/evaluation-reports/{reportId}/compare/{candidateReportId}
 confirmReviewMemberAssignment -> reviewMemberAssignmentControllerConfirm(input: { path: { taskId: number }; body: ReviewMemberAssignmentRequest }): Promise<ReviewMemberAssignment>; // POST /api/v1/review-workflow/tasks/{taskId}/assignment/confirm
 createEnterpriseTenant -> enterpriseTenantControllerCreate(input: { body: EnterpriseTenantCreateRequest }): Promise<EnterpriseTenant>; // POST /api/v1/enterprise/tenants
@@ -56,6 +57,7 @@ fetchNotificationEvents -> notificationIntegrationControllerListEvents(input?: {
 fetchNotificationReadKeys -> notificationControllerReadKeys(): Promise<string[]>; // GET /api/v1/notifications/read
 fetchNotificationReport -> notificationControllerReport(input?: { query?: { period?: string } }): Promise<NotificationReport>; // GET /api/v1/notifications/reports
 fetchNotifications -> notificationControllerGetNotifications(): Promise<NotificationCenter>; // GET /api/v1/notifications
+fetchPendingGithubPublications -> githubPublicationResolutionControllerList(input: { path: { taskId: number }; query?: { afterId?: number; limit?: number } }): Promise<PendingGithubPublication[]>; // GET /api/v1/reviews/{taskId}/github-comments/resolutions
 fetchRabbitMqIntegrationConfig -> systemConfigControllerGetRabbitMqIntegration(): Promise<ServiceIntegrationConfig>; // GET /api/v1/config/integrations/rabbitmq
 fetchRepositoryPolicyPreview -> repositoryPolicyControllerPreview(input?: { query?: { headSha?: string; organization: string; repository: string } }): Promise<RepositoryPolicyPreviewResponse>; // GET /api/v1/config/repository-policy/preview
 fetchRepositorySuppressions -> repositoryPolicyControllerListSuppressions(input?: { query?: { limit?: number; organization: string; repository: string } }): Promise<RepositorySuppressionResponse[]>; // GET /api/v1/config/repository-policy/suppressions
@@ -135,4 +137,5 @@ updateReviewStrategyEnforcement -> systemConfigControllerPromoteReviewStrategy(i
 updateSystemSettings -> systemConfigControllerUpdateSystemSettings(input: { body: SystemSettingsRequest }): Promise<SystemSettings>; // PUT /api/v1/config/system-settings
 updateUserRole -> userManagementControllerUpdateRole(input: { path: { id: number }; body: UserRoleUpdateRequest }): Promise<ManagedUser>; // PUT /api/v1/users/{id}/role
 updateUserStatus -> userManagementControllerUpdateStatus(input: { path: { id: number }; body: UserStatusUpdateRequest }): Promise<ManagedUser>; // PUT /api/v1/users/{id}/status
+verifyGithubPublication -> githubPublicationResolutionControllerVerify(input: { path: { publicationId: number; taskId: number }; body: GithubPublicationVerifyRequest }): Promise<PendingGithubPublication>; // POST /api/v1/reviews/{taskId}/github-comments/resolutions/{publicationId}/verify
 verifyLlmModelReleaseAudit -> reviewCalibrationControllerVerifyModelReleaseAudit(input: { path: { auditId: number } }): Promise<LlmModelReleaseAuditVerification>; // GET /api/v1/config/review-calibration/release-center/audits/{auditId}/verify

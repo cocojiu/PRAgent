@@ -230,6 +230,7 @@ export const findingFeedbackPromptTitle = (status: FindingFeedbackStatus) => {
 export const publishStatusText = (status: string) => {
   const labels: Record<string, string> = {
     outcome_unknown: "结果待核验",
+    closed: "已关闭，不再回写",
     published: "已发布",
     failed: "失败",
     skipped: "跳过",
@@ -272,7 +273,8 @@ export const publicationItemStatusClass = (status: string) => {
     already_published: "skipped",
     skipped: "skipped",
     failed: "failed",
-    outcome_unknown: "failed"
+    outcome_unknown: "failed",
+    closed: "skipped"
   };
   return classes[status] ?? "skipped";
 };
@@ -287,7 +289,7 @@ export const publicationMessageText = (message: string | undefined, status: stri
     return labels[message];
   }
   if (message) {
-    return message;
+    return message.replace(/<!-- repoguard-publication:[\s\S]*? -->\s*/g, "");
   }
   const fallbackLabels: Record<string, string> = {
     published: "GitHub 评论已发布。",

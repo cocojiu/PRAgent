@@ -67,6 +67,7 @@ class OpenApiGeneratedClientContractTest {
     );
     private static final List<String> MIGRATED_CLIENT_PREFIXES = List.of(
         "githubCommentHistoryController",
+        "githubPublicationResolutionController",
         "cacheStatsController",
         "dataRetentionController",
         "dashboardController",

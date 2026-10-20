@@ -74,7 +74,7 @@ class GithubCommentPublishServiceImplTest {
         new GithubCommentPublishPlanBuilder(),
         new GithubCommentDraftPublisher(
             githubPullRequestClient,
-            publicationRecorder,
+            com.repoguard.agent.testsupport.GithubPublicationProtocolFixture.protocol(publicationRecorder),
             writebackFailureClassifier
         ),
         publicationRecorder
@@ -183,7 +183,7 @@ class GithubCommentPublishServiceImplTest {
             new GithubCommentPublishPlanBuilder(),
             new GithubCommentDraftPublisher(
                 githubPullRequestClient,
-                publicationRecorder,
+            com.repoguard.agent.testsupport.GithubPublicationProtocolFixture.protocol(publicationRecorder),
                 writebackFailureClassifier
             ),
             publicationRecorder
@@ -204,7 +204,7 @@ class GithubCommentPublishServiceImplTest {
             new GithubCommentPublishPlanBuilder(),
             new GithubCommentDraftPublisher(
                 githubPullRequestClient,
-                publicationRecorder,
+            com.repoguard.agent.testsupport.GithubPublicationProtocolFixture.protocol(publicationRecorder),
                 writebackFailureClassifier
             ),
             publicationRecorder
@@ -244,7 +244,7 @@ class GithubCommentPublishServiceImplTest {
             new GithubCommentPublishPlanBuilder(),
             new GithubCommentDraftPublisher(
                 githubPullRequestClient,
-                publicationRecorder,
+            com.repoguard.agent.testsupport.GithubPublicationProtocolFixture.protocol(publicationRecorder),
                 writebackFailureClassifier
             ),
             publicationRecorder

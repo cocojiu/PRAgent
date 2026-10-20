@@ -6,6 +6,7 @@ public enum GithubCommentPublicationStatus {
     PUBLISHED("published"),
     DOWNGRADED_TO_PR_COMMENT("downgraded_to_pr_comment"),
     FAILED("failed"),
+    CLOSED("closed"),
     OUTCOME_UNKNOWN("outcome_unknown"),
     ALREADY_PUBLISHED("already_published"),
     SKIPPED("skipped");
