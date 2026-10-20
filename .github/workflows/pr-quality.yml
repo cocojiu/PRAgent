@@ -349,9 +349,9 @@ jobs:
     env:
       REPOGUARD_RUN_LINUX_BACKUP_INTEGRATION: 'true'
       REPOGUARD_ROLLBACK_PREVIOUS_SCHEMA_VERSION: '108'
-      # Signed SSE candidate source run 39392081392; compatible d969 baseline source run 39297463922. Isolated acceptance only.
-      REPOGUARD_ROLLBACK_UPGRADE_IMAGE: ghcr.io/cocojiu/pragent-backend@sha256:0f9136a7105ad91f2d16e58715ecac6094e400b6775187ca53e3874b6fe14194
-      REPOGUARD_ROLLBACK_UPGRADE_REVISION: ee9dbdcb1af74b00e2b1ac570499cd70dd46b00f
+      # Signed SSE candidate source run 39428286193; compatible d969 baseline source run 39297463922. Isolated acceptance only.
+      REPOGUARD_ROLLBACK_UPGRADE_IMAGE: ghcr.io/cocojiu/pragent-backend@sha256:84b69a88e9d45a5c184ae5221865480ca8c9cf42c88469a4f16c3a3eda407c37
+      REPOGUARD_ROLLBACK_UPGRADE_REVISION: 09b7567faf05cca029481f95fee845c82fe63202
       REPOGUARD_ROLLBACK_PREVIOUS_IMAGE: ghcr.io/cocojiu/pragent-backend@sha256:59ad1c7d8241f97e5fdff4ee0f517a182999e51d363d71ed294c1c195da7fcfe
       REPOGUARD_ROLLBACK_PREVIOUS_REVISION: d9696dce33c06f072cfc966adeb7e620fcfca769
     steps:
