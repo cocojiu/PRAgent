@@ -19,9 +19,10 @@ public class RabbitRuntimeHealthProbe {
     private final RabbitReviewQueueProperties properties;
     private final Executor executor;
     private final AsyncExecutorProperties asyncProperties;
-    private volatile String cachedStatus;
-    private volatile long cachedUntilMillis;
-    private volatile CompletableFuture<Boolean> inFlightProbe;
+    private record CachedStatus(String value, long untilMillis) { }
+    private volatile CachedStatus cached;
+    // Private and never cancelled by waiters: isDone tracks the supplier's actual completion.
+    private CompletableFuture<Boolean> inFlightProbe;
 
     public RabbitRuntimeHealthProbe(RabbitTemplate rabbitTemplate, RabbitReviewQueueProperties properties) {
         this(rabbitTemplate, properties, Runnable::run, new AsyncExecutorProperties());
@@ -51,8 +52,9 @@ public class RabbitRuntimeHealthProbe {
 
     public String connectionStatus() {
         long now = System.currentTimeMillis();
-        if (cachedStatus != null && now < cachedUntilMillis) {
-            return cachedStatus;
+        CachedStatus snapshot = cached;
+        if (snapshot != null && now < snapshot.untilMillis()) {
+            return snapshot.value();
         }
         try {
             CompletableFuture<Boolean> probe = currentProbe();
@@ -60,41 +62,25 @@ public class RabbitRuntimeHealthProbe {
             return cache(Boolean.TRUE.equals(open) ? "CONNECTED" : "DISCONNECTED", false);
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
-            return cache("UNKNOWN", true);
+            return "UNKNOWN";
         } catch (ExecutionException | RuntimeException | TimeoutException ex) {
-            CompletableFuture<Boolean> probe = inFlightProbe;
-            if (probe != null) {
-                probe.cancel(true);
-            }
             return cache("UNKNOWN", true);
         }
     }
 
     private synchronized CompletableFuture<Boolean> currentProbe() {
-        if (inFlightProbe != null && !inFlightProbe.isDone()) {
-            return inFlightProbe;
+        if (inFlightProbe == null || inFlightProbe.isDone()) {
+            inFlightProbe = CompletableFuture.supplyAsync(
+                () -> rabbitTemplate.execute(channel -> channel.isOpen()), executor);
         }
-        CompletableFuture<Boolean> probe = CompletableFuture.supplyAsync(
-            () -> rabbitTemplate.execute(channel -> channel.isOpen()),
-            executor
-        );
-        inFlightProbe = probe;
-        probe.whenComplete((ignored, failure) -> clearCompletedProbe(probe));
-        return probe;
-    }
-
-    private synchronized void clearCompletedProbe(CompletableFuture<Boolean> completed) {
-        if (inFlightProbe == completed) {
-            inFlightProbe = null;
-        }
+        return inFlightProbe;
     }
 
     private String cache(String status, boolean failure) {
-        cachedStatus = status;
         long duration = failure
             ? asyncProperties.getRabbitHealthFailureBackoffMillis()
             : asyncProperties.getRabbitHealthCacheMillis();
-        cachedUntilMillis = System.currentTimeMillis() + Math.max(100, duration);
+        cached = new CachedStatus(status, System.currentTimeMillis() + Math.max(100, duration));
         return status;
     }
 
