@@ -349,11 +349,11 @@ jobs:
     env:
       REPOGUARD_RUN_LINUX_BACKUP_INTEGRATION: 'true'
       REPOGUARD_ROLLBACK_PREVIOUS_SCHEMA_VERSION: '108'
-      # Signed candidate source run 39117463631; production rollback approved run 39107320086 (source 39022353214).
-      REPOGUARD_ROLLBACK_UPGRADE_IMAGE: ghcr.io/cocojiu/pragent-backend@sha256:285253d17a58164c27557f23cbd26042d63f5a63a9944606f0b0594853f50cdf
-      REPOGUARD_ROLLBACK_UPGRADE_REVISION: f2e6ce94f396e493a89b14ddfb840fdf6f7f0678
-      REPOGUARD_ROLLBACK_PREVIOUS_IMAGE: ghcr.io/cocojiu/pragent-backend@sha256:ff1c61bcec73255767caecc5292f27696ae6201b54ad682c596153e9bd254517
-      REPOGUARD_ROLLBACK_PREVIOUS_REVISION: 268aa8b7f71063aa0b23816a10c0f7fa1e03be02
+      # Signed SSE candidate source run 39392081392; compatible d969 baseline source run 39297463922. Isolated acceptance only.
+      REPOGUARD_ROLLBACK_UPGRADE_IMAGE: ghcr.io/cocojiu/pragent-backend@sha256:0f9136a7105ad91f2d16e58715ecac6094e400b6775187ca53e3874b6fe14194
+      REPOGUARD_ROLLBACK_UPGRADE_REVISION: ee9dbdcb1af74b00e2b1ac570499cd70dd46b00f
+      REPOGUARD_ROLLBACK_PREVIOUS_IMAGE: ghcr.io/cocojiu/pragent-backend@sha256:59ad1c7d8241f97e5fdff4ee0f517a182999e51d363d71ed294c1c195da7fcfe
+      REPOGUARD_ROLLBACK_PREVIOUS_REVISION: d9696dce33c06f072cfc966adeb7e620fcfca769
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
@@ -396,6 +396,7 @@ jobs:
             repoguard-backend/target/surefire-reports/*ReviewProgressTransportIntegrationTest*
             repoguard-backend/target/surefire-reports/*RuntimeSchemaRollbackLinuxIntegrationTest*
             repoguard-backend/target/runtime-rollback/
+            repoguard-backend/target/publication-maintenance/
           if-no-files-found: warn
           retention-days: 7
 

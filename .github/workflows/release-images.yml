@@ -38,6 +38,11 @@ on:
         required: false
         default: false
         type: boolean
+      publication_maintenance_required:
+        description: Require the pre-enabled persistent publication gate throughout deployment and rollback
+        required: false
+        default: false
+        type: boolean
       migrate_legacy_secret_files:
         description: Preserve active inline values in secret files before the first configtree deployment
         required: false
@@ -869,6 +874,7 @@ jobs:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
           APP_CORS_ALLOWED_ORIGINS: ${{ secrets.APP_CORS_ALLOWED_ORIGINS || vars.APP_CORS_ALLOWED_ORIGINS }}
           HEALTH_URL: ${{ secrets.HEALTH_URL || vars.HEALTH_URL }}
+          PUBLICATION_MAINTENANCE_REQUIRED: ${{ inputs.publication_maintenance_required }}
           MIGRATE_LEGACY_SECRET_FILES: ${{ inputs.migrate_legacy_secret_files }}
           INITIALIZE_MISSING_ENCRYPTION_SALT: ${{ inputs.initialize_missing_encryption_salt }}
           REPOGUARD_FRONTEND_SERVER_NAME: ${{ secrets.REPOGUARD_FRONTEND_SERVER_NAME || vars.REPOGUARD_FRONTEND_SERVER_NAME }}
@@ -910,6 +916,7 @@ jobs:
              APP_CORS_ALLOWED_ORIGINS='${APP_CORS_ALLOWED_ORIGINS}' \
              HEALTH_URL='${health_url}' \
              DEPLOY_ASSET_BACKUP_DIR='${DEPLOY_ASSET_BACKUP_DIR}' \
+             PUBLICATION_MAINTENANCE_REQUIRED='${PUBLICATION_MAINTENANCE_REQUIRED}' \
              MIGRATE_LEGACY_SECRET_FILES='${MIGRATE_LEGACY_SECRET_FILES}' \
              INITIALIZE_MISSING_ENCRYPTION_SALT='${INITIALIZE_MISSING_ENCRYPTION_SALT}' \
              sh scripts/deploy-prod.sh"

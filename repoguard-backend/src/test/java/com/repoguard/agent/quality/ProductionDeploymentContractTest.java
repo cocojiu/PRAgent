@@ -38,6 +38,28 @@ class ProductionDeploymentContractTest {
     }
 
     @Test
+    void publicationMaintenanceIsExplicitAndVerifiedBeforeServicesChange() throws IOException {
+        Path root = repositoryRoot();
+        Map<String, Object> workflow = yaml(root.resolve(".github/workflows/release-images.yml"));
+        Map<String, Object> events = map(workflow.getOrDefault("on", workflow.get(Boolean.TRUE)));
+        Map<String, Object> option = map(map(map(events.get("workflow_dispatch")).get("inputs")).get("publication_maintenance_required"));
+        assertThat(option).containsEntry("default", false).containsEntry("type", "boolean");
+        String source = read(root.resolve(".github/workflows/release-images.yml"));
+        assertThat(source).contains("PUBLICATION_MAINTENANCE_REQUIRED: ${{ inputs.publication_maintenance_required }}",
+            "PUBLICATION_MAINTENANCE_REQUIRED='${PUBLICATION_MAINTENANCE_REQUIRED}'");
+        String script = read(root.resolve("scripts/deploy-prod.sh"));
+        assertThat(script.lastIndexOf("\nverify_publication_maintenance\n"))
+            .isNotNegative().isLessThan(script.lastIndexOf("if [ \"$PREFLIGHT_ONLY\" = \"true\" ]; then"));
+        assertThat(script.lastIndexOf("\nvalidate_publication_maintenance_volume\n"))
+            .isNotNegative().isLessThan(script.indexOf("\ncompose pull $deploy_services\n"));
+        assertThat(script).contains("PUBLICATION_MAINTENANCE_REQUIRED=\"${PUBLICATION_MAINTENANCE_REQUIRED:-false}\"",
+            "Keeping the maintenance-aware candidate Caddyfile during application rollback.", "compose stop caddy");
+        assertThat(read(root.resolve("Caddyfile"))).contains("root /data/repoguard-maintenance", "try_files publication-blocked", "Retry-After 60");
+        Map<String, Object> caddy = map(services().get("caddy"));
+        assertThat(list(caddy.get("volumes"))).contains("repoguard_caddy_data:/data");
+    }
+
+    @Test
     void evaluationRuntimeRevisionUsesThePublishedImageCommit() throws IOException {
         String dockerfile = read(repositoryRoot().resolve("repoguard-backend/Dockerfile"));
         String workflow = read(repositoryRoot().resolve(".github/workflows/release-images.yml"));

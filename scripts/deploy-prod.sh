@@ -13,6 +13,8 @@ DEPLOY_LOCK_FILE="${DEPLOY_LOCK_FILE:-.deploy.lock}"
 DEPLOY_ASSET_BACKUP_DIR="${DEPLOY_ASSET_BACKUP_DIR:-}"
 DEPLOY_STATE_DIR="${DEPLOY_STATE_DIR:-.deploy-state}"
 PREFLIGHT_ONLY="${PREFLIGHT_ONLY:-false}"
+PUBLICATION_MAINTENANCE_REQUIRED="${PUBLICATION_MAINTENANCE_REQUIRED:-false}"
+expected_caddy_maintenance_volume=""
 MIGRATE_LEGACY_SECRET_FILES="${MIGRATE_LEGACY_SECRET_FILES:-false}"
 INITIALIZE_MISSING_ENCRYPTION_SALT="${INITIALIZE_MISSING_ENCRYPTION_SALT:-false}"
 RELEASE_MANIFEST="${RELEASE_MANIFEST:-}"
@@ -55,6 +57,14 @@ case "$PREFLIGHT_ONLY" in
   true|false) ;;
   *)
     echo "PREFLIGHT_ONLY must be true or false." >&2
+    exit 1
+    ;;
+esac
+
+case "$PUBLICATION_MAINTENANCE_REQUIRED" in
+  true|false) ;;
+  *)
+    echo "PUBLICATION_MAINTENANCE_REQUIRED must be true or false." >&2
     exit 1
     ;;
 esac
@@ -778,6 +788,67 @@ stop_inactive_split_worker() {
   fi
 }
 
+# This opt-in verifies pre-existing state; it never enables or clears maintenance.
+verify_publication_maintenance() {
+  [ "$PUBLICATION_MAINTENANCE_REQUIRED" = "true" ] || return 0
+  maintenance_caddy_id="$(compose ps -q caddy)" || return 1
+  if [ -z "$maintenance_caddy_id" ]; then
+    echo "Publication maintenance requires an already running Caddy." >&2
+    return 1
+  fi
+  maintenance_caddy_volume="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/data"}}{{if eq .Type "volume"}}{{.Name}}{{end}}{{end}}{{end}}' "$maintenance_caddy_id")" || return 1
+  if [ -z "$maintenance_caddy_volume" ]; then
+    echo "Publication maintenance requires a persistent Caddy data volume." >&2
+    return 1
+  fi
+  if [ -n "$expected_caddy_maintenance_volume" ] && [ "$maintenance_caddy_volume" != "$expected_caddy_maintenance_volume" ]; then
+    echo "Caddy maintenance volume changed; refusing to reopen publication." >&2
+    return 1
+  fi
+  expected_caddy_maintenance_volume="$maintenance_caddy_volume"
+  if ! docker exec "$maintenance_caddy_id" sh -ec 'test -f /data/repoguard-maintenance/publication-blocked && test -r /data/repoguard-maintenance/publication-blocked'; then
+    echo "Publication maintenance marker is absent or unreadable." >&2
+    return 1
+  fi
+  # Probe only the inspected Caddy address, with no credentials, redirects or response body.
+  maintenance_addresses="$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' "$maintenance_caddy_id")" || return 1
+  if ! printf '%s\n' "$maintenance_addresses" | python3 -c '
+import http.client, ipaddress, sys
+addresses = [ipaddress.ip_address(value) for value in sys.stdin.read().split()]
+addresses = [value for value in addresses if value.version == 4 and value.is_private and not value.is_loopback and not value.is_unspecified and not value.is_multicast]
+if not addresses:
+    raise SystemExit("Caddy has no private container address for maintenance verification")
+connection = http.client.HTTPConnection(str(addresses[0]), 80, timeout=5)
+try:
+    connection.request("POST", "/api/v1/reviews/0/github-comments", body=b"", headers={"Host": "localhost", "Connection": "close"})
+    response = connection.getresponse()
+    if response.status != 503 or response.getheader("X-RepoGuard-Publication-Maintenance") != "true":
+        raise SystemExit(f"Publication maintenance response was not confirmed: HTTP {response.status}")
+finally:
+    connection.close()
+'; then
+    echo "Caddy did not confirm the publication maintenance response." >&2
+    return 1
+  fi
+}
+
+validate_publication_maintenance_volume() {
+  [ "$PUBLICATION_MAINTENANCE_REQUIRED" = "true" ] || return 0
+  maintenance_planned_volume="$(compose config --format json | python3 -c '
+import json, sys
+model = json.load(sys.stdin)
+mounts = [m for m in model["services"]["caddy"].get("volumes", []) if m.get("target") == "/data" and m.get("type") == "volume"]
+if len(mounts) != 1:
+    raise SystemExit("Caddy must retain exactly one persistent data volume")
+source = mounts[0]["source"]
+print(model.get("volumes", {}).get(source, {}).get("name", source))
+')" || return 1
+  if [ -z "$expected_caddy_maintenance_volume" ] || [ "$maintenance_planned_volume" != "$expected_caddy_maintenance_volume" ]; then
+    echo "Candidate Compose would replace the active maintenance volume." >&2
+    return 1
+  fi
+}
+
 restore_deployment_assets() {
   restore_compose_file="${1:-true}"
   if [ -z "$DEPLOY_ASSET_BACKUP_DIR" ]; then
@@ -791,7 +862,13 @@ restore_deployment_assets() {
 
   compose_directory="$(dirname "$COMPOSE_FILE")"
   restored_assets=false
+  kept_maintenance_edge=false
   for relative_path in config/rabbitmq/rabbitmq.conf Caddyfile docker-compose.metrics-bridge.yml; do
+    if [ "$relative_path" = "Caddyfile" ] && [ "$PUBLICATION_MAINTENANCE_REQUIRED" = "true" ]; then
+      echo "Keeping the maintenance-aware candidate Caddyfile during application rollback." >&2
+      kept_maintenance_edge=true
+      continue
+    fi
     backup_path="${DEPLOY_ASSET_BACKUP_DIR}/${relative_path}"
     target_path="${compose_directory}/${relative_path}"
     if [ -f "$backup_path" ]; then
@@ -811,12 +888,18 @@ restore_deployment_assets() {
 
   if [ "$restored_assets" = "true" ]; then
     echo "Previous deployment assets restored from $DEPLOY_ASSET_BACKUP_DIR." >&2
+  elif [ "$kept_maintenance_edge" = "true" ]; then
+    echo "Publication maintenance edge retained; no other assets needed restoration." >&2
   else
     echo "No previous deployment assets existed; keeping the uploaded assets." >&2
   fi
 }
 
 recreate_edge_proxy_chain() {
+  if ! verify_publication_maintenance; then
+    compose stop caddy >/dev/null 2>&1 || true
+    return 1
+  fi
   edge_refresh_status=0
   # Nginx and Caddy resolve their upstream service names when their processes
   # start. Recreate both in dependency order whenever the backend is recreated
@@ -825,6 +908,10 @@ recreate_edge_proxy_chain() {
   wait_service_health frontend 30 || edge_refresh_status=1
   compose up -d --no-deps --force-recreate caddy || edge_refresh_status=1
   wait_service_health caddy 30 || edge_refresh_status=1
+  if ! verify_publication_maintenance; then
+    compose stop caddy >/dev/null 2>&1 || true
+    edge_refresh_status=1
+  fi
   return "$edge_refresh_status"
 }
 
@@ -946,6 +1033,7 @@ verify_deployment() {
   fi
   assert_service_image frontend "$FRONTEND_IMAGE"
   verify_release_schema
+  verify_publication_maintenance
   echo "Deployment release identities:"
   print_service_release_identity backend
   if has_compose_service backend-worker; then
@@ -979,6 +1067,8 @@ validate_edge_observability_isolation
 validate_split_runtime_mode
 validate_production_data_routing
 validate_review_timeout_layering
+verify_publication_maintenance
+validate_publication_maintenance_volume
 if [ "$PREFLIGHT_ONLY" = "true" ]; then
   echo "Production deployment preflight passed; no image was pulled and no service was changed."
   exit 0

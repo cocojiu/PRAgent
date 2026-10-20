@@ -46,6 +46,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManagerFactory;
@@ -72,13 +73,15 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 /** Real transport and product proxy configuration; authentication and repositories are isolated fixtures. */
 class ReviewProgressTransportIntegrationTest {
     private static final ObjectMapper JSON = new ObjectMapper();
-    private static final String NGINX = "nginxinc/nginx-unprivileged:1.31.6-alpine-slim@sha256:123fb7283ffb4788e260d4e980005a978995fefedcdbb04d268077a19b84576d";
+    private static final String NGINX = "nginxinc/nginx-unprivileged:1.31.7-alpine-slim@sha256:b94a56c52fd315bbd8f1f4368d64c25983351c978313e02feff2c0b35e856f2d";
     private static final String CADDY = "caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648";
     private static final String OWNER = "progress-" + UUID.randomUUID().toString().replace("-", "");
     private static final AtomicBoolean REVOKED = new AtomicBoolean();
     private static final Map<Integer, String> TOKENS = java.util.stream.IntStream.rangeClosed(1, 9)
         .boxed().collect(java.util.stream.Collectors.toUnmodifiableMap(id -> id, id -> UUID.randomUUID().toString()));
+    private static final AtomicInteger PUBLICATION_PROBES = new AtomicInteger();
     private final List<String> containers = new ArrayList<>();
+    private final List<String> volumes = new ArrayList<>();
     private final List<Stream> open = new ArrayList<>();
     @TempDir Path temporary;
     private Tomcat tomcat;
@@ -96,6 +99,7 @@ class ReviewProgressTransportIntegrationTest {
             assertThat(System.getProperty("os.name")).startsWith("Linux");
         }
         REVOKED.set(false);
+        PUBLICATION_PROBES.set(0);
         TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), ReviewTask.class);
         TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), ReviewTimeline.class);
         tomcat = new Tomcat();
@@ -166,10 +170,9 @@ class ReviewProgressTransportIntegrationTest {
         String site = "{$REPOGUARD_FRONTEND_SERVER_NAME} {";
         assertThat(product.split(java.util.regex.Pattern.quote(site), -1).length).isEqualTo(2);
         Files.writeString(caddyfile, product.replace(site, site + "\n    tls internal"));
-        String edge = container(List.of(CADDY, "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"), List.of(
-            "--entrypoint", "caddy", "--cap-add", "NET_BIND_SERVICE", "--publish", "127.0.0.1::443", "--env", "REPOGUARD_FRONTEND_SERVER_NAME=localhost",
-            "--tmpfs", "/data:rw,noexec,nosuid,size=16m", "--tmpfs", "/config:rw,noexec,nosuid,size=4m",
-            "--volume", caddyfile + ":/etc/caddy/Caddyfile:ro"));
+        String dataVolume = command("docker", "volume", "create", "--label", "com.repoguard.ci.owner=" + OWNER, "repoguard-ci-" + OWNER + "-edge-data");
+        volumes.add(dataVolume);
+        String edge = startProxyEdge(caddyfile, dataVolume);
         assertThat(JSON.readTree(command("docker", "inspect", "--format", "{{json .HostConfig.CapDrop}}", edge)))
             .isEqualTo(JSON.readTree("[\"ALL\"]"));
         assertThat(JSON.readTree(command("docker", "inspect", "--format", "{{json .HostConfig.CapAdd}}", edge)))
@@ -219,6 +222,150 @@ class ReviewProgressTransportIntegrationTest {
             recovered.reader().close(); open.clear();
             await(() -> active() == 0 && scheduler().getQueue().isEmpty(), 20);
         }
+        verifyPublicationMaintenance(repository, edge, caddyfile, dataVolume, ca[0]);
+    }
+
+    private String startProxyEdge(Path caddyfile, String dataVolume) throws Exception {
+        return container(List.of(CADDY, "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"), List.of(
+            "--entrypoint", "caddy", "--cap-add", "NET_BIND_SERVICE", "--publish", "127.0.0.1::443", "--publish", "127.0.0.1::80", "--env", "REPOGUARD_FRONTEND_SERVER_NAME=localhost",
+            "--volume", dataVolume + ":/data", "--tmpfs", "/config:rw,noexec,nosuid,size=4m",
+            "--volume", caddyfile + ":/etc/caddy/Caddyfile:ro"));
+    }
+
+    private URI proxyBase(String edge) throws Exception {
+        String binding = command("docker", "port", edge, "443/tcp");
+        assertThat(binding).matches("127\\.0\\.0\\.1:[1-9][0-9]*");
+        return URI.create("https://localhost:" + binding.substring(binding.lastIndexOf(':') + 1));
+    }
+
+    private URI proxyHttpBase(String edge) throws Exception {
+        String binding = command("docker", "port", edge, "80/tcp");
+        assertThat(binding).matches("127\\.0\\.0\\.1:[1-9][0-9]*");
+        return URI.create("http://localhost:" + binding.substring(binding.lastIndexOf(':') + 1));
+    }
+
+    private String recreateProxyEdge(String edge, Path config, String volume) throws Exception {
+        command("docker", "rm", "--force", edge); containers.remove(edge);
+        return startProxyEdge(config, volume);
+    }
+
+    private void awaitProxy(HttpClient client, URI base) throws Exception {
+        await(() -> {
+            try { return client.send(HttpRequest.newBuilder(base.resolve("/healthz")).timeout(Duration.ofSeconds(2)).GET().build(), HttpResponse.BodyHandlers.discarding()).statusCode() == 200; }
+            catch (Exception e) { return false; }
+        }, 15);
+    }
+
+    private void publicationRequest(HttpClient client, URI base, String method, String path, boolean blocked) throws Exception {
+        int before = PUBLICATION_PROBES.get();
+        var response = client.send(HttpRequest.newBuilder(base.resolve(path)).timeout(Duration.ofSeconds(8))
+            .method(method, HttpRequest.BodyPublishers.noBody()).build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        assertThat(response.statusCode()).as(method + " " + path).isEqualTo(blocked ? 503 : 200);
+        assertThat(PUBLICATION_PROBES.get()).as("Blocked requests must not reach even the isolated application").isEqualTo(before + (blocked ? 0 : 1));
+        if (blocked) {
+            assertThat(response.headers().firstValue("X-RepoGuard-Publication-Maintenance")).contains("true");
+            assertThat(response.headers().firstValue("Retry-After")).contains("60");
+            assertThat(response.headers().firstValue("Cache-Control")).contains("no-store");
+            assertThat(JSON.readTree(response.body()).path("success").asBoolean()).isFalse();
+            assertThat(JSON.readTree(response.body()).path("code").asText()).isEqualTo("SERVICE_UNAVAILABLE");
+        } else assertThat(JSON.readTree(response.body()).path("proxied").asBoolean()).isTrue();
+    }
+
+    private int deploymentGuard(Path repository, String edge, Path compose, String expectedVolume, boolean required) throws Exception {
+        String script = Files.readString(repository.resolve("scripts/deploy-prod.sh"));
+        String functions = script.substring(script.indexOf("verify_publication_maintenance() {"), script.indexOf("restore_deployment_assets() {"));
+        String resolver = "compose() { if [ \"$1\" = ps ]; then printf '%s\\n' \"$TEST_EDGE\"; else docker compose -f \"$TEST_COMPOSE\" \"$@\"; fi; }\n";
+        var process = new ProcessBuilder("sh", "-ec", resolver + functions + "\nverify_publication_maintenance\nvalidate_publication_maintenance_volume");
+        process.environment().putAll(Map.of("PUBLICATION_MAINTENANCE_REQUIRED", Boolean.toString(required),
+            "expected_caddy_maintenance_volume", expectedVolume, "TEST_EDGE", edge, "TEST_COMPOSE", compose.toString()));
+        Path diagnostic = temporary.resolve("maintenance-guard.log");
+        Process running = process.redirectErrorStream(true).redirectOutput(diagnostic.toFile()).start();
+        try {
+            assertThat(running.waitFor(30, TimeUnit.SECONDS)).isTrue();
+            Path evidence = Path.of("target/publication-maintenance"); Files.createDirectories(evidence);
+            String output = Files.readString(diagnostic);
+            Files.writeString(evidence.resolve("guard-last.log"), output.substring(0, Math.min(output.length(), 8192)));
+            return running.exitValue();
+        } finally { if (running.isAlive()) running.destroyForcibly(); }
+    }
+
+    private void restoreAssets(Path repository, Path config, Path backup, boolean required) throws Exception {
+        String script = Files.readString(repository.resolve("scripts/deploy-prod.sh"));
+        String function = script.substring(script.indexOf("restore_deployment_assets() {"), script.indexOf("recreate_edge_proxy_chain() {"));
+        var process = new ProcessBuilder("sh", "-ec", function + "\nrestore_deployment_assets false");
+        process.environment().putAll(Map.of("PUBLICATION_MAINTENANCE_REQUIRED", Boolean.toString(required),
+            "COMPOSE_FILE", config.getParent().resolve("docker-compose.prod.yml").toString(), "DEPLOY_ASSET_BACKUP_DIR", backup.toString()));
+        Process running = process.redirectErrorStream(true).redirectOutput(temporary.resolve("maintenance-restore.log").toFile()).start();
+        try { assertThat(running.waitFor(15, TimeUnit.SECONDS)).isTrue(); assertThat(running.exitValue()).isZero(); }
+        finally { if (running.isAlive()) running.destroyForcibly(); }
+    }
+
+    private void verifyPublicationMaintenance(Path repository, String initialEdge, Path config, String volume, byte[] ca) throws Exception {
+        Path compose = temporary.resolve("maintenance-compose.yml");
+        String model = "services:\n  caddy:\n    image: " + CADDY + "\n    volumes:\n      - edge_data:/data\nvolumes:\n  edge_data:\n    name: " + volume + "\n";
+        Files.writeString(compose, model);
+        String gateConfig = Files.readString(config);
+        String edge = initialEdge;
+        var proof = new java.util.LinkedHashMap<String, Object>();
+        try (HttpClient client = client(trust(ca))) {
+            URI base = proxyBase(edge); awaitProxy(client, base);
+            publicationRequest(client, base, "POST", "/api/v1/reviews/9/github-comments", false);
+            URI httpBase = proxyHttpBase(edge);
+            var redirected = client.send(HttpRequest.newBuilder(httpBase.resolve("/api/v1/reviews/9/github-comments"))
+                .timeout(Duration.ofSeconds(5)).POST(HttpRequest.BodyPublishers.noBody()).build(), HttpResponse.BodyHandlers.discarding());
+            assertThat(redirected.statusCode()).isEqualTo(301);
+            assertThat(redirected.headers().firstValue("Location")).contains("https://localhost/api/v1/reviews/9/github-comments");
+            assertThat(deploymentGuard(repository, edge, compose, "", false)).isZero();
+            assertThat(deploymentGuard(repository, edge, compose, "", true)).as("Missing marker must fail preflight").isNotZero();
+            command("docker", "exec", edge, "sh", "-ec", "umask 077; mkdir -p /data/repoguard-maintenance; : > /data/repoguard-maintenance/publication-blocked");
+            List<String> paths = List.of("/api/v1/reviews/9/github-comments", "/api/v1/reviews/9/github-comments/",
+                "/api/v1/reviews/9/github-comments/resolutions/1/verify", "/api/v1/reviews/9/github-comments/resolutions/1/close",
+                "/api/v1/reviews;scope/9/github-comments", "/api/v1/reviews/9/github-comments;scope", "/api/v1/reviews/9/%67ithub-comments?preview=false");
+            for (String path : paths) publicationRequest(client, base, "POST", path, true);
+            publicationRequest(client, httpBase, "POST", paths.getFirst(), true);
+            awaitProxy(client, httpBase);
+            publicationRequest(client, base, "GET", "/api/v1/reviews/9/github-comments", false);
+            publicationRequest(client, base, "POST", "/api/v1/reviews/9/retry", false);
+            Stream stream = subscribe(client, base.resolve("/api/v1/reviews/9/events"), 1); assertProgress(stream);
+            stream.reader().close(); open.clear(); await(() -> active() == 0, 15);
+            assertThat(deploymentGuard(repository, edge, compose, "", true)).as(Files.readString(temporary.resolve("maintenance-guard.log"))).isZero();
+            assertThat(deploymentGuard(repository, edge, compose, volume + "-unexpected", true)).isNotZero();
+            Files.writeString(compose, model.replace("name: " + volume, "name: " + volume + "-replacement"));
+            assertThat(deploymentGuard(repository, edge, compose, "", true)).isNotZero();
+            Files.writeString(compose, model);
+            edge = recreateProxyEdge(edge, config, volume); base = proxyBase(edge); awaitProxy(client, base);
+            publicationRequest(client, base, "POST", paths.getFirst(), true);
+            assertThat(deploymentGuard(repository, edge, compose, volume, true)).as(Files.readString(temporary.resolve("maintenance-guard.log"))).isZero();
+            Path backup = temporary.resolve("previous-assets"); Files.createDirectories(backup);
+            String legacy = "localhost {\n    tls internal\n    respond \"legacy\" 200\n}\n:80 {\n    respond \"legacy\" 200\n}\n";
+            Files.writeString(backup.resolve("Caddyfile"), legacy);
+            restoreAssets(repository, config, backup, true);
+            assertThat(Files.readString(config)).isEqualTo(gateConfig);
+            edge = recreateProxyEdge(edge, config, volume); base = proxyBase(edge); awaitProxy(client, base);
+            publicationRequest(client, base, "POST", paths.getLast(), true);
+            assertThat(deploymentGuard(repository, edge, compose, volume, true)).as(Files.readString(temporary.resolve("maintenance-guard.log"))).isZero();
+            restoreAssets(repository, config, backup, false);
+            assertThat(Files.readString(config)).isEqualTo(legacy);
+            edge = recreateProxyEdge(edge, config, volume); base = proxyBase(edge); awaitProxy(client, base);
+            assertThat(deploymentGuard(repository, edge, compose, volume, true)).as("A marker alone must not pass with a legacy Caddyfile").isNotZero();
+            Files.writeString(config, gateConfig);
+            edge = recreateProxyEdge(edge, config, volume); base = proxyBase(edge); awaitProxy(client, base);
+            assertThat(deploymentGuard(repository, edge, compose, volume, true)).as(Files.readString(temporary.resolve("maintenance-guard.log"))).isZero();
+            command("docker", "exec", edge, "rm", "/data/repoguard-maintenance/publication-blocked");
+            for (String path : paths.subList(0, 4)) publicationRequest(client, base, "POST", path, false);
+            assertThat(deploymentGuard(repository, edge, compose, volume, true)).isNotZero();
+            proof.putAll(Map.of("blockedPostVariants", paths.size(), "blockedRequestsReachedBackend", 0, "markerSurvivedRecreation", true,
+                "candidateConfigRetainedDuringRollback", true, "legacyConfigRejected", true, "markerAbsentRejected", true,
+                "changedRuntimeVolumeRejected", true, "replacementComposeVolumeRejected", true, "defaultOffAndReleaseForwarded", true));
+        }
+        proof.put("httpCanonicalRedirect", 301); proof.put("httpMaintenanceStatus", 503); proof.put("httpHealthDuringMaintenance", 200);
+        proof.put("runId", System.getenv("GITHUB_RUN_ID")); proof.put("revision", System.getenv("GITHUB_SHA"));
+        proof.put("caddy", CADDY); proof.put("volume", volume);
+        proof.put("caddyfileSha256", java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(repository.resolve("Caddyfile")))));
+        proof.put("deployScriptSha256", java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(repository.resolve("scripts/deploy-prod.sh")))));
+        proof.put("productionWrites", 0); proof.put("realGithubPosts", 0); proof.put("fullApplicationRollback", false); proof.put("passed", true);
+        Path evidence = Path.of("target/publication-maintenance"); Files.createDirectories(evidence);
+        Files.writeString(evidence.resolve("result.json"), JSON.writerWithDefaultPrettyPrinter().writeValueAsString(proof));
     }
 
     private void verifyRejectedInputs(HttpClient client, URI endpoint) throws Exception {
@@ -370,6 +517,10 @@ class ReviewProgressTransportIntegrationTest {
                     assertThat(command("docker", "inspect", "--format", "{{.Id}}|{{index .Config.Labels \"com.repoguard.ci.owner\"}}", id)).isEqualTo(id + "|" + OWNER);
                     command("docker", "rm", "--force", id);
                 }
+                for (String volume : volumes.reversed()) {
+                    assertThat(command("docker", "volume", "inspect", "--format", "{{index .Labels \"com.repoguard.ci.owner\"}}", volume)).isEqualTo(OWNER);
+                    command("docker", "volume", "rm", volume);
+                }
                 if (network != null) {
                     assertThat(command("docker", "network", "inspect", "--format", "{{.Id}}|{{index .Labels \"com.repoguard.ci.owner\"}}", network)).isEqualTo(network + "|" + OWNER);
                     command("docker", "network", "rm", network);
@@ -382,6 +533,12 @@ class ReviewProgressTransportIntegrationTest {
     }
 
     private record Stream(HttpResponse<InputStream> response, BufferedReader reader, long startedAt) {}
+
+    @org.springframework.web.bind.annotation.RestController
+    static class PublicationProbeController {
+        @org.springframework.web.bind.annotation.RequestMapping({"/api/v1/reviews/{taskId}/github-comments", "/api/v1/reviews/{taskId}/github-comments/**", "/api/v1/reviews/{taskId}/retry"})
+        Map<String, Boolean> probe() { PUBLICATION_PROBES.incrementAndGet(); return Map.of("proxied", true); }
+    }
 
     @TestConfiguration @EnableWebMvc
     static class Fixture implements WebMvcConfigurer {
@@ -407,6 +564,7 @@ class ReviewProgressTransportIntegrationTest {
         }
         @Bean ReviewProgressController controller(ReviewProgressStreamService streams) { return new ReviewProgressController(streams); }
         @Bean GlobalExceptionHandler errors() { return new GlobalExceptionHandler(); }
+        @Bean PublicationProbeController publicationProbe() { return new PublicationProbeController(); }
         @Override public void addInterceptors(InterceptorRegistry registry) {
             registry.addInterceptor(new HandlerInterceptor() {
                 @Override public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
