@@ -401,7 +401,7 @@ $env:REPOGUARD_LOG_PATH = "../logs/backend"
 
 ### GitHub 发布维护窗口
 
-需要限制 GitHub 回写的升级，应先单独安装并验证支持维护门禁的 Caddyfile，再开启发布窗口；安装边缘配置本身也属于需审批的生产变更。门禁使用现有 Caddy `/data` 持久卷中的 `/data/repoguard-maintenance/publication-blocked` 标记，默认不存在，不改变正常路由。标记存在时，HTTP/HTTPS 的 GitHub 评论发布及核验/关闭 POST 返回带 `Retry-After: 60` 的503；GET、健康检查和其他写入不受此门禁影响。标记只供运维控制，不对外提供开关接口。
+需要限制 GitHub 回写的升级，应先单独安装并验证支持维护门禁的 Caddyfile，再开启发布窗口；安装边缘配置本身也属于需审批的生产变更。门禁使用现有 Caddy `/data` 持久卷中的 `/data/repoguard-maintenance/publication-blocked` 标记，默认不存在，不改变正常路由。标记存在时，HTTP/HTTPS 的 GitHub 评论发布及核验/关闭 POST 返回带 `Retry-After: 60` 的503；GET、健康检查和其他写入不受此门禁影响。标记只供运维控制，不对外提供开关接口。HTTP跳转由既有显式canonical规则处理，自动证书管理保持启用。
 
 在部署根目录、确认获批后启用；与部署共用锁，避免切换过程中被提前解除：
 

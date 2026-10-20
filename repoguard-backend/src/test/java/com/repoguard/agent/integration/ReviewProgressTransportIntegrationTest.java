@@ -227,7 +227,7 @@ class ReviewProgressTransportIntegrationTest {
 
     private String startProxyEdge(Path caddyfile, String dataVolume) throws Exception {
         return container(List.of(CADDY, "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"), List.of(
-            "--entrypoint", "caddy", "--cap-add", "NET_BIND_SERVICE", "--publish", "127.0.0.1::443", "--env", "REPOGUARD_FRONTEND_SERVER_NAME=localhost",
+            "--entrypoint", "caddy", "--cap-add", "NET_BIND_SERVICE", "--publish", "127.0.0.1::443", "--publish", "127.0.0.1::80", "--env", "REPOGUARD_FRONTEND_SERVER_NAME=localhost",
             "--volume", dataVolume + ":/data", "--tmpfs", "/config:rw,noexec,nosuid,size=4m",
             "--volume", caddyfile + ":/etc/caddy/Caddyfile:ro"));
     }
@@ -236,6 +236,12 @@ class ReviewProgressTransportIntegrationTest {
         String binding = command("docker", "port", edge, "443/tcp");
         assertThat(binding).matches("127\\.0\\.0\\.1:[1-9][0-9]*");
         return URI.create("https://localhost:" + binding.substring(binding.lastIndexOf(':') + 1));
+    }
+
+    private URI proxyHttpBase(String edge) throws Exception {
+        String binding = command("docker", "port", edge, "80/tcp");
+        assertThat(binding).matches("127\\.0\\.0\\.1:[1-9][0-9]*");
+        return URI.create("http://localhost:" + binding.substring(binding.lastIndexOf(':') + 1));
     }
 
     private String recreateProxyEdge(String edge, Path config, String volume) throws Exception {
@@ -304,6 +310,11 @@ class ReviewProgressTransportIntegrationTest {
         try (HttpClient client = client(trust(ca))) {
             URI base = proxyBase(edge); awaitProxy(client, base);
             publicationRequest(client, base, "POST", "/api/v1/reviews/9/github-comments", false);
+            URI httpBase = proxyHttpBase(edge);
+            var redirected = client.send(HttpRequest.newBuilder(httpBase.resolve("/api/v1/reviews/9/github-comments"))
+                .timeout(Duration.ofSeconds(5)).POST(HttpRequest.BodyPublishers.noBody()).build(), HttpResponse.BodyHandlers.discarding());
+            assertThat(redirected.statusCode()).isEqualTo(308);
+            assertThat(redirected.headers().firstValue("Location")).contains("https://localhost/api/v1/reviews/9/github-comments");
             assertThat(deploymentGuard(repository, edge, compose, "", false)).isZero();
             assertThat(deploymentGuard(repository, edge, compose, "", true)).as("Missing marker must fail preflight").isNotZero();
             command("docker", "exec", edge, "sh", "-ec", "umask 077; mkdir -p /data/repoguard-maintenance; : > /data/repoguard-maintenance/publication-blocked");
@@ -311,6 +322,8 @@ class ReviewProgressTransportIntegrationTest {
                 "/api/v1/reviews/9/github-comments/resolutions/1/verify", "/api/v1/reviews/9/github-comments/resolutions/1/close",
                 "/api/v1/reviews;scope/9/github-comments", "/api/v1/reviews/9/github-comments;scope", "/api/v1/reviews/9/%67ithub-comments?preview=false");
             for (String path : paths) publicationRequest(client, base, "POST", path, true);
+            publicationRequest(client, httpBase, "POST", paths.getFirst(), true);
+            awaitProxy(client, httpBase);
             publicationRequest(client, base, "GET", "/api/v1/reviews/9/github-comments", false);
             publicationRequest(client, base, "POST", "/api/v1/reviews/9/retry", false);
             Stream stream = subscribe(client, base.resolve("/api/v1/reviews/9/events"), 1); assertProgress(stream);
@@ -345,6 +358,7 @@ class ReviewProgressTransportIntegrationTest {
                 "candidateConfigRetainedDuringRollback", true, "legacyConfigRejected", true, "markerAbsentRejected", true,
                 "changedRuntimeVolumeRejected", true, "replacementComposeVolumeRejected", true, "defaultOffAndReleaseForwarded", true));
         }
+        proof.put("httpCanonicalRedirect", 308); proof.put("httpMaintenanceStatus", 503); proof.put("httpHealthDuringMaintenance", 200);
         proof.put("runId", System.getenv("GITHUB_RUN_ID")); proof.put("revision", System.getenv("GITHUB_SHA"));
         proof.put("caddy", CADDY); proof.put("volume", volume);
         proof.put("caddyfileSha256", java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(repository.resolve("Caddyfile")))));

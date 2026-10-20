@@ -823,7 +823,7 @@ try:
     connection.request("POST", "/api/v1/reviews/0/github-comments", body=b"", headers={"Host": "localhost", "Connection": "close"})
     response = connection.getresponse()
     if response.status != 503 or response.getheader("X-RepoGuard-Publication-Maintenance") != "true":
-        raise SystemExit("Publication maintenance response was not confirmed")
+        raise SystemExit(f"Publication maintenance response was not confirmed: HTTP {response.status}")
 finally:
     connection.close()
 '; then

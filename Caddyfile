@@ -1,3 +1,8 @@
+{
+    # Explicit HTTP routing below owns redirects; certificate automation stays enabled.
+    auto_https disable_redirects
+}
+
 # Operator-owned state stays in the existing Caddy data volume across recreation.
 (publication_maintenance) {
     @publicationMaintenance {
