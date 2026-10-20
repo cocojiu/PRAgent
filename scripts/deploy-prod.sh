@@ -810,11 +810,23 @@ verify_publication_maintenance() {
     echo "Publication maintenance marker is absent or unreadable." >&2
     return 1
   fi
-  # The fixed invalid task and absent credentials cannot publish even if the gate is missing.
-  # BusyBox wget exits before reading 5xx headers. Read the bounded local response directly.
-  maintenance_probe="$(docker exec "$maintenance_caddy_id" sh -ec "printf 'POST /api/v1/reviews/0/github-comments HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\nConnection: close\r\n\r\n' | nc -w 5 127.0.0.1 80 | head -c 8192" 2>/dev/null)" || true
-  if ! printf '%s\n' "$maintenance_probe" | grep -Eq '^[[:space:]]*HTTP/[0-9.]+ 503([[:space:]]|$)' \
-    || ! printf '%s\n' "$maintenance_probe" | grep -Eiq '^[[:space:]]*X-Repoguard-Publication-Maintenance:[[:space:]]*true[[:space:]]*$'; then
+  # Probe only the inspected Caddy address, with no credentials, redirects or response body.
+  maintenance_addresses="$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' "$maintenance_caddy_id")" || return 1
+  if ! printf '%s\n' "$maintenance_addresses" | python3 -c '
+import http.client, ipaddress, sys
+addresses = [ipaddress.ip_address(value) for value in sys.stdin.read().split()]
+addresses = [value for value in addresses if value.version == 4 and value.is_private and not value.is_loopback and not value.is_unspecified and not value.is_multicast]
+if not addresses:
+    raise SystemExit("Caddy has no private container address for maintenance verification")
+connection = http.client.HTTPConnection(str(addresses[0]), 80, timeout=5)
+try:
+    connection.request("POST", "/api/v1/reviews/0/github-comments", body=b"", headers={"Host": "localhost", "Connection": "close"})
+    response = connection.getresponse()
+    if response.status != 503 or response.getheader("X-RepoGuard-Publication-Maintenance") != "true":
+        raise SystemExit("Publication maintenance response was not confirmed")
+finally:
+    connection.close()
+'; then
     echo "Caddy did not confirm the publication maintenance response." >&2
     return 1
   fi

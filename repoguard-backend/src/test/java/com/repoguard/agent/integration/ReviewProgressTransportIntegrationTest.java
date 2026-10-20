@@ -274,8 +274,13 @@ class ReviewProgressTransportIntegrationTest {
             "expected_caddy_maintenance_volume", expectedVolume, "TEST_EDGE", edge, "TEST_COMPOSE", compose.toString()));
         Path diagnostic = temporary.resolve("maintenance-guard.log");
         Process running = process.redirectErrorStream(true).redirectOutput(diagnostic.toFile()).start();
-        try { assertThat(running.waitFor(30, TimeUnit.SECONDS)).isTrue(); return running.exitValue(); }
-        finally { if (running.isAlive()) running.destroyForcibly(); }
+        try {
+            assertThat(running.waitFor(30, TimeUnit.SECONDS)).isTrue();
+            Path evidence = Path.of("target/publication-maintenance"); Files.createDirectories(evidence);
+            String output = Files.readString(diagnostic);
+            Files.writeString(evidence.resolve("guard-last.log"), output.substring(0, Math.min(output.length(), 8192)));
+            return running.exitValue();
+        } finally { if (running.isAlive()) running.destroyForcibly(); }
     }
 
     private void restoreAssets(Path repository, Path config, Path backup, boolean required) throws Exception {
@@ -310,14 +315,14 @@ class ReviewProgressTransportIntegrationTest {
             publicationRequest(client, base, "POST", "/api/v1/reviews/9/retry", false);
             Stream stream = subscribe(client, base.resolve("/api/v1/reviews/9/events"), 1); assertProgress(stream);
             stream.reader().close(); open.clear(); await(() -> active() == 0, 15);
-            assertThat(deploymentGuard(repository, edge, compose, "", true)).isZero();
+            assertThat(deploymentGuard(repository, edge, compose, "", true)).as(Files.readString(temporary.resolve("maintenance-guard.log"))).isZero();
             assertThat(deploymentGuard(repository, edge, compose, volume + "-unexpected", true)).isNotZero();
             Files.writeString(compose, model.replace("name: " + volume, "name: " + volume + "-replacement"));
             assertThat(deploymentGuard(repository, edge, compose, "", true)).isNotZero();
             Files.writeString(compose, model);
             edge = recreateProxyEdge(edge, config, volume); base = proxyBase(edge); awaitProxy(client, base);
             publicationRequest(client, base, "POST", paths.getFirst(), true);
-            assertThat(deploymentGuard(repository, edge, compose, volume, true)).isZero();
+            assertThat(deploymentGuard(repository, edge, compose, volume, true)).as(Files.readString(temporary.resolve("maintenance-guard.log"))).isZero();
             Path backup = temporary.resolve("previous-assets"); Files.createDirectories(backup);
             String legacy = "localhost {\n    tls internal\n    respond \"legacy\" 200\n}\n:80 {\n    respond \"legacy\" 200\n}\n";
             Files.writeString(backup.resolve("Caddyfile"), legacy);
@@ -325,14 +330,14 @@ class ReviewProgressTransportIntegrationTest {
             assertThat(Files.readString(config)).isEqualTo(gateConfig);
             edge = recreateProxyEdge(edge, config, volume); base = proxyBase(edge); awaitProxy(client, base);
             publicationRequest(client, base, "POST", paths.getLast(), true);
-            assertThat(deploymentGuard(repository, edge, compose, volume, true)).isZero();
+            assertThat(deploymentGuard(repository, edge, compose, volume, true)).as(Files.readString(temporary.resolve("maintenance-guard.log"))).isZero();
             restoreAssets(repository, config, backup, false);
             assertThat(Files.readString(config)).isEqualTo(legacy);
             edge = recreateProxyEdge(edge, config, volume); base = proxyBase(edge); awaitProxy(client, base);
             assertThat(deploymentGuard(repository, edge, compose, volume, true)).as("A marker alone must not pass with a legacy Caddyfile").isNotZero();
             Files.writeString(config, gateConfig);
             edge = recreateProxyEdge(edge, config, volume); base = proxyBase(edge); awaitProxy(client, base);
-            assertThat(deploymentGuard(repository, edge, compose, volume, true)).isZero();
+            assertThat(deploymentGuard(repository, edge, compose, volume, true)).as(Files.readString(temporary.resolve("maintenance-guard.log"))).isZero();
             command("docker", "exec", edge, "rm", "/data/repoguard-maintenance/publication-blocked");
             for (String path : paths.subList(0, 4)) publicationRequest(client, base, "POST", path, false);
             assertThat(deploymentGuard(repository, edge, compose, volume, true)).isNotZero();
