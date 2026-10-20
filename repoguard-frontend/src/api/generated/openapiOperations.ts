@@ -38,6 +38,8 @@ import type {
   GithubFeedbackDiagnostics,
   GithubIntegrationConfig,
   GithubIntegrationConfigRequest,
+  GithubPublicationCloseRequest,
+  GithubPublicationVerifyRequest,
   GithubPullRequestOptions,
   HighRiskReview,
   LlmEvaluationExport,
@@ -69,6 +71,7 @@ import type {
   NotificationReadRequest,
   NotificationReport,
   PageResponse,
+  PendingGithubPublication,
   RepositoryPolicyPreviewResponse,
   RepositorySuppressionRequest,
   RepositorySuppressionResponse,
@@ -337,6 +340,27 @@ export type GeneratedOpenApiOperationMap = {
     query: never;
     body: never;
     response: void;
+  };
+  "githubPublicationResolutionControllerClose": {
+    method: "POST";
+    pathParams: { publicationId: number; taskId: number };
+    query: never;
+    body: GithubPublicationCloseRequest;
+    response: PendingGithubPublication;
+  };
+  "githubPublicationResolutionControllerList": {
+    method: "GET";
+    pathParams: { taskId: number };
+    query: { afterId?: number; limit?: number };
+    body: never;
+    response: PendingGithubPublication[];
+  };
+  "githubPublicationResolutionControllerVerify": {
+    method: "POST";
+    pathParams: { publicationId: number; taskId: number };
+    query: never;
+    body: GithubPublicationVerifyRequest;
+    response: PendingGithubPublication;
   };
   "messageQueueHealthControllerGetHealth": {
     method: "GET";
@@ -1313,6 +1337,30 @@ export const generatedOpenApiOperations = {
     queryParamNames: [],
     hasRequestBody: false,
     requestBodyRequired: false
+  },
+  "githubPublicationResolutionControllerClose": {
+    method: "POST",
+    path: "/api/v1/reviews/{taskId}/github-comments/resolutions/{publicationId}/close",
+    pathParamNames: ["publicationId", "taskId"],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "githubPublicationResolutionControllerList": {
+    method: "GET",
+    path: "/api/v1/reviews/{taskId}/github-comments/resolutions",
+    pathParamNames: ["taskId"],
+    queryParamNames: ["afterId", "limit"],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "githubPublicationResolutionControllerVerify": {
+    method: "POST",
+    path: "/api/v1/reviews/{taskId}/github-comments/resolutions/{publicationId}/verify",
+    pathParamNames: ["publicationId", "taskId"],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
   },
   "messageQueueHealthControllerGetHealth": {
     method: "GET",

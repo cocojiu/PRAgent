@@ -1,3 +1,4 @@
+import { isPendingGithubPublication, isPendingGithubPublications, type PendingGithubPublication, type GithubPublicationVerifyRequest, type GithubPublicationCloseRequest } from "@/api/githubPublicationTypes";
 import type { ApiEndpointMap } from "@/api/endpoint";
 import type {
   CiSarifCredential,
@@ -79,6 +80,9 @@ type GithubCommentPreviewInput = ReviewDetailPageInput & {
 };
 
 export type ReviewApiContract = {
+  fetchPendingGithubPublications: ApiOperation<{ taskId: number; afterId?: number; limit?: number }, PendingGithubPublication[]>;
+  verifyGithubPublication: ApiOperation<{ taskId: number; publicationId: number; payload: GithubPublicationVerifyRequest }, PendingGithubPublication>;
+  closeGithubPublication: ApiOperation<{ taskId: number; publicationId: number; payload: GithubPublicationCloseRequest }, PendingGithubPublication>;
   fetchCiSarifSetup: ApiOperation<{ taskId: number }, CiSarifSetup>;
   issueCiSarifCredential: ApiOperation<{ taskId: number; attemptId: number }, CiSarifCredential>;
   fetchFeedbackSummary: ApiOperation<undefined, FeedbackSummary>;
@@ -256,6 +260,24 @@ export const reviewEndpoints: ApiEndpointMap<ReviewApiContract> = {
     path: input => ({ taskId: input.id, batchId: input.batchId }),
     query: input => ({ afterId: input.afterId, pageSize: input.pageSize })
   }),
+  fetchPendingGithubPublications: {
+    ...generatedEndpoint("githubPublicationResolutionControllerList", {
+    path: input => ({ taskId: input.taskId }), query: input => ({ afterId: input.afterId, limit: input.limit })
+    }),
+    validateResponse: isPendingGithubPublications
+  },
+  verifyGithubPublication: {
+    ...generatedEndpoint("githubPublicationResolutionControllerVerify", {
+    path: input => ({ taskId: input.taskId, publicationId: input.publicationId }), body: input => input.payload
+    }),
+    validateResponse: isPendingGithubPublication
+  },
+  closeGithubPublication: {
+    ...generatedEndpoint("githubPublicationResolutionControllerClose", {
+    path: input => ({ taskId: input.taskId, publicationId: input.publicationId }), body: input => input.payload
+    }),
+    validateResponse: isPendingGithubPublication
+  },
   publishGithubComments: generatedEndpoint("reviewControllerPublishGithubComments", {
     path: input => ({ id: input.id })
   }),

@@ -216,6 +216,8 @@
             @publish="confirmPublishGithubComments"
           />
 
+          <ReviewPublicationResolutionPanel v-if="canManageHotTask" :key="selectedTask.id" :task-id="selectedTask.id" @resolved="loadGithubCommentData" />
+
           <ReviewDetailFilesSection
             :archived="isArchivedTask"
             :missing-tests="missingTests"
@@ -274,6 +276,7 @@ import { enterpriseEditionEnabled } from "@/config/edition";
 import ReviewDetailCiSarifGuide from "@/features/review-detail/components/ReviewDetailCiSarifGuide.vue";
 import { computed } from "vue";
 import { ArrowLeft, ExternalLink, RefreshCw, ShieldAlert } from "@lucide/vue";
+import ReviewPublicationResolutionPanel from "@/features/review-detail/components/ReviewPublicationResolutionPanel.vue";
 import Github from "@/components/icons/GithubIcon.vue";
 import { canManage, currentUser } from "@/stores/authState";
 import { useRoute, useRouter } from "vue-router";

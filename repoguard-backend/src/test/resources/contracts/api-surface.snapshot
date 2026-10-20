@@ -73,6 +73,7 @@ GET /api/v1/reviews/{taskId}/attempts/{attemptId}/findings query=[cursor, limit]
 GET /api/v1/reviews/{taskId}/attempts/{candidateAttemptId}/comparison query=[baselineAttemptId, page, pageSize] body=- bodyRequired=false
 GET /api/v1/reviews/{taskId}/github-comments/publications/batches query=[page, pageSize, status] body=- bodyRequired=false
 GET /api/v1/reviews/{taskId}/github-comments/publications/{batchId}/items query=[afterId, pageSize] body=- bodyRequired=false
+GET /api/v1/reviews/{taskId}/github-comments/resolutions query=[afterId, limit] body=- bodyRequired=false
 GET /api/v1/scanners/sarif/ci/tasks/{taskId}/setup query=[] body=- bodyRequired=false
 GET /api/v1/scanners/sarif/tasks/{taskId}/export query=[] body=- bodyRequired=false
 GET /api/v1/scm/providers query=[] body=- bodyRequired=false
@@ -135,6 +136,8 @@ POST /api/v1/reviews/{id}/findings/{findingId}/feedback query=[] body=FindingFee
 POST /api/v1/reviews/{id}/github-comments query=[] body=- bodyRequired=false
 POST /api/v1/reviews/{id}/human-review query=[] body=HumanReviewRequest bodyRequired=true
 POST /api/v1/reviews/{id}/retry query=[] body=- bodyRequired=false
+POST /api/v1/reviews/{taskId}/github-comments/resolutions/{publicationId}/close query=[] body=GithubPublicationCloseRequest bodyRequired=true
+POST /api/v1/reviews/{taskId}/github-comments/resolutions/{publicationId}/verify query=[] body=GithubPublicationVerifyRequest bodyRequired=true
 POST /api/v1/scanners/sarif/ci/tasks/{taskId}/credentials query=[attemptId] body=- bodyRequired=false
 POST /api/v1/scanners/sarif/ci/tasks/{taskId}/upload query=[] body=byte[] bodyRequired=true
 POST /api/v1/scanners/sarif/tasks/{taskId}/import query=[] body=SarifImportRequest bodyRequired=true

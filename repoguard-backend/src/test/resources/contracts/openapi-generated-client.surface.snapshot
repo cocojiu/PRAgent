@@ -37,6 +37,9 @@ githubCommentHistoryControllerGetBatches(input: { path: { taskId: number }; quer
 githubCommentHistoryControllerGetItems(input: { path: { batchId: number; taskId: number }; query?: { afterId?: number; pageSize?: number } }): Promise<GithubCommentPublicationItems>; // GET /api/v1/reviews/{taskId}/github-comments/publications/{batchId}/items
 githubFeedbackControllerDiagnostics(input?: { query?: { limit?: number } }): Promise<GithubFeedbackDiagnostics>; // GET /api/v1/github/feedback-events
 githubFeedbackControllerRetry(input: { path: { id: number } }): Promise<void>; // POST /api/v1/github/feedback-events/{id}/retry
+githubPublicationResolutionControllerClose(input: { path: { publicationId: number; taskId: number }; body: GithubPublicationCloseRequest }): Promise<PendingGithubPublication>; // POST /api/v1/reviews/{taskId}/github-comments/resolutions/{publicationId}/close
+githubPublicationResolutionControllerList(input: { path: { taskId: number }; query?: { afterId?: number; limit?: number } }): Promise<PendingGithubPublication[]>; // GET /api/v1/reviews/{taskId}/github-comments/resolutions
+githubPublicationResolutionControllerVerify(input: { path: { publicationId: number; taskId: number }; body: GithubPublicationVerifyRequest }): Promise<PendingGithubPublication>; // POST /api/v1/reviews/{taskId}/github-comments/resolutions/{publicationId}/verify
 githubWebhookControllerReceive(input: { body: Uint8Array }): Promise<GithubWebhookResponse>; // POST /api/v1/github/webhooks
 llmUsageAccountingControllerPending(input?: { query?: { limit?: number } }): Promise<PendingUsage[]>; // GET /api/v1/config/llm-usage/pending
 llmUsageAccountingControllerPendingPage(input?: { query?: { cursor?: string; limit?: number; month?: string; status?: string } }): Promise<PendingUsagePage>; // GET /api/v1/config/llm-usage/pending/page

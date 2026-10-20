@@ -92,7 +92,8 @@ final class GithubCommentPublicationGateway {
             .body(Map.of(
                 "commit_id", commitSha,
                 "event", "COMMENT",
-                "body", "",
+                "body", lineDrafts.stream().map(draft -> GithubPublicationIntent.marker(draft.body()))
+                    .filter(Objects::nonNull).collect(java.util.stream.Collectors.joining("\n")),
                 "comments", comments
             ))
             .exchange((request, response) -> readJsonResponse(

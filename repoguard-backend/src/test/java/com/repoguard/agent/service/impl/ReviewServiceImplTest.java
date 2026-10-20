@@ -244,7 +244,7 @@ class ReviewServiceImplTest {
         new GithubCommentPublishPlanBuilder(),
         new GithubCommentDraftPublisher(
             githubPullRequestClient,
-            githubCommentPublicationRecorder,
+            com.repoguard.agent.testsupport.GithubPublicationProtocolFixture.protocol(githubCommentPublicationRecorder),
             githubWritebackFailureClassifier
         ),
         githubCommentPublicationRecorder

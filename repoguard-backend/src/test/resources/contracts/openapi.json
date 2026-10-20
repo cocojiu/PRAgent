@@ -8777,6 +8777,226 @@
         }
       }
     },
+    "/api/v1/reviews/{taskId}/github-comments/resolutions" : {
+      "get" : {
+        "tags" : [ "GithubPublicationResolution" ],
+        "operationId" : "githubPublicationResolutionControllerList",
+        "x-controller-operation" : "GithubPublicationResolutionController#list",
+        "parameters" : [ {
+          "name" : "taskId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        }, {
+          "name" : "afterId",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 0,
+            "default" : 0
+          }
+        }, {
+          "name" : "limit",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 50,
+            "default" : 20
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "List<PendingGithubPublication>",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "array",
+                      "items" : {
+                        "type" : "object",
+                        "x-java-type" : "PendingGithubPublication"
+                      }
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reviews/{taskId}/github-comments/resolutions/{publicationId}/close" : {
+      "post" : {
+        "tags" : [ "GithubPublicationResolution" ],
+        "operationId" : "githubPublicationResolutionControllerClose",
+        "x-controller-operation" : "GithubPublicationResolutionController#close",
+        "parameters" : [ {
+          "name" : "taskId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        }, {
+          "name" : "publicationId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "GithubPublicationCloseRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/GithubPublicationCloseRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "PendingGithubPublication",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "object",
+                      "x-java-type" : "PendingGithubPublication"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reviews/{taskId}/github-comments/resolutions/{publicationId}/verify" : {
+      "post" : {
+        "tags" : [ "GithubPublicationResolution" ],
+        "operationId" : "githubPublicationResolutionControllerVerify",
+        "x-controller-operation" : "GithubPublicationResolutionController#verify",
+        "parameters" : [ {
+          "name" : "taskId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        }, {
+          "name" : "publicationId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "GithubPublicationVerifyRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/GithubPublicationVerifyRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "PendingGithubPublication",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "object",
+                      "x-java-type" : "PendingGithubPublication"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/scanners/sarif/ci/tasks/{taskId}/credentials" : {
       "post" : {
         "tags" : [ "CiSarif" ],
