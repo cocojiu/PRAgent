@@ -37,6 +37,8 @@ import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 class LlmModelReleaseServiceTest {
@@ -520,7 +522,7 @@ class LlmModelReleaseServiceTest {
         assertThat(json.content()).contains("release-7", "eventHash", "calculatedHash", hash)
             .doesNotContain("modelName", "security, incident", "detailsJson", "provider", "promptVersion");
         assertThat(csv.format()).isEqualTo("csv");
-        assertThat(csv.content()).contains("id,releaseId,releaseKey", "calculatedHash", hash)
+        assertThat(csv.content()).startsWith("\ufeffid,releaseId,releaseKey").contains("calculatedHash", hash)
             .doesNotContain("security, incident", "detailsJson", "modelName", "provider");
 
         when(repository.countAudits(eq(42L), any())).thenReturn(1_001L);
@@ -531,6 +533,45 @@ class LlmModelReleaseServiceTest {
         assertThatThrownBy(() -> service.exportReleaseAudits(null, null, null, null,
             "2026-09-04T00:00:00", "2026-09-03T00:00:00", "json"))
             .isInstanceOf(BusinessException.class).hasMessageContaining("from < to");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"=1+2", "+1", "-1", "@SUM(A1)", "＝1", "＋1", "－1", "＠SUM(A1)",
+        "  =1", "\t=1", "\r\n+1", "\u0000-1", "\ufeff@SUM(A1)", "\u00a0＝1"})
+    void spreadsheetCsvNeutralizesFormulaPrefixesWithoutChangingJsonOrAuditHashes(String value) throws Exception {
+        String hash = LlmModelReleaseAuditService.sha256("PROMOTE", 7L, value, "{}", "private reason");
+        LlmModelReleaseRepository.ReleaseAudit audit = new LlmModelReleaseRepository.ReleaseAudit(
+            94L, 7L, value, "PROMOTE", "SHADOW", "ACTIVE", 100, value,
+            "private reason", "{}", hash, LocalDateTime.of(2026, 10, 21, 0, 0));
+        when(repository.countAudits(eq(42L), any())).thenReturn(1L);
+        when(repository.findAudits(eq(42L), any(), eq(0), eq(1))).thenReturn(List.of(audit));
+        when(repository.findAuditById(42L, 94L)).thenReturn(audit);
+        var csv = service.exportReleaseAudits(null, null, null, null, null, null, "csv");
+        var json = service.exportReleaseAudits(null, null, null, null, null, null, "json");
+        assertThat(csv.content().split("\n")[1]).startsWith("\"94\",\"7\",\"\t");
+        assertThat(csv.content()).startsWith("\ufeffid,").contains("\"\t").doesNotContain("private reason", "\u0000");
+        assertThat(csv.content().substring(1)).doesNotContain("\ufeff");
+        var row = new JacksonConfig().objectMapper().readTree(json.content()).get(0);
+        assertThat(row.get("releaseKey").asText()).isEqualTo(value);
+        assertThat(row.get("operator").asText()).isEqualTo(value);
+        assertThat(row.get("eventHash").asText()).isEqualTo(hash);
+        assertThat(row.get("calculatedHash").asText()).isEqualTo(hash);
+        assertThat(row.get("hashValid").asBoolean()).isTrue();
+        assertThat(service.verifyReleaseAudit(94L).valid()).isTrue();
+        assertThat(csv.contentSha256()).isEqualTo(java.util.HexFormat.of().formatHex(
+            java.security.MessageDigest.getInstance("SHA-256").digest(csv.content().getBytes(java.nio.charset.StandardCharsets.UTF_8))));
+        verify(repository, never()).insertAudit(anyLong(), anyLong(), anyString(), anyString(), any(), any(), anyInt(), anyString(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void spreadsheetCsvKeepsSeparatorsAndQuotesInOneCellAndNormalizesLineBreaks() {
+        var audit = new LlmModelReleaseRepository.ReleaseAudit(94L, 7L, "release,\"quoted\";=1\r\nnext",
+            "PROMOTE", "SHADOW", "ACTIVE", 100, "operator", "reason", "{}", "not-a-hash", LocalDateTime.now());
+        when(repository.countAudits(eq(42L), any())).thenReturn(1L);
+        when(repository.findAudits(eq(42L), any(), eq(0), eq(1))).thenReturn(List.of(audit));
+        var csv = service.exportReleaseAudits(null, null, null, null, null, null, "csv");
+        assertThat(csv.content()).contains("\"release,\"\"quoted\"\";=1  next\"");
+        assertThat(csv.content().lines().count()).isEqualTo(2);
     }
 
     private LlmModelReleaseRequest request(String fingerprint, int traffic, boolean qualityGatePassed) {
