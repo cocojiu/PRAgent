@@ -191,8 +191,12 @@ final class LlmModelReleaseAuditService {
             .reduce((left, right) -> left + "," + right).orElse("");
     }
 
+    /** Spreadsheet-view encoding only; JSON and the immutable audit hash keep original values. */
     private String csvCell(String value) {
-        return "\"" + value.replace("\"", "\"\"").replace("\r", " ").replace("\n", " ") + "\"";
+        String text = value.replaceAll("[\\p{Cc}\\p{Cf}]", " ");
+        String leading = text.replaceFirst("^[\\s\\p{Z}]*", "");
+        if (!leading.isEmpty() && "=+-@＝＋－＠".indexOf(leading.charAt(0)) >= 0) text = "\t" + text;
+        return "\"" + text.replace("\"", "\"\"") + "\"";
     }
 
     private String json(Object value) {

@@ -238,7 +238,9 @@
               plain
               @click="downloadAudits('csv')"
             >导出 CSV</el-button>
+            <el-button :loading="auditOperation === 'export-json'" :disabled="auditLoading" @click="downloadAudits('json')">导出 JSON</el-button>
           </div>
+          <p class="rg-muted">CSV 用于电子表格查看，公式类前缀会加制表符、控制字符会转为空格；程序处理请选 JSON 保留原值。CSV 重新保存或跨软件打开后请重新核验。</p>
           <el-table :data="audits" class="rg-table release-audit-table" size="small" row-key="id" aria-label="模型发布审计时间线">
             <el-table-column label="时间 / 动作" min-width="185">
               <template #default="{ row }">
