@@ -399,6 +399,30 @@ $env:REPOGUARD_LOG_PATH = "../logs/backend"
 
 使用候选前先下载该运行的源清单，并使用 `gh attestation verify` 绑定预期仓库、`.github/workflows/production-observability-security.yml`、精确源码 SHA、`refs/heads/main` 和托管 runner，另外核对证明中的 run/attempt；不能仅凭标签或任务成功采用镜像。生产切换仍需单独备份 Loki 数据、检查配置和资源、准备批准的原 digest 及回退步骤，再按签名清单中的镜像 digest 操作。
 
+### GitHub 发布维护窗口
+
+需要限制 GitHub 回写的升级，应先单独安装并验证支持维护门禁的 Caddyfile，再开启发布窗口；安装边缘配置本身也属于需审批的生产变更。门禁使用现有 Caddy `/data` 持久卷中的 `/data/repoguard-maintenance/publication-blocked` 标记，默认不存在，不改变正常路由。标记存在时，HTTP/HTTPS 的 GitHub 评论发布及核验/关闭 POST 返回带 `Retry-After: 60` 的503；GET、健康检查和其他写入不受此门禁影响。标记只供运维控制，不对外提供开关接口。
+
+在部署根目录、确认获批后启用；与部署共用锁，避免切换过程中被提前解除：
+
+```sh
+flock -n .deploy.lock docker exec repoguard-caddy sh -ec \
+  'umask 077; mkdir -p /data/repoguard-maintenance; : > /data/repoguard-maintenance/publication-blocked'
+```
+
+该门禁不会终止在途请求，也不会阻止 Worker 恢复已有发布批次。发布前另行核验并排空在途/恢复批次；未排空则停止切换。不得直接请求真实发布接口来测试门禁，可用无凭据的无效任务路径 `/api/v1/reviews/0/github-comments` 检查503及 `X-RepoGuard-Publication-Maintenance: true`。
+
+需要保持维护状态的 `Release Images` 必须显式设置 `publication_maintenance_required=true`。部署脚本只验证已开启的门禁，不自动开启或解除：服务改变前核对实际503、持久卷及候选 Compose 的卷身份，代理重建和最终后检再次核验；应用失败回退保留候选的维护 Caddyfile，避免恢复旧边缘配置导致入口重开。重建后不能确认门禁时停止 Caddy并报告失败。该模式依赖同一 Caddy 数据卷，不要在维护窗口改名、替换或删除此卷。
+
+整条部署已成功、独立后检完成且兼容回退基线明确后，才按批准的操作解除：
+
+```sh
+flock -n .deploy.lock docker exec repoguard-caddy sh -ec \
+  'rm -f /data/repoguard-maintenance/publication-blocked'
+```
+
+解除不需要重建代理。失败时保持标记；仅恢复健康不能证明旧应用理解新的发布状态，兼容性不明时不得开放发布者。
+
 ## API 入口
 
 主要后端接口前缀为 `/api/v1`：

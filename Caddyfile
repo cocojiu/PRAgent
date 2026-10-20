@@ -1,9 +1,32 @@
+# Operator-owned state stays in the existing Caddy data volume across recreation.
+(publication_maintenance) {
+    @publicationMaintenance {
+        method POST
+        path_regexp publication (^|/)github-comments([/;]|$)
+        file {
+            root /data/repoguard-maintenance
+            try_files publication-blocked
+        }
+    }
+    handle @publicationMaintenance {
+        header {
+            Cache-Control no-store
+            Content-Type "application/json; charset=utf-8"
+            Retry-After 60
+            X-RepoGuard-Publication-Maintenance true
+        }
+        respond `{"success":false,"code":"SERVICE_UNAVAILABLE","message":"GitHub 发布维护中，请稍后重试"}` 503
+    }
+}
+
 {$REPOGUARD_FRONTEND_SERVER_NAME} {
     log {
         output stdout
         format json
     }
     encode zstd gzip
+
+    import publication_maintenance
 
     @health path /healthz
     handle @health {
@@ -20,6 +43,8 @@
         output stdout
         format json
     }
+
+    import publication_maintenance
 
     @containerHealth path /healthz
     handle @containerHealth {

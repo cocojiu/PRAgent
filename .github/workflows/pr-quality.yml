@@ -396,6 +396,7 @@ jobs:
             repoguard-backend/target/surefire-reports/*ReviewProgressTransportIntegrationTest*
             repoguard-backend/target/surefire-reports/*RuntimeSchemaRollbackLinuxIntegrationTest*
             repoguard-backend/target/runtime-rollback/
+            repoguard-backend/target/publication-maintenance/
           if-no-files-found: warn
           retention-days: 7
 
