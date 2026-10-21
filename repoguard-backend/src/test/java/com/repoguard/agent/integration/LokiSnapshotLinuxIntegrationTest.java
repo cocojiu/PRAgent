@@ -120,6 +120,43 @@ class LokiSnapshotLinuxIntegrationTest {
             query=urllib.parse.urlencode(dict(query='{job="repoguard-recovery-fixture"}',start=query_start,end=time.time_ns(),limit=100))
             result=json.loads(http(base,'/loki/api/v1/query_range?'+query)[1])
             return collections.Counter(value[1] for stream in result['data']['result'] for value in stream['values'])
+        def frontend_queries(base):
+            source=root/'config/observability/grafana/provisioning/dashboards/repoguard-review-observability.json'
+            dashboard=json.loads(source.read_text())
+            panels={item['id']:item['targets'][0]['expr'] for item in dashboard['panels'] if item['id'] in (7,8)}
+            assert set(panels)=={7,8}
+            cases=[('mixed',[(2,1,5),(3,2,7)],False,False,'5','0.25'),
+                ('cancelled-only',[(4,0,0)],False,False,'4',None),
+                ('successful-only',[(0,0,6)],False,False,'0','0'),
+                ('legacy-only',[],True,False,None,None),('no-samples',[],False,False,None,None),
+                ('mixed-legacy',[(1,2,10)],True,False,'1','0.2'),
+                ('malformed-counts',[],False,True,None,None)]
+            # Fresh stream labels and disjoint windows keep synthetic samples independent.
+            # Two-hour-old points remain inside Loki's default three-hour ingester query window.
+            started=time.time_ns()-2*60*60*1_000_000_000
+            results=[]
+            for index,(name,counts,legacy,malformed,cancelled,ratio) in enumerate(cases):
+                timestamp=started+index*10*60*1_000_000_000
+                values=[[str(timestamp+offset*1_000_000_000),
+                    'Frontend performance observed route=/fixture apiCancelled=%s apiFailed=%s apiCompleted=%s'%row]
+                    for offset,row in enumerate(counts)]
+                if legacy:values.append([str(timestamp+3_000_000_000),'Frontend performance observed route=/fixture apiRequests=4'])
+                if malformed:values.append([str(timestamp+3_000_000_000),'Frontend performance observed apiCancelled=unknown apiFailed=invalid apiCompleted=missing'])
+                if values:
+                    stream=dict(container='repoguard-backend-worker' if index%2 else 'repoguard-backend',verification=owner,scenario=name)
+                    assert http(base,'/loki/api/v1/push',dict(streams=[dict(stream=stream,values=values)]))[0]==204
+                for panel_id,expression in sorted(panels.items()):
+                    expression=expression.replace('$__range','4m')
+                    query=urllib.parse.urlencode(dict(query=expression,time=(timestamp+60_000_000_000)/1_000_000_000))
+                    response=json.loads(http(base,'/loki/api/v1/query?'+query)[1])
+                    actual=[item['value'][1] for item in response['data']['result']]
+                    expected=cancelled if panel_id==7 else ratio
+                    assert actual==([] if expected is None else [expected]),(name,panel_id,expected,actual)
+                    results.append(dict(scenario=name,panelId=panel_id,expected=expected,actual=actual))
+            proof=dict(imageId=candidate,dashboardSha256=hashlib.sha256(source.read_bytes()).hexdigest(),
+                platform='linux/amd64',assertions=len(results),results=results,productionWrites=0)
+            (root/'repoguard-backend/target/frontend-observation-queries.json').write_text(json.dumps(proof,indent=2))
+            return proof
         try:
             for image in (baseline,collector):docker('pull',image)
             loaded=json.loads(docker('image','inspect',candidate))[0]
@@ -144,6 +181,7 @@ class LokiSnapshotLinuxIntegrationTest {
             assert restored['restoreVerified'] and restored['restoredFiles']>0
             pair2,base2=start_pair('candidate',candidate,cloned)
             wait(lambda:messages(base2)[first]==1,'restored historical log')
+            observations=frontend_queries(base2)
             with events.open('a') as output:output.write(second+'\\n')
             wait(lambda:messages(base2)==collections.Counter({first:1,second:1}),'restored Alloy cursor delivery')
             stop_pair(pair2)
@@ -156,7 +194,8 @@ class LokiSnapshotLinuxIntegrationTest {
             evidence=dict(state='verified',encryptedBackupRestored=True,realAlloyCursorRetained=True,
                 persistedLogsAfterRollback=3,previousLogsRetained=2,collectorWroteAfterRollback=True,
                 originalVolumesUnchanged=True,productionWrites=0,
-                publishedPorts=0,archiveSha256=snapshot['archiveSha256'],restoredFiles=restored['restoredFiles'])
+                publishedPorts=0,archiveSha256=snapshot['archiveSha256'],restoredFiles=restored['restoredFiles'],
+                frontendObservationAssertions=observations['assertions'])
             (root/'repoguard-backend/target/loki-recovery-evidence.json').write_text(json.dumps(evidence,indent=2))
             print(json.dumps(evidence));print('LOKI_RECOVERY_FIXTURE_PASSED')
         finally:

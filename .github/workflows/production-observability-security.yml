@@ -305,7 +305,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import json, os, pathlib, xml.etree.ElementTree as ET
+          import hashlib, json, os, pathlib, xml.etree.ElementTree as ET
           root = pathlib.Path('repoguard-backend/target')
           expected = {'quality.LokiReleaseManifestTest': 9, 'quality.LokiSnapshotSafetyTest': 6,
               'quality.LokiDeploymentSafetyTest': 7,
@@ -320,6 +320,12 @@ jobs:
           assert result['realAlloyCursorRetained'] and result['persistedLogsAfterRollback'] == 3
           assert result['previousLogsRetained'] == 2 and result['collectorWroteAfterRollback']
           assert result['originalVolumesUnchanged'] and result['productionWrites'] == result['publishedPorts'] == 0
+          assert result['frontendObservationAssertions'] == 14
+          observations = json.loads((root / 'frontend-observation-queries.json').read_text())
+          dashboard = pathlib.Path('config/observability/grafana/provisioning/dashboards/repoguard-review-observability.json')
+          assert observations['imageId'] == os.environ['CHECKED_IMAGE_ID'] and observations['platform'] == 'linux/amd64'
+          assert observations['dashboardSha256'] == hashlib.sha256(dashboard.read_bytes()).hexdigest()
+          assert observations['assertions'] == len(observations['results']) == 14 and observations['productionWrites'] == 0
           scan = json.loads((root / 'loki-recovery-trivy.json').read_text())
           assert scan['Metadata']['ImageID'] == os.environ['CHECKED_IMAGE_ID']
           assert not [v for item in scan['Results'] for v in item.get('Vulnerabilities') or []]
@@ -331,6 +337,7 @@ jobs:
           name: loki-encrypted-recovery-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             repoguard-backend/target/loki-recovery-evidence.json
+            repoguard-backend/target/frontend-observation-queries.json
             repoguard-backend/target/loki-recovery-trivy.json
             repoguard-backend/target/loki-fixture-diagnostics/
             repoguard-backend/target/surefire-reports/*Loki*Test*
