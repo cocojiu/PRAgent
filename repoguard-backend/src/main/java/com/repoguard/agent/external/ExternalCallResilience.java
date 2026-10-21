@@ -87,6 +87,11 @@ public class ExternalCallResilience {
         );
     }
 
+    public <T> T github(String operation, LongSupplier remaining, Supplier<T> supplier) {
+        return ExternalRetryTiming.withinBudget("GitHub", Objects.requireNonNull(remaining, "remaining"),
+            () -> github(operation, supplier));
+    }
+
     public <T> T llm(String operation, Supplier<T> supplier) {
         return executeWithBulkhead(
             "LLM",

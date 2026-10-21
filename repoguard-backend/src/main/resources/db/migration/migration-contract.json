@@ -7,7 +7,7 @@
     "externalDatabaseSupported": true,
     "publishedMigrationPolicy": "IMMUTABLE",
     "newInstallationStrategy": "VALIDATED_SCHEMA_SNAPSHOT_THEN_BASELINE",
-    "candidateVersion": 108,
+    "candidateVersion": 109,
     "requiredEvidence": [
       "empty database migration to the candidate version",
       "schema structure diff against the supported production shape",
@@ -16,9 +16,9 @@
     ],
     "decisionEvidence": [
       "application-prod.yml requires an externally supplied datasource",
-      "FlywayMigrationUpgradePathIntegrationTest verifies the supported incremental upgrade path through V108"
+      "FlywayMigrationUpgradePathIntegrationTest verifies the supported incremental upgrade path through V109"
     ],
-    "reconsiderWhen": "A V108 schema snapshot and all required rehearsal evidence are versioned together.",
+    "reconsiderWhen": "A V109 schema snapshot and all required rehearsal evidence are versioned together.",
     "rollbackStrategy": "restore a validated backup and apply a forward fix; never rewrite or delete a published migration"
   },
   "defaults": {
@@ -463,6 +463,19 @@
       "compatibilityNote": "old writers omit the generated column; binary label matching and task/tenant ordering remain unchanged; task-first prefix supports personal and enterprise modes",
       "interruptedRecovery": "inspect Flyway history, the generated column and index after either DDL statement; use a reviewed forward repair or validated backup restore, never blind retry or checksum repair",
       "rollbackStrategy": "roll back application while retaining the additive virtual column and index; no column/index drop or historical label rewrite"
+    },
+    {
+      "version": 109,
+      "file": "V109__finding_comparison_history_index.sql",
+      "phase": "EXPAND",
+      "estimatedRows": "all review_finding rows visited once to build one task-first fingerprint history index; no payload rewrite",
+      "lockType": "brief metadata locks plus online secondary-index build; INPLACE and LOCK=NONE required explicitly",
+      "maxDurationSeconds": 300,
+      "maxDiskMegabytes": 256,
+      "nMinusOneCompatible": true,
+      "compatibilityNote": "existing columns, constraints, indexes and writer behavior retained; task-first lookup serves both editions",
+      "interruptedRecovery": "inspect Flyway history and index existence before reviewed forward repair; never blind retry or checksum repair",
+      "rollbackStrategy": "retain additive index and data; run the previous application with its supported explicit expected-schema override after compatibility validation"
     }
   ]
 }

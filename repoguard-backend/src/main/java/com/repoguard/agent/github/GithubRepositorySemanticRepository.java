@@ -7,6 +7,7 @@ import com.repoguard.agent.config.LlmReviewContextProperties;
 import com.repoguard.agent.external.ExternalCallResilience;
 import com.repoguard.agent.external.ExternalHttpJsonResponseReader;
 import com.repoguard.agent.external.ExternalHttpResponseProfile;
+import com.repoguard.agent.external.ExternalHttpResponseTooLargeException;
 import com.repoguard.agent.external.OutboundEndpointPolicy;
 import com.repoguard.agent.external.OutboundEndpointType;
 import com.repoguard.agent.review.PullRequestChangedFile;
@@ -16,9 +17,13 @@ import com.repoguard.agent.review.RepositorySemanticLimitation;
 import com.repoguard.agent.review.RepositorySemanticRepository;
 import com.repoguard.agent.review.RepositorySemanticSnapshot;
 import com.repoguard.agent.review.ReviewFilePolicy;
-import java.io.IOException;
+import com.repoguard.agent.review.ReviewDeadline;
+import com.repoguard.agent.tenancy.TenantContext;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -27,7 +32,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -58,6 +62,7 @@ class GithubRepositorySemanticRepository implements RepositorySemanticRepository
     private final LlmReviewContextProperties properties;
     private final ReviewFilePolicy filePolicy;
     private final Cache<CacheKey, RepositorySemanticSnapshot> cache;
+    private io.micrometer.core.instrument.MeterRegistry meterRegistry;
 
     @Autowired
     GithubRepositorySemanticRepository(
@@ -79,13 +84,25 @@ class GithubRepositorySemanticRepository implements RepositorySemanticRepository
         this.properties = Objects.requireNonNull(properties, "properties");
         this.filePolicy = Objects.requireNonNull(filePolicy, "filePolicy");
         this.cache = Caffeine.newBuilder()
-            .maximumSize(properties.getSemanticIndexCacheMaximumSize())
+            .maximumWeight(Math.min(256L * 1024 * 1024,
+                Math.multiplyExact(properties.getSemanticIndexCacheMaximumSize(), (long) properties.getSemanticIndexMaxTotalBytes())))
+            .weigher((CacheKey key, RepositorySemanticSnapshot value) -> (int) Math.min(Integer.MAX_VALUE,
+                Math.max(properties.getSemanticIndexMaxTotalBytes(), 1024L + value.files().stream()
+                    .mapToLong(file -> 128L + 2L * (file.path().length() + file.content().length())).sum())))
             .expireAfterWrite(Duration.ofSeconds(properties.getSemanticIndexCacheTtlSeconds()))
+            .recordStats()
             .build();
+    }
+
+    @Autowired
+    void bindCacheMetrics(io.micrometer.core.instrument.MeterRegistry registry) {
+        meterRegistry = registry;
+        io.micrometer.core.instrument.binder.cache.CaffeineCacheMetrics.monitor(registry, cache, "repository_semantic");
     }
 
     @Override
     public RepositorySemanticSnapshot fetch(PullRequestDiff diff, Set<String> changedSymbols) {
+        ReviewDeadline deadline = ReviewDeadline.startingNow(Duration.ofMillis(properties.getSemanticIndexTimeoutMs()));
         if (diff == null || !StringUtils.hasText(diff.owner()) || !StringUtils.hasText(diff.repository())) {
             return RepositorySemanticSnapshot.empty("missing_repository");
         }
@@ -102,9 +119,30 @@ class GithubRepositorySemanticRepository implements RepositorySemanticRepository
         }
         String baseUrl = StringUtils.hasText(settings.baseUrl()) ? settings.baseUrl().trim() : DEFAULT_GITHUB_BASE_URL;
         Set<String> symbols = changedSymbols == null ? Set.of() : Set.copyOf(changedSymbols);
-        CacheKey key = new CacheKey(baseUrl, owner, repository, String.join(",", symbols));
         try {
-            return cache.get(key, ignored -> fetchUncached(settings, baseUrl, owner, repository, diff, symbols));
+            // Resolve against GitHub even on cache hits: revoked credentials must not reuse cached content.
+            String branch = text(getJson(settings, baseUrl, owner, repository, "", "fetch_repository_metadata", deadline)
+                .path("default_branch"));
+            if (!StringUtils.hasText(branch)) return degraded("default_branch_missing");
+            JsonNode commit = getJson(settings, baseUrl, owner, repository, branch, "resolve_semantic_commit", deadline);
+            String commitSha = text(commit.path("sha"));
+            String treeSha = text(commit.path("commit").path("tree").path("sha"));
+            if (!commitSha.matches("[0-9a-fA-F]{40,64}") || !treeSha.matches("[0-9a-fA-F]{40,64}")) {
+                return degraded("semantic_commit_missing");
+            }
+            String selection = diff.files().stream().map(PullRequestChangedFile::filename)
+                .filter(StringUtils::hasText).map(this::normalize).distinct().sorted()
+                .collect(java.util.stream.Collectors.joining("\n"));
+            CacheKey key = new CacheKey(TenantContext.currentTenantIdOrDefault(), settings.id(),
+                digest(settings.token() == null ? "" : settings.token()), baseUrl, owner, repository, commitSha,
+                symbols.stream().sorted().toList(), digest(selection),
+                List.of(properties.getSemanticIndexMaxFiles(), properties.getSemanticIndexMaxFileBytes(),
+                    properties.getSemanticIndexMaxTotalBytes()));
+            RepositorySemanticSnapshot snapshot = cache.get(key, ignored ->
+                fetchUncached(settings, baseUrl, owner, repository, diff, symbols, branch, commitSha, treeSha, deadline));
+            deadline.requireRemaining("semantic_context_cache");
+            if (snapshot.limitations().stream().anyMatch(item -> "UNAVAILABLE".equals(item.status()))) cache.invalidate(key);
+            return snapshot;
         } catch (RuntimeException ex) {
             LOGGER.warn(
                 "GitHub repository semantic context degraded repository={}/{} operation=repository_semantic_context exceptionType={}",
@@ -120,22 +158,15 @@ class GithubRepositorySemanticRepository implements RepositorySemanticRepository
         String owner,
         String repository,
         PullRequestDiff diff,
-        Set<String> symbols
+        Set<String> symbols,
+        String branch,
+        String commitSha,
+        String treeSha,
+        ReviewDeadline deadline
     ) {
-        long startedAt = System.nanoTime();
-        String branch;
-        try {
-            branch = text(getJson(settings, baseUrl, owner, repository, "", "fetch_repository_metadata")
-                .path("default_branch"));
-        } catch (RuntimeException ex) {
-            return degraded("default_branch_unavailable:" + ex.getClass().getSimpleName());
-        }
-        if (!StringUtils.hasText(branch)) {
-            return degraded("default_branch_missing");
-        }
         JsonNode root;
         try {
-            root = getJson(settings, baseUrl, owner, repository, branch, "fetch_default_branch_tree");
+            root = getJson(settings, baseUrl, owner, repository, treeSha, "fetch_default_branch_tree", deadline);
         } catch (RuntimeException ex) {
             return degraded("default_branch_tree_unavailable:" + ex.getClass().getSimpleName());
         }
@@ -147,15 +178,20 @@ class GithubRepositorySemanticRepository implements RepositorySemanticRepository
         int requested = 0;
         boolean truncated = root != null && root.path("truncated").asBoolean(false);
         for (Candidate candidate : candidates) {
-            if (requested >= properties.getSemanticIndexMaxFiles()
-                || elapsedMillis(startedAt) >= properties.getSemanticIndexTimeoutMs()) {
+            if (requested >= properties.getSemanticIndexMaxFiles() || deadline.exhausted()
+                || retainedBytes >= properties.getSemanticIndexMaxTotalBytes()) {
+                if (meterRegistry != null) meterRegistry.counter("repoguard.review.semantic.limit", "reason",
+                    deadline.exhausted() ? "deadline" : requested >= properties.getSemanticIndexMaxFiles() ? "files" : "bytes").increment();
                 truncated = true;
                 break;
             }
             requested++;
             try {
-                String content = contentReader.fetch(settings, baseUrl, owner, repository, branch, candidate.path(), resilience);
+                int byteBudget = Math.min(properties.getSemanticIndexMaxFileBytes(), properties.getSemanticIndexMaxTotalBytes() - retainedBytes);
+                String content = observe("fetch_semantic_file_context", () -> contentReader.fetch(
+                    settings, baseUrl, owner, repository, commitSha, candidate.path(), resilience, deadline, byteBudget));
                 int bytes = content.getBytes(StandardCharsets.UTF_8).length;
+                if (meterRegistry != null) meterRegistry.summary("repoguard.review.semantic.file.bytes").record(bytes);
                 if (bytes > properties.getSemanticIndexMaxFileBytes()) {
                     limitations.add(new RepositorySemanticLimitation(
                         candidate.path(), "TOO_LARGE", "semantic_context_max_file_bytes"
@@ -169,8 +205,13 @@ class GithubRepositorySemanticRepository implements RepositorySemanticRepository
                 files.add(new RepositorySemanticFile(candidate.path(), content));
                 retainedBytes += bytes;
             } catch (RuntimeException ex) {
+                if (org.springframework.core.NestedExceptionUtils.getMostSpecificCause(ex) instanceof ExternalHttpResponseTooLargeException) {
+                    limitations.add(new RepositorySemanticLimitation(candidate.path(), "TOO_LARGE", "semantic_context_byte_budget"));
+                    if (properties.getSemanticIndexMaxTotalBytes() - retainedBytes < properties.getSemanticIndexMaxFileBytes()) truncated = true;
+                    continue;
+                }
                 limitations.add(new RepositorySemanticLimitation(
-                    candidate.path(), "UNAVAILABLE", "semantic_context_fetch_failed"
+                    candidate.path(), "UNAVAILABLE", deadline.exhausted() ? "semantic_context_deadline_exhausted" : "semantic_context_fetch_failed"
                 ));
             }
         }
@@ -179,7 +220,8 @@ class GithubRepositorySemanticRepository implements RepositorySemanticRepository
             files,
             limitations,
             truncated,
-            "branch=" + safeBranch(branch) + "; deterministic=true; candidates=" + candidates.size()
+            "branch=" + safeBranch(branch) + "; commit=" + commitSha + "; deterministic=true; candidates=" + candidates.size(),
+            commitSha
         );
     }
 
@@ -189,20 +231,35 @@ class GithubRepositorySemanticRepository implements RepositorySemanticRepository
         String owner,
         String repository,
         String branch,
-        String operation
+        String operation,
+        ReviewDeadline deadline
     ) {
-        URI uri = "fetch_repository_metadata".equals(operation)
-            ? UriComponentsBuilder.fromUriString(baseUrl)
-                .pathSegment("repos", owner, repository).build().encode().toUri()
-            : UriComponentsBuilder.fromUriString(baseUrl)
-                .pathSegment("repos", owner, repository, "git", "trees", branch)
-                .queryParam("recursive", "1").build().encode().toUri();
+        var builder = UriComponentsBuilder.fromUriString(baseUrl).pathSegment("repos", owner, repository);
+        if ("resolve_semantic_commit".equals(operation)) builder.pathSegment("commits", branch);
+        else if (!"fetch_repository_metadata".equals(operation)) {
+            builder.pathSegment("git", "trees", branch).queryParam("recursive", "1");
+        }
+        URI uri = builder.build().encode().toUri();
         endpointPolicy.validate(OutboundEndpointType.GITHUB, uri.toString());
-        return resilience.github(operation, () -> restClient.get().uri(uri)
+        return observe(operation, () -> resilience.github(operation, deadline::remainingNanos,
+            () -> GithubRestClientFactory.withinDeadline(restClient, deadline).get().uri(uri)
             .headers(headers -> applyGithubHeaders(headers, settings))
             .exchange((request, response) -> jsonReader.readSuccessfulTree(
                 response, "GitHub " + operation + " failed", ExternalHttpResponseProfile.GITHUB
-            )));
+            ))));
+    }
+
+    private <T> T observe(String stage, java.util.function.Supplier<T> call) {
+        long startedAt = System.nanoTime();
+        String outcome = "failed";
+        try {
+            T result = call.get();
+            outcome = "success";
+            return result;
+        } finally {
+            if (meterRegistry != null) meterRegistry.timer("repoguard.review.semantic.phase.duration", "stage", stage,
+                "outcome", outcome).record(Duration.ofNanos(System.nanoTime() - startedAt));
+        }
     }
 
     private void applyGithubHeaders(HttpHeaders headers, GithubIntegrationSettings settings) {
@@ -318,10 +375,6 @@ class GithubRepositorySemanticRepository implements RepositorySemanticRepository
         return sanitized.substring(0, Math.min(80, sanitized.length()));
     }
 
-    private long elapsedMillis(long startedAt) {
-        return TimeUnit.NANOSECONDS.toMillis(Math.max(0, System.nanoTime() - startedAt));
-    }
-
     private RepositorySemanticSnapshot degraded(String reason) {
         return new RepositorySemanticSnapshot(
             "", List.of(), List.of(new RepositorySemanticLimitation("[repository]", "UNAVAILABLE", reason)),
@@ -335,6 +388,15 @@ class GithubRepositorySemanticRepository implements RepositorySemanticRepository
     private record Candidate(String path, int score) {
     }
 
-    private record CacheKey(String baseUrl, String owner, String repository, String symbols) {
+    private static String digest(String text) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(text.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException("SHA-256 unavailable", impossible);
+        }
+    }
+
+    private record CacheKey(long tenantId, Long integrationId, String credentialRevision, String baseUrl,
+        String owner, String repository, String commitSha, List<String> symbols, String changedPaths, List<Integer> policy) {
     }
 }

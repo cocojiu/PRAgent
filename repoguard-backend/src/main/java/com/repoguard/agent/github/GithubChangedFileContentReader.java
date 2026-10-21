@@ -5,7 +5,7 @@ import com.repoguard.agent.external.ExternalHttpResponseProfile;
 import com.repoguard.agent.external.ExternalHttpResponseReader;
 import com.repoguard.agent.external.OutboundEndpointPolicy;
 import com.repoguard.agent.external.OutboundEndpointType;
-import java.io.IOException;
+import com.repoguard.agent.review.ReviewDeadline;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -66,6 +66,11 @@ public class GithubChangedFileContentReader {
         String filePath,
         ExternalCallResilience resilience
     ) {
+        return fetch(settings, baseUrl, owner, repository, headSha, filePath, resilience, null, ExternalHttpResponseProfile.GITHUB.maxBytes());
+    }
+
+    public String fetch(GithubIntegrationSettings settings, String baseUrl, String owner, String repository,
+        String headSha, String filePath, ExternalCallResilience resilience, ReviewDeadline deadline, int maxBytes) {
         Objects.requireNonNull(settings, "settings");
         Objects.requireNonNull(resilience, "resilience");
         String[] pathSegments = validatedPathSegments(filePath);
@@ -79,19 +84,14 @@ public class GithubChangedFileContentReader {
         if (endpointPolicy != null) {
             endpointPolicy.validate(OutboundEndpointType.GITHUB, uri.toString());
         }
-        return resilience.github("fetch_changed_file_context", () -> restClient.get()
+        RestClient client = deadline == null ? restClient : GithubRestClientFactory.withinDeadline(restClient, deadline);
+        java.util.function.Supplier<String> call = () -> client.get()
             .uri(uri)
             .headers(headers -> applyGithubHeaders(headers, settings))
-            .exchange((request, response) -> readBody(response)));
-    }
-
-    private String readBody(org.springframework.http.client.ClientHttpResponse response) throws IOException {
-        byte[] body = responseReader.readSuccessfulBody(
-            response,
-            "GitHub fetch_changed_file_context failed",
-            ExternalHttpResponseProfile.GITHUB
-        );
-        return new String(body, StandardCharsets.UTF_8);
+            .exchange((request, response) -> new String(responseReader.readSuccessfulBody(response,
+                "GitHub fetch_changed_file_context failed", ExternalHttpResponseProfile.GITHUB, maxBytes), StandardCharsets.UTF_8));
+        return deadline == null ? resilience.github("fetch_changed_file_context", call)
+            : resilience.github("fetch_semantic_file_context", deadline::remainingNanos, call);
     }
 
     private void applyGithubHeaders(HttpHeaders headers, GithubIntegrationSettings settings) {

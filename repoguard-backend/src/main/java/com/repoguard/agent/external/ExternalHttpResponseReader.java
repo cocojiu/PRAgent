@@ -28,16 +28,23 @@ public class ExternalHttpResponseReader {
         String failureMessagePrefix,
         ExternalHttpResponseProfile profile
     ) throws IOException {
+        return readSuccessfulBody(response, failureMessagePrefix, profile, Objects.requireNonNull(profile, "profile").maxBytes());
+    }
+
+    public byte[] readSuccessfulBody(ClientHttpResponse response, String failureMessagePrefix,
+        ExternalHttpResponseProfile profile, int requestedMaxBytes) throws IOException {
         Objects.requireNonNull(response, "response");
         Objects.requireNonNull(failureMessagePrefix, "failureMessagePrefix");
         Objects.requireNonNull(profile, "profile");
-        int maxBytes = profile.maxBytes();
+        if (requestedMaxBytes < 1) throw new IllegalArgumentException("Response byte budget must be positive");
+        int maxBytes = Math.min(profile.maxBytes(), requestedMaxBytes);
         long contentLength = response.getHeaders().getContentLength();
         if (contentLength > maxBytes) {
             throw rejectTooLarge(
                 response,
                 failureMessagePrefix,
                 profile,
+                maxBytes,
                 contentLength,
                 "content_length"
             );
@@ -48,6 +55,7 @@ public class ExternalHttpResponseReader {
                 response,
                 failureMessagePrefix,
                 profile,
+                maxBytes,
                 body.length,
                 "stream"
             );
@@ -69,6 +77,7 @@ public class ExternalHttpResponseReader {
         ClientHttpResponse response,
         String failureMessagePrefix,
         ExternalHttpResponseProfile profile,
+        int maxBytes,
         long observedBytes,
         String detection
     ) {
@@ -83,7 +92,7 @@ public class ExternalHttpResponseReader {
         return new ExternalHttpResponseTooLargeException(
             failureMessagePrefix,
             profile,
-            profile.maxBytes(),
+            maxBytes,
             observedBytes,
             detection
         );

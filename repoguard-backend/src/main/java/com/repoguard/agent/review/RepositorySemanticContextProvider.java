@@ -41,6 +41,7 @@ class RepositorySemanticContextProvider {
             return RepositorySemanticContext.empty("disabled_or_missing_repository");
         }
         LinkedHashSet<String> symbols = changedSymbols(diff);
+        SymbolMatcher matcher = SymbolMatcher.of(symbols);
         RepositorySemanticSnapshot snapshot;
         try {
             snapshot = repository.fetch(diff, symbols);
@@ -52,12 +53,12 @@ class RepositorySemanticContextProvider {
         }
         List<LlmContextSlice> slices = new ArrayList<>();
         for (RepositorySemanticFile file : snapshot.files()) {
-            if (file == null || !relevant(file.path(), file.content(), symbols)) {
+            if (file == null || !relevant(file.path(), file.content(), matcher)) {
                 continue;
             }
             PullRequestChangedFile relatedFile = new PullRequestChangedFile(
-                file.path(), "modified", 0, 0, patchAt(file.content(), symbols),
-                ChangedFileContext.available(file.path(), snapshot.defaultBranch(), file.content())
+                file.path(), "modified", 0, 0, patchAt(file.content(), matcher),
+                ChangedFileContext.available(file.path(), snapshot.commitSha(), file.content())
             );
             LlmContextSlice slice = sourceSlicer.slice(relatedFile, 100);
             if (slice != null) {
@@ -107,7 +108,7 @@ class RepositorySemanticContextProvider {
             .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }
 
-    private boolean relevant(String path, String content, Set<String> symbols) {
+    private boolean relevant(String path, String content, SymbolMatcher matcher) {
         String normalizedPath = normalize(path);
         if (normalizedPath.endsWith(".md") || normalizedPath.endsWith(".txt")
             || normalizedPath.endsWith(".adoc")) {
@@ -122,23 +123,15 @@ class RepositorySemanticContextProvider {
             return true;
         }
         String normalizedContent = content == null ? "" : content.toLowerCase(Locale.ROOT);
-        Set<String> tokens = symbols.stream()
-            .flatMap(symbol -> java.util.stream.Stream.concat(
-                java.util.stream.Stream.of(symbol),
-                java.util.Arrays.stream(CAMEL_BOUNDARY.split(symbol))
-            ))
-            .filter(token -> token.length() >= 3)
-            .map(token -> token.toLowerCase(Locale.ROOT))
-            .collect(java.util.stream.Collectors.toSet());
-        return symbols.stream().anyMatch(symbol -> containsWord(normalizedContent, symbol.toLowerCase(Locale.ROOT)))
-            || tokens.stream().anyMatch(token -> normalizedPath.contains(token));
+        return matcher.matches(normalizedContent)
+            || matcher.tokens().stream().anyMatch(normalizedPath::contains);
     }
 
-    private String patchAt(String content, Set<String> symbols) {
+    private String patchAt(String content, SymbolMatcher matcher) {
         List<String> lines = content == null ? List.of() : content.lines().toList();
         for (int index = 0; index < lines.size(); index++) {
             String line = lines.get(index).toLowerCase(Locale.ROOT);
-            if (symbols.stream().anyMatch(symbol -> containsWord(line, symbol.toLowerCase(Locale.ROOT)))) {
+            if (matcher.matches(line)) {
                 int lineNumber = index + 1;
                 return "@@ -" + lineNumber + ",0 +" + lineNumber + ",1 @@\n+" + lines.get(index);
             }
@@ -146,8 +139,21 @@ class RepositorySemanticContextProvider {
         return null;
     }
 
-    private boolean containsWord(String content, String word) {
-        return StringUtils.hasText(word) && content.matches("(?s).*\\b" + Pattern.quote(word) + "\\b.*");
+    private record SymbolMatcher(List<Pattern> patterns, Set<String> tokens) {
+        static SymbolMatcher of(Set<String> symbols) {
+            List<Pattern> patterns = symbols.stream().filter(StringUtils::hasText)
+                .map(symbol -> Pattern.compile("\\b" + Pattern.quote(symbol.toLowerCase(Locale.ROOT)) + "\\b"))
+                .toList();
+            Set<String> tokens = symbols.stream().flatMap(symbol -> java.util.stream.Stream.concat(
+                    java.util.stream.Stream.of(symbol), java.util.Arrays.stream(CAMEL_BOUNDARY.split(symbol))))
+                .filter(token -> token.length() >= 3).map(token -> token.toLowerCase(Locale.ROOT))
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+            return new SymbolMatcher(patterns, tokens);
+        }
+
+        boolean matches(String content) {
+            return patterns.stream().anyMatch(pattern -> pattern.matcher(content).find());
+        }
     }
 
     private String normalize(String value) {

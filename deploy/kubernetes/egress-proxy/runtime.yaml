@@ -3,5 +3,5 @@ kind: ConfigMap
 metadata:
   name: repoguard-runtime
 data:
-  REPOGUARD_SCHEMA_EXPECTED_VERSION: "108"
+  REPOGUARD_SCHEMA_EXPECTED_VERSION: "109"
   REPOGUARD_OUTBOUND_HTTP_PROXY: http://repoguard-egress-gateway.egress.svc.cluster.local:3128

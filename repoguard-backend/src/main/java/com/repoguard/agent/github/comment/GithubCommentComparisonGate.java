@@ -44,6 +44,6 @@ public class GithubCommentComparisonGate {
                 "GitHub writeback requires a current review execution attempt"
             );
         }
-        comparisonService.compare(task.getId(), null, task.getCurrentAttemptId(), 1, 1);
+        comparisonService.materializeCurrent(task.getId(), task.getCurrentAttemptId());
     }
 }

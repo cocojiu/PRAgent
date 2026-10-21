@@ -60,7 +60,9 @@ public class FrontendPerformanceObservationServiceImpl implements FrontendPerfor
                 status(item.status()),
                 item.result()
             );
-            thresholdMonitor.frontendApiRequest(duration, route, item.operation(), normalizedPath);
+            if (!"cancelled".equals(item.result())) {
+                thresholdMonitor.frontendApiRequest(duration, route, item.operation(), normalizedPath);
+            }
         });
         longTasks.forEach(item -> {
             Duration duration = duration(item.durationMs());
@@ -131,14 +133,17 @@ public class FrontendPerformanceObservationServiceImpl implements FrontendPerfor
             .collect(Collectors.joining(","));
 
         log.info(
-            "Frontend performance observed route={} apiRequests={} apiTotalDurationMs={} longTasks={} maxLongTaskMs={} waterfall={} longTaskRegions={}",
+            "Frontend performance observed route={} apiRequests={} apiTotalDurationMs={} longTasks={} maxLongTaskMs={} waterfall={} longTaskRegions={} apiCancelled={} apiFailed={} apiCompleted={}",
             route,
             apiRequests.size(),
             apiTotalDuration,
             longTasks.size(),
             maxLongTaskDuration,
             waterfall,
-            longTaskRegions
+            longTaskRegions,
+            apiRequests.stream().filter(item -> "cancelled".equals(item.result())).count(),
+            apiRequests.stream().filter(item -> "failed".equals(item.result())).count(),
+            apiRequests.stream().filter(item -> "failed".equals(item.result()) || "success".equals(item.result())).count()
         );
     }
 

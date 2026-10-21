@@ -1,4 +1,4 @@
-type ApiRequestResult = "success" | "failed";
+type ApiRequestResult = "success" | "failed" | "cancelled";
 
 export type FrontendApiRequestObservation = {
   operation: string;
@@ -54,7 +54,9 @@ export const configureFrontendPerformanceBuffer = (nextHooks: BufferHooks) => {
 
 export const observeFrontendApiRequest = (observation: FrontendApiRequestObservation) => {
   const normalizedObservation = normalizeApiObservation(observation);
-  latestApiByOperation.set(normalizedObservation.operation, normalizedObservation);
+  if (normalizedObservation.result === "success") {
+    latestApiByOperation.set(normalizedObservation.operation, normalizedObservation);
+  }
   if (!hooks.shouldRecord()) {
     return;
   }

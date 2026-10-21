@@ -122,7 +122,7 @@ class LokiReleaseManifestTest {
                 if predicate=='https://cyclonedx.org/bom':
                     args.output.mkdir();(args.output/'user-asset.txt').write_text('preserve')
                     return [dict(subject=[dict(digest=dict(sha256='a'*64))],predicate=dict(bomFormat='CycloneDX',
-                        components=[dict(name='stdlib',version='v1.26.9'),dict(name='golang.org/x/net',version='v0.60.0')]))]
+                        components=[dict(name='stdlib',version='v1.26.10'),dict(name='golang.org/x/net',version='v0.60.0')]))]
                 return [dict(subject=[dict(digest=dict(sha256='a'*64))])]
             with patch.object(m,'github',side_effect=github),patch.object(m,'command',side_effect=command),patch.object(m,'verify_attestation',side_effect=attest):
                 if scenario=='untrusted-run':

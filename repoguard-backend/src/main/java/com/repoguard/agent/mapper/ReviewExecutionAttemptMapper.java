@@ -11,6 +11,14 @@ import org.apache.ibatis.annotations.Update;
 public interface ReviewExecutionAttemptMapper extends BaseMapper<ReviewExecutionAttempt> {
 
     @Select("""
+        select * from review_execution_attempt
+        where task_id = #{taskId} and attempt_no < #{beforeAttemptNo}
+          and status in ('COMPLETED', 'PARTIAL')
+        order by attempt_no desc limit 1
+        """)
+    ReviewExecutionAttempt selectPreviousSuccessful(@Param("taskId") Long taskId, @Param("beforeAttemptNo") Integer beforeAttemptNo);
+
+    @Select("""
         select coalesce(max(attempt_no), 0)
         from review_execution_attempt
         where task_id = #{taskId}

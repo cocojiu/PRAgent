@@ -1,10 +1,14 @@
 {
   "uid": "repoguard-review-observability",
   "title": "RepoGuard Review Observability",
-  "tags": ["repoguard", "logs", "review"],
+  "tags": [
+    "repoguard",
+    "logs",
+    "review"
+  ],
   "timezone": "browser",
   "schemaVersion": 40,
-  "version": 2,
+  "version": 3,
   "refresh": "10s",
   "time": {
     "from": "now-6h",
@@ -265,6 +269,100 @@
           },
           "expr": "{container=~\"repoguard-backend(-worker)?\"} |= \"operation=review_execute\"",
           "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Sampled frontend cancellations",
+      "description": "Sum of explicitly cancelled requests in sampled frontend performance batches over the selected time range; unavailable for old log formats.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 36
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No samples"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(sum_over_time({container=~\"repoguard-backend(-worker)?\"} |= \"Frontend performance observed\" | regexp \"apiCancelled=(?P<cancelled>[0-9]+) apiFailed=(?P<failed>[0-9]+) apiCompleted=(?P<completed>[0-9]+)\" | unwrap cancelled | __error__=\"\" [$__range]))",
+          "refId": "A",
+          "queryType": "instant",
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Sampled frontend failure ratio",
+      "description": "failed / (success + failed) in sampled batches. Cancellations are excluded from both numerator and denominator. A zero denominator or missing samples remains unavailable.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 36
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "noValue": "No samples"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(sum_over_time({container=~\"repoguard-backend(-worker)?\"} |= \"Frontend performance observed\" | regexp \"apiCancelled=(?P<cancelled>[0-9]+) apiFailed=(?P<failed>[0-9]+) apiCompleted=(?P<completed>[0-9]+)\" | unwrap failed | __error__=\"\" [$__range])) / (sum(sum_over_time({container=~\"repoguard-backend(-worker)?\"} |= \"Frontend performance observed\" | regexp \"apiCancelled=(?P<cancelled>[0-9]+) apiFailed=(?P<failed>[0-9]+) apiCompleted=(?P<completed>[0-9]+)\" | unwrap completed | __error__=\"\" [$__range])) > 0)",
+          "refId": "A",
+          "queryType": "instant",
+          "editorMode": "code"
         }
       ]
     }

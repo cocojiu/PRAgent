@@ -349,9 +349,7 @@ jobs:
     env:
       REPOGUARD_RUN_LINUX_BACKUP_INTEGRATION: 'true'
       REPOGUARD_ROLLBACK_PREVIOUS_SCHEMA_VERSION: '108'
-      # Signed SSE candidate source run 39392081392; compatible d969 baseline source run 39297463922. Isolated acceptance only.
-      REPOGUARD_ROLLBACK_UPGRADE_IMAGE: ghcr.io/cocojiu/pragent-backend@sha256:0f9136a7105ad91f2d16e58715ecac6094e400b6775187ca53e3874b6fe14194
-      REPOGUARD_ROLLBACK_UPGRADE_REVISION: ee9dbdcb1af74b00e2b1ac570499cd70dd46b00f
+      # Keep the signed d969/V108 rollback baseline; build the upgrade from this exact checkout below.
       REPOGUARD_ROLLBACK_PREVIOUS_IMAGE: ghcr.io/cocojiu/pragent-backend@sha256:59ad1c7d8241f97e5fdff4ee0f517a182999e51d363d71ed294c1c195da7fcfe
       REPOGUARD_ROLLBACK_PREVIOUS_REVISION: d9696dce33c06f072cfc966adeb7e620fcfca769
     steps:
@@ -367,6 +365,19 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build exact checkout backend for schema rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          revision="$(git rev-parse HEAD)"
+          test "${revision}" = "${GITHUB_SHA}"
+          (cd repoguard-backend && ./mvnw -B -DskipTests package)
+          docker build --build-arg "OCI_REVISION=${revision}" --build-arg "OCI_VERSION=isolated-${GITHUB_RUN_ID}" \
+            --iidfile "${RUNNER_TEMP}/rollback-candidate-image.id" -f repoguard-backend/Dockerfile repoguard-backend
+          image="$(cat "${RUNNER_TEMP}/rollback-candidate-image.id")"
+          [[ "${image}" =~ ^sha256:[a-f0-9]{64}$ ]]
+          echo "REPOGUARD_ROLLBACK_UPGRADE_IMAGE=${image}" >> "$GITHUB_ENV"
+          echo "REPOGUARD_ROLLBACK_UPGRADE_REVISION=${revision}" >> "$GITHUB_ENV"
       - name: Run real restore, TLS streaming and runtime rollback checks
         working-directory: repoguard-backend
         run: ./mvnw -B -Dtest=ScheduledMysqlBackupLinuxIntegrationTest,ReviewProgressTransportIntegrationTest,RuntimeSchemaRollbackLinuxIntegrationTest test
@@ -422,6 +433,32 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: repoguard-frontend/package-lock.json
+      - name: Build exact checkout application images without publishing
+        shell: bash
+        env:
+          VITE_REVIEW_PROGRESS_STREAM: 'true'
+        run: |
+          set -euo pipefail
+          revision="$(git rev-parse HEAD)"
+          test "${revision}" = "${GITHUB_SHA}"
+          (cd repoguard-backend && ./mvnw -B -DskipTests package)
+          (cd repoguard-frontend && npm ci && npm run build)
+          docker build --build-arg "OCI_REVISION=${revision}" --build-arg "OCI_VERSION=isolated-${GITHUB_RUN_ID}" \
+            --iidfile "${RUNNER_TEMP}/acceptance-backend-image.id" -f repoguard-backend/Dockerfile repoguard-backend
+          docker build --build-arg "OCI_REVISION=${revision}" --build-arg "OCI_VERSION=isolated-${GITHUB_RUN_ID}" \
+            --build-arg REVIEW_PROGRESS_STREAM=true --iidfile "${RUNNER_TEMP}/acceptance-frontend-image.id" \
+            -f repoguard-frontend/Dockerfile repoguard-frontend
+          backend="$(cat "${RUNNER_TEMP}/acceptance-backend-image.id")"
+          frontend="$(cat "${RUNNER_TEMP}/acceptance-frontend-image.id")"
+          [[ "${backend}" =~ ^sha256:[a-f0-9]{64}$ && "${frontend}" =~ ^sha256:[a-f0-9]{64}$ ]]
+          echo "REPOGUARD_ISOLATED_BACKEND_IMAGE=${backend}" >> "$GITHUB_ENV"
+          echo "REPOGUARD_ISOLATED_FRONTEND_IMAGE=${frontend}" >> "$GITHUB_ENV"
+          echo "REPOGUARD_ISOLATED_REVISION=${revision}" >> "$GITHUB_ENV"
       - name: Install isolated Chromium test runtime
         working-directory: repoguard-backend
         run: ./mvnw -B test-compile org.codehaus.mojo:exec-maven-plugin:3.6.3:java -Dexec.mainClass=com.microsoft.playwright.CLI -Dexec.classpathScope=test -Dexec.args="install --with-deps chromium"
