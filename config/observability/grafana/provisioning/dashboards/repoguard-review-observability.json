@@ -359,7 +359,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "sum(sum_over_time({container=~\"repoguard-backend(-worker)?\"} |= \"Frontend performance observed\" | regexp \"apiCancelled=(?P<cancelled>[0-9]+) apiFailed=(?P<failed>[0-9]+) apiCompleted=(?P<completed>[0-9]+)\" | unwrap failed | __error__=\"\" [$__range])) / sum(sum_over_time({container=~\"repoguard-backend(-worker)?\"} |= \"Frontend performance observed\" | regexp \"apiCancelled=(?P<cancelled>[0-9]+) apiFailed=(?P<failed>[0-9]+) apiCompleted=(?P<completed>[0-9]+)\" | unwrap completed | __error__=\"\" [$__range]))",
+          "expr": "sum(sum_over_time({container=~\"repoguard-backend(-worker)?\"} |= \"Frontend performance observed\" | regexp \"apiCancelled=(?P<cancelled>[0-9]+) apiFailed=(?P<failed>[0-9]+) apiCompleted=(?P<completed>[0-9]+)\" | unwrap failed | __error__=\"\" [$__range])) / (sum(sum_over_time({container=~\"repoguard-backend(-worker)?\"} |= \"Frontend performance observed\" | regexp \"apiCancelled=(?P<cancelled>[0-9]+) apiFailed=(?P<failed>[0-9]+) apiCompleted=(?P<completed>[0-9]+)\" | unwrap completed | __error__=\"\" [$__range])) > 0)",
           "refId": "A",
           "queryType": "instant",
           "editorMode": "code"
