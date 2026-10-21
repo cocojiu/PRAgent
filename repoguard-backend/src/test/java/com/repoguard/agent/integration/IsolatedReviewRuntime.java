@@ -72,14 +72,24 @@ final class IsolatedReviewRuntime implements AutoCloseable {
         assertThat(System.getenv("GITHUB_ACTIONS")).isEqualTo("true");
         assertThat(System.getenv("RUNNER_ENVIRONMENT")).isEqualTo("github-hosted");
         assertThat(System.getenv("GITHUB_RUN_ID")).matches("[1-9][0-9]*");
-        assertThat(REVISION).as("Isolated acceptance must exercise this exact checkout")
-            .isEqualTo(System.getenv("GITHUB_SHA"));
+        String workflowRevision = System.getenv("GITHUB_SHA");
+        String sourceRevision = System.getenv().getOrDefault("REPOGUARD_ISOLATED_SOURCE_REVISION", workflowRevision);
+        assertThat(REVISION).as("Isolated acceptance must exercise the selected source revision").isEqualTo(sourceRevision);
+        if (!REVISION.equals(workflowRevision)) {
+            assertThat(command(List.of("git", "rev-parse", "HEAD"))).isEqualTo(workflowRevision);
+            assertThat(command(List.of("git", "merge-base", REVISION, workflowRevision))).isEqualTo(REVISION);
+            assertThat(command(List.of("git", "diff", "--name-only", REVISION, workflowRevision)).lines().toList())
+                .as("Release source may differ only in these acceptance identity files")
+                .isSubsetOf(".github/workflows/pr-quality.yml",
+                    "repoguard-backend/src/test/java/com/repoguard/agent/integration/IsolatedReviewRuntime.java");
+        }
         Files.createDirectories(evidence);
         long memory = Long.parseLong(command(List.of("docker", "info", "--format", "{{.MemTotal}}")));
         assertThat(memory).as("Hosted acceptance needs at least 7 GiB for six bounded services and Chromium").isGreaterThanOrEqualTo(7L * 1024 * 1024 * 1024);
         proof.put("dockerHostMemoryBytes", memory);
         proof.put("serviceLimits", Map.of("containers", 6, "memoryBytesEach", 768L * 1024 * 1024, "cpusEach", 1, "pidsEach", 256));
         proof.put("revision", REVISION); proof.put("backend", BACKEND); proof.put("frontend", FRONTEND);
+        proof.put("workflowRevision", workflowRevision); proof.put("sourceRevision", sourceRevision);
         proof.put("productionWrites", 0); proof.put("realProviderCalls", 0); proof.put("naturalBusinessReplay", false);
         proof.put("runId", System.getenv("GITHUB_RUN_ID"));
         for (String image : List.of(MYSQL, RABBIT, BACKEND, FRONTEND, CADDY)) {

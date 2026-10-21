@@ -349,11 +349,13 @@ jobs:
     env:
       REPOGUARD_RUN_LINUX_BACKUP_INTEGRATION: 'true'
       REPOGUARD_ROLLBACK_PREVIOUS_SCHEMA_VERSION: '108'
-      # Keep the signed d969/V108 rollback baseline; build the upgrade from this exact checkout below.
-      REPOGUARD_ROLLBACK_PREVIOUS_IMAGE: ghcr.io/cocojiu/pragent-backend@sha256:59ad1c7d8241f97e5fdff4ee0f517a182999e51d363d71ed294c1c195da7fcfe
-      REPOGUARD_ROLLBACK_PREVIOUS_REVISION: d9696dce33c06f072cfc966adeb7e620fcfca769
+      # Exercise the signed 09/V108 recovery baseline against the signed main SSE candidate.
+      REPOGUARD_ROLLBACK_PREVIOUS_IMAGE: ghcr.io/cocojiu/pragent-backend@sha256:84b69a88e9d45a5c184ae5221865480ca8c9cf42c88469a4f16c3a3eda407c37
+      REPOGUARD_ROLLBACK_PREVIOUS_REVISION: 09b7567faf05cca029481f95fee845c82fe63202
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
@@ -378,6 +380,26 @@ jobs:
           [[ "${image}" =~ ^sha256:[a-f0-9]{64}$ ]]
           echo "REPOGUARD_ROLLBACK_UPGRADE_IMAGE=${image}" >> "$GITHUB_ENV"
           echo "REPOGUARD_ROLLBACK_UPGRADE_REVISION=${revision}" >> "$GITHUB_ENV"
+      - name: Use signed main SSE backend for schema rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_revision=1c1d09afdbeffd6eb365d672b1fb0a2570e0337d
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git merge-base "$source_revision" HEAD)" = "$source_revision"
+          while IFS= read -r path; do
+            case "$path" in
+              .github/workflows/pr-quality.yml|repoguard-backend/src/test/java/com/repoguard/agent/integration/IsolatedReviewRuntime.java) ;;
+              *) echo "Unexpected release source difference: $path" >&2; exit 1 ;;
+            esac
+          done < <(git diff --name-only "$source_revision" HEAD)
+          image=ghcr.io/cocojiu/pragent-backend@sha256:5a156e27182ce29ac4af2ed2fc2d9c7552b9ccc7def23a005815afe7db9e375f
+          docker pull --platform linux/amd64 "$image"
+          test "$(docker image inspect "$image" --format '{{.Id}}')" = sha256:768b9171e6a6b2327157b7fdf3c62d37f244bef460e1cdcbe241bdd9eb54b125
+          test "$(docker image inspect "$image" --format '{{.Os}}/{{.Architecture}}')" = linux/amd64
+          test "$(docker image inspect "$image" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')" = "$source_revision"
+          echo "REPOGUARD_ROLLBACK_UPGRADE_IMAGE=$image" >> "$GITHUB_ENV"
+          echo "REPOGUARD_ROLLBACK_UPGRADE_REVISION=$source_revision" >> "$GITHUB_ENV"
       - name: Run real restore, TLS streaming and runtime rollback checks
         working-directory: repoguard-backend
         run: ./mvnw -B -Dtest=ScheduledMysqlBackupLinuxIntegrationTest,ReviewProgressTransportIntegrationTest,RuntimeSchemaRollbackLinuxIntegrationTest test
@@ -423,6 +445,8 @@ jobs:
       REPOGUARD_RUN_ISOLATED_REVIEW_ACCEPTANCE: 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
@@ -459,6 +483,32 @@ jobs:
           echo "REPOGUARD_ISOLATED_BACKEND_IMAGE=${backend}" >> "$GITHUB_ENV"
           echo "REPOGUARD_ISOLATED_FRONTEND_IMAGE=${frontend}" >> "$GITHUB_ENV"
           echo "REPOGUARD_ISOLATED_REVISION=${revision}" >> "$GITHUB_ENV"
+      - name: Use signed main SSE application images
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_revision=1c1d09afdbeffd6eb365d672b1fb0a2570e0337d
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git merge-base "$source_revision" HEAD)" = "$source_revision"
+          while IFS= read -r path; do
+            case "$path" in
+              .github/workflows/pr-quality.yml|repoguard-backend/src/test/java/com/repoguard/agent/integration/IsolatedReviewRuntime.java) ;;
+              *) echo "Unexpected release source difference: $path" >&2; exit 1 ;;
+            esac
+          done < <(git diff --name-only "$source_revision" HEAD)
+          backend=ghcr.io/cocojiu/pragent-backend@sha256:5a156e27182ce29ac4af2ed2fc2d9c7552b9ccc7def23a005815afe7db9e375f
+          frontend=ghcr.io/cocojiu/pragent-frontend@sha256:6c3d12f6287223fa600f66d37669f65300bb9012abec301fd90b500ac77002d8
+          for image in "$backend" "$frontend"; do
+            docker pull --platform linux/amd64 "$image"
+            test "$(docker image inspect "$image" --format '{{.Os}}/{{.Architecture}}')" = linux/amd64
+            test "$(docker image inspect "$image" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')" = "$source_revision"
+          done
+          test "$(docker image inspect "$backend" --format '{{.Id}}')" = sha256:768b9171e6a6b2327157b7fdf3c62d37f244bef460e1cdcbe241bdd9eb54b125
+          test "$(docker image inspect "$frontend" --format '{{.Id}}')" = sha256:d1f5343b76b4e8111454d6e19f482509c8c93d721cfc198ba69e4b92607e85ba
+          echo "REPOGUARD_ISOLATED_BACKEND_IMAGE=$backend" >> "$GITHUB_ENV"
+          echo "REPOGUARD_ISOLATED_FRONTEND_IMAGE=$frontend" >> "$GITHUB_ENV"
+          echo "REPOGUARD_ISOLATED_REVISION=$source_revision" >> "$GITHUB_ENV"
+          echo "REPOGUARD_ISOLATED_SOURCE_REVISION=$source_revision" >> "$GITHUB_ENV"
       - name: Install isolated Chromium test runtime
         working-directory: repoguard-backend
         run: ./mvnw -B test-compile org.codehaus.mojo:exec-maven-plugin:3.6.3:java -Dexec.mainClass=com.microsoft.playwright.CLI -Dexec.classpathScope=test -Dexec.args="install --with-deps chromium"
