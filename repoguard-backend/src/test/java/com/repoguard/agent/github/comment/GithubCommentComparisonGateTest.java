@@ -21,7 +21,7 @@ class GithubCommentComparisonGateTest {
 
         new GithubCommentComparisonGate(comparisonService).ensureCompared(task);
 
-        verify(comparisonService).compare(42L, null, 7L, 1, 1);
+        verify(comparisonService).materializeCurrent(42L, 7L);
     }
 
     @Test

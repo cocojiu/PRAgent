@@ -12031,7 +12031,7 @@
           },
           "result" : {
             "type" : "string",
-            "pattern" : "success|failed"
+            "pattern" : "success|failed|cancelled"
           },
           "traceId" : {
             "type" : "string",

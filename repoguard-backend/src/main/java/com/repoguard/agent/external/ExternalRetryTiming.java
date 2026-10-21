@@ -11,14 +11,19 @@ import org.springframework.web.client.RestClientResponseException;
 
 /** Synchronous retry scheduling shares the caller's monotonic budget without retaining it. */
 final class ExternalRetryTiming {
-    private static final ThreadLocal<LongSupplier> REMAINING = new ThreadLocal<>();
+    private record Budget(String system, LongSupplier remaining) { }
+    private static final ThreadLocal<Budget> REMAINING = new ThreadLocal<>();
 
     private ExternalRetryTiming() {
     }
 
     static <T> T withinBudget(LongSupplier remaining, Supplier<T> call) {
-        LongSupplier previous = REMAINING.get();
-        REMAINING.set(remaining);
+        return withinBudget("LLM", remaining, call);
+    }
+
+    static <T> T withinBudget(String system, LongSupplier remaining, Supplier<T> call) {
+        Budget previous = REMAINING.get();
+        REMAINING.set(new Budget(system, remaining));
         try {
             requireRemaining();
             return call.get();
@@ -28,8 +33,8 @@ final class ExternalRetryTiming {
     }
 
     static void requireRemaining() {
-        LongSupplier remaining = REMAINING.get();
-        if (Thread.currentThread().isInterrupted() || remaining != null && remaining.getAsLong() <= 0) {
+        Budget remaining = REMAINING.get();
+        if (Thread.currentThread().isInterrupted() || remaining != null && remaining.remaining().getAsLong() <= 0) {
             throw declined("deadline_exhausted");
         }
     }
@@ -46,8 +51,8 @@ final class ExternalRetryTiming {
         long requested = retryAfterMillis(failure, clock);
         if (requested > maximum) throw declined("retry_after_exceeds_limit");
         long delay = Math.max(requested, Math.min(maximum, jittered));
-        LongSupplier remaining = REMAINING.get();
-        if (remaining != null && remaining.getAsLong() <= Duration.ofMillis(delay).toNanos()) {
+        Budget remaining = REMAINING.get();
+        if (remaining != null && remaining.remaining().getAsLong() <= Duration.ofMillis(delay).toNanos()) {
             throw declined("deadline_exhausted");
         }
         requireRemaining();
@@ -82,13 +87,14 @@ final class ExternalRetryTiming {
     }
 
     static ExternalCallException declined(String reason) {
-        return new LocalDeclineException(reason);
+        return new LocalDeclineException(REMAINING.get() == null ? "LLM" : REMAINING.get().system(), reason);
     }
 
     private static final class LocalDeclineException extends ExternalCallException {
         private static final long serialVersionUID = 1L;
-        private LocalDeclineException(String reason) {
-            super("LLM", "llm_" + reason, false, null, "retry or request admission stopped locally", null);
+        private LocalDeclineException(String system, String reason) {
+            super(system, system.toLowerCase(java.util.Locale.ROOT) + "_" + reason, false, null,
+                "retry or request admission stopped locally", null);
         }
     }
 }

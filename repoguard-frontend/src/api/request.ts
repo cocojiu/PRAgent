@@ -81,7 +81,7 @@ export const createApiRequester = <Contract extends { [Operation in keyof Contra
         path: observationPath,
         method,
         status: error instanceof RequestError ? error.status : undefined,
-        result: "failed",
+        result: error instanceof RequestError && error.code === "REQUEST_ABORTED" ? "cancelled" : "failed",
         startedAtMs,
         durationMs: currentTimeMs() - startedAtMs
       });

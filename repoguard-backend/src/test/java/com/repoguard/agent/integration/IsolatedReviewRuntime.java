@@ -146,7 +146,7 @@ final class IsolatedReviewRuntime implements AutoCloseable {
 
     void startApplications() throws Exception {
         api = application("api", "api");
-        assertThat(sql("SELECT MAX(CAST(version AS UNSIGNED)) FROM flyway_schema_history WHERE success=1")).isEqualTo("108");
+        assertThat(sql("SELECT MAX(CAST(version AS UNSIGNED)) FROM flyway_schema_history WHERE success=1")).isEqualTo(Integer.toString(new com.repoguard.agent.config.SchemaVersionProperties().getExpectedVersion()));
         String frontend = container("frontend", FRONTEND, environment("frontend", Map.of()), List.of("--network-alias", "frontend"), List.of());
         assertThat(inspect("container", frontend).path("Config").path("Labels").path("org.opencontainers.image.revision").asText()).isEqualTo(REVISION);
         Path repository = Path.of(System.getenv("GITHUB_WORKSPACE"));
@@ -174,7 +174,7 @@ final class IsolatedReviewRuntime implements AutoCloseable {
         request("PUT", "/api/v1/config/integrations/github", Map.of("baseUrl", "https://supplier.test:18443", "token", githubToken, "defaultOwner", "fixture", "defaultRepo", "sample"), token);
         configureReviewPolicy(180, true);
         worker = application("worker", "worker");
-        proof.put("schema", 108); proof.put("rolesSimultaneouslyReady", true); save();
+        proof.put("schema", new com.repoguard.agent.config.SchemaVersionProperties().getExpectedVersion()); proof.put("rolesSimultaneouslyReady", true); save();
     }
 
     void configureReviewPolicy(int seconds, boolean fallback) throws Exception {

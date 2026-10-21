@@ -42,7 +42,8 @@ class ReviewFindingComparisonServiceTest {
             org.mockito.ArgumentMatchers.any(),
             org.mockito.ArgumentMatchers.any(),
             org.mockito.ArgumentMatchers.any(),
-            org.mockito.ArgumentMatchers.anyLong()
+            org.mockito.ArgumentMatchers.anyLong(),
+            org.mockito.ArgumentMatchers.any()
         )).thenReturn(1);
     }
 
@@ -60,7 +61,7 @@ class ReviewFindingComparisonServiceTest {
         assertThat(result.summary().newCount()).isEqualTo(1);
         assertThat(result.findings().items()).extracting(item -> item.status()).containsExactly("NEW");
         assertThat(result.findings().hasMore()).isFalse();
-        assertThat(finding.getComparisonAttemptId()).isEqualTo(102L);
+        assertThat(finding.getComparisonAttemptId()).isNull();
     }
 
     @Test
@@ -77,7 +78,7 @@ class ReviewFindingComparisonServiceTest {
         assertThat(result.baselineAttemptId()).isEqualTo(101L);
         assertThat(result.summary().persistingCount()).isEqualTo(1);
         assertThat(result.findings().items().getFirst().baselineFindingId()).isEqualTo(201L);
-        assertThat(newFinding.getComparisonStatus()).isEqualTo("PERSISTING");
+        assertThat(newFinding.getComparisonStatus()).isNull();
     }
 
     @Test
@@ -90,7 +91,7 @@ class ReviewFindingComparisonServiceTest {
 
         var resolved = service.compare(42L, null, 102L, 1, 10);
         assertThat(resolved.summary().resolvedCount()).isEqualTo(1);
-        assertThat(original.getComparisonStatus()).isEqualTo("RESOLVED");
+        assertThat(original.getComparisonStatus()).isNull();
 
         ReviewFinding reappeared = finding(203L, 103L, "src/App.java", 12, "Use logger");
         prepare(third, second, List.of(first, second, third), List.of(original, reappeared));
@@ -117,7 +118,6 @@ class ReviewFindingComparisonServiceTest {
         assertThat(result.summary().unmatchedCount()).isEqualTo(1);
 
         candidate.setPromptVersion("prompt-v1");
-        when(findingMapper.selectByTaskIdForComparison(42L)).thenReturn(List.of(oldFinding, newFinding));
         var crossFile = service.compare(42L, 101L, 102L, 1, 10);
         assertThat(crossFile.comparable()).isTrue();
         assertThat(crossFile.summary().unmatchedCount()).isEqualTo(1);
@@ -149,7 +149,16 @@ class ReviewFindingComparisonServiceTest {
             when(attemptMapper.selectById(baseline.getId())).thenReturn(baseline);
         }
         when(attemptMapper.selectByTaskId(42L, 100)).thenReturn(attempts);
-        when(findingMapper.selectByTaskIdForComparison(42L)).thenReturn(findings);
+        when(attemptMapper.selectPreviousSuccessful(42L, candidate.getAttemptNo())).thenReturn(baseline);
+        when(findingMapper.selectAttemptForComparison(42L, candidate.getId())).thenReturn(findings.stream()
+            .filter(f -> candidate.getId().equals(f.getAttemptId())).toList());
+        if (baseline != null) {
+            when(findingMapper.selectAttemptForComparison(42L, baseline.getId())).thenReturn(findings.stream()
+                .filter(f -> baseline.getId().equals(f.getAttemptId())).toList());
+            when(findingMapper.selectEarlierFingerprintMatches(org.mockito.ArgumentMatchers.eq(42L),
+                org.mockito.ArgumentMatchers.eq(baseline.getAttemptNo()), org.mockito.ArgumentMatchers.any())).thenReturn(findings.stream()
+                .filter(f -> attempts.stream().anyMatch(a -> a.getId().equals(f.getAttemptId()) && a.getAttemptNo() < baseline.getAttemptNo())).toList());
+        }
     }
 
     private ReviewTask task() {

@@ -7,14 +7,21 @@ public record RepositorySemanticSnapshot(
     List<RepositorySemanticFile> files,
     List<RepositorySemanticLimitation> limitations,
     boolean truncated,
-    String summary
+    String summary,
+    String commitSha
 ) {
+
+    public RepositorySemanticSnapshot(String defaultBranch, List<RepositorySemanticFile> files,
+        List<RepositorySemanticLimitation> limitations, boolean truncated, String summary) {
+        this(defaultBranch, files, limitations, truncated, summary, "");
+    }
 
     public RepositorySemanticSnapshot {
         defaultBranch = defaultBranch == null ? "" : defaultBranch;
         files = files == null ? List.of() : List.copyOf(files);
         limitations = limitations == null ? List.of() : List.copyOf(limitations);
         summary = summary == null ? "" : summary;
+        commitSha = commitSha == null ? "" : commitSha;
     }
 
     public static RepositorySemanticSnapshot empty(String summary) {

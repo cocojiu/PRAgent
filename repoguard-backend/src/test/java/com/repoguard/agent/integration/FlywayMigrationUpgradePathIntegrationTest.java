@@ -20,7 +20,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
  * Exercises the supported rolling-upgrade path against a real MySQL instance.
  *
  * <p>The test is opt-in because local unit-test runs do not provision a database. CI enables it
- * with an isolated database and verifies V76 through the V108 indexed legacy failure state.
+ * with an isolated database and verifies V76 through the V109 fingerprint history index.
  */
 @EnabledIfEnvironmentVariable(named = "REPOGUARD_RUN_INTEGRATION_TESTS", matches = "true")
 class FlywayMigrationUpgradePathIntegrationTest {
@@ -463,6 +463,22 @@ class FlywayMigrationUpgradePathIntegrationTest {
                     classified.setLong(1, tenantId); classified.setLong(2, taskId);
                     try (ResultSet rows = classified.executeQuery()) {
                         assertThat(rows.next()).isTrue(); assertThat(rows.getInt(1)).isEqualTo(2);
+                    }
+                }
+            }
+            migrateTo(url, username, password, "109");
+            try (Connection connection = open(url, username, password)) {
+                assertThat(latestSuccessfulMigration(connection)).isEqualTo("109");
+                try (PreparedStatement index = connection.prepareStatement("""
+                    select column_name from information_schema.statistics
+                    where table_schema=database() and table_name='review_finding'
+                      and index_name='idx_review_finding_history_fingerprint' order by seq_in_index
+                    """)) {
+                    try (ResultSet rows = index.executeQuery()) {
+                        for (String column : List.of("task_id", "finding_fingerprint", "tenant_id", "attempt_id")) {
+                            assertThat(rows.next()).isTrue(); assertThat(rows.getString(1)).isEqualTo(column);
+                        }
+                        assertThat(rows.next()).isFalse();
                     }
                 }
             }

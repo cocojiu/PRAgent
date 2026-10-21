@@ -40,13 +40,13 @@ class GithubRepositorySemanticRepositoryTest {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/repos/octo/repo", exchange -> {
             String path = exchange.getRequestURI().getPath();
-            String body = path.endsWith("/git/trees/main")
+            String body = path.endsWith("/git/trees/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
                 ? "{\"truncated\":false,\"tree\":["
                     + "{\"path\":\"src/main/java/OrderService.java\",\"type\":\"blob\"},"
                     + "{\"path\":\"src/main/java/OrderFacade.java\",\"type\":\"blob\"},"
                     + "{\"path\":\"src/main/resources/application.yml\",\"type\":\"blob\"},"
                     + "{\"path\":\"docs/README.md\",\"type\":\"blob\"}]}"
-                : "{\"default_branch\":\"main\"}";
+                : "{\"default_branch\":\"main\",\"sha\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"commit\":{\"tree\":{\"sha\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}}";
             byte[] response = body.getBytes(StandardCharsets.UTF_8);
             exchange.sendResponseHeaders(200, response.length);
             exchange.getResponseBody().write(response);
@@ -65,12 +65,12 @@ class GithubRepositorySemanticRepositoryTest {
             );
             when(integrationProvider.getSettingsForRepository("octo", "repo")).thenReturn(settings);
             when(contentReader.fetch(
-                eq(settings), eq(settings.baseUrl()), eq("octo"), eq("repo"), eq("main"),
-                eq("src/main/java/OrderFacade.java"), eq(resilience)
+                eq(settings), eq(settings.baseUrl()), eq("octo"), eq("repo"), eq("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+                eq("src/main/java/OrderFacade.java"), eq(resilience), any(), org.mockito.ArgumentMatchers.anyInt()
             )).thenReturn("class OrderFacade { OrderService service; }");
             when(contentReader.fetch(
-                eq(settings), eq(settings.baseUrl()), eq("octo"), eq("repo"), eq("main"),
-                eq("src/main/resources/application.yml"), eq(resilience)
+                eq(settings), eq(settings.baseUrl()), eq("octo"), eq("repo"), eq("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+                eq("src/main/resources/application.yml"), eq(resilience), any(), org.mockito.ArgumentMatchers.anyInt()
             )).thenReturn("security:\n  role: ADMIN");
 
             GithubRepositorySemanticRepository repository = new GithubRepositorySemanticRepository(
@@ -130,17 +130,17 @@ class GithubRepositorySemanticRepositoryTest {
             .thenReturn(new GithubIntegrationSettings(
                 "GITHUB", "CONFIGURED", "https://api.github.com", null, null, "octo", "repo", 1L
             ));
-        when(resilience.github(eq("fetch_repository_metadata"), any()))
+        when(resilience.github(eq("fetch_repository_metadata"), any(), any()))
             .thenThrow(new IllegalArgumentException("metadata unavailable"));
         assertThat(repository.fetch(diff, java.util.Set.of("OrderService")).summary())
-            .isEqualTo("unavailable; reason=default_branch_unavailable:IllegalArgumentException");
+            .isEqualTo("unavailable; reason=semantic_context_unavailable:IllegalArgumentException");
     }
 
     @Test
     void reportsFileLimitsFetchFailuresAndFiltersUnsafeTreeEntries() throws Exception {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/repos/octo/repo", exchange -> {
-            String body = exchange.getRequestURI().getPath().endsWith("/git/trees/main")
+            String body = exchange.getRequestURI().getPath().endsWith("/git/trees/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
                 ? "{\"truncated\":false,\"tree\":["
                     + "{\"path\":\"src/main/java/OrderServiceSupport/Helper.java\",\"type\":\"blob\"},"
                     + "{\"path\":\"src/main/java/Failure.java\",\"type\":\"blob\"},"
@@ -149,7 +149,7 @@ class GithubRepositorySemanticRepositoryTest {
                     + "{\"path\":\"/absolute.java\",\"type\":\"blob\"},"
                     + "{\"path\":\"docs/README.md\",\"type\":\"blob\"},"
                     + "{\"path\":\"image.png\",\"type\":\"blob\"}]}"
-                : "{\"default_branch\":\"main\"}";
+                : "{\"default_branch\":\"main\",\"sha\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"commit\":{\"tree\":{\"sha\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}}";
             byte[] response = body.getBytes(StandardCharsets.UTF_8);
             exchange.sendResponseHeaders(200, response.length);
             exchange.getResponseBody().write(response);
@@ -168,16 +168,16 @@ class GithubRepositorySemanticRepositoryTest {
             );
             when(integrationProvider.getSettingsForRepository("octo", "repo")).thenReturn(settings);
             when(contentReader.fetch(
-                eq(settings), eq(settings.baseUrl()), eq("octo"), eq("repo"), eq("main"),
-                eq("src/main/java/OrderServiceSupport/Helper.java"), eq(resilience)
+                eq(settings), eq(settings.baseUrl()), eq("octo"), eq("repo"), eq("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+                eq("src/main/java/OrderServiceSupport/Helper.java"), eq(resilience), any(), org.mockito.ArgumentMatchers.anyInt()
             )).thenReturn("x".repeat(5_000));
             when(contentReader.fetch(
-                eq(settings), eq(settings.baseUrl()), eq("octo"), eq("repo"), eq("main"),
-                eq("src/main/java/Failure.java"), eq(resilience)
+                eq(settings), eq(settings.baseUrl()), eq("octo"), eq("repo"), eq("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+                eq("src/main/java/Failure.java"), eq(resilience), any(), org.mockito.ArgumentMatchers.anyInt()
             )).thenThrow(new IllegalStateException("content unavailable"));
             when(contentReader.fetch(
-                eq(settings), eq(settings.baseUrl()), eq("octo"), eq("repo"), eq("main"),
-                eq("src/main/resources/application.yml"), eq(resilience)
+                eq(settings), eq(settings.baseUrl()), eq("octo"), eq("repo"), eq("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+                eq("src/main/resources/application.yml"), eq(resilience), any(), org.mockito.ArgumentMatchers.anyInt()
             )).thenReturn("security:\n  role: ADMIN");
 
             LlmReviewContextProperties properties = new LlmReviewContextProperties();
@@ -209,11 +209,11 @@ class GithubRepositorySemanticRepositoryTest {
     void truncatesByFileCountAndTotalBytes() throws Exception {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/repos/octo/repo", exchange -> {
-            String body = exchange.getRequestURI().getPath().endsWith("/git/trees/main")
+            String body = exchange.getRequestURI().getPath().endsWith("/git/trees/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
                 ? "{\"truncated\":false,\"tree\":["
                     + "{\"path\":\"src/main/java/OrderServiceSupport/Helper.java\",\"type\":\"blob\"},"
                     + "{\"path\":\"src/main/java/OrderServiceFactory.java\",\"type\":\"blob\"}]}"
-                : "{\"default_branch\":\"main\"}";
+                : "{\"default_branch\":\"main\",\"sha\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"commit\":{\"tree\":{\"sha\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}}";
             byte[] response = body.getBytes(StandardCharsets.UTF_8);
             exchange.sendResponseHeaders(200, response.length);
             exchange.getResponseBody().write(response);
@@ -231,7 +231,7 @@ class GithubRepositorySemanticRepositoryTest {
                 null, null, "octo", "repo", 1L
             );
             when(integrationProvider.getSettingsForRepository("octo", "repo")).thenReturn(settings);
-            when(contentReader.fetch(any(), any(), eq("octo"), eq("repo"), eq("main"), any(), eq(resilience)))
+            when(contentReader.fetch(any(), any(), eq("octo"), eq("repo"), eq("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), any(), eq(resilience), any(), org.mockito.ArgumentMatchers.anyInt()))
                 .thenReturn("x".repeat(10_000));
             PullRequestDiff diff = new PullRequestDiff(
                 "octo", "repo", 7, "head", List.of(new PullRequestChangedFile(
@@ -279,20 +279,22 @@ class GithubRepositorySemanticRepositoryTest {
             "GITHUB", "CONFIGURED", "https://api.github.com", null, null, "octo", "repo", 1L
         );
         doReturn(settings).when(integrationProvider).getSettingsForRepository("octo", "repo");
-        doReturn(new ObjectMapper().readTree("{\"default_branch\":\"main\"}"))
-            .when(resilience).github(eq("fetch_repository_metadata"), any());
+        doReturn(new ObjectMapper().readTree("{\"default_branch\":\"main\",\"sha\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"commit\":{\"tree\":{\"sha\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}}"))
+            .when(resilience).github(eq("fetch_repository_metadata"), any(), any());
+        doReturn(new ObjectMapper().readTree("{\"sha\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"commit\":{\"tree\":{\"sha\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}}"))
+            .when(resilience).github(eq("resolve_semantic_commit"), any(), any());
         doThrow(new IllegalArgumentException("tree down"))
-            .when(resilience).github(eq("fetch_default_branch_tree"), any());
+            .when(resilience).github(eq("fetch_default_branch_tree"), any(), any());
         assertThat(newRepository(integrationProvider, contentReader, resilience, endpointPolicy, properties)
             .fetch(diff, Set.of()).summary()).contains("default_branch_tree_unavailable");
 
         doAnswer(invocation -> {
-            java.util.function.Supplier<?> supplier = invocation.getArgument(1);
+            java.util.function.Supplier<?> supplier = invocation.getArgument(2);
             return supplier.get();
-        }).when(resilience).github(eq("fetch_default_branch_tree"), any());
+        }).when(resilience).github(eq("fetch_default_branch_tree"), any(), any());
         // A metadata response without default_branch is handled before the tree request.
         doReturn(new ObjectMapper().readTree("{}")).when(resilience)
-            .github(eq("fetch_repository_metadata"), any());
+            .github(eq("fetch_repository_metadata"), any(), any());
         assertThat(newRepository(integrationProvider, contentReader, resilience, endpointPolicy, properties)
             .fetch(diff, Set.of()).summary()).contains("default_branch_missing");
     }
@@ -311,9 +313,9 @@ class GithubRepositorySemanticRepositoryTest {
 
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/repos/octo/repo", exchange -> {
-            String body = exchange.getRequestURI().getPath().endsWith("/git/trees/main")
+            String body = exchange.getRequestURI().getPath().endsWith("/git/trees/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
                 ? "{\"truncated\":false}"
-                : "{\"default_branch\":\"main\"}";
+                : "{\"default_branch\":\"main\",\"sha\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"commit\":{\"tree\":{\"sha\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}}";
             byte[] response = body.getBytes(StandardCharsets.UTF_8);
             exchange.sendResponseHeaders(200, response.length);
             exchange.getResponseBody().write(response);
@@ -364,8 +366,8 @@ class GithubRepositorySemanticRepositoryTest {
 
     private ExternalCallResilience passthroughResilience() {
         ExternalCallResilience resilience = mock(ExternalCallResilience.class);
-        when(resilience.github(any(), any())).thenAnswer(invocation -> {
-            java.util.function.Supplier<?> supplier = invocation.getArgument(1);
+        when(resilience.github(any(), any(), any())).thenAnswer(invocation -> {
+            java.util.function.Supplier<?> supplier = invocation.getArgument(2);
             return supplier.get();
         });
         return resilience;
