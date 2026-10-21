@@ -140,9 +140,15 @@ class ProductionObservabilityWorkflowContractTest {
         String content = read(repositoryRoot().resolve(".github/workflows/production-observability-security.yml"));
         Map<String, Object> workflow = new Yaml().load(content);
         Map<String, Object> recovery = mapping(mapping(workflow.get("jobs")).get("loki-recovery-rehearsal"));
-        assertThat(mapping(recovery.get("permissions"))).isEqualTo(Map.of("contents", "read"));
+        assertThat(mapping(recovery.get("permissions"))).isEqualTo(Map.of("actions", "read", "contents", "read"));
         assertThat(recovery).doesNotContainKeys("environment", "secrets");
-        assertThat(recovery.get("needs")).isEqualTo("resolve");
+        assertThat(recovery.get("needs")).isEqualTo(List.of("resolve", "loki-security-candidate"));
+        Map<String, Object> scan = steps(recovery).stream()
+            .filter(step -> String.valueOf(step.get("name")).startsWith("Enforce zero HIGH"))
+            .map(step -> mapping(step.get("with"))).findFirst().orElseThrow();
+        assertThat(scan.get("image-ref")).isEqualTo("${{ steps.loaded.outputs.image_id }}");
+        assertThat(steps(recovery).stream().anyMatch(step -> "./.github/actions/verify-loki-candidate".equals(step.get("uses"))))
+            .as("Recovery loads the exact checked archive before scanning and running it").isTrue();
         assertThat(recovery.get("if")).isEqualTo(
             "${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.verify_loki_recovery) }}"
         );
@@ -208,7 +214,7 @@ class ProductionObservabilityWorkflowContractTest {
             "loaded[0]['Id'] == identity",
             "persistence['runtimeConfigSha256'] == hashlib.sha256(runtime_config.read_bytes()).hexdigest()",
             "persistence['memoryLimitBytes'] == 384 * 1024 * 1024",
-            "'go1.26.9' in version"
+            "'go1.26.10' in version"
         );
     }
 

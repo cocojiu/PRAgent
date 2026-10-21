@@ -23,9 +23,12 @@ class LokiSnapshotLinuxIntegrationTest {
         while (root != null && !Files.isRegularFile(root.resolve("scripts/loki_snapshot.py"))) root = root.getParent();
         assertThat(root).isNotNull();
         String python = System.getProperty("repoguard.python.executable", "python3");
+        String candidate = System.getenv("REPOGUARD_LOKI_RECOVERY_IMAGE");
+        assertThat(candidate).as("The recovery job must supply its verified, locally loaded image ID")
+            .matches("sha256:[a-f0-9]{64}");
         Path nativeOutput = temporaryDirectory.resolve("native-output.log");
         Process process = new ProcessBuilder("sudo", "-n", python, "-B", "-c", CONTRACT,
-            root.toString(), temporaryDirectory.toString()).directory(root.toFile()).redirectErrorStream(true)
+            root.toString(), temporaryDirectory.toString(), candidate).directory(root.toFile()).redirectErrorStream(true)
             .redirectOutput(nativeOutput.toFile()).start();
         boolean completed = process.waitFor(480, TimeUnit.SECONDS);
         if (!completed) process.destroyForcibly();
@@ -47,7 +50,8 @@ class LokiSnapshotLinuxIntegrationTest {
         owner='loki-fixture-'+secrets.token_hex(6);label='repoguard.loki-fixture-owner='+owner
         network=owner+'-network';containers=[];volumes=[];network_created=False
         baseline='grafana/loki:3.7.8@sha256:1107dd5274e0ada47e42472b7a7e71f3b2a2fe878878108f3e2f9e51528f0193'
-        candidate='ghcr.io/cocojiu/pragent-loki@sha256:870766ebe4760b30077fd47206b21cfd3722f6f5f4dc6fdadc83612a179ee491'
+        candidate=sys.argv[3]
+        assert candidate.startswith('sha256:') and len(candidate)==71
         collector='grafana/alloy:v1.18.0@sha256:491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b308'
         def docker(*args):return subprocess.check_output(['docker',*args],stderr=subprocess.STDOUT,timeout=120).decode().strip()
         def inspect(name):return json.loads(docker('inspect',name))[0]
@@ -117,7 +121,10 @@ class LokiSnapshotLinuxIntegrationTest {
             result=json.loads(http(base,'/loki/api/v1/query_range?'+query)[1])
             return collections.Counter(value[1] for stream in result['data']['result'] for value in stream['values'])
         try:
-            for image in (baseline,candidate,collector):docker('pull',image)
+            for image in (baseline,collector):docker('pull',image)
+            loaded=json.loads(docker('image','inspect',candidate))[0]
+            assert loaded['Id']==candidate and loaded['Os']=='linux' and loaded['Architecture']=='amd64'
+            assert loaded['Config']['Labels']['org.opencontainers.image.version']=='3.7.8-repoguard.2'
             docker('network','create','--internal','--label',label,network);network_created=True
             original={role:new_volume('original-'+role) for role in ('loki','alloy')}
             for role,uid in [('loki',10001),('alloy',473)]:os.chown(original[role][1],uid,uid)

@@ -92,7 +92,18 @@ class RuntimeSchemaRollbackLinuxIntegrationTest {
         PROOF.put("upgradeRevision", upgradeRevision);
         saveProof();
         for (String image : List.of(MYSQL_IMAGE, RABBIT_IMAGE, previousImage, upgradeImage)) {
-            checked(List.of("docker", "pull", "--platform", "linux/amd64", image), Duration.ofMinutes(3));
+            if (image.startsWith("sha256:")) {
+                JsonNode local = inspect("image", image);
+                assertThat(local.path("Id").asText()).isEqualTo(image);
+                assertThat(local.path("Os").asText()).isEqualTo("linux");
+                assertThat(local.path("Architecture").asText()).isEqualTo("amd64");
+                assertThat(local.path("Config").path("Labels").path("org.opencontainers.image.revision").asText())
+                    .isEqualTo(upgradeRevision);
+                assertThat(upgradeRevision).as("Local candidate must come from this workflow checkout")
+                    .isEqualTo(System.getenv("GITHUB_SHA"));
+            } else {
+                checked(List.of("docker", "pull", "--platform", "linux/amd64", image), Duration.ofMinutes(3));
+            }
         }
         network = checked(List.of("docker", "network", "create", "--internal", "--driver", "bridge",
             "--label", LABEL + "=" + OWNER, "--opt", "com.docker.network.bridge.host_binding_ipv4=127.0.0.1", OWNER));
@@ -288,7 +299,9 @@ class RuntimeSchemaRollbackLinuxIntegrationTest {
         return path;
     }
     private static String image(String name) {
-        String value = System.getenv(name); assertThat(value).matches("ghcr\\.io/cocojiu/pragent-backend@sha256:[a-f0-9]{64}"); return value;
+        String value = System.getenv(name);
+        if ("REPOGUARD_ROLLBACK_UPGRADE_IMAGE".equals(name) && value != null && value.matches("sha256:[a-f0-9]{64}")) return value;
+        assertThat(value).matches("ghcr\\.io/cocojiu/pragent-backend@sha256:[a-f0-9]{64}"); return value;
     }
     private static String revision(String name) { String value = System.getenv(name); assertThat(value).matches("[a-f0-9]{40}"); return value; }
     private static String container(String name, String image, Path env, List<String> options, List<String> args) throws Exception {

@@ -247,11 +247,12 @@ jobs:
 
   loki-recovery-rehearsal:
     name: Isolated Loki encrypted backup and recovery
-    needs: resolve
+    needs: [resolve, loki-security-candidate]
     if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.verify_loki_recovery) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
+      actions: read
       contents: read
     env:
       REPOGUARD_LOKI_RECOVERY_REHEARSAL: 'true'
@@ -265,13 +266,26 @@ jobs:
           cache: maven
       - name: Prepare recovery evidence directory
         run: mkdir -p repoguard-backend/target
+      - name: Download this run's checked recovery source
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh run download "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}" \
+            --name "loki-security-candidate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" --dir loki-candidate-evidence
+      - name: Verify and load checked recovery source
+        id: loaded
+        uses: ./.github/actions/verify-loki-candidate
+        with:
+          directory: loki-candidate-evidence
       - name: Enforce zero HIGH and CRITICAL on the actual recovery source image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         env:
           TRIVY_DB_REPOSITORY: ghcr.io/aquasecurity/trivy-db:2
         with:
           scan-type: image
-          image-ref: ghcr.io/cocojiu/pragent-loki@sha256:870766ebe4760b30077fd47206b21cfd3722f6f5f4dc6fdadc83612a179ee491
+          image-ref: ${{ steps.loaded.outputs.image_id }}
           scanners: vuln
           format: json
           output: repoguard-backend/target/loki-recovery-trivy.json
@@ -280,14 +294,18 @@ jobs:
           exit-code: '1'
       - name: Run formal Loki release and recovery contracts
         working-directory: repoguard-backend
+        env:
+          REPOGUARD_LOKI_RECOVERY_IMAGE: ${{ steps.loaded.outputs.image_id }}
         run: ./mvnw -B -Dtest=LokiReleaseManifestTest,LokiSnapshotSafetyTest,LokiDeploymentSafetyTest,ProductionObservabilityWorkflowContractTest,LokiSnapshotLinuxIntegrationTest test
       - name: Require actual execution and a verified recovery result
         if: success()
         shell: bash
+        env:
+          CHECKED_IMAGE_ID: ${{ steps.loaded.outputs.image_id }}
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import json, pathlib, xml.etree.ElementTree as ET
+          import json, os, pathlib, xml.etree.ElementTree as ET
           root = pathlib.Path('repoguard-backend/target')
           expected = {'quality.LokiReleaseManifestTest': 9, 'quality.LokiSnapshotSafetyTest': 6,
               'quality.LokiDeploymentSafetyTest': 7,
@@ -303,7 +321,7 @@ jobs:
           assert result['previousLogsRetained'] == 2 and result['collectorWroteAfterRollback']
           assert result['originalVolumesUnchanged'] and result['productionWrites'] == result['publishedPorts'] == 0
           scan = json.loads((root / 'loki-recovery-trivy.json').read_text())
-          assert scan['Metadata']['ImageID'] == 'sha256:68e3f90a94951e9afe02d7ff518d6ce03aa5acb0ae2c372dad76e74d658a0eb5'
+          assert scan['Metadata']['ImageID'] == os.environ['CHECKED_IMAGE_ID']
           assert not [v for item in scan['Results'] for v in item.get('Vulnerabilities') or []]
           PY
       - name: Preserve isolated recovery evidence
@@ -324,7 +342,7 @@ jobs:
   loki-security-candidate:
     name: Isolated Loki security rebuild
     needs: resolve
-    if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && (inputs.build_loki_candidate || inputs.archive_loki_candidate || inputs.publish_loki_candidate)) }}
+    if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && (inputs.build_loki_candidate || inputs.archive_loki_candidate || inputs.publish_loki_candidate || inputs.verify_loki_recovery)) }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -506,7 +524,7 @@ jobs:
           PY
 
       - name: Archive exact checked image
-        if: ${{ github.event_name == 'workflow_dispatch' && (inputs.archive_loki_candidate || inputs.publish_loki_candidate) }}
+        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && (inputs.archive_loki_candidate || inputs.publish_loki_candidate || inputs.verify_loki_recovery)) }}
         shell: bash
         run: |
           set -euo pipefail
@@ -596,7 +614,7 @@ jobs:
         run: |
           set -euo pipefail
           repository="ghcr.io/${GITHUB_REPOSITORY,,}-loki"
-          tag="3.7.8-repoguard.1-${GITHUB_SHA:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          tag="3.7.8-repoguard.2-${GITHUB_SHA:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           image="${repository}:${tag}"
           docker image tag "${CHECKED_IMAGE_ID}" "${image}"
           docker image push "${image}"
@@ -636,7 +654,7 @@ jobs:
           for name in ('trivy.json', 'sbom.cdx.json', 'persistence-result.json', 'transfer-verification.json'):
               evidence[name] = hashlib.sha256((root / name).read_bytes()).hexdigest()
           runtime = json.loads((root / 'persistence-result.json').read_text())
-          manifest = {'formatVersion': 1, 'version': '3.7.8-repoguard.1',
+          manifest = {'formatVersion': 1, 'version': '3.7.8-repoguard.2',
               'source': {'repository': os.environ['GITHUB_REPOSITORY'],
                   'workflow': '.github/workflows/production-observability-security.yml',
                   'gitSha': os.environ['GITHUB_SHA'], 'ref': os.environ['GITHUB_REF'],

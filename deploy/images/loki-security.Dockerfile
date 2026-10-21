@@ -1,4 +1,4 @@
-FROM golang:1.26.9-bookworm@sha256:d9c68c2c51161e12fd77e4c6320687c9cd86e1af1e3ad6e6cd63ff970641453c AS build
+FROM golang:1.26.10-bookworm@sha256:fe3da92a5cb2881e4aa75e625cb0b7c50571632fb4cf340cbe53e6ccdcffdd51 AS build
 
 # Keep the official release source immutable; only the Go toolchain and the
 # x/net security update (with its required Go modules) differ from v3.7.8.
@@ -11,10 +11,10 @@ RUN mkdir -p /out && go mod edit -require=golang.org/x/net@v0.60.0 \
       -require=golang.org/x/crypto@v0.57.0 -require=golang.org/x/sys@v0.48.0 \
       -require=golang.org/x/term@v0.46.0 -require=golang.org/x/text@v0.42.0 \
     && go build -mod=mod -p=2 -trimpath -tags netgo \
-      -ldflags='-s -w -X github.com/grafana/loki/v3/pkg/util/build.Version=3.7.8-repoguard.1 -X github.com/grafana/loki/v3/pkg/util/build.Revision=09e6ce2ff1bdc19763a10265b870c86f51c98655 -X github.com/grafana/loki/v3/pkg/util/build.Branch=repoguard-security-rebuild -X github.com/grafana/loki/v3/pkg/util/build.BuildUser=repoguard' \
+      -ldflags='-s -w -X github.com/grafana/loki/v3/pkg/util/build.Version=3.7.8-repoguard.2 -X github.com/grafana/loki/v3/pkg/util/build.Revision=09e6ce2ff1bdc19763a10265b870c86f51c98655 -X github.com/grafana/loki/v3/pkg/util/build.Branch=repoguard-security-rebuild -X github.com/grafana/loki/v3/pkg/util/build.BuildUser=repoguard' \
       -o /out/loki ./cmd/loki \
     && go version -m /out/loki > /out/build-info.txt \
-    && grep -F 'go1.26.9' /out/build-info.txt \
+    && grep -F 'go1.26.10' /out/build-info.txt \
     && grep -F 'golang.org/x/net' /out/build-info.txt | grep -F 'v0.60.0'
 
 # Preserve the supported runtime filesystem, configuration and non-root user.
@@ -26,4 +26,4 @@ COPY --from=build /src/loki/go.mod /src/loki/go.sum /usr/share/loki/source/
 COPY --from=build /src/loki/LICENSE /usr/share/licenses/loki/LICENSE
 LABEL org.opencontainers.image.source="https://github.com/grafana/loki" \
       org.opencontainers.image.revision="09e6ce2ff1bdc19763a10265b870c86f51c98655" \
-      org.opencontainers.image.version="3.7.8-repoguard.1"
+      org.opencontainers.image.version="3.7.8-repoguard.2"

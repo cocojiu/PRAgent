@@ -33,9 +33,9 @@ import javax.net.ssl.TrustManagerFactory;
 @SuppressWarnings("try")
 final class IsolatedReviewRuntime implements AutoCloseable {
     static final ObjectMapper JSON = new ObjectMapper();
-    static final String BACKEND = "ghcr.io/cocojiu/pragent-backend@sha256:0f9136a7105ad91f2d16e58715ecac6094e400b6775187ca53e3874b6fe14194";
-    static final String FRONTEND = "ghcr.io/cocojiu/pragent-frontend@sha256:f2c386d3abd63bba2cff55042bef8d1d2b4473a101c17ea2439ed89a5cf2850b";
-    static final String REVISION = "ee9dbdcb1af74b00e2b1ac570499cd70dd46b00f";
+    static final String BACKEND = System.getenv().getOrDefault("REPOGUARD_ISOLATED_BACKEND_IMAGE", "ghcr.io/cocojiu/pragent-backend@sha256:0f9136a7105ad91f2d16e58715ecac6094e400b6775187ca53e3874b6fe14194");
+    static final String FRONTEND = System.getenv().getOrDefault("REPOGUARD_ISOLATED_FRONTEND_IMAGE", "ghcr.io/cocojiu/pragent-frontend@sha256:f2c386d3abd63bba2cff55042bef8d1d2b4473a101c17ea2439ed89a5cf2850b");
+    static final String REVISION = System.getenv().getOrDefault("REPOGUARD_ISOLATED_REVISION", "ee9dbdcb1af74b00e2b1ac570499cd70dd46b00f");
     private static final String MYSQL = "mysql:8.0.46@sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b";
     private static final String RABBIT = "rabbitmq:3.13.7@sha256:87178a0ee3e2f52980ba356d38646ed1056705ff2d5ff281f8965456eaa0c1e3";
     private static final String CADDY = "caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648";
@@ -72,6 +72,8 @@ final class IsolatedReviewRuntime implements AutoCloseable {
         assertThat(System.getenv("GITHUB_ACTIONS")).isEqualTo("true");
         assertThat(System.getenv("RUNNER_ENVIRONMENT")).isEqualTo("github-hosted");
         assertThat(System.getenv("GITHUB_RUN_ID")).matches("[1-9][0-9]*");
+        assertThat(REVISION).as("Isolated acceptance must exercise this exact checkout")
+            .isEqualTo(System.getenv("GITHUB_SHA"));
         Files.createDirectories(evidence);
         long memory = Long.parseLong(command(List.of("docker", "info", "--format", "{{.MemTotal}}")));
         assertThat(memory).as("Hosted acceptance needs at least 7 GiB for six bounded services and Chromium").isGreaterThanOrEqualTo(7L * 1024 * 1024 * 1024);
@@ -81,7 +83,17 @@ final class IsolatedReviewRuntime implements AutoCloseable {
         proof.put("productionWrites", 0); proof.put("realProviderCalls", 0); proof.put("naturalBusinessReplay", false);
         proof.put("runId", System.getenv("GITHUB_RUN_ID"));
         for (String image : List.of(MYSQL, RABBIT, BACKEND, FRONTEND, CADDY)) {
-            command(List.of("docker", "pull", "--platform", "linux/amd64", image), null, Duration.ofMinutes(4));
+            if (image.matches("sha256:[a-f0-9]{64}")) {
+                JsonNode local = inspect("image", image);
+                assertThat(local.path("Id").asText()).isEqualTo(image);
+                assertThat(local.path("Os").asText()).isEqualTo("linux");
+                assertThat(local.path("Architecture").asText()).isEqualTo("amd64");
+                assertThat(local.path("Config").path("Labels").path("org.opencontainers.image.revision").asText())
+                    .isEqualTo(REVISION);
+            } else {
+                assertThat(image).matches("[a-z0-9./:_-]+@sha256:[a-f0-9]{64}");
+                command(List.of("docker", "pull", "--platform", "linux/amd64", image), null, Duration.ofMinutes(4));
+            }
         }
         network = command(List.of("docker", "network", "create", "--internal", "--driver", "bridge", "--label", LABEL + "=" + owner, owner));
         JsonNode state = inspect("network", network);
