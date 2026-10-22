@@ -18,6 +18,10 @@ UPSTREAM = '09e6ce2ff1bdc19763a10265b870c86f51c98655'
 RUNTIME_CONFIG_SHA = 'fd92c23ef93df13499bc10537ee9561c26af0fd68e43899e1203230a13b4f2a4'
 RUNTIME_RULES_SHA = 'a18d3d0b9276ddab80fa961d14df06eba4a60bd46e5ce106a1f42074aed0b2d5'
 BASELINE_IMAGE = 'grafana/loki:3.7.8@sha256:1107dd5274e0ada47e42472b7a7e71f3b2a2fe878878108f3e2f9e51528f0193'
+# The signed .1 release is still the production baseline. Keep its immutable
+# identity explicit so an upgrade never trusts a tag or an arbitrary current image.
+PREVIOUS_SECURITY_IMAGE = 'ghcr.io/cocojiu/pragent-loki@sha256:870766ebe4760b30077fd47206b21cfd3722f6f5f4dc6fdadc83612a179ee491'
+PREVIOUS_SECURITY_CONFIG = 'sha256:68e3f90a94951e9afe02d7ff518d6ce03aa5acb0ae2c372dad76e74d658a0eb5'
 ALLOY_IMAGE = 'grafana/alloy:v1.18.0@sha256:491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b308'
 RUNTIME_RULES = {'RepoGuardApiHeartbeatMissing', 'RepoGuardWorkerHeartbeatMissing',
     'RepoGuardUsageSnapshotStale', 'RepoGuardUncertainUsageAged',
@@ -242,9 +246,24 @@ def source_from_args(args):
 def validate_running_image(role, reference, manifest, allow_candidate=False):
     require(role in ('loki', 'alloy'), 'unexpected_runtime_role')
     allowed = {BASELINE_IMAGE if role == 'loki' else ALLOY_IMAGE}
+    if role == 'loki':
+        allowed.add(PREVIOUS_SECURITY_IMAGE)
     if role == 'loki' and allow_candidate:
         allowed.add(manifest['image']['repository'] + '@' + manifest['image']['digest'])
     require(reference in allowed, 'unexpected_' + role + '_baseline')
+
+
+def validate_previous_security_identity(container):
+    if container['Config']['Image'] != PREVIOUS_SECURITY_IMAGE:
+        return
+    # Classic Docker records the config ID; containerd records the pinned
+    # platform manifest ID. Both representations must bind this exact release.
+    require(container['Image'] in (PREVIOUS_SECURITY_CONFIG, PREVIOUS_SECURITY_IMAGE.split('@')[1]),
+        'previous_security_image_identity_changed')
+    labels = container['Config'].get('Labels') or {}
+    require(labels.get('org.opencontainers.image.revision') == UPSTREAM
+        and labels.get('org.opencontainers.image.version') == '3.7.8-repoguard.1',
+        'previous_security_release_labels_changed')
 
 
 def production_preflight(manifest, root=Path('/opt/repoguard'), host=None, allow_candidate=False):
@@ -255,6 +274,7 @@ def production_preflight(manifest, root=Path('/opt/repoguard'), host=None, allow
     loki = host.inspect('repoguard-loki')
     alloy = host.inspect('repoguard-alloy')
     containers = {'loki': loki, 'alloy': alloy}
+    validate_previous_security_identity(loki)
     for role, expected_user in [('loki', '10001'), ('alloy', '473:473')]:
         container = containers[role]
         labels = container['Config'].get('Labels') or {}
