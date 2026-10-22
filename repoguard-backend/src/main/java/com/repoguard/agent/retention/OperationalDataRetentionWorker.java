@@ -84,9 +84,12 @@ public class OperationalDataRetentionWorker {
         }
         long tenantId = TenantContext.requireTenantId();
         List<Cleanup> work = new ArrayList<>(List.of(
-            new Cleanup("system_setting_log", properties.getSystemSettingLogDays(), mapper::deleteSystemSettingLogs),
-            new Cleanup("notification_delivery_log", properties.getNotificationLogDays(), mapper::deleteNotificationDeliveries),
-            new Cleanup("notification_event", properties.getNotificationLogDays(), mapper::deleteNotificationEvents),
+            new Cleanup("system_setting_log", properties.getSystemSettingLogDays(),
+                (cutoff, limit) -> mapper.deleteSystemSettingLogs(tenantId, cutoff, limit)),
+            new Cleanup("notification_delivery_log", properties.getNotificationLogDays(),
+                (cutoff, limit) -> mapper.deleteNotificationDeliveries(tenantId, cutoff, limit)),
+            new Cleanup("notification_event", properties.getNotificationLogDays(),
+                (cutoff, limit) -> mapper.deleteNotificationEvents(tenantId, cutoff, limit)),
             new Cleanup("tenant_quota_usage", properties.getTenantQuotaUsageDays(),
                 (cutoff, limit) -> mapper.deleteTenantQuotaUsage(tenantId, cutoff, limit))));
         if (properties.isFeedbackPayloadPurgeEnabled()) {

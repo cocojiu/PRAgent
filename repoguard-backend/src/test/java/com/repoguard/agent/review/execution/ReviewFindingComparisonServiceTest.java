@@ -166,6 +166,62 @@ class ReviewFindingComparisonServiceTest {
         }
     }
 
+    @Test
+    void batchCountsMustProveExactlyOneWritePerVersionFence() {
+        var candidate = attempt(102L, 2, "COMPLETED", "prompt-v1");
+        var finding = finding(202L, 102L, "src/App.java", 30, "Use logger");
+        prepare(candidate, null, List.of(candidate), List.of(finding));
+        task.setCurrentAttemptId(102L);
+        when(taskMapper.selectComparisonTaskForUpdate(42L)).thenReturn(task);
+        for (int[] counts : List.of(new int[] {1}, new int[] {0}, new int[] {-2}, new int[] {}, new int[] {1, 1})) {
+            var factory = org.mockito.Mockito.mock(org.apache.ibatis.session.SqlSessionFactory.class);
+            var session = org.mockito.Mockito.mock(org.apache.ibatis.session.SqlSession.class);
+            when(factory.openSession(org.apache.ibatis.session.ExecutorType.BATCH)).thenReturn(session);
+            when(session.getMapper(ReviewFindingMapper.class)).thenReturn(findingMapper);
+            var result = new org.apache.ibatis.executor.BatchResult(null, "fixture");
+            result.setUpdateCounts(counts);
+            when(session.flushStatements()).thenReturn(List.of(result));
+            var batched = new ReviewFindingComparisonService(taskMapper, attemptMapper, findingMapper, factory);
+            org.springframework.transaction.support.TransactionSynchronizationManager.setActualTransactionActive(true);
+            try {
+                if (counts.length == 1 && counts[0] == 1) {
+                    batched.materializeCurrent(42L, 102L);
+                    org.mockito.Mockito.verify(session).commit();
+                } else {
+                    assertThatThrownBy(() -> batched.materializeCurrent(42L, 102L)).isInstanceOf(BusinessException.class);
+                    org.mockito.Mockito.verify(session, org.mockito.Mockito.never()).commit();
+                }
+                org.mockito.Mockito.verify(session).close();
+            } finally {
+                org.springframework.transaction.support.TransactionSynchronizationManager.setActualTransactionActive(false);
+            }
+        }
+    }
+
+    @Test
+    void disabledBatchSettingUsesTheOriginalVersionFencedWrites() {
+        var candidate = attempt(102L, 2, "COMPLETED", "prompt-v1");
+        var finding = finding(202L, 102L, "src/App.java", 30, "Use logger");
+        prepare(candidate, null, List.of(candidate), List.of(finding));
+        task.setCurrentAttemptId(102L);
+        when(taskMapper.selectComparisonTaskForUpdate(42L)).thenReturn(task);
+        var factory = org.mockito.Mockito.mock(org.apache.ibatis.session.SqlSessionFactory.class);
+        var batched = new ReviewFindingComparisonService(taskMapper, attemptMapper, findingMapper, factory);
+        org.springframework.test.util.ReflectionTestUtils.setField(batched, "batchWritesEnabled", false);
+        org.springframework.transaction.support.TransactionSynchronizationManager.setActualTransactionActive(true);
+        try {
+            batched.materializeCurrent(42L, 102L);
+            org.mockito.Mockito.verifyNoInteractions(factory);
+            org.mockito.Mockito.verify(findingMapper).updateComparison(org.mockito.ArgumentMatchers.eq(202L),
+                org.mockito.ArgumentMatchers.eq(42L), org.mockito.ArgumentMatchers.eq(102L), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq("NEW"), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(ReviewFindingIdentity.VERSION),
+                org.mockito.ArgumentMatchers.eq(102L), org.mockito.ArgumentMatchers.isNull());
+        } finally {
+            org.springframework.transaction.support.TransactionSynchronizationManager.setActualTransactionActive(false);
+        }
+    }
+
     private void prepare(
         ReviewExecutionAttempt candidate,
         ReviewExecutionAttempt baseline,

@@ -60,14 +60,34 @@ public interface OperationalDataRetentionMapper {
     @Delete("delete from admin_operation_audit where id in (select id from (select id from admin_operation_audit where created_at < #{cutoff} order by created_at, id limit #{limit}) c)")
     int deleteAdminOperationAudits(@Param("cutoff") LocalDateTime cutoff, @Param("limit") int limit);
 
-    @Delete("delete from system_setting_log where id in (select id from (select id from system_setting_log where created_at < #{cutoff} order by created_at, id limit #{limit}) c)")
-    int deleteSystemSettingLogs(@Param("cutoff") LocalDateTime cutoff, @Param("limit") int limit);
+    @Delete("""
+        delete from system_setting_log where tenant_id = #{tenantId} and id in (
+            select id from (select id from system_setting_log
+                where tenant_id = #{tenantId} and created_at < #{cutoff}
+                order by created_at, id limit #{limit}) c)
+        """)
+    int deleteSystemSettingLogs(@Param("tenantId") long tenantId,
+        @Param("cutoff") LocalDateTime cutoff, @Param("limit") int limit);
 
-    @Delete("delete from notification_delivery_log where id in (select id from (select id from notification_delivery_log where created_at < #{cutoff} order by created_at, id limit #{limit}) c)")
-    int deleteNotificationDeliveries(@Param("cutoff") LocalDateTime cutoff, @Param("limit") int limit);
+    @Delete("""
+        delete from notification_delivery_log where tenant_id = #{tenantId} and id in (
+            select id from (select id from notification_delivery_log
+                where tenant_id = #{tenantId} and created_at < #{cutoff}
+                order by created_at, id limit #{limit}) c)
+        """)
+    int deleteNotificationDeliveries(@Param("tenantId") long tenantId,
+        @Param("cutoff") LocalDateTime cutoff, @Param("limit") int limit);
 
-    @Delete("delete from notification_event where id in (select id from (select e.id from notification_event e where e.created_at < #{cutoff} and not exists (select 1 from notification_delivery_log d where d.event_id = e.id) order by e.created_at, e.id limit #{limit}) c)")
-    int deleteNotificationEvents(@Param("cutoff") LocalDateTime cutoff, @Param("limit") int limit);
+    @Delete("""
+        delete from notification_event where tenant_id = #{tenantId} and id in (
+            select id from (select e.id from notification_event e
+                where e.tenant_id = #{tenantId} and e.created_at < #{cutoff}
+                and not exists (select 1 from notification_delivery_log d
+                    where d.tenant_id = e.tenant_id and d.event_id = e.id)
+                order by e.created_at, e.id limit #{limit}) c)
+        """)
+    int deleteNotificationEvents(@Param("tenantId") long tenantId,
+        @Param("cutoff") LocalDateTime cutoff, @Param("limit") int limit);
 
     @Delete("delete from tenant_quota_usage where tenant_id = #{tenantId} and usage_date < #{cutoff} order by usage_date limit #{limit}")
     int deleteTenantQuotaUsage(

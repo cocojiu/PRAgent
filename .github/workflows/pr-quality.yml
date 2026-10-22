@@ -289,6 +289,10 @@ jobs:
         working-directory: repoguard-backend
         run: ./mvnw -B -Dtest=ProductionRuntimeContextIntegrationTest,PreflightPreviewMysqlIntegrationTest,PreflightTransportIntegrationTest,ReviewMemberAssignmentMysqlIntegrationTest test 2>&1
 
+      - name: Run comparison and retention MySQL optimizations
+        working-directory: repoguard-backend
+        run: ./mvnw -B -Dtest=ReviewFindingComparisonMysqlIntegrationTest,OperationalRetentionMysqlIntegrationTest test
+
       - name: Require actual online CLI and assignment integration execution
         shell: pwsh
         working-directory: repoguard-backend
@@ -297,6 +301,8 @@ jobs:
             'integration.PreflightPreviewMysqlIntegrationTest' = 5
             'review.PreflightTransportIntegrationTest' = 1
             'integration.ReviewMemberAssignmentMysqlIntegrationTest' = 7
+            'review.execution.ReviewFindingComparisonMysqlIntegrationTest' = 3
+            'retention.OperationalRetentionMysqlIntegrationTest' = 4
           }
           foreach ($suiteName in $expectedSuites.Keys) {
             [xml]$testReport = Get-Content -LiteralPath "target/surefire-reports/TEST-com.repoguard.agent.$suiteName.xml" -Raw
@@ -305,6 +311,18 @@ jobs:
               throw "Integration $suiteName must execute and pass without skipping."
             }
           }
+
+      - name: Upload MySQL optimization evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: optimization-mysql-${{ github.run_id }}
+          path: |
+            repoguard-backend/target/optimization-acceptance/
+            repoguard-backend/target/surefire-reports/*ReviewFindingComparisonMysqlIntegrationTest*
+            repoguard-backend/target/surefire-reports/*OperationalRetentionMysqlIntegrationTest*
+          if-no-files-found: error
+          retention-days: 7
 
   migration-upgrade:
     name: Flyway supported upgrade path

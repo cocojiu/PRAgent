@@ -52,9 +52,9 @@ class OperationalDataRetentionWorkerTest {
         verify(mapper).deleteLoginAudits(any(), eq(37));
         verify(mapper).deleteUserOperationAudits(any(), eq(37));
         verify(mapper).deleteAdminOperationAudits(any(), eq(37));
-        verify(mapper).deleteSystemSettingLogs(any(), eq(37));
-        verify(mapper).deleteNotificationDeliveries(any(), eq(37));
-        verify(mapper).deleteNotificationEvents(any(), eq(37));
+        verify(mapper).deleteSystemSettingLogs(anyLong(), any(), eq(37));
+        verify(mapper).deleteNotificationDeliveries(anyLong(), any(), eq(37));
+        verify(mapper).deleteNotificationEvents(anyLong(), any(), eq(37));
         verify(mapper).deleteTenantQuotaUsage(eq(1L), any(), eq(37));
         verify(mapper).deleteCleanupAudits(any(), eq(37));
         verify(mapper, never()).purgeFeedbackPayload(anyLong(), any(), anyInt());
@@ -137,16 +137,16 @@ class OperationalDataRetentionWorkerTest {
         var properties = new OperationalDataRetentionProperties();
         properties.setBatchSize(5);
         properties.setMaxRowsPerRun(1);
-        when(mapper.deleteSystemSettingLogs(any(), eq(1))).thenReturn(1);
-        when(mapper.deleteNotificationDeliveries(any(), eq(1))).thenReturn(1);
-        when(mapper.deleteNotificationEvents(any(), eq(1))).thenReturn(1);
+        when(mapper.deleteSystemSettingLogs(anyLong(), any(), eq(1))).thenReturn(1);
+        when(mapper.deleteNotificationDeliveries(anyLong(), any(), eq(1))).thenReturn(1);
+        when(mapper.deleteNotificationEvents(anyLong(), any(), eq(1))).thenReturn(1);
         when(mapper.deleteTenantQuotaUsage(anyLong(), any(), eq(1))).thenReturn(1);
         var registry = new SimpleMeterRegistry();
         var worker = new OperationalDataRetentionWorker(mapper, properties, registry);
         for (int index = 0; index < 4; index++) worker.cleanupTenantData();
-        verify(mapper).deleteSystemSettingLogs(any(), eq(1));
-        verify(mapper).deleteNotificationDeliveries(any(), eq(1));
-        verify(mapper).deleteNotificationEvents(any(), eq(1));
+        verify(mapper).deleteSystemSettingLogs(anyLong(), any(), eq(1));
+        verify(mapper).deleteNotificationDeliveries(anyLong(), any(), eq(1));
+        verify(mapper).deleteNotificationEvents(anyLong(), any(), eq(1));
         verify(mapper).deleteTenantQuotaUsage(eq(1L), any(), eq(1));
         assertThat(registry.get("repoguard.operational.retention.run.stopped").tag("reason", "rows")
             .counter().count()).isEqualTo(4);
