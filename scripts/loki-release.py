@@ -17,6 +17,7 @@ VERSION = '3.7.8-repoguard.2'
 UPSTREAM = '09e6ce2ff1bdc19763a10265b870c86f51c98655'
 RUNTIME_CONFIG_SHA = 'fd92c23ef93df13499bc10537ee9561c26af0fd68e43899e1203230a13b4f2a4'
 RUNTIME_RULES_SHA = 'a18d3d0b9276ddab80fa961d14df06eba4a60bd46e5ce106a1f42074aed0b2d5'
+HOST_DISK_COMPOSE_SHA = '9ffb63842b8c3f0c8a13a94ae9a3fc13985b3116391bc26cb8f3c1539a9282f5'
 BASELINE_IMAGE = 'grafana/loki:3.7.8@sha256:1107dd5274e0ada47e42472b7a7e71f3b2a2fe878878108f3e2f9e51528f0193'
 # The signed .1 release is still the production baseline. Keep its immutable
 # identity explicit so an upgrade never trusts a tag or an arbitrary current image.
@@ -289,7 +290,15 @@ def production_preflight(manifest, root=Path('/opt/repoguard'), host=None, allow
     require(1 <= len(files) <= 8 and len(set(files)) == len(files), 'invalid_compose_file_set')
     reviewed = [reviewed_file(name, root) for name in files]
     alloy_files = alloy['Config']['Labels']['com.docker.compose.project.config_files'].split(',')
-    require(set(alloy_files) <= set(files), 'collector_compose_files_not_preserved')
+    if not set(alloy_files) <= set(files):
+        # The disk collector is an existing Alloy-only overlay. Preserve its
+        # exact reviewed content and order when Loki has not been recreated.
+        extra = str(root / 'config/observability/docker-compose.host-disk.yml')
+        require(len(files) < 8 and alloy_files == [*files, extra], 'collector_compose_files_not_preserved')
+        overlay = reviewed_file(extra, root)
+        require(hashlib.sha256(overlay.read_bytes()).hexdigest() == HOST_DISK_COMPOSE_SHA,
+            'collector_disk_overlay_changed')
+        reviewed.append(overlay)
     config = reviewed_file(root / 'config/observability/loki-runtime-metrics.yml', root)
     rules = reviewed_file(root / 'config/observability/runtime-rules/fake/repoguard-runtime.yml', root)
     require(hashlib.sha256(config.read_bytes()).hexdigest() == RUNTIME_CONFIG_SHA
