@@ -1,10 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type * as PerformanceBuffer from "@/observability/frontendPerformanceBuffer";
 
 const frontendPerformance = vi.hoisted(() => ({
   observeFrontendApiRequest: vi.fn()
 }));
 
-vi.mock("@/observability/frontendPerformanceBuffer", () => frontendPerformance);
+vi.mock("@/observability/frontendPerformanceBuffer", async (importOriginal) => ({
+  ...await importOriginal<typeof PerformanceBuffer>(),
+  observeFrontendApiRequest: (observation: unknown) => frontendPerformance.observeFrontendApiRequest(observation)
+}));
 
 import { apiRequest } from "./contracts";
 import { fetchUsers, fetchUserOperationAudits } from "./users";

@@ -10,6 +10,8 @@ public class OperationalDataRetentionProperties {
     private boolean enabled = true;
     private int batchSize = 500;
     private int maxBatchesPerRun = 20;
+    private int maxRowsPerRun = 10000;
+    private int maxRunMillis = 30000;
     private int refreshTokenDays = 30;
     private int loginAuditDays = 180;
     private int operationAuditDays = 365;
@@ -29,6 +31,12 @@ public class OperationalDataRetentionProperties {
     public void setBatchSize(int batchSize) { this.batchSize = batchSize; }
     public int getMaxBatchesPerRun() { return maxBatchesPerRun; }
     public void setMaxBatchesPerRun(int maxBatchesPerRun) { this.maxBatchesPerRun = maxBatchesPerRun; }
+    public int getMaxRowsPerRun() { return maxRowsPerRun; }
+    public void setMaxRowsPerRun(int value) { maxRowsPerRun = value; }
+    public int getMaxRunMillis() { return maxRunMillis; }
+    public void setMaxRunMillis(int value) { maxRunMillis = value; }
+    public int normalizedMaxRowsPerRun() { return Math.max(1, Math.min(maxRowsPerRun, 100000)); }
+    public int normalizedMaxRunMillis() { return Math.max(1, Math.min(maxRunMillis, 300000)); }
     public int getRefreshTokenDays() { return refreshTokenDays; }
     public void setRefreshTokenDays(int refreshTokenDays) { this.refreshTokenDays = refreshTokenDays; }
     public int getLoginAuditDays() { return loginAuditDays; }

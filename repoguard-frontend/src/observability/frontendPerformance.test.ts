@@ -106,6 +106,49 @@ describe("frontend performance observation", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("cancels an in-flight report when the tenant boundary changes", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn((_url: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init.signal?.addEventListener("abort", () => reject(new DOMException("cancelled", "AbortError")), { once: true });
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = await import("@/api/client");
+    const observation = await import("./frontendPerformance");
+    const tenant = await import("@/stores/tenantContext");
+    client.saveAuthTokens("access-token", "refresh-token", true);
+    observation.startFrontendPerformanceObservation(() => "overview");
+    observation.observeFrontendApiRequest({ operation: "fetchDashboardSummary", method: "GET", result: "success",
+      startedAtMs: 10, durationMs: 20 });
+    await vi.advanceTimersByTimeAsync(1300);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const signal = fetchMock.mock.calls[0]![1].signal;
+    tenant.setActiveTenant("another-tenant");
+    expect(signal?.aborted).toBe(true);
+    await vi.advanceTimersByTimeAsync(1300);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("sends separate reports for navigations buffered before the flush", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn().mockImplementation(async () => okResponse());
+    vi.stubGlobal("fetch", fetchMock);
+    const client = await import("@/api/client");
+    const observation = await import("./frontendPerformance");
+    const buffer = await import("./frontendPerformanceBuffer");
+    client.saveAuthTokens("access-token", "refresh-token", true);
+    let route = "overview";
+    observation.startFrontendPerformanceObservation(() => route);
+    observation.observeFrontendApiRequest({ operation: "first", method: "GET", result: "success", startedAtMs: 10, durationMs: 20 });
+    route = "tasks";
+    buffer.advanceFrontendPerformanceNavigation();
+    observation.observeFrontendApiRequest({ operation: "second", method: "GET", result: "success", startedAtMs: 40, durationMs: 20 });
+    await vi.advanceTimersByTimeAsync(2600);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const reports = fetchMock.mock.calls.map(call => JSON.parse(String(call[1].body)));
+    expect(reports[0]).toMatchObject({ route: "overview", apiRequests: [{ operation: "first" }] });
+    expect(reports[1]).toMatchObject({ route: "tasks", apiRequests: [{ operation: "second" }] });
+  });
+
   it("keeps lazy detail render observations after the initial window", async () => {
     vi.useFakeTimers();
     const fetchMock = vi.fn().mockResolvedValue(okResponse());

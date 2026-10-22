@@ -138,6 +138,34 @@ class ReviewFindingComparisonServiceTest {
             .hasMessageContaining("Invalid finding comparison page");
     }
 
+    @Test
+    void recordsTransactionDurationAtCompletionAndCountsActualWritesAtRepresentativeSizes() {
+        for (int size : new int[] { 10, 100, 1000, 5000 }) {
+            var registry = new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+            service.recordMetrics(registry);
+            task.setCurrentAttemptId(102L);
+            when(taskMapper.selectComparisonTaskForUpdate(42L)).thenReturn(task);
+            var candidate = attempt(102L, 2, "COMPLETED", "prompt-v1");
+            var findings = java.util.stream.IntStream.range(0, size)
+                .mapToObj(index -> finding(1000L + index, 102L, "src/App.java", index + 1, "Use logger " + index)).toList();
+            prepare(candidate, null, List.of(candidate), findings);
+            org.springframework.transaction.support.TransactionSynchronizationManager.initSynchronization();
+            try {
+                service.materializeCurrent(42L, 102L);
+                assertThat(registry.get("repoguard.review.comparison.writes").summary().totalAmount()).isEqualTo(size);
+                assertThat(registry.find("repoguard.review.comparison.transaction.duration").timer()).isNull();
+                var callbacks = org.springframework.transaction.support.TransactionSynchronizationManager.getSynchronizations();
+                callbacks.forEach(callback -> callback.afterCompletion(
+                    org.springframework.transaction.support.TransactionSynchronization.STATUS_COMMITTED));
+                assertThat(registry.get("repoguard.review.comparison.transaction.duration")
+                    .tag("outcome", "committed").timer().count()).isEqualTo(1);
+            } finally {
+                org.springframework.transaction.support.TransactionSynchronizationManager.clearSynchronization();
+                registry.close();
+            }
+        }
+    }
+
     private void prepare(
         ReviewExecutionAttempt candidate,
         ReviewExecutionAttempt baseline,

@@ -10,7 +10,7 @@ import type {
   ApiOperation
 } from "@/api/endpoint";
 import {
-  observeFrontendApiRequest
+  observeFrontendApiRequest, capturePerformanceContext
 } from "@/observability/frontendPerformanceBuffer";
 import {
   validateApiResponse
@@ -53,6 +53,7 @@ export const createApiRequester = <Contract extends { [Operation in keyof Contra
     options.body = JSON.stringify(payload);
   }
   const startedAtMs = currentTimeMs();
+  const performanceContext = capturePerformanceContext();
   try {
     const response = await requestWithMeta<unknown>(
       path,
@@ -71,7 +72,7 @@ export const createApiRequester = <Contract extends { [Operation in keyof Contra
         responseBytes: response.responseBytes,
         startedAtMs,
         durationMs: currentTimeMs() - startedAtMs
-      });
+      }, performanceContext);
     }
     return data;
   } catch (error) {
@@ -84,7 +85,7 @@ export const createApiRequester = <Contract extends { [Operation in keyof Contra
         result: error instanceof RequestError && error.code === "REQUEST_ABORTED" ? "cancelled" : "failed",
         startedAtMs,
         durationMs: currentTimeMs() - startedAtMs
-      });
+      }, performanceContext);
     }
     throw error;
   }

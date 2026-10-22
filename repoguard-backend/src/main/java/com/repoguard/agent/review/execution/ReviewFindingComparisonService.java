@@ -21,6 +21,11 @@ import java.util.Objects;
 import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import io.micrometer.core.instrument.MeterRegistry;
+import java.util.concurrent.TimeUnit;
 
 /** Read-only comparison queries and an explicit, fenced current-attempt materialization command. */
 @Service
@@ -29,6 +34,10 @@ public class ReviewFindingComparisonService {
     private final ReviewTaskMapper taskMapper;
     private final ReviewExecutionAttemptMapper attemptMapper;
     private final ReviewFindingMapper findingMapper;
+    private MeterRegistry metrics;
+
+    @Autowired(required = false)
+    void recordMetrics(MeterRegistry registry) { metrics = registry; }
 
     public ReviewFindingComparisonService(ReviewTaskMapper taskMapper, ReviewExecutionAttemptMapper attemptMapper,
         ReviewFindingMapper findingMapper) {
@@ -49,10 +58,24 @@ public class ReviewFindingComparisonService {
 
     @Transactional
     public void materializeCurrent(Long taskId, Long candidateAttemptId) {
+        long startedAt = System.nanoTime();
+        if (metrics != null && TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override public void afterCompletion(int status) {
+                    metrics.timer("repoguard.review.comparison.transaction.duration", "outcome",
+                        status == STATUS_COMMITTED ? "committed" : "rolled_back")
+                        .record(System.nanoTime() - startedAt, TimeUnit.NANOSECONDS);
+                }
+            });
+        }
         ReviewTask task = taskMapper.selectComparisonTaskForUpdate(taskId);
+        if (metrics != null) metrics.timer("repoguard.review.comparison.task_lock.duration")
+            .record(System.nanoTime() - startedAt, TimeUnit.NANOSECONDS);
         if (task == null || !Objects.equals(candidateAttemptId, task.getCurrentAttemptId()))
             throw new BusinessException(ErrorCode.CONFLICT, "Current review attempt changed before comparison");
         Calculation calculation = calculate(taskId, null, candidateAttemptId);
+        if (metrics != null) metrics.summary("repoguard.review.comparison.entries").record(calculation.entries().size());
+        int writes = 0;
         for (Entry entry : calculation.entries()) {
             ReviewFinding finding = entry.finding();
             if (finding.getId() == null || finding.getAttemptId() == null)
@@ -62,7 +85,9 @@ public class ReviewFindingComparisonService {
                 entry.baselineFindingId(), entry.status(), entry.confidence(), entry.reason(),
                 ReviewFindingIdentity.VERSION, candidateAttemptId, finding.getComparisonAttemptId());
             if (changed != 1) throw new BusinessException(ErrorCode.CONFLICT, "Comparison result changed concurrently");
+            writes++;
         }
+        if (metrics != null) metrics.summary("repoguard.review.comparison.writes").record(writes);
     }
 
     private static boolean alreadyMaterialized(ReviewFinding finding, Entry entry, Long candidate) {

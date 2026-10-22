@@ -146,7 +146,8 @@ class DashboardSnapshotStoreTest {
             }
             task.run();
         };
-        DashboardSnapshotStore store = new DashboardSnapshotStore(executor);
+        DashboardSnapshotStore store = new DashboardSnapshotStore(executor, 10,
+            java.time.Duration.ofSeconds(120), System::nanoTime, null);
         AtomicInteger loadCount = new AtomicInteger();
 
         assertThat(store.getOrLoad("dashboardSummary:summary", () -> {

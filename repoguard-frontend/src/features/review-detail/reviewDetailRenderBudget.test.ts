@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type * as PerformanceBuffer from "@/observability/frontendPerformanceBuffer";
 import {
   boundedDetailItems,
   hiddenDetailItemCount,
@@ -25,7 +26,8 @@ describe("reviewDetailRenderBudget", () => {
   it("observes bounded render regions with list counts", async () => {
     vi.resetModules();
     const observer = vi.fn();
-    vi.doMock("@/observability/frontendPerformanceBuffer", () => ({
+    vi.doMock("@/observability/frontendPerformanceBuffer", async (importOriginal) => ({
+      ...await importOriginal<typeof PerformanceBuffer>(),
       observeFrontendLongTask: observer
     }));
     const budget = await import("./reviewDetailRenderBudget");
@@ -43,6 +45,6 @@ describe("reviewDetailRenderBudget", () => {
       operation: "fetchGithubCommentPreview",
       itemCount: 20,
       totalCount: 260
-    }));
+    }), expect.objectContaining({ boundary: expect.any(Number), navigation: expect.any(Number) }));
   });
 });
