@@ -21,6 +21,18 @@ import java.util.Objects;
 import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import io.micrometer.core.instrument.MeterRegistry;
+import java.util.concurrent.TimeUnit;
+import org.apache.ibatis.session.SqlSessionFactory;
+import org.apache.ibatis.session.ExecutorType;
+import org.apache.ibatis.session.SqlSession;
+import org.springframework.beans.factory.annotation.Value;
+import org.apache.ibatis.exceptions.PersistenceException;
+import org.mybatis.spring.MyBatisExceptionTranslator;
+import org.mybatis.spring.SqlSessionHolder;
 
 /** Read-only comparison queries and an explicit, fenced current-attempt materialization command. */
 @Service
@@ -29,12 +41,26 @@ public class ReviewFindingComparisonService {
     private final ReviewTaskMapper taskMapper;
     private final ReviewExecutionAttemptMapper attemptMapper;
     private final ReviewFindingMapper findingMapper;
+    private MeterRegistry metrics;
+    private final SqlSessionFactory batchSessions;
+    @Value("${repoguard.review.comparison.batch-writes-enabled:true}")
+    private boolean batchWritesEnabled = true;
+
+    @Autowired(required = false)
+    void recordMetrics(MeterRegistry registry) { metrics = registry; }
 
     public ReviewFindingComparisonService(ReviewTaskMapper taskMapper, ReviewExecutionAttemptMapper attemptMapper,
         ReviewFindingMapper findingMapper) {
+        this(taskMapper, attemptMapper, findingMapper, null);
+    }
+
+    @Autowired
+    public ReviewFindingComparisonService(ReviewTaskMapper taskMapper, ReviewExecutionAttemptMapper attemptMapper,
+        ReviewFindingMapper findingMapper, SqlSessionFactory batchSessions) {
         this.taskMapper = Objects.requireNonNull(taskMapper, "taskMapper");
         this.attemptMapper = Objects.requireNonNull(attemptMapper, "attemptMapper");
         this.findingMapper = Objects.requireNonNull(findingMapper, "findingMapper");
+        this.batchSessions = batchSessions;
     }
 
     @Transactional(readOnly = true)
@@ -49,20 +75,89 @@ public class ReviewFindingComparisonService {
 
     @Transactional
     public void materializeCurrent(Long taskId, Long candidateAttemptId) {
+        long startedAt = System.nanoTime();
+        if (metrics != null && TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override public void afterCompletion(int status) {
+                    metrics.timer("repoguard.review.comparison.transaction.duration", "outcome",
+                        status == STATUS_COMMITTED ? "committed" : "rolled_back")
+                        .record(System.nanoTime() - startedAt, TimeUnit.NANOSECONDS);
+                }
+            });
+        }
         ReviewTask task = taskMapper.selectComparisonTaskForUpdate(taskId);
+        if (metrics != null) metrics.timer("repoguard.review.comparison.task_lock.duration")
+            .record(System.nanoTime() - startedAt, TimeUnit.NANOSECONDS);
         if (task == null || !Objects.equals(candidateAttemptId, task.getCurrentAttemptId()))
             throw new BusinessException(ErrorCode.CONFLICT, "Current review attempt changed before comparison");
         Calculation calculation = calculate(taskId, null, candidateAttemptId);
+        if (metrics != null) metrics.summary("repoguard.review.comparison.entries").record(calculation.entries().size());
+        List<Entry> pending = new ArrayList<>();
         for (Entry entry : calculation.entries()) {
             ReviewFinding finding = entry.finding();
             if (finding.getId() == null || finding.getAttemptId() == null)
                 throw new BusinessException(ErrorCode.CONFLICT, "Comparison finding identity is missing");
             if (alreadyMaterialized(finding, entry, candidateAttemptId)) continue;
-            int changed = findingMapper.updateComparison(finding.getId(), taskId, finding.getAttemptId(), entry.fingerprint(),
-                entry.baselineFindingId(), entry.status(), entry.confidence(), entry.reason(),
-                ReviewFindingIdentity.VERSION, candidateAttemptId, finding.getComparisonAttemptId());
-            if (changed != 1) throw new BusinessException(ErrorCode.CONFLICT, "Comparison result changed concurrently");
+            pending.add(entry);
         }
+        if (batchSessions != null && batchWritesEnabled && TransactionSynchronizationManager.isActualTransactionActive()) {
+            persistBatch(taskId, candidateAttemptId, pending);
+        } else {
+            for (Entry entry : pending) requireChanged(write(findingMapper, taskId, candidateAttemptId, entry));
+        }
+        if (metrics != null) metrics.summary("repoguard.review.comparison.writes").record(pending.size());
+    }
+
+    private void persistBatch(Long taskId, Long candidate, List<Entry> entries) {
+        if (entries.isEmpty()) return;
+        try (SqlSession session = batchSessions.openSession(ExecutorType.BATCH)) {
+            ReviewFindingMapper mapper = session.getMapper(ReviewFindingMapper.class);
+            int pending = 0;
+            for (Entry entry : entries) {
+                write(mapper, taskId, candidate, entry);
+                if (++pending == 100) {
+                    flushChecked(session, pending);
+                    pending = 0;
+                }
+            }
+            if (pending > 0) flushChecked(session, pending);
+            // SpringManagedTransaction retains the surrounding task lock and owns the actual commit.
+            session.commit();
+        } catch (PersistenceException failure) {
+            var translated = new MyBatisExceptionTranslator(
+                batchSessions.getConfiguration().getEnvironment().getDataSource(), true)
+                .translateExceptionIfPossible(failure);
+            if (translated != null) throw translated;
+            throw failure;
+        }
+        // Batch and read sessions share a transaction, but not their first-level caches.
+        Object current = TransactionSynchronizationManager.getResource(batchSessions);
+        if (current instanceof SqlSessionHolder holder) {
+            holder.getSqlSession().clearCache();
+        }
+    }
+
+    private static void flushChecked(SqlSession session, int expected) {
+        int observed = 0;
+        for (var batch : session.flushStatements()) {
+            for (int changed : batch.getUpdateCounts()) {
+                requireChanged(changed);
+                observed++;
+            }
+        }
+        if (observed != expected) throw new BusinessException(ErrorCode.CONFLICT, "Comparison batch update count is incomplete");
+    }
+
+    private static int write(ReviewFindingMapper mapper, Long taskId, Long candidate, Entry entry) {
+        ReviewFinding finding = entry.finding();
+        return mapper.updateComparison(finding.getId(), taskId, finding.getAttemptId(), entry.fingerprint(),
+            entry.baselineFindingId(), entry.status(), entry.confidence(), entry.reason(),
+            ReviewFindingIdentity.VERSION, candidate, finding.getComparisonAttemptId());
+    }
+
+    private static void requireChanged(int changed) {
+        // Unknown JDBC batch counts are not evidence that the per-row version fence succeeded.
+        if (changed != 1) throw new BusinessException(ErrorCode.CONFLICT, "Comparison result changed or its write could not be confirmed");
     }
 
     private static boolean alreadyMaterialized(ReviewFinding finding, Entry entry, Long candidate) {

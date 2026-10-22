@@ -28,7 +28,7 @@ class OperationalDataRetentionBatchExecutor {
         return deleted;
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional(propagation = Propagation.REQUIRES_NEW, timeout = 5)
     public void recordFailure(String table, LocalDateTime cutoff, RuntimeException failure) {
         mapper.insertAudit(
             TenantContext.currentTenantId(),

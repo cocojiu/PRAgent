@@ -88,8 +88,8 @@ class ReviewProgressStreamServiceTest {
         ticks.getFirst().run();
         verify(tasks).selectOne(any());
         verify(timelines).selectOne(any());
-        verify(accounts).findById(7L);
-        verify(accounts).findById(8L);
+        verify(accounts, org.mockito.Mockito.timeout(1000).atLeast(2)).findById(7L);
+        verify(accounts, org.mockito.Mockito.timeout(1000).atLeast(2)).findById(8L);
         when(accounts.findById(7L)).thenReturn(null);
         org.mockito.Mockito.clearInvocations(tasks, timelines);
         ticks.getFirst().run();
@@ -125,6 +125,48 @@ class ReviewProgressStreamServiceTest {
         ticks.forEach(Runnable::run);
         assertThat(observed).containsExactly(11L, 12L);
         assertThat(TenantContext.currentTenantId()).isNull();
+    }
+
+    @Test
+    void slowSubscriberDoesNotBlockSamplingOrDeliveryForAnotherTask() throws Exception {
+        streams.close();
+        var scheduler = mock(java.util.concurrent.ScheduledThreadPoolExecutor.class);
+        java.util.List<Runnable> ticks = new java.util.ArrayList<>();
+        when(scheduler.scheduleWithFixedDelay(any(Runnable.class), org.mockito.ArgumentMatchers.anyLong(),
+            org.mockito.ArgumentMatchers.anyLong(), any(java.util.concurrent.TimeUnit.class))).thenAnswer(call -> {
+                ticks.add(call.getArgument(0));
+                return mock(java.util.concurrent.ScheduledFuture.class);
+            });
+        var blocked = new java.util.concurrent.CountDownLatch(1);
+        var release = new java.util.concurrent.CountDownLatch(1);
+        var delivered = new java.util.concurrent.CountDownLatch(1);
+        var slow = mock(org.springframework.web.servlet.mvc.method.annotation.SseEmitter.class);
+        var fast = mock(org.springframework.web.servlet.mvc.method.annotation.SseEmitter.class);
+        org.mockito.Mockito.doAnswer(call -> {
+            blocked.countDown();
+            assertThat(release.await(3, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            return null;
+        }).when(slow).send(any(org.springframework.web.servlet.mvc.method.annotation.SseEmitter.SseEventBuilder.class));
+        org.mockito.Mockito.doAnswer(call -> { delivered.countDown(); return null; }).when(fast)
+            .send(any(org.springframework.web.servlet.mvc.method.annotation.SseEmitter.SseEventBuilder.class));
+        var emitters = new java.util.ArrayDeque<>(java.util.List.of(slow, fast));
+        streams = new ReviewProgressStreamService(tasks, timelines, accounts, properties, tenants,
+            new ReviewProgressStreamService.Limits(), scheduler) {
+            @Override org.springframework.web.servlet.mvc.method.annotation.SseEmitter newEmitter() {
+                return emitters.removeFirst();
+            }
+        };
+        try {
+            streams.open(9L, principal, null);
+            streams.open(10L, principal, null);
+            ticks.getFirst().run();
+            assertThat(blocked.await(1, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            for (int index = 0; index < 100; index++) ticks.getFirst().run();
+            ticks.getLast().run();
+            assertThat(delivered.await(1, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            verify(slow, org.mockito.Mockito.times(1))
+                .send(any(org.springframework.web.servlet.mvc.method.annotation.SseEmitter.SseEventBuilder.class));
+        } finally { release.countDown(); }
     }
 
     @Test

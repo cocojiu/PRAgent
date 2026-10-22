@@ -52,9 +52,9 @@ class OperationalDataRetentionWorkerTest {
         verify(mapper).deleteLoginAudits(any(), eq(37));
         verify(mapper).deleteUserOperationAudits(any(), eq(37));
         verify(mapper).deleteAdminOperationAudits(any(), eq(37));
-        verify(mapper).deleteSystemSettingLogs(any(), eq(37));
-        verify(mapper).deleteNotificationDeliveries(any(), eq(37));
-        verify(mapper).deleteNotificationEvents(any(), eq(37));
+        verify(mapper).deleteSystemSettingLogs(anyLong(), any(), eq(37));
+        verify(mapper).deleteNotificationDeliveries(anyLong(), any(), eq(37));
+        verify(mapper).deleteNotificationEvents(anyLong(), any(), eq(37));
         verify(mapper).deleteTenantQuotaUsage(eq(1L), any(), eq(37));
         verify(mapper).deleteCleanupAudits(any(), eq(37));
         verify(mapper, never()).purgeFeedbackPayload(anyLong(), any(), anyInt());
@@ -128,6 +128,54 @@ class OperationalDataRetentionWorkerTest {
         verify(mapper).purgeEvaluationRunPayload(eq(23L), any(), eq(2));
         assertThat(registry.get("repoguard.operational.retention.backlog")
             .tag("table", "github_feedback_event_payload").counter().count()).isEqualTo(1);
+        registry.close();
+    }
+
+    @Test
+    void rowBudgetIsSharedAcrossTablesAndNextRunResumesFairly() {
+        var mapper = mock(OperationalDataRetentionMapper.class);
+        var properties = new OperationalDataRetentionProperties();
+        properties.setBatchSize(5);
+        properties.setMaxRowsPerRun(1);
+        when(mapper.deleteSystemSettingLogs(anyLong(), any(), eq(1))).thenReturn(1);
+        when(mapper.deleteNotificationDeliveries(anyLong(), any(), eq(1))).thenReturn(1);
+        when(mapper.deleteNotificationEvents(anyLong(), any(), eq(1))).thenReturn(1);
+        when(mapper.deleteTenantQuotaUsage(anyLong(), any(), eq(1))).thenReturn(1);
+        var registry = new SimpleMeterRegistry();
+        var worker = new OperationalDataRetentionWorker(mapper, properties, registry);
+        for (int index = 0; index < 4; index++) worker.cleanupTenantData();
+        verify(mapper).deleteSystemSettingLogs(anyLong(), any(), eq(1));
+        verify(mapper).deleteNotificationDeliveries(anyLong(), any(), eq(1));
+        verify(mapper).deleteNotificationEvents(anyLong(), any(), eq(1));
+        verify(mapper).deleteTenantQuotaUsage(eq(1L), any(), eq(1));
+        assertThat(registry.get("repoguard.operational.retention.run.stopped").tag("reason", "rows")
+            .counter().count()).isEqualTo(4);
+        registry.close();
+    }
+
+    @Test
+    void deadlineStopsAtBatchBoundaryAndNextRunStartsWithAnotherTable() {
+        var clock = new java.util.concurrent.atomic.AtomicLong();
+        java.util.List<String> deletedTables = new java.util.ArrayList<>();
+        var mapper = mock(OperationalDataRetentionMapper.class, invocation -> {
+            if (invocation.getMethod().getName().startsWith("delete")) {
+                deletedTables.add(invocation.getMethod().getName());
+                clock.addAndGet(java.util.concurrent.TimeUnit.SECONDS.toNanos(1));
+                return 2;
+            }
+            return org.mockito.Answers.RETURNS_DEFAULTS.answer(invocation);
+        });
+        var properties = new OperationalDataRetentionProperties();
+        properties.setBatchSize(2);
+        properties.setMaxRunMillis(1000);
+        var registry = new SimpleMeterRegistry();
+        var worker = new OperationalDataRetentionWorker(mapper, properties, registry,
+            new OperationalDataRetentionBatchExecutor(mapper), clock::get);
+        worker.cleanupTenantData();
+        worker.cleanupTenantData();
+        assertThat(deletedTables).hasSize(2).doesNotHaveDuplicates();
+        assertThat(registry.get("repoguard.operational.retention.run.stopped").tag("reason", "deadline")
+            .counter().count()).isEqualTo(2);
         registry.close();
     }
 }

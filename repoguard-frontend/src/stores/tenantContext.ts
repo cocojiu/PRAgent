@@ -1,5 +1,6 @@
 import { computed, ref } from "vue";
 import { browserStorage } from "@/utils/browserStorage";
+import { resetFrontendPerformanceBoundary } from "@/observability/frontendPerformanceBuffer";
 
 const ACTIVE_TENANT_KEY = "repoguard-active-tenant";
 let pendingTenantKey: string | undefined;
@@ -9,6 +10,7 @@ export const activeTenant = computed(() => activeTenantKey.value);
 
 export const setActiveTenant = (tenantKey?: string | null) => {
   const normalized = tenantKey?.trim().toLowerCase() || "";
+  if (activeTenantKey.value !== normalized) resetFrontendPerformanceBoundary();
   activeTenantKey.value = normalized;
   const result = normalized
     ? browserStorage.set("local", ACTIVE_TENANT_KEY, normalized)
@@ -24,7 +26,9 @@ export const resetActiveTenantFromStorage = () => {
     setActiveTenant(pendingTenantKey);
     return;
   }
-  activeTenantKey.value = readStoredTenantKey(activeTenantKey.value);
+  const stored = readStoredTenantKey(activeTenantKey.value);
+  if (stored !== activeTenantKey.value) resetFrontendPerformanceBoundary();
+  activeTenantKey.value = stored;
 };
 
 function readStoredTenantKey(fallback = "") {

@@ -1,5 +1,5 @@
 import { nextTick } from "vue";
-import { observeFrontendLongTask } from "@/observability/frontendPerformanceBuffer";
+import { observeFrontendLongTask, capturePerformanceContext } from "@/observability/frontendPerformanceBuffer";
 
 export const DETAIL_RENDER_ITEM_LIMIT = 20;
 export const DETAIL_TEXT_PREVIEW_CHARS = 360;
@@ -33,6 +33,7 @@ export const isDetailTextTruncated = (value: string | undefined, maxLength = DET
   (value?.trim().length ?? 0) > maxLength;
 
 export const observeDetailRegionRender = async (input: ObserveRenderBudgetInput) => {
+  const context = capturePerformanceContext();
   await nextTick();
   observeFrontendLongTask({
     startedAtMs: input.startedAtMs,
@@ -41,7 +42,7 @@ export const observeDetailRegionRender = async (input: ObserveRenderBudgetInput)
     operation: input.operation,
     itemCount: input.itemCount,
     totalCount: input.totalCount
-  });
+  }, context);
 };
 
 const now = () => (typeof performance === "undefined" ? Date.now() : performance.now());

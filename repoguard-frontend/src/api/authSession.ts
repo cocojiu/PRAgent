@@ -1,4 +1,5 @@
 import { browserStorage } from "@/utils/browserStorage";
+import { resetFrontendPerformanceBoundary } from "@/observability/frontendPerformanceBuffer";
 
 const ACCESS_TOKEN_STORAGE_KEY = "repoguard.accessToken";
 const REFRESH_TOKEN_STORAGE_KEY = "repoguard.refreshToken";
@@ -25,6 +26,7 @@ export const saveAuthToken = (token: string, remember: boolean) => {
 };
 
 export const clearAuthToken = () => {
+  resetFrontendPerformanceBoundary();
   sessionRevision++;
   activeAccessToken = "";
   sessionMarkerOverride = false;

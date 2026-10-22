@@ -5,7 +5,7 @@ import {
   drainFrontendPerformanceReport,
   hasFrontendPerformanceObservations,
   observeFrontendApiRequest,
-  observeFrontendLongTask
+  observeFrontendLongTask, recordFrontendPerformanceSendFailure
 } from "@/observability/frontendPerformanceBuffer";
 import type { FrontendApiRequestObservation } from "@/observability/frontendPerformanceBuffer";
 
@@ -22,6 +22,7 @@ let observationStarted = false;
 let initialStartedAtMs = 0;
 let flushTimer: number | undefined;
 let longTaskObserver: PerformanceObserver | undefined;
+let flushController: AbortController | undefined;
 
 export const startFrontendPerformanceObservation = (resolveRoute: RouteResolver) => {
   if (observationStarted || typeof window === "undefined") {
@@ -32,7 +33,9 @@ export const startFrontendPerformanceObservation = (resolveRoute: RouteResolver)
   initialStartedAtMs = now();
   configureFrontendPerformanceBuffer({
     shouldRecord: shouldRecordInitialObservation,
-    scheduleFlush
+    scheduleFlush,
+    route: resolveRoute,
+    onBoundaryReset: () => flushController?.abort()
   });
   observeLongTasks();
   window.addEventListener("visibilitychange", flushWhenHidden);
@@ -77,14 +80,20 @@ const flushWhenHidden = () => {
 };
 
 const flushFrontendPerformance = async () => {
-  if (!hasAuthToken() || !hasFrontendPerformanceObservations()) {
+  if (flushController || !hasAuthToken() || !hasFrontendPerformanceObservations()) {
     return;
   }
   const report = drainFrontendPerformanceReport(routeResolver());
+  const controller = new AbortController();
+  flushController = controller;
   try {
-    await apiRequest("reportFrontendPerformance", report, { keepalive: true });
+    await apiRequest("reportFrontendPerformance", report, { keepalive: true, signal: controller.signal });
   } catch {
+    recordFrontendPerformanceSendFailure();
     // Observability must not affect user workflows.
+  } finally {
+    flushController = undefined;
+    if (hasFrontendPerformanceObservations()) scheduleFlush();
   }
 };
 

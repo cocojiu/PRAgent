@@ -4,6 +4,7 @@ import RepoGuardLayout from "@/layouts/RepoGuardLayout.vue";
 import { clearAuthToken, hasAuthToken } from "@/api/client";
 import { canAccessRouteMeta } from "@/router/accessPolicy";
 import { routeNames } from "@/router/names";
+import { advanceFrontendPerformanceNavigation } from "@/observability/frontendPerformanceBuffer";
 import { resolveSafePostAuthRedirect } from "@/router/authRedirect";
 import { canManage, currentUser, loadCurrentUser, resetCurrentUser } from "@/stores/authState";
 import { enterpriseEditionEnabled } from "@/config/edition";
@@ -261,7 +262,9 @@ router.beforeEach(async (to) => {
   beginRoutePerformanceTiming(String(to.name ?? "unknown"));
 });
 
-router.afterEach((to) => {
+router.afterEach((to, _from, failure) => {
+  if (failure) return;
+  advanceFrontendPerformanceNavigation();
   completeRoutePerformanceTiming(String(to.name ?? "unknown"));
   cancelScheduledRouteComponentPrefetch();
   if (to.meta.requiresAuth && hasAuthToken()) {

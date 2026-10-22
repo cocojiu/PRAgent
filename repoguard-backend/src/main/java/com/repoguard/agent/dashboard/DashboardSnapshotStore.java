@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.LongSupplier;
 import java.util.function.Supplier;
@@ -32,11 +33,15 @@ public class DashboardSnapshotStore {
     private final Executor executor;
     private final LongSupplier nanoClock;
     private final long maxStaleNanos;
+    private final long freshNanos;
+    private final long failureBackoffNanos;
+    private final MeterRegistry registry;
     private final Counter discardedWrites;
     private final DistributionSummary servedAge;
 
     public DashboardSnapshotStore(Executor executor) {
-        this(executor, 2048, Duration.ofSeconds(120), System::nanoTime, null);
+        this(executor, 2048, Duration.ofSeconds(120), Duration.ofSeconds(5), Duration.ofSeconds(1),
+            System::nanoTime, null);
     }
 
     @Autowired
@@ -46,17 +51,28 @@ public class DashboardSnapshotStore {
     ) {
         this(executor, properties.positive(properties.getDashboardSnapshotMaxEntries()),
             Duration.ofSeconds(properties.positive(properties.getDashboardSnapshotMaxStaleSeconds())),
+            Duration.ofSeconds(Math.max(0, properties.getDashboardSnapshotFreshSeconds())),
+            Duration.ofMillis(properties.positive(properties.getDashboardSnapshotFailureBackoffMillis())),
             System::nanoTime, registry);
     }
 
     DashboardSnapshotStore(Executor executor, int capacity, Duration maxStale,
         LongSupplier nanoClock, MeterRegistry registry) {
+        this(executor, capacity, maxStale, Duration.ZERO, Duration.ZERO, nanoClock, registry);
+    }
+
+    DashboardSnapshotStore(Executor executor, int capacity, Duration maxStale, Duration fresh,
+        Duration failureBackoff, LongSupplier nanoClock, MeterRegistry registry) {
         this.executor = Objects.requireNonNull(executor, "executor");
         this.nanoClock = Objects.requireNonNull(nanoClock, "nanoClock");
-        if (capacity < 1 || maxStale.isNegative() || maxStale.isZero()) {
+        if (capacity < 1 || maxStale.isNegative() || maxStale.isZero() || fresh.isNegative()
+            || failureBackoff.isNegative()) {
             throw new IllegalArgumentException("Snapshot capacity and maximum stale age must be positive");
         }
         maxStaleNanos = maxStale.toNanos();
+        freshNanos = Math.min(fresh.toNanos(), maxStaleNanos);
+        failureBackoffNanos = Math.min(failureBackoff.toNanos(), Duration.ofSeconds(30).toNanos());
+        this.registry = registry;
         states = Caffeine.newBuilder().maximumSize(capacity).expireAfterAccess(maxStale.multipliedBy(2))
             .ticker(nanoClock::getAsLong).build();
         discardedWrites = registry == null ? null : registry.counter("repoguard.dashboard.snapshot.discarded_write");
@@ -73,7 +89,7 @@ public class DashboardSnapshotStore {
             State state = states.get(scopedKey, ignored -> new State());
             Snapshot snapshot = state.snapshot;
             if (usable(snapshot)) {
-                refreshAsync(scopedKey, state, loader);
+                if (age(snapshot) >= freshNanos) refreshAsync(scopedKey, state, loader);
                 return value(snapshot);
             }
             Snapshot loaded = loadOnce(scopedKey, state, loader);
@@ -119,7 +135,12 @@ public class DashboardSnapshotStore {
     }
 
     private <T> void refreshAsync(TenantScopedKey key, State state, Supplier<T> loader) {
+        if (state.failures > 0 && nanoClock.getAsLong() - state.retryAtNanos < 0) {
+            refreshOutcome("backoff");
+            return;
+        }
         if (!state.refreshing.compareAndSet(false, true)) {
+            refreshOutcome("coalesced");
             return;
         }
         final long generation;
@@ -131,16 +152,22 @@ public class DashboardSnapshotStore {
             }
             generation = ++state.generation;
         }
+        refreshOutcome("submitted");
         submit(key, () -> {
-            synchronized (state) {
-                if (states.getIfPresent(key) != state || state.generation != generation) {
-                    discard();
-                    return;
+            try {
+                synchronized (state) {
+                    if (states.getIfPresent(key) != state || state.generation != generation) {
+                        discard();
+                        return;
+                    }
                 }
+                Snapshot loaded = new Snapshot(Objects.requireNonNull(loader.get(), "snapshot"), nanoClock.getAsLong());
+                if (commit(key, state, generation, loaded)) refreshOutcome("success");
+            } catch (RuntimeException ex) {
+                refreshFailed(state);
+                throw ex;
             }
-            Snapshot loaded = new Snapshot(Objects.requireNonNull(loader.get(), "snapshot"), nanoClock.getAsLong());
-            commit(key, state, generation, loaded);
-        }, () -> state.refreshing.set(false));
+        }, () -> state.refreshing.set(false), () -> refreshFailed(state));
     }
 
     private boolean commit(TenantScopedKey key, State state, long generation, Snapshot loaded) {
@@ -149,6 +176,7 @@ public class DashboardSnapshotStore {
             states.asMap().computeIfPresent(key, (ignored, current) -> {
                 if (current == state && state.generation == generation) {
                     state.snapshot = loaded;
+                    state.failures = 0;
                     committed[0] = true;
                 }
                 return current;
@@ -161,6 +189,10 @@ public class DashboardSnapshotStore {
     }
 
     private void submit(TenantScopedKey key, Runnable task, Runnable release) {
+        submit(key, task, release, () -> {});
+    }
+
+    private void submit(TenantScopedKey key, Runnable task, Runnable release, Runnable rejected) {
         try {
             executor.execute(TenantContext.wrap(() -> {
                 try {
@@ -172,9 +204,23 @@ public class DashboardSnapshotStore {
                 }
             }));
         } catch (RuntimeException ex) {
+            rejected.run();
             release.run();
             LOGGER.warn("Dashboard async task submission failed key={}", key, ex);
         }
+    }
+
+    private void refreshFailed(State state) {
+        int failures = Math.min(6, state.failures + 1);
+        long delay = Math.min(Duration.ofSeconds(30).toNanos(), failureBackoffNanos * (1L << (failures - 1)));
+        long jitter = delay == 0 ? 0 : ThreadLocalRandom.current().nextLong(delay / 4 + 1);
+        state.retryAtNanos = nanoClock.getAsLong() + Math.min(Duration.ofSeconds(30).toNanos(), delay + jitter);
+        state.failures = failures;
+        refreshOutcome("failed");
+    }
+
+    private void refreshOutcome(String outcome) {
+        if (registry != null) registry.counter("repoguard.dashboard.snapshot.refresh", "outcome", outcome).increment();
     }
 
     private boolean usable(Snapshot snapshot) {
@@ -208,6 +254,8 @@ public class DashboardSnapshotStore {
         private volatile Snapshot snapshot;
         private long generation;
         private final AtomicBoolean refreshing = new AtomicBoolean();
+        private volatile int failures;
+        private volatile long retryAtNanos;
     }
 
     private record Snapshot(Object value, long loadedAtNanos) {

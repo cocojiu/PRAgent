@@ -7,7 +7,14 @@ import com.repoguard.agent.tenancy.ScheduledJobLeaseContext;
 import com.repoguard.agent.tenancy.TenantContext;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.LocalDateTime;
-import java.util.function.Function;
+import java.util.function.BiFunction;
+import java.util.function.LongSupplier;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,6 +29,9 @@ public class OperationalDataRetentionWorker {
     private final OperationalDataRetentionProperties properties;
     private final MeterRegistry meterRegistry;
     private final OperationalDataRetentionBatchExecutor batchExecutor;
+    private final LongSupplier nanoClock;
+    private final Cache<Long, Integer> nextTable = Caffeine.newBuilder().maximumSize(2048)
+        .expireAfterAccess(java.time.Duration.ofDays(1)).build();
 
     @Autowired
     public OperationalDataRetentionWorker(
@@ -30,10 +40,16 @@ public class OperationalDataRetentionWorker {
         MeterRegistry meterRegistry,
         OperationalDataRetentionBatchExecutor batchExecutor
     ) {
+        this(mapper, properties, meterRegistry, batchExecutor, System::nanoTime);
+    }
+
+    OperationalDataRetentionWorker(OperationalDataRetentionMapper mapper, OperationalDataRetentionProperties properties,
+        MeterRegistry meterRegistry, OperationalDataRetentionBatchExecutor batchExecutor, LongSupplier nanoClock) {
         this.mapper = mapper;
         this.properties = properties;
         this.meterRegistry = meterRegistry;
         this.batchExecutor = batchExecutor;
+        this.nanoClock = nanoClock;
     }
 
     public OperationalDataRetentionWorker(
@@ -54,12 +70,12 @@ public class OperationalDataRetentionWorker {
         if (!properties.isEnabled()) {
             return;
         }
-        int limit = properties.normalizedBatchSize();
-        clean("user_refresh_token", properties.getRefreshTokenDays(), cutoff -> mapper.deleteRefreshTokens(cutoff, limit));
-        clean("user_login_audit", properties.getLoginAuditDays(), cutoff -> mapper.deleteLoginAudits(cutoff, limit));
-        clean("user_operation_audit", properties.getOperationAuditDays(), cutoff -> mapper.deleteUserOperationAudits(cutoff, limit));
-        clean("admin_operation_audit", properties.getOperationAuditDays(), cutoff -> mapper.deleteAdminOperationAudits(cutoff, limit));
-        clean("operational_data_cleanup_audit", properties.getOperationAuditDays(), cutoff -> mapper.deleteCleanupAudits(cutoff, limit));
+        run(0L, List.of(
+            new Cleanup("user_refresh_token", properties.getRefreshTokenDays(), mapper::deleteRefreshTokens),
+            new Cleanup("user_login_audit", properties.getLoginAuditDays(), mapper::deleteLoginAudits),
+            new Cleanup("user_operation_audit", properties.getOperationAuditDays(), mapper::deleteUserOperationAudits),
+            new Cleanup("admin_operation_audit", properties.getOperationAuditDays(), mapper::deleteAdminOperationAudits),
+            new Cleanup("operational_data_cleanup_audit", properties.getOperationAuditDays(), mapper::deleteCleanupAudits)));
     }
 
     public void cleanupTenantData() {
@@ -67,49 +83,68 @@ public class OperationalDataRetentionWorker {
             return;
         }
         long tenantId = TenantContext.requireTenantId();
-        int limit = properties.normalizedBatchSize();
-        clean("system_setting_log", properties.getSystemSettingLogDays(), cutoff -> mapper.deleteSystemSettingLogs(cutoff, limit));
-        clean("notification_delivery_log", properties.getNotificationLogDays(), cutoff -> mapper.deleteNotificationDeliveries(cutoff, limit));
-        clean("notification_event", properties.getNotificationLogDays(), cutoff -> mapper.deleteNotificationEvents(cutoff, limit));
-        clean(
-            "tenant_quota_usage",
-            properties.getTenantQuotaUsageDays(),
-            cutoff -> mapper.deleteTenantQuotaUsage(tenantId, cutoff, limit)
-        );
+        List<Cleanup> work = new ArrayList<>(List.of(
+            new Cleanup("system_setting_log", properties.getSystemSettingLogDays(),
+                (cutoff, limit) -> mapper.deleteSystemSettingLogs(tenantId, cutoff, limit)),
+            new Cleanup("notification_delivery_log", properties.getNotificationLogDays(),
+                (cutoff, limit) -> mapper.deleteNotificationDeliveries(tenantId, cutoff, limit)),
+            new Cleanup("notification_event", properties.getNotificationLogDays(),
+                (cutoff, limit) -> mapper.deleteNotificationEvents(tenantId, cutoff, limit)),
+            new Cleanup("tenant_quota_usage", properties.getTenantQuotaUsageDays(),
+                (cutoff, limit) -> mapper.deleteTenantQuotaUsage(tenantId, cutoff, limit))));
         if (properties.isFeedbackPayloadPurgeEnabled()) {
-            clean("github_feedback_event_payload", properties.normalizedFeedbackPayloadDays(),
-                cutoff -> mapper.purgeFeedbackPayload(tenantId, cutoff, limit));
+            work.add(new Cleanup("github_feedback_event_payload", properties.normalizedFeedbackPayloadDays(),
+                (cutoff, limit) -> mapper.purgeFeedbackPayload(tenantId, cutoff, limit)));
         }
         if (properties.isEvaluationRunPayloadPurgeEnabled()) {
-            clean("llm_evaluation_run_payload", properties.normalizedEvaluationRunPayloadDays(),
-                cutoff -> mapper.purgeEvaluationRunPayload(tenantId, cutoff, limit));
+            work.add(new Cleanup("llm_evaluation_run_payload", properties.normalizedEvaluationRunPayloadDays(),
+                (cutoff, limit) -> mapper.purgeEvaluationRunPayload(tenantId, cutoff, limit)));
         }
+        run(tenantId, work);
     }
 
-    private void clean(String table, int retentionDays, Function<LocalDateTime, Integer> delete) {
-        LocalDateTime cutoff = LocalDateTime.now().minusDays(Math.max(1, retentionDays));
-        int limit = properties.normalizedBatchSize();
-        int maxBatches = properties.normalizedMaxBatchesPerRun();
-        for (int batch = 0; batch < maxBatches; batch++) {
+    private void run(long scope, List<Cleanup> work) {
+        long startedAt = nanoClock.getAsLong();
+        LocalDateTime now = LocalDateTime.now();
+        int remaining = properties.normalizedMaxRowsPerRun();
+        int[] batches = new int[work.size()];
+        int first = Math.floorMod(nextTable.get(scope,
+            ignored -> Math.floorMod(now.toLocalDate().toEpochDay(), work.size())), work.size());
+        ArrayDeque<Integer> pending = new ArrayDeque<>();
+        for (int index = 0; index < work.size(); index++) pending.add((first + index) % work.size());
+        while (!pending.isEmpty() && remaining > 0
+            && nanoClock.getAsLong() - startedAt < TimeUnit.MILLISECONDS.toNanos(properties.normalizedMaxRunMillis())) {
+            int index = pending.removeFirst();
+            Cleanup item = work.get(index);
+            nextTable.put(scope, (index + 1) % work.size());
+            int limit = Math.min(properties.normalizedBatchSize(), remaining);
+            LocalDateTime cutoff = now.minusDays(Math.max(1, item.days));
             ScheduledJobLeaseContext.assertHeld();
+            long batchStartedAt = nanoClock.getAsLong();
             try {
-                int deleted = batchExecutor.deleteAndAudit(table, cutoff, () -> delete.apply(cutoff));
-                meterRegistry.counter("repoguard.operational.retention.deleted", "table", table).increment(deleted);
-                if (deleted < limit) {
-                    return;
+                int deleted = batchExecutor.deleteAndAudit(item.table, cutoff, () -> item.delete.apply(cutoff, limit));
+                remaining -= deleted;
+                meterRegistry.counter("repoguard.operational.retention.deleted", "table", item.table).increment(deleted);
+                if (deleted >= limit) {
+                    if (++batches[index] < properties.normalizedMaxBatchesPerRun()) pending.addLast(index);
+                    else meterRegistry.counter("repoguard.operational.retention.backlog", "table", item.table).increment();
                 }
             } catch (RuntimeException ex) {
                 try {
-                    batchExecutor.recordFailure(table, cutoff, ex);
+                    batchExecutor.recordFailure(item.table, cutoff, ex);
                 } catch (RuntimeException auditFailure) {
                     ex.addSuppressed(auditFailure);
                 }
-                meterRegistry.counter("repoguard.operational.retention.failed", "table", table).increment();
-                LOGGER.error("Operational retention cleanup failed table={}", table, ex);
-                return;
+                meterRegistry.counter("repoguard.operational.retention.failed", "table", item.table).increment();
+                LOGGER.error("Operational retention cleanup failed table={}", item.table, ex);
+            } finally {
+                meterRegistry.timer("repoguard.operational.retention.batch.duration", "table", item.table)
+                    .record(nanoClock.getAsLong() - batchStartedAt, TimeUnit.NANOSECONDS);
             }
         }
-        meterRegistry.counter("repoguard.operational.retention.backlog", "table", table).increment();
-        LOGGER.warn("Operational retention cleanup reached the batch limit table={} batches={}", table, maxBatches);
+        if (!pending.isEmpty()) meterRegistry.counter("repoguard.operational.retention.run.stopped", "reason",
+            remaining <= 0 ? "rows" : "deadline").increment();
     }
+
+    private record Cleanup(String table, int days, BiFunction<LocalDateTime, Integer, Integer> delete) { }
 }
