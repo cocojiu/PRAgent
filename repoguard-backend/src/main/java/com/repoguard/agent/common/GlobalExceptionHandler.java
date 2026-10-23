@@ -12,6 +12,7 @@ import org.springframework.validation.BindException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.HttpMediaTypeNotAcceptableException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -56,6 +57,13 @@ public class GlobalExceptionHandler {
         boolean unsupported = exception instanceof HttpMediaTypeNotSupportedException;
         return error(unsupported ? HttpStatus.UNSUPPORTED_MEDIA_TYPE : HttpStatus.NOT_ACCEPTABLE,
             ErrorCode.BAD_REQUEST, unsupported ? UNSUPPORTED_MEDIA_TYPE_MESSAGE : "Requested response type is not supported");
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMethodNotSupported(HttpRequestMethodNotSupportedException exception) {
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+            .headers(exception.getHeaders()).contentType(MediaType.APPLICATION_JSON)
+            .body(ApiResponse.error(ErrorCode.BAD_REQUEST, "Request method is not supported"));
     }
 
     @ExceptionHandler(Exception.class)

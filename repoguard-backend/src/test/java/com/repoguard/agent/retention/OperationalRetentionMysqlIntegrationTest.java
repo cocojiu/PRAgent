@@ -126,24 +126,33 @@ class OperationalRetentionMysqlIntegrationTest {
         results.put("auditFailureRollsBackRealDelete", true);
     }
 
-    @Test void simulatedLeaseLossRollsBackRealDelete() {
-        long tenant = seed(9);
-        var guard = org.mockito.Mockito.mock(ScheduledJobLeaseGuard.class);
-        var lost = new java.util.concurrent.atomic.AtomicBoolean();
-        org.mockito.Mockito.doAnswer(invocation -> {
-            if (lost.get() || logs(tenant) == 0) {
-                lost.set(true);
-                throw new IllegalStateException("synthetic lease loss after actual deletion");
+    @Test @SuppressWarnings("unchecked")
+    void simulatedLeaseLossRollsBackRealDelete() {
+        for (int first = 0; first < 4; first++) {
+            long tenant = seed(9);
+            var worker = new OperationalDataRetentionWorker(mapper, properties(), metrics, batches);
+            var starts = (com.github.benmanes.caffeine.cache.Cache<Long, Integer>)
+                org.springframework.test.util.ReflectionTestUtils.getField(worker, "nextTable");
+            java.util.Objects.requireNonNull(starts).put(tenant, first);
+            var guard = org.mockito.Mockito.mock(ScheduledJobLeaseGuard.class);
+            var lost = new java.util.concurrent.atomic.AtomicBoolean();
+            org.mockito.Mockito.doAnswer(invocation -> {
+                if (lost.get() || logs(tenant) == 0) {
+                    lost.set(true);
+                    throw new IllegalStateException("synthetic lease loss after actual deletion");
+                }
+                return null;
+            }).when(guard).assertHeld();
+            try (var _ = TenantContext.withTenant(tenant); var _ = ScheduledJobLeaseContext.withGuard(guard)) {
+                // Exercise the production lease wrapper, including its post-task ownership check.
+                var task = ScheduledJobLeaseContext.capture(worker::cleanupTenantData);
+                assertThatThrownBy(task::run).isInstanceOf(IllegalStateException.class);
             }
-            return null;
-        }).when(guard).assertHeld();
-        try (var _ = TenantContext.withTenant(tenant); var _ = ScheduledJobLeaseContext.withGuard(guard)) {
-            assertThatThrownBy(() -> new OperationalDataRetentionWorker(mapper, properties(), metrics, batches).cleanupTenantData())
-                .isInstanceOf(IllegalStateException.class);
+            assertThat(logs(tenant)).isEqualTo(9);
+            assertThat(lost).isTrue();
         }
-        assertThat(logs(tenant)).isEqualTo(9);
-        assertThat(lost).isTrue();
         results.put("simulatedLeaseLossRollsBackRealDelete", true);
+        results.put("leaseLossInitialTablePositions", List.of(0, 1, 2, 3));
     }
 
     @Test void realSlowDeleteIsCancelledByTransactionTimeout() {

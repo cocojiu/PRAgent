@@ -30,6 +30,30 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 class GlobalExceptionHandlerTest {
 
     @Test
+    void unsupportedMethodsReturn405WithAllowAndSafeJsonForStreamClients() throws Exception {
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new ReadOnlyMethodController())
+            .setControllerAdvice(new GlobalExceptionHandler()).build();
+        mvc.perform(get("/method-readonly")).andExpect(status().isOk());
+        mvc.perform(post("/method-readonly"))
+            .andExpect(status().isMethodNotAllowed())
+            .andExpect(header().string("Allow", org.hamcrest.Matchers.containsString("GET")))
+            .andExpect(header().string("Content-Type", MediaType.APPLICATION_JSON_VALUE))
+            .andExpect(jsonPath("$.code").value("BAD_REQUEST"))
+            .andExpect(header().doesNotExist(GlobalExceptionHandler.ERROR_ID_HEADER));
+        mvc.perform(post("/method-readonly").accept(MediaType.TEXT_EVENT_STREAM))
+            .andExpect(status().isMethodNotAllowed())
+            .andExpect(header().string("Content-Type", MediaType.APPLICATION_JSON_VALUE))
+            .andExpect(jsonPath("$.message").value("Request method is not supported"))
+            .andExpect(header().doesNotExist(GlobalExceptionHandler.ERROR_ID_HEADER));
+    }
+
+    @RestController
+    static class ReadOnlyMethodController {
+        @GetMapping("/method-readonly")
+        String read() { return "ready"; }
+    }
+
+    @Test
     void mvcMissingResourcesReturn404WhileApplicationFailuresKeep500Diagnostics() throws Exception {
         GlobalExceptionHandler handler = new GlobalExceptionHandler();
         MockMvc mvc = MockMvcBuilders.standaloneSetup(new MissingResourceController())
