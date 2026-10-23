@@ -42,6 +42,7 @@ export type PerformanceContext = { boundary: number; navigation: number; route: 
 type ScopedObservation<T> = { value: T; context: PerformanceContext };
 let boundary = 0;
 let navigation = 0;
+let nativeLongTaskContextStartedAtMs = 0;
 let dropped = 0;
 let sendFailures = 0;
 
@@ -67,6 +68,7 @@ export const capturePerformanceContext = (): PerformanceContext => ({
 
 export const resetFrontendPerformanceBoundary = () => {
   boundary++;
+  nativeLongTaskContextStartedAtMs = contextStartTime();
   apiRequests.length = 0;
   longTasks.length = 0;
   latestApiByOperation.clear();
@@ -75,6 +77,7 @@ export const resetFrontendPerformanceBoundary = () => {
 
 export const advanceFrontendPerformanceNavigation = () => {
   navigation++;
+  nativeLongTaskContextStartedAtMs = contextStartTime();
   latestApiByOperation.clear();
 };
 
@@ -106,6 +109,11 @@ export const observeFrontendLongTask = (
   observation: FrontendLongTaskObservation, context = capturePerformanceContext()
 ) => {
   if (context.boundary !== boundary || context.navigation !== navigation) { dropped++; return; }
+  // Native observer callbacks can arrive after the context that produced the entry has ended.
+  if (!isRegionRenderObservation(observation) && observation.startedAtMs < nativeLongTaskContextStartedAtMs) {
+    dropped++;
+    return;
+  }
   if (!isRegionRenderObservation(observation) && !hooks.shouldRecord()) {
     return;
   }
@@ -172,6 +180,8 @@ const optionalStableText = (value: string | undefined) => {
 
 const isRegionRenderObservation = (observation: FrontendLongTaskObservation) =>
   Boolean(optionalStableText(observation.region) || optionalStableText(observation.operation));
+
+const contextStartTime = () => (typeof performance === "undefined" ? 0 : performance.now());
 
 const normalizeApiObservation = (observation: FrontendApiRequestObservation): FrontendApiRequestObservation => ({
   ...observation,
