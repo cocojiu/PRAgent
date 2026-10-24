@@ -18,7 +18,7 @@ LABEL org.opencontainers.image.version="${OCI_VERSION}" \
 
 WORKDIR /app
 
-RUN apk upgrade --no-cache libcrypto3 libssl3 openssl libexpat p11-kit p11-kit-trust \
+RUN apk upgrade --no-cache libcrypto3 libssl3 openssl libexpat p11-kit p11-kit-trust brotli-libs \
     && addgroup -S -g 10001 repoguard \
     && adduser -S -D -H -u 10001 -G repoguard repoguard
 
