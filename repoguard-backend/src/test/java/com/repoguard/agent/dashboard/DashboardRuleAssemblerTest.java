@@ -27,8 +27,8 @@ class DashboardRuleAssemblerTest {
         assertThat(response.failedRules()).extracting("name")
             .containsExactly("\u786c\u7f16\u7801\u5bc6\u94a5\u68c0\u6d4b", "Controller \u65e0\u6d4b\u8bd5", "LLM \u5ba1\u67e5");
         assertThat(response.failedRules()).extracting("count").containsExactly(3L, 2L, 1L);
-        assertThat(response.failedRules()).extracting("trend").containsExactly("0.0%", "0.0%", "0.0%");
-        assertThat(response.failedRules()).extracting("direction").containsExactly("down", "down", "down");
+        assertThat(response.failedRules()).extracting("trend").containsExactly("—", "—", "—");
+        assertThat(response.failedRules()).extracting("direction").containsExactly("none", "none", "none");
     }
 
     @Test
@@ -36,7 +36,7 @@ class DashboardRuleAssemblerTest {
         DashboardRulesResponse response = assembler.assemble(List.of(ruleHitCount("RG-API-001", null)));
 
         assertThat(response.ruleHits()).extracting("value").containsExactly(0L);
-        assertThat(response.ruleHits()).extracting("percent").containsExactly("0.0%");
+        assertThat(response.ruleHits()).extracting("percent").containsExactly("—");
         assertThat(assembler.assemble(null).ruleHits()).isEmpty();
         assertThat(assembler.assemble(null).failedRules()).isEmpty();
     }

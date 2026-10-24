@@ -69,7 +69,14 @@ public class DashboardOverviewFacade {
     public List<DashboardMetricDto> getSummary() {
         return snapshotStore.getOrLoad(
             CacheNames.DASHBOARD_SUMMARY + ":summary",
-            () -> dashboardMetricAssembler.assemble(dailySnapshotService.selectMetricStat(reviewTrendStartDate()))
+            () -> {
+                LocalDate latestDate = dailySnapshotService.latestReviewDate();
+                LocalDate startDate = reviewTrendWindow.startDate(latestDate);
+                return dashboardMetricAssembler.assemble(
+                    dailySnapshotService.selectMetricStat(startDate), startDate,
+                    latestDate == null ? startDate.plusDays(reviewTrendWindow.days() - 1L) : latestDate
+                );
+            }
         );
     }
 

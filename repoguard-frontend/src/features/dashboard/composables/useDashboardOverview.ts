@@ -63,9 +63,10 @@ export const useDashboardOverview = () => {
   const llmQualityByRepository = computed(() => overview.value.llmQualityByRepository ?? []);
   const llmQualityTrend = computed(() => overview.value.llmQualityTrend ?? []);
   const overviewMetricItems = computed<MetricGridItem[]>(() => overviewMetrics.value.map(metric => ({
-    label: metric.label, value: metric.value, color: metric.color,
-    note: `较上周${metric.trendType.includes("up") ? "上升" : "下降"} ${metric.trend}`,
-    noteClass: metric.trendType === "up-danger" ? "trend danger" : "trend"
+    label: metric.label === "本周审查" ? "审查数量" : metric.label, value: metric.value, color: metric.color,
+    note: metric.trendType === "period" ? `统计区间 ${metric.trend}`
+      : metric.trendType.startsWith("share") ? `占区间审查 ${metric.trend}` : "统计区间未提供",
+    noteClass: metric.trendType === "share-danger" ? "trend danger" : "trend"
   })));
   const totalRuleHits = computed(() => ruleHits.value.reduce((total, item) => total + item.value, 0));
 

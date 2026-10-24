@@ -38,12 +38,8 @@
       <el-table :data="failedRules" class="rg-table" size="large" max-height="360" aria-label="高频失败规则列表">
         <el-table-column prop="name" label="规则名称" min-width="180" />
         <el-table-column prop="count" label="命中次数" width="100" />
-        <el-table-column label="趋势" width="100">
-          <template #default="{ row }">
-            <span :class="row.direction === 'up' ? 'trend danger' : 'trend'">
-              {{ row.direction === "up" ? "上升" : "下降" }} {{ row.trend }}
-            </span>
-          </template>
+        <el-table-column label="趋势" width="140">
+          <template #default>暂无对比数据</template>
         </el-table-column>
         <el-table-column prop="percent" label="占比" width="80" />
         <template #empty>

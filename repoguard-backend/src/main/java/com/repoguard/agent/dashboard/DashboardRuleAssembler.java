@@ -50,8 +50,8 @@ public class DashboardRuleAssembler {
             .map(count -> new FailedRuleStatDto(
                 ruleDisplayMapper.ruleName(count.getRuleId()),
                 safeTotal(count),
-                "0.0%",
-                "down",
+                "—",
+                "none",
                 percent(safeTotal(count), total)
             ))
             .toList();
@@ -59,7 +59,7 @@ public class DashboardRuleAssembler {
 
     private String percent(long value, long total) {
         if (total == 0) {
-            return "0.0%";
+            return "—";
         }
         return String.format(Locale.ROOT, "%.1f%%", value * 100.0 / total);
     }

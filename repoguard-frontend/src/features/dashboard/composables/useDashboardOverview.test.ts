@@ -32,6 +32,32 @@ vi.mock("element-plus/es/components/message/index.mjs", () => ({
 }));
 
 describe("useDashboardOverview", () => {
+  it("shows the actual historical period without a fabricated week comparison", async () => {
+    mockSuccessfulDashboardApis();
+    dashboardApi.fetchDashboardSummary.mockResolvedValue([{ label: "审查数量", value: "4", trend: "2026-10-05 ~ 2026-10-11", trendType: "period", color: "blue" }]);
+    const dashboard = useDashboardOverview();
+    await dashboard.loadOverview();
+    expect(dashboard.overviewMetricItems.value[0]?.note).toBe("统计区间 2026-10-05 ~ 2026-10-11");
+    expect(dashboard.overviewMetricItems.value[0]?.note).not.toContain("较上周");
+  });
+
+  it.each(["share", "share-danger"])("renders %s as a share rather than a week change", async trendType => {
+    mockSuccessfulDashboardApis();
+    dashboardApi.fetchDashboardSummary.mockResolvedValue([{ label: "风险", value: "2", trend: "66.7%", trendType, color: "red" }]);
+    const dashboard = useDashboardOverview();
+    await dashboard.loadOverview();
+    expect(dashboard.overviewMetricItems.value[0]?.note).toBe("占区间审查 66.7%");
+    expect(dashboard.overviewMetricItems.value[0]?.noteClass).toBe(trendType === "share-danger" ? "trend danger" : "trend");
+  });
+
+  it("does not repeat unsupported week claims from an older server", async () => {
+    mockSuccessfulDashboardApis();
+    dashboardApi.fetchDashboardSummary.mockResolvedValue([{ label: "本周审查", value: "4", trend: "0.0%", trendType: "up", color: "blue" }]);
+    const dashboard = useDashboardOverview();
+    await dashboard.loadOverview();
+    expect(dashboard.overviewMetricItems.value[0]).toMatchObject({ label: "审查数量", note: "统计区间未提供" });
+  });
+
   afterEach(() => {
     vi.resetAllMocks();
   });
