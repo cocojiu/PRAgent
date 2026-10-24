@@ -449,7 +449,7 @@ class DashboardServiceImplTest {
         verify(dailySnapshotService).selectLlmQualityTrendCounts(LocalDate.of(2026, 6, 13));
         assertThat(trend).hasSize(7);
         assertThat(trend.get(4).taskCount()).isZero();
-        assertThat(trend.get(4).parseSuccessRate()).isEqualTo("0.0%");
+        assertThat(trend.get(4).parseSuccessRate()).isEqualTo("—");
         assertThat(trend.get(5).taskCount()).isEqualTo(2L);
         assertThat(trend.get(5).parseSuccessRate()).isEqualTo("50.0%");
         assertThat(trend.get(5).fallbackRate()).isEqualTo("50.0%");
@@ -499,6 +499,10 @@ class DashboardServiceImplTest {
         assertThat(api.fallbackRate()).isEqualTo("33.3%");
         assertThat(api.partialFallbackRate()).isEqualTo("33.3%");
         assertThat(api.validRate()).isEqualTo("66.7%");
+        assertThat(overview.byModel().get(1).validRate()).isEqualTo("—");
+        assertThat(overview.byModel().get(1).falsePositiveRate()).isEqualTo("—");
+        assertThat(overview.byRepository().get(1).validRate()).isEqualTo("—");
+        assertThat(overview.byRepository().get(1).falsePositiveRate()).isEqualTo("—");
         assertThat(overview.trend()).hasSize(30);
     }
 

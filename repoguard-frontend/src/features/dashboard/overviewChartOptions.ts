@@ -1,7 +1,12 @@
 import type { EChartsOption } from "echarts";
 import type { ChartSlice, LlmQualityTrendPoint, ReviewTrendPoint } from "@/types";
 
-const percentNumber = (value: string) => Number.parseFloat(value.replace("%", "")) || 0;
+const percentNumber = (value: string, taskCount: number): number | null => {
+  const normalized = value.trim();
+  if (taskCount <= 0 || !/^\d+(?:\.\d+)?%?$/.test(normalized)) return null;
+  const percent = Number.parseFloat(normalized);
+  return Number.isFinite(percent) && percent <= 100 ? percent : null;
+};
 
 export const buildReviewTrendOption = (reviewTrend: ReviewTrendPoint[]): EChartsOption => ({
   grid: { left: 36, right: 18, top: 42, bottom: 32 },
@@ -59,7 +64,7 @@ export const buildLlmQualityTrendOption = (llmQualityTrend: LlmQualityTrendPoint
       type: "line",
       yAxisIndex: 1,
       smooth: true,
-      data: llmQualityTrend.map((item) => percentNumber(item.parseSuccessRate)),
+      data: llmQualityTrend.map((item) => percentNumber(item.parseSuccessRate, item.taskCount)),
       lineStyle: { color: "#22c55e", width: 3 },
       itemStyle: { color: "#22c55e" }
     },
@@ -68,7 +73,7 @@ export const buildLlmQualityTrendOption = (llmQualityTrend: LlmQualityTrendPoint
       type: "line",
       yAxisIndex: 1,
       smooth: true,
-      data: llmQualityTrend.map((item) => percentNumber(item.fallbackRate)),
+      data: llmQualityTrend.map((item) => percentNumber(item.fallbackRate, item.taskCount)),
       lineStyle: { color: "#f59e0b", width: 3 },
       itemStyle: { color: "#f59e0b" }
     },
@@ -77,7 +82,7 @@ export const buildLlmQualityTrendOption = (llmQualityTrend: LlmQualityTrendPoint
       type: "line",
       yAxisIndex: 1,
       smooth: true,
-      data: llmQualityTrend.map((item) => percentNumber(item.partialFallbackRate)),
+      data: llmQualityTrend.map((item) => percentNumber(item.partialFallbackRate, item.taskCount)),
       lineStyle: { color: "#14b8a6", width: 3 },
       itemStyle: { color: "#14b8a6" }
     }

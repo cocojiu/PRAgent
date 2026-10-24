@@ -42,7 +42,7 @@ class DashboardLlmQualityTrendBuilderTest {
     }
 
     @Test
-    void buildsDenseTrendAndFillsMissingDaysWithZeroes() {
+    void buildsDenseTrendWithZeroTaskCountsAndUnknownMissingRates() {
         DashboardLlmQualityTrendBuilder.Window window = new DashboardLlmQualityTrendBuilder.Window(3, LocalDate.of(2026, 6, 17));
         List<DashboardLlmQualityTrendCount> trendCounts = List.of(
             trendCount("2026-06-17", 4L, 3L, 1L, 0L),
@@ -59,7 +59,9 @@ class DashboardLlmQualityTrendBuilderTest {
         assertThat(trend.get(0).fallbackRate()).isEqualTo("25.0%");
         assertThat(trend.get(1).date()).isEqualTo("06-18");
         assertThat(trend.get(1).taskCount()).isZero();
-        assertThat(trend.get(1).parseSuccessRate()).isEqualTo("0.0%");
+        assertThat(trend.get(1).parseSuccessRate()).isEqualTo("—");
+        assertThat(trend.get(1).fallbackRate()).isEqualTo("—");
+        assertThat(trend.get(1).partialFallbackRate()).isEqualTo("—");
         assertThat(trend.get(2).date()).isEqualTo("06-19");
         assertThat(trend.get(2).taskCount()).isEqualTo(2L);
         assertThat(trend.get(2).partialFallbackRate()).isEqualTo("50.0%");
