@@ -38,7 +38,7 @@ public class DashboardLlmQualityFormatter {
 
     public String rate(long value, long total) {
         if (total <= 0) {
-            return "0.0%";
+            return "—";
         }
         return String.format(Locale.ROOT, "%.1f%%", value * 100.0 / total);
     }

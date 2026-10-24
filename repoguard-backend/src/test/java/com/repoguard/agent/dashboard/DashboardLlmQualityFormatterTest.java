@@ -35,7 +35,10 @@ class DashboardLlmQualityFormatterTest {
 
     @Test
     void formatsRates() {
-        assertThat(formatter.rate(0, 0)).isEqualTo("0.0%");
+        assertThat(formatter.rate(0, 0)).isEqualTo("—");
+        assertThat(formatter.rate(2, 0)).isEqualTo("—");
+        assertThat(formatter.rate(0, -1)).isEqualTo("—");
+        assertThat(formatter.rate(0, 3)).isEqualTo("0.0%");
         assertThat(formatter.rate(1, 3)).isEqualTo("33.3%");
         assertThat(formatter.rate(2, 3)).isEqualTo("66.7%");
     }

@@ -78,9 +78,44 @@ class DashboardLlmQualityStatsAssemblerTest {
         assertThat(assembler.assembleByModel(null)).isEmpty();
         assertThat(assembler.assembleByRepository(null)).isEmpty();
         assertThat(assembler.assembleByModel(List.of(modelStat)).get(0))
-            .isEqualTo(new LlmQualityByModelDto(null, 0L, "\u2014", "0", "未计价或无可确认费用", "0.0%", "0.0%", "0.0%", "0.0%", "0.0%"));
+            .isEqualTo(new LlmQualityByModelDto(null, 0L, "\u2014", "0", "未计价或无可确认费用", "—", "—", "—", "—", "—"));
         assertThat(assembler.assembleByRepository(List.of(repositoryStat)).get(0))
-            .isEqualTo(new LlmQualityByRepositoryDto(null, 0L, "0.0%", "0.0%", "0.0%", "0.0%"));
+            .isEqualTo(new LlmQualityByRepositoryDto(null, 0L, "—", "—", "—", "—"));
+    }
+
+    @Test
+    void modelFeedbackRatesStayUnknownUntilFeedbackExists() {
+        DashboardLlmQualityModelStat stat = modelStat();
+        stat.setTaskCount(10L);
+        stat.setParseSuccessCount(8L);
+        var unknown = assembler.assembleByModel(List.of(stat)).get(0);
+        assertThat(unknown.parseSuccessRate()).isEqualTo("80.0%");
+        assertThat(unknown.fallbackRate()).isEqualTo("0.0%");
+        assertThat(unknown.validRate()).isEqualTo("—");
+        assertThat(unknown.falsePositiveRate()).isEqualTo("—");
+        stat.setReviewedFeedbackCount(2L);
+        var measured = assembler.assembleByModel(List.of(stat)).get(0);
+        assertThat(measured.validRate()).isEqualTo("0.0%");
+        assertThat(measured.falsePositiveRate()).isEqualTo("0.0%");
+    }
+
+    @Test
+    void repositoryFeedbackRatesUseTheirOwnSampleDenominator() {
+        DashboardLlmQualityRepositoryStat stat = repositoryStat();
+        stat.setTaskCount(10L);
+        stat.setFallbackCount(3L);
+        stat.setPartialFallbackCount(1L);
+        stat.setReviewedFeedbackCount(0L);
+        var unknown = assembler.assembleByRepository(List.of(stat)).get(0);
+        assertThat(unknown.fallbackRate()).isEqualTo("30.0%");
+        assertThat(unknown.partialFallbackRate()).isEqualTo("10.0%");
+        assertThat(unknown.validRate()).isEqualTo("—");
+        assertThat(unknown.falsePositiveRate()).isEqualTo("—");
+        stat.setReviewedFeedbackCount(2L);
+        stat.setValidFeedbackCount(2L);
+        var measured = assembler.assembleByRepository(List.of(stat)).get(0);
+        assertThat(measured.validRate()).isEqualTo("100.0%");
+        assertThat(measured.falsePositiveRate()).isEqualTo("0.0%");
     }
 
     private DashboardLlmQualityModelStat modelStat() {
