@@ -3,8 +3,9 @@
     <h2>审查摘要</h2>
     <p>
       本次任务当前状态为 {{ statusText(task.status) }}，LLM 状态为
-      {{ statusText(task.llm.status) }}。共发现 {{ findingCount }} 条问题，下面按严重级别、文件、行号和修复建议展开。
+      {{ statusText(task.llm.status) }}。共记录 {{ findingCount }} 条审查发现。
     </p>
+    <p v-if="task.findingSeverityCounts">严重级别统计不含已标记为误报或仅观察的发现，完整记录可在下方“审查发现”中查看。</p>
     <div class="summary-stats">
       <div class="summary-stat high"><span>高风险</span><strong>{{ findingCounts.high + findingCounts.critical }}</strong></div>
       <div class="summary-stat medium"><span>中风险</span><strong>{{ findingCounts.medium }}</strong></div>
