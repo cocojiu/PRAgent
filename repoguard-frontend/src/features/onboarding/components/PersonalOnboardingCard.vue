@@ -491,7 +491,13 @@ onMounted(() => {
   }
 
   .onboarding-step {
-    align-items: flex-start;
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .onboarding-step-title-row {
+    flex-wrap: wrap;
   }
 
   .onboarding-step p {
@@ -499,7 +505,8 @@ onMounted(() => {
   }
 
   .onboarding-step :deep(.el-button) {
-    align-self: center;
+    grid-column: 1 / -1;
+    justify-self: end;
   }
 }
 </style>
