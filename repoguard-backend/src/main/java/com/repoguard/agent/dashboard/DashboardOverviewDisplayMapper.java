@@ -6,19 +6,19 @@ import org.springframework.stereotype.Component;
 public class DashboardOverviewDisplayMapper {
 
     public MetricDisplay totalReviewsMetric() {
-        return new MetricDisplay("\u672c\u5468\u5ba1\u67e5", "up", "blue");
+        return new MetricDisplay("\u5ba1\u67e5\u6570\u91cf", "period", "blue");
     }
 
     public MetricDisplay highRiskPullRequestsMetric() {
-        return new MetricDisplay("\u9ad8\u98ce\u9669 PR", "up-danger", "red");
+        return new MetricDisplay("\u9ad8\u98ce\u9669 PR", "share-danger", "red");
     }
 
     public MetricDisplay failedTasksMetric() {
-        return new MetricDisplay("\u5931\u8d25\u4efb\u52a1", "down", "orange");
+        return new MetricDisplay("\u5931\u8d25\u4efb\u52a1", "share", "orange");
     }
 
     public MetricDisplay averageReviewDurationMetric() {
-        return new MetricDisplay("\u5e73\u5747\u5ba1\u67e5\u8017\u65f6", "down", "green");
+        return new MetricDisplay("\u5e73\u5747\u5ba1\u67e5\u8017\u65f6", "period", "green");
     }
 
     public RiskLevelDisplay riskLevel(String riskLevel) {

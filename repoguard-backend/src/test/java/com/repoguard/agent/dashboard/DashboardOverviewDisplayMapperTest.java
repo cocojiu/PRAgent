@@ -12,16 +12,16 @@ class DashboardOverviewDisplayMapperTest {
     void mapsMetricCardsToDisplayMetadata() {
         assertThat(mapper.totalReviewsMetric())
             .extracting("label", "trendType", "color")
-            .containsExactly("\u672c\u5468\u5ba1\u67e5", "up", "blue");
+            .containsExactly("\u5ba1\u67e5\u6570\u91cf", "period", "blue");
         assertThat(mapper.highRiskPullRequestsMetric())
             .extracting("label", "trendType", "color")
-            .containsExactly("\u9ad8\u98ce\u9669 PR", "up-danger", "red");
+            .containsExactly("\u9ad8\u98ce\u9669 PR", "share-danger", "red");
         assertThat(mapper.failedTasksMetric())
             .extracting("label", "trendType", "color")
-            .containsExactly("\u5931\u8d25\u4efb\u52a1", "down", "orange");
+            .containsExactly("\u5931\u8d25\u4efb\u52a1", "share", "orange");
         assertThat(mapper.averageReviewDurationMetric())
             .extracting("label", "trendType", "color")
-            .containsExactly("\u5e73\u5747\u5ba1\u67e5\u8017\u65f6", "down", "green");
+            .containsExactly("\u5e73\u5747\u5ba1\u67e5\u8017\u65f6", "period", "green");
     }
 
     @Test

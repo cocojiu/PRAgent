@@ -176,6 +176,7 @@ class DashboardServiceImplTest {
         verify(dashboardMapper, never()).selectMetricStat(any());
         assertThat(summary).hasSize(4);
         assertThat(summary.get(0).value()).isEqualTo("3");
+        assertThat(summary.get(0).trend()).isEqualTo("2026-06-13 ~ 2026-06-19");
     }
 
     @Test
@@ -266,8 +267,8 @@ class DashboardServiceImplTest {
 
         verify(dailySnapshotService).selectMetricStat(LocalDate.of(2026, 6, 13));
         verify(dashboardMapper, never()).selectMetricStat(any());
-        assertThat(metrics).extracting("label").containsExactly("本周审查", "高风险 PR", "失败任务", "平均审查耗时");
-        assertThat(metrics).extracting("trendType").containsExactly("up", "up-danger", "down", "down");
+        assertThat(metrics).extracting("label").containsExactly("审查数量", "高风险 PR", "失败任务", "平均审查耗时");
+        assertThat(metrics).extracting("trendType").containsExactly("period", "share-danger", "share", "period");
         assertThat(metrics).extracting("color").containsExactly("blue", "red", "orange", "green");
         assertThat(metrics.get(0).value()).isEqualTo("3");
         assertThat(metrics.get(1).value()).isEqualTo("2");
@@ -275,6 +276,33 @@ class DashboardServiceImplTest {
         assertThat(metrics.get(2).value()).isEqualTo("1");
         assertThat(metrics.get(2).trend()).isEqualTo("33.3%");
         assertThat(metrics.get(3).value()).contains("30");
+    }
+
+    @Test
+    void summaryNamesTheHistoricalWindowUsedByItsAggregate() {
+        when(dailySnapshotService.latestReviewDate()).thenReturn(LocalDate.of(2026, 6, 1));
+        when(dailySnapshotService.selectMetricStat(any())).thenReturn(metricStat(4L, 0L, 0L, BigDecimal.valueOf(50)));
+        var summary = service.getSummary();
+        verify(dailySnapshotService).selectMetricStat(LocalDate.of(2026, 5, 26));
+        assertThat(summary.get(0).trend()).isEqualTo("2026-05-26 ~ 2026-06-01");
+        assertThat(summary.get(3).trend()).isEqualTo(summary.get(0).trend());
+    }
+
+    @Test
+    void summaryWithCurrentActivityUsesTheCurrentRollingWindow() {
+        when(dailySnapshotService.latestReviewDate()).thenReturn(LocalDate.of(2026, 6, 18));
+        var summary = service.getSummary();
+        verify(dailySnapshotService).selectMetricStat(LocalDate.of(2026, 6, 13));
+        assertThat(summary.get(0).trend()).isEqualTo("2026-06-13 ~ 2026-06-18");
+        assertThat(summary.get(1).trend()).isEqualTo("—");
+    }
+
+    @Test
+    void summaryDoesNotInventAnEndBeforeFutureDatedSourceRows() {
+        when(dailySnapshotService.latestReviewDate()).thenReturn(LocalDate.of(2026, 6, 22));
+        var summary = service.getSummary();
+        verify(dailySnapshotService).selectMetricStat(LocalDate.of(2026, 6, 13));
+        assertThat(summary.get(0).trend()).isEqualTo("2026-06-13 ~ 2026-06-22");
     }
 
     @Test

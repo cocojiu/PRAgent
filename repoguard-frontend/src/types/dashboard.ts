@@ -4,7 +4,7 @@ export interface DashboardMetric {
   label: string;
   value: string;
   trend: string;
-  trendType: "up" | "up-danger" | "down";
+  trendType: "period" | "share" | "share-danger" | "up" | "up-danger" | "down";
   color: MetricColor;
 }
 
@@ -33,7 +33,7 @@ export interface FailedRuleStat {
   name: string;
   count: number;
   trend: string;
-  direction: "up" | "down";
+  direction: "none" | "up" | "down";
   percent: string;
 }
 
