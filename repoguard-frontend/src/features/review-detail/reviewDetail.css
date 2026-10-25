@@ -18,6 +18,11 @@
   gap: 12px;
 }
 
+.detail-page .card-title-row,
+.attempt-comparison-head {
+  flex-wrap: wrap;
+}
+
 .attempt-comparison-head h2 {
   margin: 2px 0 0;
 }
@@ -101,6 +106,7 @@
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: #fff;
+  overflow-wrap: anywhere;
 }
 
 .finding-diff-item.resolved {
