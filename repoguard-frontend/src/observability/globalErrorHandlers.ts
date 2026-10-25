@@ -18,7 +18,8 @@ export const installGlobalErrorHandlers = (
     report(error, `vue:${info}`);
   };
   const onWindowError = (event: ErrorEvent) => {
-    report(event.error ?? event.message, "window:error");
+    report(event.error ?? event.message, isResizeObserverDeliveryNotice(event)
+      ? "window:resize-observer" : "window:error");
   };
   const onUnhandledRejection = (event: PromiseRejectionEvent) => {
     if (isExpectedCancellation(event.reason)) {
@@ -39,9 +40,17 @@ export const installGlobalErrorHandlers = (
 export const isExpectedCancellation = (error: unknown) =>
   error instanceof RequestError && error.code === "REQUEST_ABORTED";
 
+const isResizeObserverDeliveryNotice = (event: ErrorEvent) =>
+  event.isTrusted && event.error == null && event.lineno === 0 && event.colno === 0
+  && event.message === "ResizeObserver loop completed with undelivered notifications.";
+
 let lastFallbackMessageAt = 0;
 
 const defaultReporter: GlobalErrorReporter = (error, source) => {
+  if (source === "window:resize-observer") {
+    console.warn("[RepoGuard] Deferred ResizeObserver notification", error);
+    return;
+  }
   console.error(`[RepoGuard] Unhandled frontend error (${source})`, error);
   const now = Date.now();
   if (now - lastFallbackMessageAt >= 1_000) {
