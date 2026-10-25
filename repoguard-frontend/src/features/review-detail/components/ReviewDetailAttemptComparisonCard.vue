@@ -115,6 +115,9 @@ const statusText = (status: string) => ({
 const statusClass = (status: string) => status.toLowerCase();
 
 const reasonText = (reason: string) => ({
+  NO_PREVIOUS_SUCCESSFUL_ATTEMPT: "没有上一轮成功结果",
+  STRATEGY_VERSION_CHANGED: "规则、prompt、模型或 detector 版本发生变化",
+  LEGACY_HISTORY_NOT_INDEXED: "旧版历史结果较多，暂无法直接比较",
   STABLE_FINGERPRINT_MATCH: "稳定指纹匹配",
   NO_MATCHING_PREVIOUS_FINGERPRINT: "上一版本没有相同指纹",
   REAPPEARED_AFTER_RESOLUTION: "已修复问题重新出现",
@@ -125,7 +128,8 @@ const reasonText = (reason: string) => ({
 
 const comparabilityReason = (reason: string) => ({
   STRATEGY_VERSION_CHANGED: "规则、prompt、模型或 detector 版本发生变化",
-  NO_PREVIOUS_SUCCESSFUL_ATTEMPT: "没有上一轮成功结果"
+  NO_PREVIOUS_SUCCESSFUL_ATTEMPT: "没有上一轮成功结果",
+  LEGACY_HISTORY_NOT_INDEXED: "旧版历史结果较多，暂无法直接比较"
 }[reason] ?? reason);
 
 const shortSha = (sha: string) => sha.length > 12 ? `${sha.slice(0, 7)}…${sha.slice(-4)}` : sha;
