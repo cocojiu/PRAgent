@@ -778,7 +778,8 @@
   color: #1d4ed8;
   font-size: 12px;
   line-height: 20px;
-  white-space: nowrap;
+  max-width: 100%;
+  white-space: normal;
 }
 
 .github-preview-card {
@@ -1273,7 +1274,7 @@
 
 .side-card dl {
   display: grid;
-  grid-template-columns: 92px 1fr;
+  grid-template-columns: 92px minmax(0, 1fr);
   gap: 10px 12px;
   margin: 0 0 14px;
   color: #334155;
@@ -1282,6 +1283,12 @@
 
 .side-card dt {
   color: #64748b;
+}
+
+.side-card dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .lazy-section-actions {
@@ -1348,5 +1355,16 @@
 
   .detail-side {
     grid-column: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .side-card dl {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .side-card dd {
+    margin-bottom: 8px;
   }
 }
