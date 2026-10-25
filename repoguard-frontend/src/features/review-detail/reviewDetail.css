@@ -321,6 +321,15 @@
   background: #ffffff;
 }
 
+.detail-kpi > div:last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.detail-kpi strong > svg {
+  flex-shrink: 0;
+}
+
 .detail-kpi p,
 .detail-kpi span {
   margin: 0;
