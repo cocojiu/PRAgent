@@ -215,13 +215,18 @@ public class ManualReviewCreationService {
         if (!claim.owner()) {
             return creationAssembler.reusedResponse(creationGate.awaitExisting(claim));
         }
-        ReviewTask existingTask = findExistingManualTask(command);
-        if (existingTask != null) {
-            creationGate.completeImmediately(claim, existingTask);
-            return creationAssembler.reusedResponse(existingTask);
+        try {
+            ReviewTask existingTask = findExistingManualTask(command);
+            if (existingTask != null) {
+                creationGate.completeImmediately(claim, existingTask);
+                return creationAssembler.reusedResponse(existingTask);
+            }
+            ReviewTask task = creationAssembler.task(command);
+            return executeManualCreateTransaction(() -> doCreateManualReview(command, claim, headUpdatedAt, task));
+        } catch (RuntimeException ex) {
+            creationGate.fail(claim, ex);
+            throw ex;
         }
-        ReviewTask task = creationAssembler.task(command);
-        return executeManualCreateInTransaction(command, claim, headUpdatedAt, task);
     }
     private static TransactionTemplate buildManualCreateTransactionTemplate(PlatformTransactionManager transactionManager) {
         TransactionTemplate template = new TransactionTemplate(
@@ -229,19 +234,6 @@ public class ManualReviewCreationService {
         );
         template.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
         return template;
-    }
-    private ManualReviewResponse executeManualCreateInTransaction(
-        CreationCommand command,
-        Claim claim,
-        LocalDateTime headUpdatedAt,
-        ReviewTask task
-    ) {
-        try {
-            return executeManualCreateTransaction(() -> doCreateManualReview(command, claim, headUpdatedAt, task));
-        } catch (RuntimeException ex) {
-            creationGate.fail(claim, ex);
-            throw ex;
-        }
     }
     private ManualReviewResponse executeManualCreateTransaction(ManualReviewCreation creation) {
         return manualCreateTransactionTemplate.execute(status -> creation.create());
