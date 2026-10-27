@@ -28,6 +28,7 @@ import java.util.Objects;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -43,6 +44,7 @@ public final class LlmUsageBudgetLedger {
     private final Clock clock;
     private final TenantProperties tenancy;
     private final MeterRegistry metrics;
+    private final BigDecimal maxTaskCost;
 
     public LlmUsageBudgetLedger(JdbcTemplate jdbc, PlatformTransactionManager transactionManager, ObjectMapper json) {
         this(jdbc, transactionManager, json, Clock.systemUTC());
@@ -53,10 +55,16 @@ public final class LlmUsageBudgetLedger {
         this(jdbc, transactionManager, json, Clock.systemUTC(), tenancy);
     }
 
-    @Autowired
-    public LlmUsageBudgetLedger(JdbcTemplate jdbc, PlatformTransactionManager transactionManager,
-        ObjectMapper json, TenantProperties tenancy, MeterRegistry metrics) {
+    public LlmUsageBudgetLedger(JdbcTemplate jdbc, PlatformTransactionManager transactionManager, ObjectMapper json,
+        TenantProperties tenancy, MeterRegistry metrics) {
         this(jdbc, transactionManager, json, Clock.systemUTC(), tenancy, metrics);
+    }
+
+    @Autowired
+    public LlmUsageBudgetLedger(JdbcTemplate jdbc, PlatformTransactionManager transactionManager, ObjectMapper json,
+        TenantProperties tenancy, MeterRegistry metrics,
+        @Value("${repoguard.review.max-task-cost:0}") BigDecimal maxTaskCost) {
+        this(jdbc, transactionManager, json, Clock.systemUTC(), tenancy, metrics, maxTaskCost);
     }
 
     LlmUsageBudgetLedger(JdbcTemplate jdbc, PlatformTransactionManager transactionManager, ObjectMapper json, Clock clock) {
@@ -70,6 +78,15 @@ public final class LlmUsageBudgetLedger {
 
     LlmUsageBudgetLedger(JdbcTemplate jdbc, PlatformTransactionManager transactionManager, ObjectMapper json,
         Clock clock, TenantProperties tenancy, MeterRegistry metrics) {
+        this(jdbc, transactionManager, json, clock, tenancy, metrics, BigDecimal.ZERO);
+    }
+
+    LlmUsageBudgetLedger(JdbcTemplate jdbc, PlatformTransactionManager transactionManager, ObjectMapper json,
+        Clock clock, TenantProperties tenancy, MeterRegistry metrics, BigDecimal maxTaskCost) {
+        if (maxTaskCost == null || maxTaskCost.signum() < 0) {
+            throw new IllegalArgumentException("Task cost limit must be nonnegative");
+        }
+        this.maxTaskCost = maxTaskCost;
         this.jdbc = Objects.requireNonNull(jdbc, "jdbc");
         this.json = Objects.requireNonNull(json, "json");
         this.clock = Objects.requireNonNull(clock, "clock");
@@ -145,6 +162,7 @@ public final class LlmUsageBudgetLedger {
             if (tokenLimit > 0 && nextTokens > tokenLimit || costLimit.signum() > 0 && nextCost.compareTo(costLimit) > 0) {
                 throw denied("llm_monthly_budget_exhausted");
             }
+            requireTaskBudget(task, tenant, quotas.size(), bound);
             String pricing = encode(new LlmReviewCostEstimator().snapshot(settings, null, true));
             String fingerprint = fingerprint(operation, system, user);
             int inserted = jdbc.update("""
@@ -167,6 +185,23 @@ public final class LlmUsageBudgetLedger {
             throw denied("llm_budget_duplicate_call");
         } catch (org.springframework.dao.DataAccessException unavailable) {
             throw denied("llm_budget_store_unavailable");
+        }
+    }
+
+    private void requireTaskBudget(ReviewTask task, long tenant, int quotaRows, Bound bound) {
+        if (maxTaskCost.signum() == 0 || task == null || task.getId() == null) return;
+        // The tenant quota row is already locked, serializing workers even across UTC months.
+        // Evaluation/preflight calls without a persisted task have their own run-level budget.
+        if (quotaRows != 1) throw denied("llm_task_budget_quota_missing");
+        if (bound.cost() == null) throw denied("llm_task_budget_pricing_unknown");
+        Map<String, Object> usage = jdbc.queryForMap("""
+            select coalesce(sum(accounted_cost),0) as task_cost,
+                   coalesce(sum(case when accounted_cost is null or status='LEGACY' then 1 else 0 end),0) as unknown_calls
+            from llm_usage_call where tenant_id=? and task_id=?
+            """, tenant, task.getId());
+        if (number(usage, "unknown_calls") > 0) throw denied("llm_task_budget_usage_unknown");
+        if (decimal(usage, "task_cost").add(bound.cost()).compareTo(maxTaskCost) > 0) {
+            throw denied("llm_task_budget_exhausted");
         }
     }
 
