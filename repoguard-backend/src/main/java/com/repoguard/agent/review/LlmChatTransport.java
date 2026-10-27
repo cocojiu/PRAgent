@@ -15,6 +15,7 @@ import org.springframework.web.client.RestClient;
 
 /** Owns OpenAI-compatible request construction, HTTP transport and client reuse. */
 final class LlmChatTransport {
+    private static final int COMPLETE_OUTPUT_TOKEN_ALLOWANCE = 10;
     private final RestClient.Builder restClientBuilder;
     private final ExternalHttpJsonResponseReader responseReader;
     private final LlmChatCompletionResponseExtractor responseExtractor;
@@ -60,7 +61,9 @@ final class LlmChatTransport {
     JsonNode execute(LlmEvaluationBudget budget, ReviewPolicySettings settings, String systemPrompt,
         String userPrompt, Integer maxTokens, Map<String, Object> payload, LlmProviderCapability capability,
         ReviewTask task, String callKey, String operation, java.util.function.LongSupplier remaining) {
-        int outputLimit = maxTokens == null ? 1024 : maxTokens;
+        int requestedOutputLimit = maxTokens == null ? 1024 : maxTokens;
+        int outputLimit = usesCompleteOutputLimit(settings)
+            ? Math.addExact(requestedOutputLimit, COMPLETE_OUTPUT_TOKEN_ALLOWANCE) : requestedOutputLimit;
         java.util.function.Supplier<JsonNode> request = () -> {
             if (ledger != null) ledger.requireReleaseAllowed(task);
             // Admission may have waited on a database lock. Check again before the first HTTP byte.
@@ -96,7 +99,8 @@ final class LlmChatTransport {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("model", settings.modelName());
         payload.put("temperature", settings.temperature());
-        payload.put("max_tokens", maxTokens == null ? 1024 : maxTokens);
+        payload.put(usesCompleteOutputLimit(settings) ? "max_completion_tokens" : "max_tokens",
+            maxTokens == null ? 1024 : maxTokens);
         payload.put("messages", List.of(
             Map.of("role", "system", "content", systemPrompt),
             Map.of("role", "user", "content", userPrompt)
@@ -114,6 +118,15 @@ final class LlmChatTransport {
             );
         }
         return payload;
+    }
+
+    private static boolean usesCompleteOutputLimit(ReviewPolicySettings settings) {
+        String provider = settings.llmProvider() == null ? "" : settings.llmProvider().trim().toLowerCase(java.util.Locale.ROOT);
+        String model = settings.modelName() == null ? "" : settings.modelName().trim();
+        // DashScope documents this limit as reasoning + answer, with up to 10 tokens of drift.
+        // Keep it in legacy-format retries too; dropping response_format must not remove the limit.
+        return ("dashscope".equals(provider) || "qwen".equals(provider))
+            && model.matches("(?i)qwen3\\.7-plus(?:-[0-9]{4}-[0-9]{2}-[0-9]{2})?");
     }
 
     private JsonNode executeRequest(

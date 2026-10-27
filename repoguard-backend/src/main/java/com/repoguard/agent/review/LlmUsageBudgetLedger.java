@@ -50,16 +50,6 @@ public final class LlmUsageBudgetLedger {
         this(jdbc, transactionManager, json, Clock.systemUTC());
     }
 
-    public LlmUsageBudgetLedger(JdbcTemplate jdbc, PlatformTransactionManager transactionManager,
-        ObjectMapper json, TenantProperties tenancy) {
-        this(jdbc, transactionManager, json, Clock.systemUTC(), tenancy);
-    }
-
-    public LlmUsageBudgetLedger(JdbcTemplate jdbc, PlatformTransactionManager transactionManager, ObjectMapper json,
-        TenantProperties tenancy, MeterRegistry metrics) {
-        this(jdbc, transactionManager, json, Clock.systemUTC(), tenancy, metrics);
-    }
-
     @Autowired
     public LlmUsageBudgetLedger(JdbcTemplate jdbc, PlatformTransactionManager transactionManager, ObjectMapper json,
         TenantProperties tenancy, MeterRegistry metrics,
