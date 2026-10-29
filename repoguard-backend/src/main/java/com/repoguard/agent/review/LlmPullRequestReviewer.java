@@ -364,6 +364,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
                     task, logicalCall + ":" + attempt.incrementAndGet(), operation + "_legacy_format", remaining
                 ));
             }
+            LlmChatCompletionResponse extracted = responseExtractor.extract(response);
             metrics.llmRequestDuration(Duration.ofNanos(System.nanoTime() - startedAt), "success");
             metrics.llmStructuredOutput(
                 settings.llmProvider(),
@@ -371,7 +372,6 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
                 outputStatus.code(),
                 "none"
             );
-            LlmCallResult extracted = extractLlmCallResult(response);
             return new LlmCallResult(
                 extracted.content(),
                 extracted.promptTokens(),
@@ -412,21 +412,6 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
             || detail.contains("unsupported")
             || detail.contains("not support")
             || detail.contains("unknown parameter");
-    }
-
-    private LlmCallResult extractLlmCallResult(JsonNode root) {
-        try {
-            LlmChatCompletionResponse response = responseExtractor.extract(root);
-            return new LlmCallResult(
-                response.content(),
-                response.promptTokens(),
-                response.completionTokens(),
-                response.totalTokens(), LlmStructuredOutputStatus.NOT_REQUESTED,
-                response.cachedInputTokens(), response.usageSource()
-            );
-        } catch (Exception ex) {
-            throw new IllegalStateException("Unable to parse LLM HTTP response", ex);
-        }
     }
 
     private <T> T executeLlm(String operation, ReviewPolicySettings settings,

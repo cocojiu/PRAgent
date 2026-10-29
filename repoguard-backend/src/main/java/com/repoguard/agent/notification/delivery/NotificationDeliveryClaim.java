@@ -9,7 +9,7 @@ public record NotificationDeliveryClaim(
 ) {
 
     public NotificationDeliveryClaim {
-        Objects.requireNonNull(claimedAt, "claimedAt");
+        claimedAt = Objects.requireNonNull(claimedAt, "claimedAt").withNano(0);
         Objects.requireNonNull(claimedBy, "claimedBy");
     }
 }
