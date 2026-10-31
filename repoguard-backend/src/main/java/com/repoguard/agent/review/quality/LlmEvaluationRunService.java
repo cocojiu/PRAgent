@@ -275,8 +275,8 @@ public class LlmEvaluationRunService {
                 if (state.cancelled.get()) {
                     throw new CancellationException();
                 }
+                state.accountBudget(budget);
                 if (state.diagnostics() != null) {
-                    state.accountBudget(budget);
                     state.complete(null);
                     persist(state);
                     return;
