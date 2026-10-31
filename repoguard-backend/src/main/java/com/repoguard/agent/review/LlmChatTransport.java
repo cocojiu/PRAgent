@@ -74,13 +74,8 @@ final class LlmChatTransport {
         };
         java.util.function.Supplier<JsonNode> accounted = ledger == null ? request : () -> ledger.execute(
             task, callKey, operation, settings, systemPrompt, userPrompt, outputLimit, payload, request, responseExtractor::extractUsage);
-        if (budget == null) {
-            return accounted.get();
-        }
-        return budget.execute(
-            systemPrompt,
-            userPrompt,
-            outputLimit,
+        return budget == null ? accounted.get() : budget.execute(
+            systemPrompt, userPrompt, outputLimit,
             settings.conservativeInputTokenPricePerMillion(),
             settings.outputTokenPricePerMillion(),
             accounted,
@@ -101,6 +96,10 @@ final class LlmChatTransport {
         payload.put("temperature", settings.temperature());
         payload.put(usesCompleteOutputLimit(settings) ? "max_completion_tokens" : "max_tokens",
             maxTokens == null ? 1024 : maxTokens);
+        if (usesCompleteOutputLimit(settings) && (maxTokens == null || maxTokens > 1)) {
+            // Stop thinking before it consumes the answer's entire completion budget.
+            payload.put("thinking_budget", (maxTokens == null ? 1024 : maxTokens) / 2);
+        }
         payload.put("messages", List.of(
             Map.of("role", "system", "content", systemPrompt),
             Map.of("role", "user", "content", userPrompt)
