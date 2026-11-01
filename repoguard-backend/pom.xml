@@ -22,7 +22,7 @@
         <!-- Security patches for both Jackson maintenance families managed by Spring Boot. -->
         <jackson-2-bom.version>2.21.7</jackson-2-bom.version>
         <jackson-bom.version>3.1.7</jackson-bom.version>
-        <mybatis-plus.version>3.5.17</mybatis-plus.version>
+        <mybatis-plus.version>3.5.18.1</mybatis-plus.version>
         <netty.version>4.2.17.Final</netty.version>
         <rabbit-amqp-client.version>5.34.0</rabbit-amqp-client.version>
         <resilience4j.version>2.4.0</resilience4j.version>
@@ -170,7 +170,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-enforcer-plugin</artifactId>
-                <version>3.6.3</version>
+                <version>3.7.0</version>
                 <executions>
                     <execution>
                         <id>enforce-build-toolchain</id>
@@ -196,7 +196,7 @@
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.8.15</version>
+                <version>0.8.16</version>
                 <executions>
                     <execution>
                         <configuration>
