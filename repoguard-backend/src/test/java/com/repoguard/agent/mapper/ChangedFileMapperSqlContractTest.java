@@ -13,10 +13,10 @@ class ChangedFileMapperSqlContractTest {
     @Test
     void countsAreScopedToTheFilePageTaskAndCurrentFindings() throws Exception {
         assertThat(sql("selectFindingCountsForFiles", Long.class, java.util.List.class))
-            .contains("left join review_finding finding", "finding.task_id = file.task_id",
+            .contains("left join review_finding finding", "finding.task_id = cf.task_id",
                 "finding.current_attempt = 1", "finding.category = 'finding'",
-                "cast(finding.file_path as binary) = cast(file.file_path as binary)", "file.task_id = #{taskid}",
-                "file.current_attempt = 1", "collection=\"fileids\"", "group by file.id",
+                "cast(finding.file_path as binary) = cast(cf.file_path as binary)", "cf.task_id = #{taskid}",
+                "cf.current_attempt = 1", "collection=\"fileids\"", "group by cf.id",
                 "count(finding.id)");
     }
 
@@ -33,15 +33,15 @@ class ChangedFileMapperSqlContractTest {
 
     private org.assertj.core.api.AbstractStringAssert<?> assertFindingPresenceSql(String sql) {
         return assertThat(sql)
-            .contains("from changed_file file")
-            .contains("where file.task_id = #{taskid}")
-            .contains("file.current_attempt = 1")
+            .contains("from changed_file cf")
+            .contains("where cf.task_id = #{taskid}")
+            .contains("cf.current_attempt = 1")
             .contains("from review_finding finding")
-            .contains("finding.task_id = file.task_id")
+            .contains("finding.task_id = cf.task_id")
             .contains("finding.current_attempt = 1")
             .contains("finding.category = 'finding'")
-            .contains("cast(finding.file_path as binary) = cast(file.file_path as binary)")
-            .contains("order by file.id asc")
+            .contains("cast(finding.file_path as binary) = cast(cf.file_path as binary)")
+            .contains("order by cf.id asc")
             .doesNotContain("select distinct")
             .doesNotContain("force index")
             .doesNotContain(" in (")
