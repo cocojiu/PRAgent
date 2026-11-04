@@ -624,7 +624,21 @@ jobs:
           tag="3.7.8-repoguard.3-${GITHUB_SHA:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           image="${repository}:${tag}"
           docker image tag "${CHECKED_IMAGE_ID}" "${image}"
-          docker image push "${image}"
+          push_log="$(mktemp)"
+          trap 'rm -f "${push_log}"' EXIT
+          for attempt in 1 2 3; do
+            test "$(docker image inspect --format '{{.Id}}' "${image}")" = "${CHECKED_IMAGE_ID}"
+            if docker image push "${image}" >"${push_log}" 2>&1; then
+              cat "${push_log}"
+              break
+            fi
+            cat "${push_log}"
+            if ! tail -n 1 "${push_log}" | grep -Fxq 'unknown blob' || (( attempt == 3 )); then
+              exit 1
+            fi
+            echo "GHCR reported an unknown blob; retrying the same checked image (${attempt}/3)."
+            sleep "$((attempt * 10))"
+          done
           digest="$(docker image inspect "${image}" | jq -er --arg prefix "${repository}@" \
             '[.[0].RepoDigests[] | select(startswith($prefix)) | split("@")[1]] | unique | if length == 1 then .[0] else error("ambiguous pushed digest") end')"
           [[ "${digest}" =~ ^sha256:[a-f0-9]{64}$ ]]
