@@ -296,7 +296,7 @@ public class OperationalSqlVerificationPlan {
             new ExplainTableExpectation(
                 "selectChangedFilesWithFindings",
                 "changed_file",
-                "file",
+                "cf",
                 List.of("idx_changed_file_current_attempt"),
                 List.of("ref", "range"),
                 "changed_file rows should be task-bounded before paging.",
@@ -314,7 +314,7 @@ public class OperationalSqlVerificationPlan {
             new ExplainTableExpectation(
                 "selectChangedFilesWithoutFindings",
                 "changed_file",
-                "file",
+                "cf",
                 List.of("idx_changed_file_current_attempt"),
                 List.of("ref", "range"),
                 "changed_file rows should be task-bounded before paging.",

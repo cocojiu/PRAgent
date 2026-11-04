@@ -13,16 +13,16 @@ import sys
 import tempfile
 
 SOURCE_WORKFLOW = '.github/workflows/production-observability-security.yml'
-VERSION = '3.7.8-repoguard.2'
+VERSION = '3.7.8-repoguard.3'
 UPSTREAM = '09e6ce2ff1bdc19763a10265b870c86f51c98655'
 RUNTIME_CONFIG_SHA = 'fd92c23ef93df13499bc10537ee9561c26af0fd68e43899e1203230a13b4f2a4'
 RUNTIME_RULES_SHA = 'a18d3d0b9276ddab80fa961d14df06eba4a60bd46e5ce106a1f42074aed0b2d5'
 HOST_DISK_COMPOSE_SHA = '9ffb63842b8c3f0c8a13a94ae9a3fc13985b3116391bc26cb8f3c1539a9282f5'
 BASELINE_IMAGE = 'grafana/loki:3.7.8@sha256:1107dd5274e0ada47e42472b7a7e71f3b2a2fe878878108f3e2f9e51528f0193'
-# The signed .1 release is still the production baseline. Keep its immutable
+# The signed .2 release is still the production baseline. Keep its immutable
 # identity explicit so an upgrade never trusts a tag or an arbitrary current image.
-PREVIOUS_SECURITY_IMAGE = 'ghcr.io/cocojiu/pragent-loki@sha256:870766ebe4760b30077fd47206b21cfd3722f6f5f4dc6fdadc83612a179ee491'
-PREVIOUS_SECURITY_CONFIG = 'sha256:68e3f90a94951e9afe02d7ff518d6ce03aa5acb0ae2c372dad76e74d658a0eb5'
+PREVIOUS_SECURITY_IMAGE = 'ghcr.io/cocojiu/pragent-loki@sha256:00a2fc9abd6877b0cfd4700231f3e143c798149ddc72efc0f50c7942fa4daeb7'
+PREVIOUS_SECURITY_CONFIG = 'sha256:ef460b9668447f4962eb6cfbcf6d3ba23d576d7de378ca5cf81e4d9121550727'
 ALLOY_IMAGE = 'grafana/alloy:v1.18.0@sha256:491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b308'
 RUNTIME_RULES = {'RepoGuardApiHeartbeatMissing', 'RepoGuardWorkerHeartbeatMissing',
     'RepoGuardUsageSnapshotStale', 'RepoGuardUncertainUsageAged',
@@ -164,7 +164,8 @@ def fetch_source(args):
                 if kind == 'sbom':
                     bom = statement['predicate']
                     require(bom['bomFormat'] == 'CycloneDX', 'unsupported_sbom')
-                    for name, version in [('stdlib', 'v1.26.10'), ('golang.org/x/net', 'v0.60.0')]:
+                    for name, version in [('stdlib', 'v1.26.10'), ('golang.org/x/net', 'v0.60.0'),
+                            ('github.com/go-jose/go-jose/v4', 'v4.1.6')]:
                         require(any(component['name'] == name and component.get('version') == version
                             for component in bom['components']), 'security_dependency_missing')
         result = {'state': 'verified', 'repository': args.repository, 'gitSha': args.source_sha,

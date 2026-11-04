@@ -140,7 +140,7 @@
           <p class="form-hint">issuer 必须是 HTTPS 地址，subject 使用 IdP 的稳定标识。</p>
           <el-form label-position="top" @submit.prevent>
             <el-form-item label="用户 ID"><el-input-number v-model="identityForm.userId" :min="1" controls-position="right" /></el-form-item>
-            <el-form-item label="Issuer"><el-input v-model="identityForm.issuer" placeholder="https://idp.example.com" /></el-form-item>
+            <el-form-item label="Issuer"><el-input v-model="identityForm.issuer" :placeholder="identityIssuerPlaceholder" /></el-form-item>
             <el-form-item label="Subject"><el-input v-model="identityForm.subject" placeholder="00u123" /></el-form-item>
             <el-button type="primary" :loading="savingIdentity" @click="saveIdentity">绑定身份</el-button>
           </el-form>
@@ -226,6 +226,7 @@ const quotaForm = reactive({ maxDailyReviews: 1000, monthlyLlmTokenBudget: 0, mo
 const repositoryForm = reactive<EnterpriseTenantRepositoryRequest>({ organization: "", repository: "", githubInstallationId: 1 });
 const membershipForm = reactive<EnterpriseTenantMembershipRequest>({ userId: 1, role: "TENANT_ADMIN", defaultTenant: false });
 const identityForm = reactive<EnterpriseIdentityBindingRequest>({ userId: 1, issuer: "", subject: "" });
+const identityIssuerPlaceholder = "https://idp.example.com";
 
 const membershipRoleOptions: Array<{ label: string; value: Exclude<EnterpriseRole, "PLATFORM_ADMIN"> }> = [
   { label: "租户管理员", value: "TENANT_ADMIN" },

@@ -12,20 +12,20 @@ public interface ChangedFileMapper extends BaseMapper<ChangedFile> {
 
     @Select("""
         <script>
-        select file.id as changedFileId, count(finding.id) as total
-        from changed_file file
+        select cf.id as changedFileId, count(finding.id) as total
+        from changed_file cf
         left join review_finding finding
-          on finding.task_id = file.task_id
+          on finding.task_id = cf.task_id
          and finding.current_attempt = 1
          and finding.category = 'FINDING'
-         and cast(finding.file_path as binary) = cast(file.file_path as binary)
-        where file.task_id = #{taskId}
-          and file.current_attempt = 1
-          and file.id in
+         and cast(finding.file_path as binary) = cast(cf.file_path as binary)
+        where cf.task_id = #{taskId}
+          and cf.current_attempt = 1
+          and cf.id in
           <foreach collection="fileIds" item="fileId" open="(" separator="," close=")">
             #{fileId}
           </foreach>
-        group by file.id
+        group by cf.id
         </script>
         """)
     List<FileFindingCount> selectFindingCountsForFiles(@Param("taskId") Long taskId,
@@ -54,38 +54,38 @@ public interface ChangedFileMapper extends BaseMapper<ChangedFile> {
 
     @Select("""
         <script>
-        select file.*
-        from changed_file file
-        where file.task_id = #{taskId}
-          and file.current_attempt = 1
+        select cf.*
+        from changed_file cf
+        where cf.task_id = #{taskId}
+          and cf.current_attempt = 1
           and exists (
               select 1
               from review_finding finding
-              where finding.task_id = file.task_id
+              where finding.task_id = cf.task_id
                 and finding.current_attempt = 1
                 and finding.category = 'FINDING'
-                and cast(finding.file_path as binary) = cast(file.file_path as binary)
+                and cast(finding.file_path as binary) = cast(cf.file_path as binary)
           )
-        order by file.id asc
+        order by cf.id asc
         </script>
         """)
     Page<ChangedFile> selectChangedFilesWithFindings(Page<ChangedFile> page, @Param("taskId") Long taskId);
 
     @Select("""
         <script>
-        select file.*
-        from changed_file file
-        where file.task_id = #{taskId}
-          and file.current_attempt = 1
+        select cf.*
+        from changed_file cf
+        where cf.task_id = #{taskId}
+          and cf.current_attempt = 1
           and not exists (
               select 1
               from review_finding finding
-              where finding.task_id = file.task_id
+              where finding.task_id = cf.task_id
                 and finding.current_attempt = 1
                 and finding.category = 'FINDING'
-                and cast(finding.file_path as binary) = cast(file.file_path as binary)
+                and cast(finding.file_path as binary) = cast(cf.file_path as binary)
           )
-        order by file.id asc
+        order by cf.id asc
         </script>
         """)
     Page<ChangedFile> selectChangedFilesWithoutFindings(Page<ChangedFile> page, @Param("taskId") Long taskId);

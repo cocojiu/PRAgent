@@ -307,7 +307,7 @@ jobs:
           python3 - <<'PY'
           import hashlib, json, os, pathlib, xml.etree.ElementTree as ET
           root = pathlib.Path('repoguard-backend/target')
-          expected = {'quality.LokiReleaseManifestTest': 9, 'quality.LokiSnapshotSafetyTest': 6,
+          expected = {'quality.LokiReleaseManifestTest': 10, 'quality.LokiSnapshotSafetyTest': 6,
               'quality.LokiDeploymentSafetyTest': 7,
               'quality.ProductionObservabilityWorkflowContractTest': 8,
               'integration.LokiSnapshotLinuxIntegrationTest': 1}
@@ -608,7 +608,7 @@ jobs:
         with:
           directory: loki-candidate-evidence
       - name: Log in to GHCR
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -621,7 +621,7 @@ jobs:
         run: |
           set -euo pipefail
           repository="ghcr.io/${GITHUB_REPOSITORY,,}-loki"
-          tag="3.7.8-repoguard.2-${GITHUB_SHA:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          tag="3.7.8-repoguard.3-${GITHUB_SHA:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           image="${repository}:${tag}"
           docker image tag "${CHECKED_IMAGE_ID}" "${image}"
           docker image push "${image}"
@@ -661,7 +661,7 @@ jobs:
           for name in ('trivy.json', 'sbom.cdx.json', 'persistence-result.json', 'transfer-verification.json'):
               evidence[name] = hashlib.sha256((root / name).read_bytes()).hexdigest()
           runtime = json.loads((root / 'persistence-result.json').read_text())
-          manifest = {'formatVersion': 1, 'version': '3.7.8-repoguard.2',
+          manifest = {'formatVersion': 1, 'version': '3.7.8-repoguard.3',
               'source': {'repository': os.environ['GITHUB_REPOSITORY'],
                   'workflow': '.github/workflows/production-observability-security.yml',
                   'gitSha': os.environ['GITHUB_SHA'], 'ref': os.environ['GITHUB_REF'],
