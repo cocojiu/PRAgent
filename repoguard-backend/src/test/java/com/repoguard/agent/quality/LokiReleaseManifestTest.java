@@ -15,7 +15,7 @@ class LokiReleaseManifestTest {
     @TempDir Path temporaryDirectory;
 
     @ParameterizedTest
-    @ValueSource(strings = {"identity", "checks", "runtime", "types", "readonly-profile", "attestation", "untrusted-run", "existing-output", "output-race"})
+    @ValueSource(strings = {"identity", "checks", "runtime", "types", "readonly-profile", "attestation", "untrusted-run", "existing-output", "output-race", "missing-patched-dependency"})
     void rejectsUntrustedSourcesAndPreservesExistingAssets(String scenario) throws Exception {
         Path root = Path.of("").toAbsolutePath();
         while (root != null && !Files.isRegularFile(root.resolve("scripts/loki-release.py"))) root = root.getParent();
@@ -120,9 +120,13 @@ class LokiReleaseManifestTest {
             def attest(subject,path,predicate,repo,digest,expected):
                 Path(path).write_text('[]')
                 if predicate=='https://cyclonedx.org/bom':
-                    args.output.mkdir();(args.output/'user-asset.txt').write_text('preserve')
+                    if scenario!='missing-patched-dependency':
+                        args.output.mkdir();(args.output/'user-asset.txt').write_text('preserve')
+                    components=[dict(name='stdlib',version='v1.26.10'),dict(name='golang.org/x/net',version='v0.60.0')]
+                    if scenario!='missing-patched-dependency':
+                        components.append(dict(name='github.com/go-jose/go-jose/v4',version='v4.1.6'))
                     return [dict(subject=[dict(digest=dict(sha256='a'*64))],predicate=dict(bomFormat='CycloneDX',
-                        components=[dict(name='stdlib',version='v1.26.10'),dict(name='golang.org/x/net',version='v0.60.0')]))]
+                        components=components))]
                 return [dict(subject=[dict(digest=dict(sha256='a'*64))])]
             with patch.object(m,'github',side_effect=github),patch.object(m,'command',side_effect=command),patch.object(m,'verify_attestation',side_effect=attest):
                 if scenario=='untrusted-run':
@@ -131,11 +135,14 @@ class LokiReleaseManifestTest {
                 elif scenario=='existing-output':
                     args.output.mkdir();(args.output/'user-asset.txt').write_text('preserve')
                     rejected(lambda:m.fetch_source(args),'unsafe_output_directory');assert not commands
+                elif scenario=='missing-patched-dependency':
+                    rejected(lambda:m.fetch_source(args),'security_dependency_missing')
+                    assert not args.output.exists()
                 else:
                     try:m.fetch_source(args)
                     except FileExistsError:pass
                     else:raise AssertionError('concurrent output directory was overwritten')
-                if scenario!='untrusted-run':
+                if scenario not in ('untrusted-run','missing-patched-dependency'):
                     assert (args.output/'user-asset.txt').read_text()=='preserve'
                     assert not (args.output/'verification-result.json').exists()
         print('CASE PASS: '+scenario)

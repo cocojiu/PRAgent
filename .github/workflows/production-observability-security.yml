@@ -621,7 +621,7 @@ jobs:
         run: |
           set -euo pipefail
           repository="ghcr.io/${GITHUB_REPOSITORY,,}-loki"
-          tag="3.7.8-repoguard.2-${GITHUB_SHA:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          tag="3.7.8-repoguard.3-${GITHUB_SHA:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           image="${repository}:${tag}"
           docker image tag "${CHECKED_IMAGE_ID}" "${image}"
           docker image push "${image}"
@@ -661,7 +661,7 @@ jobs:
           for name in ('trivy.json', 'sbom.cdx.json', 'persistence-result.json', 'transfer-verification.json'):
               evidence[name] = hashlib.sha256((root / name).read_bytes()).hexdigest()
           runtime = json.loads((root / 'persistence-result.json').read_text())
-          manifest = {'formatVersion': 1, 'version': '3.7.8-repoguard.2',
+          manifest = {'formatVersion': 1, 'version': '3.7.8-repoguard.3',
               'source': {'repository': os.environ['GITHUB_REPOSITORY'],
                   'workflow': '.github/workflows/production-observability-security.yml',
                   'gitSha': os.environ['GITHUB_SHA'], 'ref': os.environ['GITHUB_REF'],
