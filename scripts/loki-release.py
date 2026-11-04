@@ -23,6 +23,7 @@ BASELINE_IMAGE = 'grafana/loki:3.7.8@sha256:1107dd5274e0ada47e42472b7a7e71f3b2a2
 # identity explicit so an upgrade never trusts a tag or an arbitrary current image.
 PREVIOUS_SECURITY_IMAGE = 'ghcr.io/cocojiu/pragent-loki@sha256:00a2fc9abd6877b0cfd4700231f3e143c798149ddc72efc0f50c7942fa4daeb7'
 PREVIOUS_SECURITY_CONFIG = 'sha256:ef460b9668447f4962eb6cfbcf6d3ba23d576d7de378ca5cf81e4d9121550727'
+PREVIOUS_SECURITY_VERSION = '3.7.8-repoguard.2'
 ALLOY_IMAGE = 'grafana/alloy:v1.18.0@sha256:491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b308'
 RUNTIME_RULES = {'RepoGuardApiHeartbeatMissing', 'RepoGuardWorkerHeartbeatMissing',
     'RepoGuardUsageSnapshotStale', 'RepoGuardUncertainUsageAged',
@@ -264,7 +265,7 @@ def validate_previous_security_identity(container):
         'previous_security_image_identity_changed')
     labels = container['Config'].get('Labels') or {}
     require(labels.get('org.opencontainers.image.revision') == UPSTREAM
-        and labels.get('org.opencontainers.image.version') == '3.7.8-repoguard.1',
+        and labels.get('org.opencontainers.image.version') == PREVIOUS_SECURITY_VERSION,
         'previous_security_release_labels_changed')
 
 
