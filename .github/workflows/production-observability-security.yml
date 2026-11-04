@@ -307,7 +307,7 @@ jobs:
           python3 - <<'PY'
           import hashlib, json, os, pathlib, xml.etree.ElementTree as ET
           root = pathlib.Path('repoguard-backend/target')
-          expected = {'quality.LokiReleaseManifestTest': 9, 'quality.LokiSnapshotSafetyTest': 6,
+          expected = {'quality.LokiReleaseManifestTest': 10, 'quality.LokiSnapshotSafetyTest': 6,
               'quality.LokiDeploymentSafetyTest': 7,
               'quality.ProductionObservabilityWorkflowContractTest': 8,
               'integration.LokiSnapshotLinuxIntegrationTest': 1}
