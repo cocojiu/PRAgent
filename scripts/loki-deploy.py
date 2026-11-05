@@ -186,6 +186,20 @@ class Deployment:
         require(metadata['Config']['User'] == '10001', 'pulled_image_user_mismatch')
         return normalized
 
+    def prepare_image(self):
+        steps = [('image_pull', lambda: docker('pull', self.reference, timeout=240)),
+            ('image_identity', lambda: self.verify_image(self.reference, self.manifest['image']['imageId']))]
+        for phase, operation in steps:
+            self.audit(phase + '_started', servicesStopped=False)
+            try:
+                operation()
+            except BaseException as error:
+                self.audit(phase + '_failed', errorType=type(error).__name__,
+                    errorCode=phase + ('_timeout' if isinstance(error, subprocess.TimeoutExpired) else '_failed'),
+                    servicesStopped=False)
+                raise
+            self.audit(phase + '_completed', servicesStopped=False)
+
     def frozen(self):
         for role, identifier in self.plan['containerIds'].items():
             state = self.host.inspect(identifier)['State']
@@ -333,8 +347,7 @@ class Deployment:
         self.protected = container_baseline()
         self.audit('preflight_passed', plan=self.plan)
         require(available_memory() >= 768 * 1024 * 1024, 'insufficient_memory_headroom')
-        docker('pull', self.reference, timeout=240)
-        self.verify_image(self.reference, self.manifest['image']['imageId'])
+        self.prepare_image()
         backup_directory = ensure_directory(ROOT / 'backups/loki-security' / self.args.release_id)
         self.audit('image_verified')
         window = None
