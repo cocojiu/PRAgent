@@ -279,17 +279,24 @@ class Deployment:
         self.host.compose(ROOT, [*files, overlay], 'up', '-d', '--pull', 'never', '--no-build', '--no-deps', 'loki', 'alloy')
         return str(overlay)
 
-    def verify_active(self, image, window, fingerprint):
+    def verify_active_identity(self, image):
         for role, target in [('loki', '/loki'), ('alloy', '/var/lib/alloy/data')]:
             metadata = self.host.inspect('repoguard-' + role)
             expected_image = image if role == 'loki' else self.plan['baselineImages']['alloy']
-            require(metadata['Config']['Image'] == expected_image and metadata['State']['Status'] == 'running'
-                and not metadata['State'].get('OOMKilled'), 'unexpected_active_' + role)
+            require(metadata['Config']['Image'] == expected_image
+                and metadata['Config'].get('Labels', {}).get('com.docker.compose.project') == 'repoguard-observability',
+                'unexpected_active_' + role)
             mount = release.data_mount(metadata, target, self.host)
             require(mount['name'] == self.clones[role]['name'], 'active_volume_identity_mismatch')
         metadata = self.host.inspect('repoguard-loki')
         require(metadata['HostConfig']['Memory'] == self.plan['memoryLimitBytes']
             and metadata['HostConfig']['NanoCpus'] == self.plan['cpuLimitNanoCpusPreserved'], 'active_resource_limits_changed')
+
+    def verify_active(self, image, window, fingerprint):
+        self.verify_active_identity(image)
+        for role in ('loki', 'alloy'):
+            state = self.host.inspect('repoguard-' + role)['State']
+            require(state['Status'] == 'running' and not state.get('OOMKilled'), 'unexpected_active_' + role)
         base = 'http://127.0.0.1:3100'
         wait_for(lambda: request(base, '/ready')[0] == 200, 'active_loki_readiness')
         wait_for(lambda: rules_loaded(base), 'active_loki_rules')
@@ -410,8 +417,12 @@ class Deployment:
         window, fingerprint = prior['historicalWindow'], prior['historicalFingerprint']
         current = self.host.inspect('repoguard-loki')['Config']['Image']
         require(current in (self.reference, self.plan['baselineImages']['loki']), 'unexpected_rollback_image')
-        self.verify_active(current, window, fingerprint)
+        # A failed candidate must remain recoverable. Check its immutable image,
+        # owned data mounts and resource limits before recovery; require health
+        # only after restoring the old binary on the retained active volumes.
+        self.verify_active_identity(current)
         if current == self.plan['baselineImages']['loki']:
+            self.verify_active(current, window, fingerprint)
             self.audit('rolled_back', alreadyRolledBack=True, originalVolumesPreserved=True)
         else:
             self.audit('rollback_requested')
