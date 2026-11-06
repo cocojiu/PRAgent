@@ -282,8 +282,11 @@ def active_production_candidate(container, manifest, root):
     files = (container['Config'].get('Labels') or {}).get('com.docker.compose.project.config_files', '').split(',')
     pattern = re.compile(re.escape(str(root)) + r'/\.deploy-state/loki-security-([1-9][0-9]{4,19}-[1-9][0-9]{0,3})/(?:candidate|rollback)\.compose\.json\Z')
     overlays = [(Path(name), pattern.fullmatch(name)) for name in files if pattern.fullmatch(name)]
-    require(len(overlays) == 1, 'production_loki_target_journal_missing')
-    overlay, match = overlays[0]
+    require(bool(overlays) and len({path for path, _ in overlays}) == len(overlays),
+        'production_loki_target_journal_missing')
+    # Compose applies overlays in order and retains earlier release files.
+    # The last matching overlay owns the effective Loki release journal.
+    overlay, match = overlays[-1]
     reviewed_file(overlay, root)
     path = reviewed_file(overlay.parent / 'result.json', root)
     require(path.stat().st_uid == 0 and stat.S_IMODE(path.stat().st_mode) == 0o600, 'untrusted_loki_target_journal')
