@@ -246,13 +246,22 @@ def source_from_args(args):
     return validate_source(manifest, args.repository, args.source_sha, args.run_id, args.run_attempt)
 
 
-def validate_running_image(role, reference, manifest, allow_candidate=False):
+def validate_running_image(role, reference, manifest, allow_candidate=False, candidate_image=None):
     require(role in ('loki', 'alloy'), 'unexpected_runtime_role')
     allowed = {BASELINE_IMAGE if role == 'loki' else ALLOY_IMAGE}
     if role == 'loki':
         allowed.add(PREVIOUS_SECURITY_IMAGE)
     if role == 'loki' and allow_candidate:
         allowed.add(manifest['image']['repository'] + '@' + manifest['image']['digest'])
+        if candidate_image is not None:
+            require(isinstance(candidate_image, dict) and set(candidate_image) == {'repository', 'digest', 'imageId', 'runtimeId', 'platform'}
+                and candidate_image.get('imageId') == manifest['image']['imageId']
+                and candidate_image.get('platform') == 'linux/amd64'
+                and isinstance(candidate_image.get('repository'), str)
+                and re.fullmatch(r'[a-z0-9][a-z0-9.-]*\.aliyuncs\.com/[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*', candidate_image.get('repository', ''))
+                and all(isinstance(candidate_image.get(key), str) and DIGEST.fullmatch(candidate_image[key]) for key in ('digest', 'runtimeId')),
+                'invalid_production_loki_candidate')
+            allowed.add(candidate_image['repository'] + '@' + candidate_image['digest'])
     require(reference in allowed, 'unexpected_' + role + '_baseline')
 
 
@@ -269,7 +278,38 @@ def validate_previous_security_identity(container):
         'previous_security_release_labels_changed')
 
 
-def production_preflight(manifest, root=Path('/opt/repoguard'), host=None, allow_candidate=False):
+def active_production_candidate(container, manifest, root):
+    files = (container['Config'].get('Labels') or {}).get('com.docker.compose.project.config_files', '').split(',')
+    pattern = re.compile(re.escape(str(root)) + r'/\.deploy-state/loki-security-([1-9][0-9]{4,19}-[1-9][0-9]{0,3})/(?:candidate|rollback)\.compose\.json\Z')
+    overlays = [(Path(name), pattern.fullmatch(name)) for name in files if pattern.fullmatch(name)]
+    require(len(overlays) == 1, 'production_loki_target_journal_missing')
+    overlay, match = overlays[0]
+    reviewed_file(overlay, root)
+    path = reviewed_file(overlay.parent / 'result.json', root)
+    require(path.stat().st_uid == 0 and stat.S_IMODE(path.stat().st_mode) == 0o600, 'untrusted_loki_target_journal')
+    journal = read_json(path)
+    target = journal.get('deploymentTarget')
+    require(type(journal.get('formatVersion')) is int and journal['formatVersion'] == 1
+        and journal.get('releaseId') == match.group(1) and journal.get('source') == manifest['source']
+        and journal.get('candidateImage') == manifest['image'] and isinstance(target, dict), 'production_loki_target_source_changed')
+    run_id, attempt = (int(item) for item in match.group(1).split('-'))
+    approval = target.get('approval') or {}
+    require(type(target.get('formatVersion')) is int and target['formatVersion'] == 1 and target.get('source') == manifest['source']
+        and target.get('sourceImage') == manifest['image']
+        and target.get('sourceManifestSha256') == journal.get('manifestSha256')
+        and isinstance(journal.get('manifestSha256'), str)
+        and re.fullmatch('[a-f0-9]{64}', journal.get('manifestSha256', ''))
+        and approval.get('environment') == 'production'
+        and approval.get('workflow') == '.github/workflows/production-observability-log-stack-upgrade.yml'
+        and approval.get('repository') == manifest['source']['repository'] and approval.get('ref') == 'refs/heads/main'
+        and isinstance(approval.get('gitSha'), str) and SHA.fullmatch(approval['gitSha'])
+        and type(approval.get('runId')) is int and approval['runId'] == run_id
+        and type(approval.get('runAttempt')) is int and approval['runAttempt'] == attempt,
+        'production_loki_target_approval_changed')
+    return target.get('image')
+
+
+def production_preflight(manifest, root=Path('/opt/repoguard'), host=None, allow_candidate=False, candidate_image=None):
     """Read current state; do not pull images, create locks, stop services, or copy data."""
     host = host or DockerHost()
     root = Path(root)
@@ -278,10 +318,19 @@ def production_preflight(manifest, root=Path('/opt/repoguard'), host=None, allow
     alloy = host.inspect('repoguard-alloy')
     containers = {'loki': loki, 'alloy': alloy}
     validate_previous_security_identity(loki)
+    known = {BASELINE_IMAGE, PREVIOUS_SECURITY_IMAGE,
+        manifest['image']['repository'] + '@' + manifest['image']['digest']}
+    if allow_candidate and candidate_image is None and loki['Config']['Image'] not in known:
+        candidate_image = active_production_candidate(loki, manifest, root)
     for role, expected_user in [('loki', '10001'), ('alloy', '473:473')]:
         container = containers[role]
         labels = container['Config'].get('Labels') or {}
-        validate_running_image(role, container['Config']['Image'], manifest, allow_candidate)
+        validate_running_image(role, container['Config']['Image'], manifest, allow_candidate, candidate_image)
+        if role == 'loki' and candidate_image is not None and allow_candidate:
+            candidate_reference = candidate_image['repository'] + '@' + candidate_image['digest']
+            if container['Config']['Image'] == candidate_reference:
+                require(container['Image'] in (manifest['image']['imageId'], candidate_image['runtimeId'], candidate_image['digest']),
+                    'production_loki_candidate_identity_changed')
         require(container['State']['Status'] == 'running' and not container['State'].get('OOMKilled')
             and container['Config']['User'] == expected_user,
             'unexpected_' + role + '_baseline')

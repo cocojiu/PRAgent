@@ -33,6 +33,7 @@ def module(name, filename):
 release = module('loki_release', 'loki-release.py')
 snapshot = module('loki_snapshot', 'loki_snapshot.py')
 identity = module('release_manifest', 'release-manifest.py')
+target_identity = module('loki_target', 'loki-target.py')
 require = release.require
 ROOT = Path('/opt/repoguard')
 KEY = Path('/etc/repoguard/backup-password')
@@ -162,11 +163,23 @@ class Deployment:
         self.host = release.DockerHost()
         self.manifest = release.source_from_args(args)
         self.reference = self.manifest['image']['repository'] + '@' + self.manifest['image']['digest']
+        self.deployment_target = None
+        if getattr(args, 'target_manifest', ''):
+            path = Path(args.target_manifest)
+            target = release.read_json(path)
+            require(re.fullmatch('[a-f0-9]{64}', args.target_manifest_sha or '')
+                and hashlib.sha256(path.read_bytes()).hexdigest() == args.target_manifest_sha,
+                'loki_target_manifest_checksum_mismatch')
+            self.deployment_target = target_identity.validate(target, self.manifest,
+                args.manifest_sha, args.repository, args.deployment_sha, args.release_id, args.target_repository)
+            self.reference = target_identity.reference(self.deployment_target)
         self.owner = 'loki-security-' + args.release_id
         self.stage = ROOT / '.deploy-state' / self.owner
         self.record = {'formatVersion': 1, 'releaseId': args.release_id, 'source': self.manifest['source'],
             'manifestSha256': args.manifest_sha, 'candidateImage': self.manifest['image'],
             'state': 'starting', 'productionWrites': True, 'events': []}
+        if self.deployment_target:
+            self.record.update(deploymentTarget=self.deployment_target, targetManifestSha256=args.target_manifest_sha)
         self.plan = None
         self.clones = {}
         self.canary = None
@@ -185,6 +198,20 @@ class Deployment:
         metadata = json.loads(docker('image', 'inspect', reference))[0]
         require(metadata['Config']['User'] == '10001', 'pulled_image_user_mismatch')
         return normalized
+
+    def prepare_image(self):
+        steps = [('image_pull', lambda: docker('pull', self.reference, timeout=240)),
+            ('image_identity', lambda: self.verify_image(self.reference, self.manifest['image']['imageId']))]
+        for phase, operation in steps:
+            self.audit(phase + '_started', servicesStopped=False)
+            try:
+                operation()
+            except BaseException as error:
+                self.audit(phase + '_failed', errorType=type(error).__name__,
+                    errorCode=phase + ('_timeout' if isinstance(error, subprocess.TimeoutExpired) else '_failed'),
+                    servicesStopped=False)
+                raise
+            self.audit(phase + '_completed', servicesStopped=False)
 
     def frozen(self):
         for role, identifier in self.plan['containerIds'].items():
@@ -333,8 +360,7 @@ class Deployment:
         self.protected = container_baseline()
         self.audit('preflight_passed', plan=self.plan)
         require(available_memory() >= 768 * 1024 * 1024, 'insufficient_memory_headroom')
-        docker('pull', self.reference, timeout=240)
-        self.verify_image(self.reference, self.manifest['image']['imageId'])
+        self.prepare_image()
         backup_directory = ensure_directory(ROOT / 'backups/loki-security' / self.args.release_id)
         self.audit('image_verified')
         window = None
@@ -407,6 +433,11 @@ class Deployment:
         self.record = prior
         self.plan = prior['plan']
         self.clones = prior['clonedVolumes']
+        if prior.get('deploymentTarget'):
+            stored = prior['deploymentTarget']
+            self.deployment_target = target_identity.validate(stored, self.manifest, self.args.manifest_sha,
+                self.args.repository, stored['approval']['gitSha'], self.args.release_id, self.args.target_repository)
+            self.reference = target_identity.reference(self.deployment_target)
         self.protected = container_baseline()
         for role, clone in self.clones.items():
             require(role in ('loki', 'alloy') and clone['name'] == self.owner + '-' + role,
@@ -444,9 +475,14 @@ def main():
     parser.add_argument('--manifest-sha', required=True)
     parser.add_argument('--release-id', required=True)
     parser.add_argument('--confirmation', required=True)
+    parser.add_argument('--target-manifest', default='')
+    parser.add_argument('--target-manifest-sha', default='')
+    parser.add_argument('--target-repository', default='')
+    parser.add_argument('--deployment-sha', default='')
     args = parser.parse_args()
     expected = 'UPGRADE_LOKI_SECURITY' if args.action == 'upgrade' else 'ROLLBACK_LOKI_SECURITY'
     require(args.confirmation == expected, 'explicit_production_confirmation_required')
+    require(args.action != 'upgrade' or bool(args.target_manifest), 'verified_loki_production_target_required')
     require(os.name == 'posix' and fcntl is not None, 'linux_production_host_required')
     require(ROOT.resolve() == ROOT and ROOT.is_dir(), 'unexpected_deployment_root')
     descriptor = os.open(ROOT / '.deploy.lock', os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
