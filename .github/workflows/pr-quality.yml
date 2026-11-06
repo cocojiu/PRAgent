@@ -175,6 +175,41 @@ jobs:
           trivyignores: .trivyignore.yaml
           vuln-type: library
           severity: HIGH,CRITICAL
+      - name: Build and inspect backend runtime image
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 600s docker build --pull --build-arg OCI_REVISION="${GITHUB_SHA}" \
+            --build-arg OCI_VERSION=pr-runtime -t repoguard/backend:pr-runtime repoguard-backend
+          test "$(docker image inspect --format '{{.Config.User}}' repoguard/backend:pr-runtime)" = '10001:10001'
+          docker image inspect --format '{{.Id}} {{.Config.User}}' repoguard/backend:pr-runtime > backend-runtime-identity.txt
+          timeout 30s docker run --rm --network none --read-only --cap-drop ALL \
+            --security-opt no-new-privileges --entrypoint /sbin/apk repoguard/backend:pr-runtime \
+            info -v zlib | tee -a backend-runtime-identity.txt
+      - name: Scan backend runtime image for high and critical CVEs
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_DB_REPOSITORY: ghcr.io/aquasecurity/trivy-db:2
+        with:
+          scan-type: image
+          image-ref: repoguard/backend:pr-runtime
+          scanners: vuln
+          format: json
+          output: backend-runtime-trivy.json
+          exit-code: '1'
+          ignore-unfixed: false
+          trivyignores: .trivyignore.yaml
+          severity: HIGH,CRITICAL
+      - name: Preserve backend runtime scan evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: backend-runtime-security-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            backend-runtime-identity.txt
+            backend-runtime-trivy.json
+          if-no-files-found: warn
+          retention-days: 7
       - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -212,6 +247,46 @@ jobs:
         env:
           VITE_REPOGUARD_EDITION: enterprise-experimental
         run: npm run test:e2e
+      - name: Build and inspect frontend runtime image
+        shell: bash
+        env:
+          VITE_REPOGUARD_EDITION: personal
+          VITE_REVIEW_PROGRESS_STREAM: 'false'
+        run: |
+          set -euo pipefail
+          npm --prefix repoguard-frontend run build
+          timeout 600s docker build --pull --build-arg OCI_REVISION="${GITHUB_SHA}" \
+            --build-arg OCI_VERSION=pr-runtime --build-arg REVIEW_PROGRESS_STREAM=false \
+            -t repoguard/frontend:pr-runtime repoguard-frontend
+          test "$(docker image inspect --format '{{.Config.User}}' repoguard/frontend:pr-runtime)" = '101'
+          docker image inspect --format '{{.Id}} {{.Config.User}}' repoguard/frontend:pr-runtime > frontend-runtime-identity.txt
+          timeout 30s docker run --rm --network none --read-only --cap-drop ALL \
+            --security-opt no-new-privileges --entrypoint /sbin/apk repoguard/frontend:pr-runtime \
+            info -v zlib | tee -a frontend-runtime-identity.txt
+      - name: Scan frontend runtime image for high and critical CVEs
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_DB_REPOSITORY: ghcr.io/aquasecurity/trivy-db:2
+        with:
+          scan-type: image
+          image-ref: repoguard/frontend:pr-runtime
+          scanners: vuln
+          format: json
+          output: frontend-runtime-trivy.json
+          exit-code: '1'
+          ignore-unfixed: false
+          trivyignores: .trivyignore.yaml
+          severity: HIGH,CRITICAL
+      - name: Preserve frontend runtime scan evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: frontend-runtime-security-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            frontend-runtime-identity.txt
+            frontend-runtime-trivy.json
+          if-no-files-found: warn
+          retention-days: 7
       - name: Upload browser failure evidence
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
