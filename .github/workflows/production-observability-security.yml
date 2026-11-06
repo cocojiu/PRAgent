@@ -9,6 +9,7 @@ on:
       - "deploy/images/loki-security.Dockerfile"
       - ".github/actions/verify-loki-candidate/**"
       - "scripts/loki*.py"
+      - "scripts/loki-image-mirror.sh"
       - "repoguard-backend/src/test/java/com/repoguard/agent/quality/Loki*Test.java"
       - "repoguard-backend/src/test/java/com/repoguard/agent/integration/LokiSnapshotLinuxIntegrationTest.java"
   push:
@@ -21,6 +22,7 @@ on:
       - "deploy/images/loki-security.Dockerfile"
       - ".github/actions/verify-loki-candidate/**"
       - "scripts/loki*.py"
+      - "scripts/loki-image-mirror.sh"
       - "repoguard-backend/src/test/java/com/repoguard/agent/quality/Loki*Test.java"
       - "repoguard-backend/src/test/java/com/repoguard/agent/integration/LokiSnapshotLinuxIntegrationTest.java"
   workflow_dispatch:

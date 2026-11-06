@@ -128,7 +128,7 @@ jobs:
     needs: source
     environment: production
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     permissions:
       actions: read
       contents: read
@@ -178,8 +178,8 @@ jobs:
           PY
           ssh -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" python3 - \
             < remote-preflight.py > loki-production-preflight.json
-      - name: Apply explicit approved operation and retain all original data
-        id: operation
+      - name: Stage verified Loki production tools
+        id: stage
         if: inputs.action != 'preflight'
         shell: bash
         env:
@@ -218,15 +218,77 @@ jobs:
           python3 - <<'PY'
           import hashlib, pathlib
           names = ['scripts/loki-release.py', 'scripts/loki_snapshot.py', 'scripts/loki-deploy.py',
-              'scripts/release-manifest.py', 'verified-loki/loki-source-manifest.json']
+              'scripts/release-manifest.py', 'scripts/loki-target.py', 'verified-loki/loki-source-manifest.json']
           pathlib.Path('source-transport.sha256').write_text(''.join(
               hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest() + '  ' + pathlib.Path(name).name + '\n' for name in names))
           PY
           scp -P "${DEPLOY_PORT:-22}" scripts/loki-release.py scripts/loki_snapshot.py \
-            scripts/loki-deploy.py scripts/release-manifest.py verified-loki/loki-source-manifest.json source-transport.sha256 \
+            scripts/loki-deploy.py scripts/release-manifest.py scripts/loki-target.py verified-loki/loki-source-manifest.json source-transport.sha256 \
             "${DEPLOY_USER}@${DEPLOY_HOST}:${stage}/"
           ssh -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "cd '${stage}' && sha256sum -c source-transport.sha256 >&2 && python3 '${stage}/loki-deploy.py' '${ACTION}' --repository '${GITHUB_REPOSITORY}' --source-sha '${SOURCE_SHA}' --run-id '${SOURCE_RUN_ID}' --run-attempt '${SOURCE_RUN_ATTEMPT}' --manifest '${stage}/loki-source-manifest.json' --manifest-sha '${MANIFEST_SHA}' --release-id '${RELEASE_ID}' --confirmation '${CONFIRMATION}'" \
+            "cd '${stage}' && sha256sum -c source-transport.sha256 >&2"
+      - name: Transfer checked Loki image to the existing production registry
+        if: inputs.action == 'upgrade'
+        timeout-minutes: 20
+        shell: bash
+        env:
+          ACR_TOKEN: ${{ secrets.ALIYUN_REGISTRY_PASSWORD }}
+          ACR_REGISTRY: ${{ secrets.ALIYUN_DEPLOY_REGISTRY || vars.ALIYUN_DEPLOY_REGISTRY }}
+          ACR_NAMESPACE: ${{ secrets.ALIYUN_NAMESPACE || vars.ALIYUN_NAMESPACE }}
+          ACR_REPOSITORY: ${{ secrets.ALIYUN_REPOSITORY || vars.ALIYUN_REPOSITORY }}
+          ACR_USER: ${{ secrets.ALIYUN_REGISTRY_USERNAME || vars.ALIYUN_REGISTRY_USERNAME }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
+          LOKI_STAGE: /opt/repoguard/.deploy-state/loki-release-input-${{ github.run_id }}-${{ github.run_attempt }}
+          EXPECTED_MANIFEST_SHA: ${{ needs.source.outputs.manifest_sha }}
+        run: bash scripts/loki-image-mirror.sh verified-loki/loki-source-manifest.json loki-deployment-target.json
+      - name: Attest exact Loki production target mapping
+        if: inputs.action == 'upgrade'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: loki-deployment-target.json
+      - name: Apply explicit approved operation and retain all original data
+        id: operation
+        if: inputs.action != 'preflight'
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
+          ACTION: ${{ inputs.action }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          SOURCE_RUN_ATTEMPT: ${{ needs.source.outputs.source_run_attempt }}
+          MANIFEST_SHA: ${{ needs.source.outputs.manifest_sha }}
+          RELEASE_ID: ${{ needs.source.outputs.release_id }}
+          TARGET_REGISTRY: ${{ secrets.ALIYUN_DEPLOY_REGISTRY || vars.ALIYUN_DEPLOY_REGISTRY }}
+          TARGET_NAMESPACE: ${{ secrets.ALIYUN_NAMESPACE || vars.ALIYUN_NAMESPACE }}
+          TARGET_REPOSITORY_NAME: ${{ secrets.ALIYUN_REPOSITORY || vars.ALIYUN_REPOSITORY }}
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REF}" = 'refs/heads/main'
+          test "${DEPLOY_PATH}" = '/opt/repoguard'
+          target_repository="${TARGET_REGISTRY}/${TARGET_NAMESPACE}/${TARGET_REPOSITORY_NAME}"
+          python3 scripts/loki-target.py --check-repository "${target_repository}"
+          case "${ACTION}:${CONFIRMATION}" in
+            upgrade:UPGRADE_LOKI_SECURITY | rollback:ROLLBACK_LOKI_SECURITY) ;;
+            *) echo 'Explicit production confirmation mismatch.' >&2; exit 1 ;;
+          esac
+          stage="/opt/repoguard/.deploy-state/loki-release-input-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          entrypoint='scripts/loki-deploy.py'
+          remote_entrypoint="$(basename "${entrypoint}")"
+          target_options=""
+          if [ "${ACTION}" = upgrade ]; then
+            target_sha="$(sha256sum loki-deployment-target.json | cut -d' ' -f1)"
+            scp -P "${DEPLOY_PORT:-22}" loki-deployment-target.json "${DEPLOY_USER}@${DEPLOY_HOST}:${stage}/"
+            target_options="--target-manifest '${stage}/loki-deployment-target.json' --target-manifest-sha '${target_sha}' --deployment-sha '${GITHUB_SHA}'"
+          fi
+          ssh -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "cd '${stage}' && sha256sum -c source-transport.sha256 >&2 && python3 '${stage}/${remote_entrypoint}' '${ACTION}' --repository '${GITHUB_REPOSITORY}' --source-sha '${SOURCE_SHA}' --run-id '${SOURCE_RUN_ID}' --run-attempt '${SOURCE_RUN_ATTEMPT}' --manifest '${stage}/loki-source-manifest.json' --manifest-sha '${MANIFEST_SHA}' --release-id '${RELEASE_ID}' --confirmation '${CONFIRMATION}' --target-repository '${target_repository}' ${target_options}" \
             > loki-production-result.json
       - name: Read retained journal after an unsuccessful operation
         if: failure() && steps.operation.outcome == 'failure'
@@ -255,5 +317,7 @@ jobs:
           path: |
             loki-production-preflight.json
             loki-production-result.json
+            loki-deployment-target.json
+            loki-image-transfer.json
           if-no-files-found: warn
           retention-days: 90
