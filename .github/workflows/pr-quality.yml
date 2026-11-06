@@ -185,7 +185,7 @@ jobs:
           docker image inspect --format '{{.Id}} {{.Config.User}}' repoguard/backend:pr-runtime > backend-runtime-identity.txt
           timeout 30s docker run --rm --network none --read-only --cap-drop ALL \
             --security-opt no-new-privileges --entrypoint /sbin/apk repoguard/backend:pr-runtime \
-            info -v zlib | tee -a backend-runtime-identity.txt
+            list --installed zlib | tee -a backend-runtime-identity.txt
       - name: Scan backend runtime image for high and critical CVEs
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         env:
@@ -262,7 +262,7 @@ jobs:
           docker image inspect --format '{{.Id}} {{.Config.User}}' repoguard/frontend:pr-runtime > frontend-runtime-identity.txt
           timeout 30s docker run --rm --network none --read-only --cap-drop ALL \
             --security-opt no-new-privileges --entrypoint /sbin/apk repoguard/frontend:pr-runtime \
-            info -v zlib | tee -a frontend-runtime-identity.txt
+            list --installed zlib | tee -a frontend-runtime-identity.txt
       - name: Scan frontend runtime image for high and critical CVEs
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         env:
