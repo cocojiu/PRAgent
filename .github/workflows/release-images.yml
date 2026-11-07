@@ -400,6 +400,7 @@ jobs:
         with:
           context: repoguard-backend
           file: repoguard-backend/Dockerfile
+          no-cache-filters: runtime
           push: true
           # Images are mirrored to Aliyun ACR only after the GHCR image passes release checks.
           # Keep the mirrored manifest compatible with Aliyun ACR; attestations are stored in GitHub.
@@ -463,6 +464,7 @@ jobs:
         with:
           context: repoguard-frontend
           file: repoguard-frontend/Dockerfile
+          no-cache-filters: runtime
           push: true
           # Images are mirrored to Aliyun ACR only after the GHCR image passes release checks.
           # Keep the mirrored manifest compatible with Aliyun ACR; attestations are stored in GitHub.

@@ -179,13 +179,30 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          timeout 600s docker build --pull --build-arg OCI_REVISION="${GITHUB_SHA}" \
-            --build-arg OCI_VERSION=pr-runtime -t repoguard/backend:pr-runtime repoguard-backend
+          build_runtime() {
+            timeout 600s docker buildx build --load --progress plain --build-arg OCI_REVISION="${GITHUB_SHA}" \
+              --build-arg OCI_VERSION=pr-runtime "$@" -t repoguard/backend:pr-runtime repoguard-backend
+          }
+          build_runtime --pull
+          build_runtime 2>&1 | tee backend-runtime-cache.log
+          build_runtime --no-cache-filter runtime 2>&1 | tee backend-runtime-refresh.log
+          python3 - <<'PY'
+          import json,pathlib,re,subprocess
+          for kind,cached in [('cache',True),('refresh',False)]:
+              text=pathlib.Path('backend-runtime-'+kind+'.log').read_text()
+              ids=re.findall(r'^(#\d+) \[[^\]]+\] RUN apk upgrade --no-cache(?:\s|$)',text,re.M)
+              assert len(ids)==1,'runtime APK step missing or ambiguous'
+              hit=bool(re.search(r'^'+re.escape(ids[0])+r' CACHED\s*$',text,re.M))
+              assert hit==cached,'runtime cache policy did not execute as requested'
+              if not cached:assert re.search(r'^'+re.escape(ids[0])+r' DONE(?:\s|$)',text,re.M)
+          image_id=subprocess.check_output(['docker','image','inspect','--format','{{.Id}}','repoguard/backend:pr-runtime'],text=True,timeout=10).strip()
+          pathlib.Path('backend-runtime-cache-verification.json').write_text(json.dumps({'state':'verified','runtimeStage':'runtime','baselineCacheHit':True,'filteredRuntimeExecuted':True,'imageId':image_id}))
+          PY
           test "$(docker image inspect --format '{{.Config.User}}' repoguard/backend:pr-runtime)" = '10001:10001'
           docker image inspect --format '{{.Id}} {{.Config.User}}' repoguard/backend:pr-runtime > backend-runtime-identity.txt
           timeout 30s docker run --rm --network none --read-only --cap-drop ALL \
             --security-opt no-new-privileges --entrypoint /sbin/apk repoguard/backend:pr-runtime \
-            list --installed zlib | tee -a backend-runtime-identity.txt
+            list --installed musl musl-utils zlib | tee -a backend-runtime-identity.txt
       - name: Scan backend runtime image for high and critical CVEs
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         env:
@@ -208,6 +225,9 @@ jobs:
           path: |
             backend-runtime-identity.txt
             backend-runtime-trivy.json
+            backend-runtime-cache-verification.json
+            backend-runtime-cache.log
+            backend-runtime-refresh.log
           if-no-files-found: warn
           retention-days: 7
       - name: Upload coverage report
@@ -255,14 +275,31 @@ jobs:
         run: |
           set -euo pipefail
           npm --prefix repoguard-frontend run build
-          timeout 600s docker build --pull --build-arg OCI_REVISION="${GITHUB_SHA}" \
-            --build-arg OCI_VERSION=pr-runtime --build-arg REVIEW_PROGRESS_STREAM=false \
-            -t repoguard/frontend:pr-runtime repoguard-frontend
+          build_runtime() {
+            timeout 600s docker buildx build --load --progress plain --build-arg OCI_REVISION="${GITHUB_SHA}" \
+              --build-arg OCI_VERSION=pr-runtime --build-arg REVIEW_PROGRESS_STREAM=false \
+              "$@" -t repoguard/frontend:pr-runtime repoguard-frontend
+          }
+          build_runtime --pull
+          build_runtime 2>&1 | tee frontend-runtime-cache.log
+          build_runtime --no-cache-filter runtime 2>&1 | tee frontend-runtime-refresh.log
+          python3 - <<'PY'
+          import json,pathlib,re,subprocess
+          for kind,cached in [('cache',True),('refresh',False)]:
+              text=pathlib.Path('frontend-runtime-'+kind+'.log').read_text()
+              ids=re.findall(r'^(#\d+) \[[^\]]+\] RUN apk upgrade --no-cache(?:\s|$)',text,re.M)
+              assert len(ids)==1,'runtime APK step missing or ambiguous'
+              hit=bool(re.search(r'^'+re.escape(ids[0])+r' CACHED\s*$',text,re.M))
+              assert hit==cached,'runtime cache policy did not execute as requested'
+              if not cached:assert re.search(r'^'+re.escape(ids[0])+r' DONE(?:\s|$)',text,re.M)
+          image_id=subprocess.check_output(['docker','image','inspect','--format','{{.Id}}','repoguard/frontend:pr-runtime'],text=True,timeout=10).strip()
+          pathlib.Path('frontend-runtime-cache-verification.json').write_text(json.dumps({'state':'verified','runtimeStage':'runtime','baselineCacheHit':True,'filteredRuntimeExecuted':True,'imageId':image_id}))
+          PY
           test "$(docker image inspect --format '{{.Config.User}}' repoguard/frontend:pr-runtime)" = '101'
           docker image inspect --format '{{.Id}} {{.Config.User}}' repoguard/frontend:pr-runtime > frontend-runtime-identity.txt
           timeout 30s docker run --rm --network none --read-only --cap-drop ALL \
             --security-opt no-new-privileges --entrypoint /sbin/apk repoguard/frontend:pr-runtime \
-            list --installed zlib | tee -a frontend-runtime-identity.txt
+            list --installed musl musl-utils zlib | tee -a frontend-runtime-identity.txt
       - name: Scan frontend runtime image for high and critical CVEs
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         env:
@@ -285,6 +322,9 @@ jobs:
           path: |
             frontend-runtime-identity.txt
             frontend-runtime-trivy.json
+            frontend-runtime-cache-verification.json
+            frontend-runtime-cache.log
+            frontend-runtime-refresh.log
           if-no-files-found: warn
           retention-days: 7
       - name: Upload browser failure evidence

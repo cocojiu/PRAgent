@@ -6,7 +6,7 @@ WORKDIR /app
 COPY target/repoguard-backend-0.1.0.jar /app/repoguard-backend.jar
 RUN java -Djarmode=tools -jar /app/repoguard-backend.jar extract --launcher --destination /app/extracted
 
-FROM ${JAVA_IMAGE}
+FROM ${JAVA_IMAGE} AS runtime
 
 ARG OCI_VERSION
 ARG OCI_REVISION
