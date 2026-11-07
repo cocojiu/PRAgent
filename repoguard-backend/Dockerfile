@@ -6,7 +6,7 @@ WORKDIR /app
 COPY target/repoguard-backend-0.1.0.jar /app/repoguard-backend.jar
 RUN java -Djarmode=tools -jar /app/repoguard-backend.jar extract --launcher --destination /app/extracted
 
-FROM ${JAVA_IMAGE}
+FROM ${JAVA_IMAGE} AS runtime
 
 ARG OCI_VERSION
 ARG OCI_REVISION
@@ -18,7 +18,7 @@ LABEL org.opencontainers.image.version="${OCI_VERSION}" \
 
 WORKDIR /app
 
-RUN apk upgrade --no-cache libcrypto3 libssl3 openssl libexpat p11-kit p11-kit-trust brotli-libs zlib \
+RUN apk upgrade --no-cache \
     && addgroup -S -g 10001 repoguard \
     && adduser -S -D -H -u 10001 -G repoguard repoguard
 
