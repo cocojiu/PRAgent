@@ -405,7 +405,10 @@ const reportGateType = (report: LlmEvaluationReport) => {
 
 const reportDetailTitle = (report: LlmEvaluationReport) => {
   if (report.status === "PROVISIONAL") {
-    return "小样本验收报告仅供观察、比较和导出，不能作为模型发布证据";
+    const limitation = "小样本验收报告仅供观察、比较和导出，不能作为模型发布证据";
+    return report.blockers.length
+      ? `${limitation}；当前质量阻断：${report.blockers.join("；")}`
+      : limitation;
   }
   return report.blockers.length
     ? report.blockers.join("；")
