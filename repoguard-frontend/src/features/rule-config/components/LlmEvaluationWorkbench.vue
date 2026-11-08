@@ -173,11 +173,13 @@
         </span>
       </template>
     </el-alert>
+    <LlmEvaluationReportMetrics v-if="selectedReport" :report="selectedReport" />
   </section>
 </template>
 
 <script setup lang="ts">
 import { selectedEvaluationSampleIds } from "../composables/useLlmModelReleaseCenter";
+import LlmEvaluationReportMetrics from "./LlmEvaluationReportMetrics.vue";
 import { estimatedCostText } from "@/utils/estimatedCost";
 import { llmCostSourceText, llmUsageSourceText } from "@/features/review-detail/reviewDetailDisplayMappers";
 import { onMounted, onUnmounted, ref } from "vue";

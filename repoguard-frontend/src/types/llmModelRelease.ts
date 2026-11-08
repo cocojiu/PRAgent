@@ -166,6 +166,10 @@ export interface LlmEvaluationMetrics {
   ruleContributionRate: number;
   llmContributionRate: number;
   verifiedContributionRate: number;
+  /** Older stored reports may not include execution failure counters. */
+  parseFailures?: number;
+  transportFailures?: number;
+  transportFailureRate?: number;
 }
 
 export interface LlmEvaluationReport {
