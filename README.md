@@ -179,7 +179,9 @@ powershell -ExecutionPolicy Bypass -File scripts/production-readiness-check.ps1 
 
 ### 可选服务器定时数据库备份
 
-`deploy/systemd/repoguard-mysql-backup.{service,timer}` 提供独立于操作电脑的日常加密 MySQL 逻辑备份。默认不安装、不启用；生产启用须先完成备份与恢复预检。需要 Linux、systemd（支持 `LoadCredential`）、Python 3.8+、Docker、Bash 和 OpenSSL。将两个生产脚本 `scripts/scheduled-mysql-backup.py`、`scripts/backup-prod-mysql.sh` 安装到单元配置中的脚本目录，创建单元指定的备份父目录，并用受保护的运维通道配置 `LoadCredential` 指向的密钥文件（仅 root 可读，至少32字节）。密钥必须另行离线保管，不写入命令行、Git 或日志。
+`deploy/systemd/repoguard-mysql-backup.{service,timer}` 提供独立于操作电脑的日常加密 MySQL 逻辑备份。默认不安装、不启用；生产启用须先完成备份与恢复预检。需要 Linux、systemd（支持 `LoadCredential`）、Python 3.8+、Docker、Bash 和 OpenSSL。将三个生产脚本 `scripts/scheduled-mysql-backup.py`、`scripts/backup-prod-mysql.sh`、`scripts/backup-data-digest.py` 安装到单元配置中的同一脚本目录，创建单元指定的备份父目录，并用受保护的运维通道配置 `LoadCredential` 指向的密钥文件（仅 root 可读，至少32字节）。密钥必须另行离线保管，不写入命令行、Git 或日志。
+
+启用 `VERIFY_RESTORE=true` 的完整恢复验证在迁移演练之前，对比已加密备份快照与隔离恢复库的数据行集合、行数和表名；重复行保留计数，无主键表允许行顺序不同，备份之后的正常业务写入不参与比较。数据校验只支持脚本固定的单行 `mysqldump` 格式、字母数字下划线表名和不超过64 MiB的单条导出行；格式不支持或数据不同会直接失败。临时排序文件只保存带密钥的行摘要，仍需预留排序磁盘空间。普通应用发布同时安装这两个底层备份脚本；应用镜像回退保留本次执行版本的运维脚本，不恢复旧备份校验逻辑。日常定时任务使用 `VERIFY_RESTORE=false`，不启动隔离恢复容器，也不执行该数据对比。
 
 经审批启用 timer 后，每天北京时间20:00加最多5分钟随机延迟执行；服务器停机错过的计划在恢复后补执行一次。失败15分钟后重试，1小时内最多启动3次。独立目录和互斥锁隔离调度产物；仅在新备份完成解密/gzip验证和 SHA256 核对后清理旧的已验证副本，保留最多7份、目标总量2 GiB。单份超出预算时保留最新副本并报告超预算，后续运行停止，需人工处理；不会为腾出空间删除唯一备份。服务资源限制不限制 MySQL 容器内的 dump，因此首次启用仍需检查业务负载。
 

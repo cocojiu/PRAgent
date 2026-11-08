@@ -716,13 +716,18 @@ jobs:
           run_transfer scripts/release-manifest.py "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/scripts/release-manifest.py"
           run_transfer scripts/prune-prod-images.py "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/scripts/prune-prod-images.py"
           run_transfer scripts/disk-maintenance.py "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/scripts/disk-maintenance.py"
+          # Operational backup tooling follows this reviewed checkout, including image rollback.
+          run_transfer scripts/backup-data-digest.py "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/scripts/backup-data-digest.py"
+          run_transfer scripts/backup-prod-mysql.sh "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/scripts/backup-prod-mysql.sh"
           run_transfer scripts/migrate-prod-secret-files.sh "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/scripts/migrate-prod-secret-files.sh"
           run_transfer \
             performance/remote/run-isolated-real-chain-smoke.sh \
             performance/remote/run-real-chain-smoke.sh \
             "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/performance/remote/"
           run_remote "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "chmod 0700 '${DEPLOY_PATH}/scripts/migrate-prod-secret-files.sh' \
+            "chmod 0700 '${DEPLOY_PATH}/scripts/backup-data-digest.py' \
+                        '${DEPLOY_PATH}/scripts/backup-prod-mysql.sh' \
+                        '${DEPLOY_PATH}/scripts/migrate-prod-secret-files.sh' \
                         '${DEPLOY_PATH}/performance/remote/run-isolated-real-chain-smoke.sh' \
                         '${DEPLOY_PATH}/performance/remote/run-real-chain-smoke.sh'"
           # Check before chunk transfer/docker load, not only before the later compose pull.
