@@ -60,12 +60,12 @@ jobs:
           scp_args=(-i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}")
           ssh "${ssh_args[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "install -m 700 -d '${DEPLOY_PATH}/scripts' '${DEPLOY_PATH}/migration-rehearsal' '/opt/repoguard/backups/mysql' && find '${DEPLOY_PATH}/migration-rehearsal' -maxdepth 1 -type f -name 'V*__*.sql' -delete"
-          scp "${scp_args[@]}" scripts/backup-prod-mysql.sh scripts/prune-prod-mysql-backups.sh \
+          scp "${scp_args[@]}" scripts/backup-data-digest.py scripts/backup-prod-mysql.sh scripts/prune-prod-mysql-backups.sh \
             "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/scripts/"
           scp "${scp_args[@]}" repoguard-backend/src/main/resources/db/migration/V*__*.sql \
             "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/migration-rehearsal/"
           ssh "${ssh_args[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "chmod 0700 '${DEPLOY_PATH}/scripts/backup-prod-mysql.sh' '${DEPLOY_PATH}/scripts/prune-prod-mysql-backups.sh'"
+            "chmod 0700 '${DEPLOY_PATH}/scripts/backup-data-digest.py' '${DEPLOY_PATH}/scripts/backup-prod-mysql.sh' '${DEPLOY_PATH}/scripts/prune-prod-mysql-backups.sh'"
 
       - name: Create encrypted backup and verify restore
         id: backup

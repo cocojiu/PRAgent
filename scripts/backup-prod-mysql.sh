@@ -84,6 +84,11 @@ if [[ "${VERIFY_MIGRATIONS}" == "true" ]]; then
   [[ "${VERIFY_RESTORE}" == "true" ]] || fail "migration_rehearsal_requires_restore_verification"
   [[ -d "${MIGRATION_DIR}" ]] || fail "migration_directory_not_found"
 fi
+data_digest_script="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/backup-data-digest.py"
+if [[ "${VERIFY_RESTORE}" == "true" ]]; then
+  command -v python3 >/dev/null 2>&1 || fail "missing_required_command_python3"
+  [[ -f "${data_digest_script}" ]] || fail "backup_data_digest_script_not_found"
+fi
 
 case "${VERIFY_MEMORY_MB}" in
   *[!0-9]* | "")
@@ -170,6 +175,7 @@ mysql_query() {
 dump_database() {
   local container_name="$1"
   local dump_database_name="$2"
+  local include_source_coordinates="${3:-true}"
 
   docker exec "${container_name}" sh -lc '
     if [ -n "${MYSQL_ROOT_PASSWORD:-}" ]; then
@@ -179,6 +185,12 @@ dump_database() {
     else
       echo "MySQL root password source is unavailable." >&2
       exit 64
+    fi
+    dump_database_name="$1"
+    if [ "$2" = true ]; then
+      set -- --source-data=2
+    else
+      set --
     fi
     MYSQL_PWD="$mysql_root_password" exec mysqldump \
       --user=root \
@@ -190,14 +202,19 @@ dump_database() {
       --events \
       --hex-blob \
       --order-by-primary \
+      --skip-extended-insert \
+      --complete-insert \
+      --add-locks \
+      --skip-no-autocommit \
+      --tz-utc \
       --skip-comments \
       --default-character-set=utf8mb4 \
       --set-gtid-purged=OFF \
-      --source-data=2 \
       --column-statistics=0 \
       --no-tablespaces \
-      --databases "$1"
-  ' sh "${dump_database_name}"
+      "$@" \
+      --databases "$dump_database_name"
+  ' sh "${dump_database_name}" "${include_source_coordinates}"
 }
 
 read -r -d '' MANIFEST_SQL <<'SQL' || true
@@ -327,6 +344,9 @@ logical_dump_sha256="$(
     | cut -d ' ' -f 1
 )"
 
+data_digest_algorithm="skipped"
+snapshot_data_sha256=""
+snapshot_row_count=""
 restore_verified="skipped"
 migration_rehearsal="skipped"
 migration_rehearsal_from=""
@@ -334,6 +354,24 @@ migration_rehearsal_to=""
 migration_rehearsal_count=0
 migration_rehearsal_seconds=0
 if [[ "${VERIFY_RESTORE}" == "true" ]]; then
+  # Read the encrypted snapshot, not the live database's earlier row counts.
+  snapshot_fingerprint="$(
+    openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 \
+      -pass env:BACKUP_ENCRYPTION_PASSWORD -in "${backup_path}" \
+      | gzip -dc \
+      | python3 "${data_digest_script}" --manifest "${source_manifest_file}" \
+          --temporary-directory "${temporary_dir}"
+  )" || fail "backup_snapshot_data_digest_failed"
+  IFS=$'\t' read -r data_digest_algorithm snapshot_dump_sha256 snapshot_data_sha256 \
+    snapshot_row_count snapshot_table_count <<<"${snapshot_fingerprint}"
+  [[ "${data_digest_algorithm}" == "hmac-sha256-sorted-rows-v1" \
+      && "${snapshot_data_sha256}" =~ ^[0-9a-f]{64}$ \
+      && "${snapshot_row_count}" =~ ^[0-9]+$ ]] \
+    || fail "invalid_backup_snapshot_data_digest"
+  [[ "${snapshot_dump_sha256}" == "${logical_dump_sha256}" \
+      && "${snapshot_table_count}" == "${source_table_count}" ]] \
+    || fail "backup_snapshot_identity_mismatch"
+
   mem_available_kb="$(awk '/^MemAvailable:/ { print $2 }' /proc/meminfo)"
   case "${mem_available_kb}" in
     *[!0-9]* | "")
@@ -476,6 +514,21 @@ if [[ "${VERIFY_RESTORE}" == "true" ]]; then
     fail "isolated_table_check_failed"
   fi
 
+  # Exclude source binlog coordinates; the isolated server need not enable binlogs.
+  restored_fingerprint="$(
+    dump_database "${verify_container}" "${database_name}" false \
+      | python3 "${data_digest_script}" --manifest "${restored_manifest_file}" \
+          --temporary-directory "${temporary_dir}"
+  )" || fail "restored_data_digest_failed"
+  IFS=$'\t' read -r restored_algorithm _ restored_data_sha256 restored_row_count \
+    restored_table_count <<<"${restored_fingerprint}"
+  [[ "${restored_algorithm}" == "${data_digest_algorithm}" \
+      && "${restored_data_sha256}" == "${snapshot_data_sha256}" \
+      && "${restored_row_count}" == "${snapshot_row_count}" \
+      && "${restored_row_count}" == "${exact_row_count}" \
+      && "${restored_table_count}" == "${table_count}" ]] \
+    || fail "restored_snapshot_data_mismatch"
+
   if [[ "${VERIFY_MIGRATIONS}" == "true" ]]; then
     migration_rehearsal_from="$(mysql_query "${verify_container}" "${database_name}" \
       "SELECT COALESCE(MAX(CAST(version AS UNSIGNED)), 0) FROM flyway_schema_history WHERE success = 1;")"
@@ -526,6 +579,9 @@ echo "BACKUP_BYTES=${backup_bytes}"
 echo "BACKUP_PATH=${backup_path}"
 echo "BACKUP_SHA256=${backup_sha256}"
 echo "LOGICAL_DUMP_SHA256=${logical_dump_sha256}"
+echo "DATA_DIGEST_ALGORITHM=${data_digest_algorithm}"
+echo "SNAPSHOT_DATA_SHA256=${snapshot_data_sha256}"
+echo "SNAPSHOT_ROW_COUNT=${snapshot_row_count}"
 echo "KEY_FINGERPRINT=${key_fingerprint}"
 echo "LEGACY_PLAINTEXT_BACKUP_COUNT=${legacy_plaintext_backup_count}"
 echo "RESTORE_VERIFIED=${restore_verified}"
