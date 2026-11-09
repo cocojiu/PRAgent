@@ -183,6 +183,8 @@ powershell -ExecutionPolicy Bypass -File scripts/production-readiness-check.ps1 
 
 启用 `VERIFY_RESTORE=true` 的完整恢复验证在迁移演练之前，对比已加密备份快照与隔离恢复库的数据行集合、行数和表名；重复行保留计数，无主键表允许行顺序不同，备份之后的正常业务写入不参与比较。数据校验只支持脚本固定的单行 `mysqldump` 格式、字母数字下划线表名和不超过64 MiB的单条导出行；格式不支持或数据不同会直接失败。临时排序文件只保存带密钥的行摘要，仍需预留排序磁盘空间。普通应用发布同时安装这两个底层备份脚本；应用镜像回退保留本次执行版本的运维脚本，不恢复旧备份校验逻辑。日常定时任务使用 `VERIFY_RESTORE=false`，不启动隔离恢复容器，也不执行该数据对比。
 
+恢复数据校验按顺序返回固定错误码：`restored_data_digest_algorithm_mismatch` 表示摘要算法不同，`restored_snapshot_row_count_mismatch` 表示与加密快照行数不同，`restored_manifest_row_count_mismatch` 表示与备份行数清单不同，`restored_snapshot_table_count_mismatch` 表示表数不同；这些检查通过后，`restored_snapshot_data_mismatch` 才表示行内容摘要不同。任何一项失败都不生成成功凭证，不能据此采用该备份或继续部署。先保留失败归档，在隔离环境定位原因；不要忽略差异或直接重跑生产备份。
+
 经审批启用 timer 后，每天北京时间20:00加最多5分钟随机延迟执行；服务器停机错过的计划在恢复后补执行一次。失败15分钟后重试，1小时内最多启动3次。独立目录和互斥锁隔离调度产物；仅在新备份完成解密/gzip验证和 SHA256 核对后清理旧的已验证副本，保留最多7份、目标总量2 GiB。单份超出预算时保留最新副本并报告超预算，后续运行停止，需人工处理；不会为腾出空间删除唯一备份。服务资源限制不限制 MySQL 容器内的 dump，因此首次启用仍需检查业务负载。
 
 在服务器运行 `python3 /opt/repoguard/scripts/scheduled-mysql-backup.py status` 查看最近执行记录；可用 `--max-age-hours 30` 设置记录新鲜度（1～168小时，默认30小时）。输出 JSON，最近成功且未超存储预算时退出0，16分钟以内的运行中记录退出1，失败、过期、超时未结束、缺失或无效记录退出2。查询只读取有界状态文件，不读取密钥或解密备份，也不检查进程存活、timer 是否启用、归档当前完整性或恢复能力；`SUCCESS_RECORDED` 仅表示记录成功。结合 `systemctl status repoguard-mysql-backup.timer repoguard-mysql-backup.service` 和 `journalctl -u repoguard-mysql-backup.service` 诊断实际调度与中断，失败不会自动发送外部通知。电脑上线后使用已有 OpenSSH 别名补拉当前保留的已验证加密副本：

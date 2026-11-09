@@ -522,11 +522,15 @@ if [[ "${VERIFY_RESTORE}" == "true" ]]; then
   )" || fail "restored_data_digest_failed"
   IFS=$'\t' read -r restored_algorithm _ restored_data_sha256 restored_row_count \
     restored_table_count <<<"${restored_fingerprint}"
-  [[ "${restored_algorithm}" == "${data_digest_algorithm}" \
-      && "${restored_data_sha256}" == "${snapshot_data_sha256}" \
-      && "${restored_row_count}" == "${snapshot_row_count}" \
-      && "${restored_row_count}" == "${exact_row_count}" \
-      && "${restored_table_count}" == "${table_count}" ]] \
+  [[ "${restored_algorithm}" == "${data_digest_algorithm}" ]] \
+    || fail "restored_data_digest_algorithm_mismatch"
+  [[ "${restored_row_count}" == "${snapshot_row_count}" ]] \
+    || fail "restored_snapshot_row_count_mismatch"
+  [[ "${restored_row_count}" == "${exact_row_count}" ]] \
+    || fail "restored_manifest_row_count_mismatch"
+  [[ "${restored_table_count}" == "${table_count}" ]] \
+    || fail "restored_snapshot_table_count_mismatch"
+  [[ "${restored_data_sha256}" == "${snapshot_data_sha256}" ]] \
     || fail "restored_snapshot_data_mismatch"
 
   if [[ "${VERIFY_MIGRATIONS}" == "true" ]]; then
