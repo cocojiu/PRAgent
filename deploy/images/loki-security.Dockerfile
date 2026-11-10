@@ -7,16 +7,16 @@ ADD --checksum=sha256:44c1433b8c5e9638708e62644aa43a746f991206acef5889eaec620a89
 WORKDIR /src/loki
 RUN tar -xzf /tmp/loki.tar.gz --strip-components=1 && rm /tmp/loki.tar.gz
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local GOMAXPROCS=2
-RUN mkdir -p /out && go mod edit -require=golang.org/x/net@v0.60.0 \
-      -require=golang.org/x/crypto@v0.57.0 -require=golang.org/x/sys@v0.48.0 \
-      -require=golang.org/x/term@v0.46.0 -require=golang.org/x/text@v0.42.0 \
+RUN mkdir -p /out && go mod edit -require=golang.org/x/net@v0.62.0 \
+      -require=golang.org/x/crypto@v0.58.0 -require=golang.org/x/sys@v0.49.0 \
+      -require=golang.org/x/term@v0.47.0 -require=golang.org/x/text@v0.43.0 \
       -require=github.com/go-jose/go-jose/v4@v4.1.6 \
     && go build -mod=mod -p=2 -trimpath -tags netgo \
-      -ldflags='-s -w -X github.com/grafana/loki/v3/pkg/util/build.Version=3.7.8-repoguard.3 -X github.com/grafana/loki/v3/pkg/util/build.Revision=09e6ce2ff1bdc19763a10265b870c86f51c98655 -X github.com/grafana/loki/v3/pkg/util/build.Branch=repoguard-security-rebuild -X github.com/grafana/loki/v3/pkg/util/build.BuildUser=repoguard' \
+      -ldflags='-s -w -X github.com/grafana/loki/v3/pkg/util/build.Version=3.7.8-repoguard.4 -X github.com/grafana/loki/v3/pkg/util/build.Revision=09e6ce2ff1bdc19763a10265b870c86f51c98655 -X github.com/grafana/loki/v3/pkg/util/build.Branch=repoguard-security-rebuild -X github.com/grafana/loki/v3/pkg/util/build.BuildUser=repoguard' \
       -o /out/loki ./cmd/loki \
     && go version -m /out/loki > /out/build-info.txt \
     && grep -F 'go1.26.10' /out/build-info.txt \
-    && grep -F 'golang.org/x/net' /out/build-info.txt | grep -F 'v0.60.0' \
+    && grep -F 'golang.org/x/net' /out/build-info.txt | grep -F 'v0.62.0' \
     && grep -F 'github.com/go-jose/go-jose/v4' /out/build-info.txt | grep -F 'v4.1.6'
 
 # Preserve the supported runtime filesystem, configuration and non-root user.
@@ -28,4 +28,4 @@ COPY --from=build /src/loki/go.mod /src/loki/go.sum /usr/share/loki/source/
 COPY --from=build /src/loki/LICENSE /usr/share/licenses/loki/LICENSE
 LABEL org.opencontainers.image.source="https://github.com/grafana/loki" \
       org.opencontainers.image.revision="09e6ce2ff1bdc19763a10265b870c86f51c98655" \
-      org.opencontainers.image.version="3.7.8-repoguard.3"
+      org.opencontainers.image.version="3.7.8-repoguard.4"

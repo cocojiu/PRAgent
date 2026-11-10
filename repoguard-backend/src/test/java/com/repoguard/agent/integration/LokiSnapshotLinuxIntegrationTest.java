@@ -161,7 +161,7 @@ class LokiSnapshotLinuxIntegrationTest {
             for image in (baseline,collector):docker('pull',image)
             loaded=json.loads(docker('image','inspect',candidate))[0]
             assert loaded['Id']==candidate and loaded['Os']=='linux' and loaded['Architecture']=='amd64'
-            assert loaded['Config']['Labels']['org.opencontainers.image.version']=='3.7.8-repoguard.3'
+            assert loaded['Config']['Labels']['org.opencontainers.image.version']=='3.7.8-repoguard.4'
             docker('network','create','--internal','--label',label,network);network_created=True
             original={role:new_volume('original-'+role) for role in ('loki','alloy')}
             for role,uid in [('loki',10001),('alloy',473)]:os.chown(original[role][1],uid,uid)
