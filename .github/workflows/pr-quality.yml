@@ -641,7 +641,13 @@ jobs:
           owner = 'ci-mysql-clone-' + uuid.uuid4().hex
           label = 'com.repoguard.mysql-clone-ci-owner'
           root = pathlib.Path('/opt/repoguard/backups')
-          root.mkdir(parents=True, exist_ok=True, mode=0o700)
+          # Provision the disposable runner as a protected host. Never relax runtime key checks.
+          for parent in (pathlib.Path('/opt'), root.parent, root):
+              parent.mkdir(exist_ok=True, mode=0o700)
+              assert parent.is_dir() and not parent.is_symlink() and parent.resolve() == parent
+              print(json.dumps({'fixtureParent': str(parent), 'uidBefore': parent.stat().st_uid,
+                  'modeBefore': oct(parent.stat().st_mode & 0o777)}), flush=True)
+              os.chown(parent, 0, 0); parent.chmod(0o755 if parent == pathlib.Path('/opt') else 0o700)
           home = root / owner; home.mkdir(mode=0o700)
           password = secrets.token_hex(32).encode()
           key = home / 'key'; key.write_text(secrets.token_hex(32)); key.chmod(0o600)
