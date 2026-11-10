@@ -620,6 +620,140 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+  mysql-physical-recovery:
+    name: Linux MySQL encrypted physical recovery
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Exercise actual local clone, encryption and isolated native-type recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo python3 - <<'PY'
+          import hashlib, importlib.util, json, os, pathlib, secrets, shutil, subprocess, sys, time, uuid
+          sys.path.insert(0, str(pathlib.Path('scripts').resolve()))
+          spec = importlib.util.spec_from_file_location('mysql_backup', 'scripts/mysql-physical-backup.py')
+          m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+          owner = 'ci-mysql-clone-' + uuid.uuid4().hex
+          label = 'com.repoguard.mysql-clone-ci-owner'
+          root = pathlib.Path('/opt/repoguard/backups')
+          root.mkdir(parents=True, exist_ok=True, mode=0o700)
+          home = root / owner; home.mkdir(mode=0o700)
+          password = secrets.token_hex(32).encode()
+          key = home / 'key'; key.write_text(secrets.token_hex(32)); key.chmod(0o600)
+          auth = home / 'password'; auth.write_bytes(password); auth.chmod(0o600)
+          source = owner + '-source'; volume = owner + '-data'; recipient = owner + '-audit'
+          image = 'mysql:8.0.46@sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b'
+          created = []; audit_id = None; result = {}; volume_created = False
+          evidence = {'productionConnections': 0, 'publishedPorts': 0, 'modelCalls': 0, 'state': 'failed'}
+          try:
+              m.docker('pull', image, timeout=240)
+              m.docker('volume', 'create', '--label', label + '=' + owner, volume)
+              volume_created = True
+              m.docker('run', '--detach', '--name', source, '--label', label + '=' + owner,
+                  '--network', 'none', '--restart', 'no', '--memory', '512m', '--memory-swap', '512m',
+                  '--env', 'MYSQL_ROOT_PASSWORD_FILE=/run/root-password', '--env', 'MYSQL_DATABASE=clone_fixture',
+                  '--mount', 'type=bind,src=' + str(auth) + ',dst=/run/root-password,readonly',
+                  '--volume', volume + ':/var/lib/mysql', image, '--innodb-buffer-pool-size=64M',
+                  '--max-connections=8', '--mysqlx=OFF', timeout=60)
+              created.append(source)
+              deadline = time.monotonic() + 150
+              while True:
+                  try:
+                      if m.docker('exec', source, 'cat', '/proc/1/comm').strip() == b'mysqld' and m.query(source, password, 'SELECT 1;') == '1':
+                          break
+                  except ValueError:
+                      pass
+                  assert time.monotonic() < deadline, 'source_readiness_timeout'
+                  time.sleep(1)
+              m.query(source, password, '''INSTALL PLUGIN clone SONAME 'mysql_clone.so';
+              CREATE TABLE clone_fixture.types(id INT PRIMARY KEY, doc JSON) ENGINE=InnoDB;
+              INSERT INTO clone_fixture.types VALUES
+              (1,'[9088544342.689998]'),
+              (2,JSON_OBJECT('x',1.4334335999999999e0)),
+              (3,JSON_OBJECT('x',CAST('1.2' AS DECIMAL(10,1)))),
+              (4,JSON_OBJECT('x',CAST('2026-01-02' AS DATE))),
+              (5,JSON_OBJECT('x',CAST('2026-01-02 12:34:56.123456' AS DATETIME(6))));
+              CREATE TABLE clone_fixture.no_pk(v VARCHAR(10), n INT) ENGINE=InnoDB;
+              INSERT INTO clone_fixture.no_pk VALUES('dup',1),('dup',1),(NULL,2);''')
+              sql = "SELECT id,HEX(CAST(doc AS CHAR)),JSON_TYPE(doc),JSON_TYPE(JSON_EXTRACT(doc,'$.x')) FROM clone_fixture.types ORDER BY id;"
+              expected = m.query(source, password, sql)
+              before = m.inspect(source)
+              result = m.run(source, 'clone_fixture', home / 'backup', key)
+              assert result['restoreVerified'] and result['physicalFilesVerified'] and result['ownedResourcesCleaned'], result.get('reason')
+              assert result['restored'] == {'tables': 2, 'rows': 8}
+              assert m.inspect(source)['state']['StartedAt'] == before['state']['StartedAt']
+              # Independent second recovery reads only the encrypted artifact and its protected receipt.
+              restored = home / 'independent'; restored.mkdir(mode=0o700)
+              receipt = m.snapshot.restore_snapshot(result['archive'], {'mysql': restored}, key, m.PROFILE)
+              assert receipt['restoreVerified']
+              audit_id = m.docker('create', '--name', recipient, '--label', label + '=' + owner,
+                  '--network', 'none', '--memory', '384m', '--memory-swap', '384m', '--cpus', '0.50',
+                  '--user', 'mysql', '--mount', 'type=bind,src=' + str(restored) + ',dst=/var/lib/mysql',
+                  '--entrypoint', 'mysqld', result['imageId'], '--skip-networking', '--mysqlx=OFF',
+                  '--skip-log-bin', '--skip-replica-start', '--event-scheduler=OFF',
+                  '--innodb-buffer-pool-size=64M', '--performance-schema=OFF').decode().strip()
+              created.append(audit_id); m.docker('start', audit_id)
+              deadline = time.monotonic() + 120
+              while True:
+                  try:
+                      actual = m.query(audit_id, password, sql)
+                      break
+                  except ValueError:
+                      assert time.monotonic() < deadline, 'audit_readiness_timeout'
+                      time.sleep(1)
+              assert actual == expected, 'native_json_type_or_value_changed'
+              assert m.query(audit_id, password, 'SELECT COUNT(*) FROM clone_fixture.no_pk;') == '3'
+              m.query(source, password, "INSERT INTO clone_fixture.no_pk VALUES('later',3);")
+              assert m.query(audit_id, password, 'SELECT COUNT(*) FROM clone_fixture.no_pk;') == '3'
+              assert m.query(source, password, 'SELECT COUNT(*) FROM clone_fixture.no_pk;') == '4'
+              assert m.inspect(audit_id)['network'] == 'none'
+              # Damaged ciphertext must fail before a decryption process or SQL is started.
+              damaged = home / 'damaged.enc'; raw = pathlib.Path(result['archive']['archive']).read_bytes()
+              damaged.write_bytes(raw[:-1] + bytes([raw[-1] ^ 1]))
+              destination = home / 'reject'; destination.mkdir(mode=0o700)
+              try:
+                  m.snapshot.restore_snapshot(dict(result['archive'], archive=str(damaged)), {'mysql': destination}, key, m.PROFILE)
+              except ValueError as error:
+                  assert str(error) == 'snapshot_checksum_mismatch'
+              else:
+                  raise AssertionError('damaged_archive_accepted')
+              assert not any(destination.iterdir())
+              evidence.update(state='verified', nativeJsonTypesPreserved=True, numericValuesPreserved=True,
+                  duplicateRowsPreserved=True, donorRemainedOnline=True, snapshotIndependent=True,
+                  encryptedPhysicalFilesVerified=True, corruptedCiphertextRejected=True,
+                  mysqlVersion=result['mysqlVersion'], imageId=result['imageId'], tables=2, rows=8)
+          finally:
+              for container in reversed(created):
+                  value = m.inspect(container)
+                  assert value['labels'].get(label) == owner
+                  m.docker('rm', '--force', value['id'])
+              if volume_created:
+                  volumes = json.loads(m.docker('volume', 'inspect', volume))
+                  assert len(volumes) == 1 and volumes[0]['Labels'].get(label) == owner
+                  m.docker('volume', 'rm', volume)
+              # An unknown wrapper-created resource must remain visible as a failed cleanup.
+              if result.get('owner'):
+                  assert not m.docker('ps', '--all', '--quiet', '--filter', 'label=' + m.LABEL + '=' + result['owner']).strip()
+              evidence['ownedResourcesCleaned'] = True
+              output = pathlib.Path('repoguard-backend/target/mysql-physical-recovery.json')
+              output.parent.mkdir(parents=True, exist_ok=True)
+              output.write_text(json.dumps(evidence, indent=2) + '\n'); output.chmod(0o644)
+              shutil.rmtree(home)
+          PY
+      - name: Preserve aggregate physical recovery evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mysql-physical-recovery-${{ github.run_id }}
+          path: repoguard-backend/target/mysql-physical-recovery.json
+          if-no-files-found: error
+          retention-days: 7
+
   dependency-review:
     name: Dependency review
     if: ${{ github.event_name == 'pull_request' }}
