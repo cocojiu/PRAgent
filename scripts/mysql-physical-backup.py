@@ -30,11 +30,11 @@ elif [ -n "${MYSQL_ROOT_PASSWORD_FILE:-}" ] && [ -r "$MYSQL_ROOT_PASSWORD_FILE" 
 else exit 64; fi'''
 
 
-def command(*args, data=None, timeout=45, limit=128 * 1024):
+def command(*args, data=None, timeout=45, limit=128 * 1024, combined=False):
     """Never include command output or credential material in public errors."""
     try:
         result = subprocess.run(args, input=data, stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL, timeout=timeout, check=False)
+            stderr=subprocess.STDOUT if combined else subprocess.DEVNULL, timeout=timeout, check=False)
     except subprocess.TimeoutExpired:
         raise ValueError('command_outcome_unknown') from None
     require(result.returncode == 0, 'command_failed')
@@ -165,6 +165,29 @@ def verify_recipient(name, owner, image, restored):
     return value
 
 
+def restore_clone_root_metadata(container, clone_path, destination):
+    # Copying clone/. copies its contents; the pre-created host root keeps its own metadata.
+    raw = docker('exec', container, 'stat', '-c', '%u\t%g\t%a', clone_path).decode().strip().split('\t')
+    require(len(raw) == 3 and all(re.fullmatch('[0-9]{1,5}', part) for part in raw[:2])
+        and re.fullmatch('[0-7]{3,4}', raw[2]), 'invalid_clone_root_metadata')
+    uid, gid, mode = int(raw[0]), int(raw[1]), int(raw[2], 8)
+    mysql_uid = docker('exec', container, 'id', '-u', 'mysql').strip()
+    require(uid <= 65535 and gid <= 65535 and mode <= 0o7777 and mysql_uid == str(uid).encode(),
+        'clone_root_owner_mismatch')
+    changed = destination.stat().st_uid != uid or destination.stat().st_gid != gid
+    os.chown(destination, uid, gid)
+    os.chmod(destination, mode & 0o777)
+    return changed
+
+
+def recipient_diagnostics(container):
+    state = inspect(container)['state']
+    raw = docker('logs', '--tail', '100', container, limit=65536, combined=True)
+    return {'exitCode': int(state['ExitCode']), 'oomKilled': bool(state['OOMKilled']),
+        'mysqlLogCodes': sorted({int(code) for code in re.findall(rb'\[MY-([0-9]{6})\]', raw)})[:24],
+        'permissionDenied': b'Permission denied' in raw}
+
+
 def run(container, database, directory, key_file):
     import fcntl  # The production operation is Linux/root-only.
     require(os.name == 'posix' and os.geteuid() == 0, 'linux_root_required')
@@ -236,6 +259,7 @@ def run(container, database, directory, key_file):
             'insufficient_archive_disk')
         source.mkdir(mode=0o700)
         docker('cp', '--archive', donor_id + ':' + clone_path + '/.', str(source), timeout=180, limit=1024)
+        record['stagingRootOwnershipCorrected'] = restore_clone_root_metadata(donor_id, clone_path, source)
         baseline = snapshot.catalog({'mysql': source}, PROFILE)
         require(any(item['name'] == 'mysql/mysql.ibd' for item in baseline['entries']), 'clone_system_tables_missing')
         def quiescent():
@@ -290,6 +314,11 @@ def run(container, database, directory, key_file):
         record['restoreVerified'] = False
         reason = str(error) if isinstance(error, ValueError) else type(error).__name__
         record['reason'] = reason if re.fullmatch('[A-Za-z_]{1,100}', reason) else 'backup_operation_failed'
+        if recipient_id:
+            try:
+                record['recipientDiagnostics'] = recipient_diagnostics(recipient_id)
+            except Exception:
+                record['recipientDiagnosticsUnavailable'] = True
     finally:
         cleanup_ok = True
         try:
