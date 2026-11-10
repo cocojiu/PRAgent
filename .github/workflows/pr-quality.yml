@@ -693,6 +693,7 @@ jobs:
               evidence.update(failurePhase=result.get('phase'), failureReason=result.get('reason'))
               evidence['recipientDiagnostics'] = result.get('recipientDiagnostics', {})
               evidence['stagingRootOwnershipCorrected'] = result.get('stagingRootOwnershipCorrected', False)
+              print(json.dumps({'physicalRecovery': evidence}), flush=True)
               assert result['restoreVerified'] and result['physicalFilesVerified'] and result['ownedResourcesCleaned'], result.get('reason')
               assert result['restored'] == {'tables': 2, 'rows': 8}
               assert m.inspect(source)['state']['StartedAt'] == before['state']['StartedAt']
@@ -750,7 +751,8 @@ jobs:
                   assert not m.docker('ps', '--all', '--quiet', '--filter', 'label=' + m.LABEL + '=' + result['owner']).strip()
               evidence['ownedResourcesCleaned'] = True
               output = pathlib.Path('repoguard-backend/target/mysql-physical-recovery.json')
-              output.parent.mkdir(parents=True, exist_ok=True)
+              output.parent.mkdir(parents=True, exist_ok=True, mode=0o755)
+              output.parent.chmod(0o755)
               output.write_text(json.dumps(evidence, indent=2) + '\n'); output.chmod(0o644)
               shutil.rmtree(home)
           PY

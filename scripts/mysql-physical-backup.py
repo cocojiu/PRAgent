@@ -196,8 +196,12 @@ def run(container, database, directory, key_file):
     require(key_file.is_absolute() and key_file.resolve() == key_file and key_file.stat().st_nlink == 1
         and all(parent.stat().st_uid == 0 and not parent.stat().st_mode & 0o022 for parent in key_file.parents),
         'unsafe_backup_key_links_or_parents')
-    os.umask(0o077)
-    directory = private_directory(directory)
+    previous_umask = os.umask(0o077)
+    try:
+        directory = private_directory(directory)
+    except Exception:
+        os.umask(previous_umask)
+        raise
     owner = 'mysql-clone-' + uuid.uuid4().hex
     recipient = 'repoguard-' + owner
     donor_path = '/var/lib/mysql-files/' + owner
@@ -347,9 +351,12 @@ def run(container, database, directory, key_file):
             donorCloneRetained=donor_directory_submitted and not donor_directory_removed,
             recipientCreationUnknown=recipient_create_submitted and not recipient_id,
             finishedUtc=datetime.now(timezone.utc).isoformat())
-        write_record(directory / 'receipt.json', record)
-        if lock:
-            lock.close()
+        try:
+            write_record(directory / 'receipt.json', record)
+        finally:
+            if lock:
+                lock.close()
+            os.umask(previous_umask)
     return record
 
 
