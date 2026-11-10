@@ -8,7 +8,7 @@ import argparse
 from datetime import datetime, timezone
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import shutil
 import stat
@@ -84,6 +84,32 @@ def private_directory(path):
     return path
 
 
+def datafile_path(name):
+    require(isinstance(name, str) and 0 < len(name) <= 4096 and not any(ord(c) < 32 for c in name)
+        and '\\' not in name and '..' not in name.split('/'), 'external_tablespaces')
+    path = PurePosixPath(name)
+    root = PurePosixPath('/var/lib/mysql')
+    if not path.is_absolute():
+        path = root / path
+    require(path != root and path.is_relative_to(root), 'external_tablespaces')
+    return str(path)
+
+
+def verify_datafiles(container, password):
+    # MySQL reports both bare relative names (including undo files) and ./ paths.
+    # Resolve inside the donor too: a lexically internal path may be a symlink.
+    paths = query(container, password, 'SELECT PATH FROM information_schema.INNODB_DATAFILES ORDER BY PATH;').splitlines()
+    require(0 < len(paths) <= PROFILE.max_entries, 'unsupported_datafile_set')
+    names = [datafile_path(name) for name in paths]
+    require(docker('exec', container, 'readlink', '-e', '/var/lib/mysql').strip()
+        == b'/var/lib/mysql', 'external_tablespaces')
+    canonical = docker('exec', '-i', container, 'sh', '-c',
+        'while IFS= read -r path; do readlink -e -- "$path" || exit 64; done',
+        data=('\n'.join(names) + '\n').encode(), limit=2 * 1024 * 1024).decode().splitlines()
+    require(len(canonical) == len(names) and all(datafile_path(name) == name for name in canonical),
+        'external_tablespaces')
+
+
 def preflight(container, database, password):
     require(re.fullmatch('[A-Za-z0-9_]{1,64}', database), 'unsupported_database_name')
     version = query(container, password, 'SELECT @@version;')
@@ -94,7 +120,6 @@ def preflight(container, database, password):
         'extra_user_databases': "SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME NOT IN ('mysql','sys','information_schema','performance_schema','" + database + "');",
         'non_innodb_tables': "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA NOT IN ('mysql','sys','information_schema','performance_schema') AND TABLE_TYPE='BASE TABLE' AND ENGINE <> 'InnoDB';",
         'encrypted_tablespaces': "SELECT COUNT(*) FROM information_schema.INNODB_TABLESPACES WHERE ENCRYPTION='Y';",
-        'external_tablespaces': "SELECT COUNT(*) FROM information_schema.INNODB_DATAFILES WHERE PATH NOT LIKE './%' AND PATH NOT LIKE '/var/lib/mysql/%';",
         'clone_already_running': "SELECT COUNT(*) FROM performance_schema.clone_status WHERE STATE='In Progress';",
     }
     for reason, sql in checks.items():
@@ -105,6 +130,7 @@ def preflight(container, database, password):
         require(result == ('1' if reason == 'clone_plugin_not_active' else '0'), reason)
     require(query(container, password, "SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='"
         + database + "';") == '1', 'database_not_found')
+    verify_datafiles(container, password)
     return version
 
 

@@ -690,6 +690,7 @@ jobs:
               expected = m.query(source, password, sql)
               before = m.inspect(source)
               result = m.run(source, 'clone_fixture', home / 'backup', key)
+              evidence.update(failurePhase=result.get('phase'), failureReason=result.get('reason'))
               assert result['restoreVerified'] and result['physicalFilesVerified'] and result['ownedResourcesCleaned'], result.get('reason')
               assert result['restored'] == {'tables': 2, 'rows': 8}
               assert m.inspect(source)['state']['StartedAt'] == before['state']['StartedAt']
