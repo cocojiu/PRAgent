@@ -165,8 +165,8 @@ def verify_recipient(name, owner, image, restored):
     return value
 
 
-def restore_clone_root_metadata(container, clone_path, destination):
-    # Copying clone/. copies its contents; the pre-created host root keeps its own metadata.
+def prepare_clone_copy(container, clone_path, destination):
+    # Docker extraction can retain host ownership. The private copy must be writable by mysqld.
     raw = docker('exec', container, 'stat', '-c', '%u\t%g\t%a', clone_path).decode().strip().split('\t')
     require(len(raw) == 3 and all(re.fullmatch('[0-9]{1,5}', part) for part in raw[:2])
         and re.fullmatch('[0-7]{3,4}', raw[2]), 'invalid_clone_root_metadata')
@@ -174,10 +174,15 @@ def restore_clone_root_metadata(container, clone_path, destination):
     mysql_uid = docker('exec', container, 'id', '-u', 'mysql').strip()
     require(uid <= 65535 and gid <= 65535 and mode <= 0o7777 and mysql_uid == str(uid).encode(),
         'clone_root_owner_mismatch')
-    changed = destination.stat().st_uid != uid or destination.stat().st_gid != gid
-    os.chown(destination, uid, gid)
-    os.chmod(destination, mode & 0o777)
-    return changed
+    metadata = snapshot.catalog({'mysql': destination}, PROFILE)
+    changes = {'entries': len(metadata['entries']), 'ownerChanged': 0, 'ownerWriteAdded': 0}
+    for item in metadata['entries']:
+        path = destination.joinpath(*snapshot.safe_name(item['name'], PROFILE)[1:])
+        changes['ownerChanged'] += int(item['uid'] != uid or item['gid'] != gid)
+        changes['ownerWriteAdded'] += int(not item['mode'] & 0o200)
+        os.chown(path, uid, gid)
+        os.chmod(path, 0o700 if item['directory'] else 0o600)
+    return changes
 
 
 def recipient_diagnostics(container):
@@ -263,7 +268,7 @@ def run(container, database, directory, key_file):
             'insufficient_archive_disk')
         source.mkdir(mode=0o700)
         docker('cp', '--archive', donor_id + ':' + clone_path + '/.', str(source), timeout=180, limit=1024)
-        record['stagingRootOwnershipCorrected'] = restore_clone_root_metadata(donor_id, clone_path, source)
+        record['stagingMetadata'] = prepare_clone_copy(donor_id, clone_path, source)
         baseline = snapshot.catalog({'mysql': source}, PROFILE)
         require(any(item['name'] == 'mysql/mysql.ibd' for item in baseline['entries']), 'clone_system_tables_missing')
         def quiescent():

@@ -203,7 +203,7 @@ python scripts/scheduled-mysql-backup.py pull --host <已配置SSH别名> --dest
 python3 /opt/repoguard/scripts/mysql-physical-backup.py --mysql-container <MySQL容器名> --database <业务库名> --directory /opt/repoguard/backups/<唯一运行目录> --key-file <受保护的密钥文件>
 ```
 
-入口要求 MySQL 原始数据不超过2 GiB，并预留至少原始数据四倍加512 MiB的可用磁盘及640 MiB可用内存。源实例保持运行；CLONE 完成后，将独占目录中的静止物理文件加密为有界 tar/gzip 归档，再解密到全新目录，逐文件比较 SHA256、所有权和模式。仅使用源实例的确切镜像ID启动无网络、无端口、384 MiB/0.5 CPU的恢复实例，禁用复制启动、binlog和事件调度，并检查业务表。恢复完成后清理本次实例及明文目录；已加密归档和私有 `receipt.json` 保留。只有 receipt 的 `restoreVerified`、`physicalFilesVerified`、`ownedResourcesCleaned` 全为 true 才能采用。源端 CLONE 超时或结果未知时不重试、不删除可能仍在写入的克隆目录，记录失败并等待受控核对。物理副本依赖同版本及兼容平台，不代替配置、消息队列、文件卷备份或 PITR。
+入口要求 MySQL 原始数据不超过2 GiB，并预留至少原始数据四倍加512 MiB的可用磁盘及640 MiB可用内存。源实例保持运行；CLONE 完成后，把独占暂存副本归属设为同一镜像的 MySQL 用户，目录0700、文件0600，再将静止物理文件加密为有界 tar/gzip 归档。解密到全新目录，逐文件比较 SHA256、归档所有权和模式。仅使用源实例的确切镜像ID启动无网络、无端口、384 MiB/0.5 CPU的恢复实例，禁用复制启动、binlog和事件调度，并检查业务表。恢复完成后清理本次实例及明文目录；已加密归档和私有 `receipt.json` 保留。只有 receipt 的 `restoreVerified`、`physicalFilesVerified`、`ownedResourcesCleaned` 全为 true 才能采用。源端 CLONE 超时或结果未知时不重试、不删除可能仍在写入的克隆目录，记录失败并等待受控核对。物理副本依赖同版本及兼容平台，不代替配置、消息队列、文件卷备份或 PITR。
 
 系统设置页提供仅系统管理员可见的备份状态卡片。接口 `GET /api/v1/system/backup-status` 默认返回未配置；不允许租户管理员、审查员或只读用户读取主机级元数据。启用前由运维创建 `/opt/repoguard/backup-status`（root 所有、0755、禁止组和其他用户写入）；systemd 单元将执行状态的受限投影写入此目录，文件0644，只包含时间、状态、份数、大小及固定原因码，不包含备份路径、归档哈希或密钥。投影失败不会中止数据库备份，页面会显示缺失或旧记录。
 

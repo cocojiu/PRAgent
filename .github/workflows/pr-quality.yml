@@ -692,7 +692,7 @@ jobs:
               result = m.run(source, 'clone_fixture', home / 'backup', key)
               evidence.update(failurePhase=result.get('phase'), failureReason=result.get('reason'))
               evidence['recipientDiagnostics'] = result.get('recipientDiagnostics', {})
-              evidence['stagingRootOwnershipCorrected'] = result.get('stagingRootOwnershipCorrected', False)
+              evidence['stagingMetadata'] = result.get('stagingMetadata', {})
               print(json.dumps({'physicalRecovery': evidence}), flush=True)
               assert result['restoreVerified'] and result['physicalFilesVerified'] and result['ownedResourcesCleaned'], result.get('reason')
               assert result['restored'] == {'tables': 2, 'rows': 8}
