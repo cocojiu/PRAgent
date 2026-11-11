@@ -122,7 +122,7 @@ class LokiReleaseManifestTest {
                 if predicate=='https://cyclonedx.org/bom':
                     if scenario!='missing-patched-dependency':
                         args.output.mkdir();(args.output/'user-asset.txt').write_text('preserve')
-                    components=[dict(name='stdlib',version='v1.26.10'),dict(name='golang.org/x/net',version='v0.60.0')]
+                    components=[dict(name='stdlib',version='v1.26.10'),dict(name='golang.org/x/net',version='v0.62.0')]
                     if scenario!='missing-patched-dependency':
                         components.append(dict(name='github.com/go-jose/go-jose/v4',version='v4.1.6'))
                     return [dict(subject=[dict(digest=dict(sha256='a'*64))],predicate=dict(bomFormat='CycloneDX',

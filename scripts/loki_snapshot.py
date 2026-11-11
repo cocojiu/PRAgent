@@ -1,4 +1,4 @@
-"""Encrypted, bounded snapshots for quiescent Loki and Alloy data volumes."""
+"""Encrypted, bounded snapshots for quiescent service data and completed MySQL clones."""
 import gzip
 import hashlib
 import io
@@ -9,11 +9,30 @@ import re
 import stat
 import subprocess
 import tarfile
+from typing import NamedTuple
 
 MAX_DATA = 256 * 1024 * 1024
 MAX_ARCHIVE = 512 * 1024 * 1024
 MAX_ENTRIES = 20_000
 ROLES = {'loki', 'alloy'}
+
+
+class SnapshotProfile(NamedTuple):
+    roles: frozenset
+    max_data: int
+    max_archive: int
+    max_entries: int
+    version: int
+
+
+LOKI_PROFILE = SnapshotProfile(frozenset(ROLES), MAX_DATA, MAX_ARCHIVE, MAX_ENTRIES, 1)
+MYSQL_PROFILE = SnapshotProfile(frozenset({'mysql'}), 2 * 1024 ** 3, 4 * 1024 ** 3, MAX_ENTRIES, 2)
+
+
+def snapshot_profile(profile):
+    require(profile in (LOKI_PROFILE, MYSQL_PROFILE), 'unsupported_snapshot_profile')
+    return profile._replace(max_data=MAX_DATA, max_archive=MAX_ARCHIVE, max_entries=MAX_ENTRIES) \
+        if profile == LOKI_PROFILE else profile
 
 
 def require(value, reason):
@@ -29,11 +48,11 @@ def digest(path):
     return result.hexdigest()
 
 
-def safe_name(name):
+def safe_name(name, profile=LOKI_PROFILE):
     require(isinstance(name, str) and 0 < len(name) <= 4096 and '\\' not in name and '\x00' not in name,
         'unsafe_snapshot_name')
     parts = name.split('/')
-    require(parts[0] in ROLES and all(part not in ('', '.', '..') for part in parts), 'unsafe_snapshot_name')
+    require(parts[0] in profile.roles and all(part not in ('', '.', '..') for part in parts), 'unsafe_snapshot_name')
     require(not PurePosixPath(name).is_absolute(), 'unsafe_snapshot_name')
     return parts
 
@@ -46,8 +65,9 @@ def protected_key(path):
     return path
 
 
-def catalog(volumes):
-    require(set(volumes) == ROLES, 'unexpected_snapshot_volume_set')
+def catalog(volumes, profile=LOKI_PROFILE):
+    profile = snapshot_profile(profile)
+    require(set(volumes) == profile.roles, 'unexpected_snapshot_volume_set')
     entries = []
     total = 0
     for role in sorted(volumes):
@@ -58,7 +78,7 @@ def catalog(volumes):
             children = []
             with os.scandir(directory) as scanned:
                 for child in scanned:
-                    require(len(children) < MAX_ENTRIES, 'snapshot_entry_limit_or_symlink')
+                    require(len(children) < profile.max_entries, 'snapshot_entry_limit_or_symlink')
                     children.append(Path(child.path))
             for child in sorted(children):
                 require(not child.is_symlink(), 'snapshot_entry_limit_or_symlink')
@@ -68,27 +88,29 @@ def catalog(volumes):
                     yield child
 
         for path in walk(root):
-            require(len(entries) < MAX_ENTRIES and not path.is_symlink(), 'snapshot_entry_limit_or_symlink')
+            require(len(entries) < profile.max_entries and not path.is_symlink(), 'snapshot_entry_limit_or_symlink')
             metadata = path.lstat()
             require(stat.S_ISDIR(metadata.st_mode) or stat.S_ISREG(metadata.st_mode), 'snapshot_special_file')
             name = role if path == root else role + '/' + path.relative_to(root).as_posix()
-            safe_name(name)
+            safe_name(name, profile)
+            require(profile != MYSQL_PROFILE or path.is_dir() or metadata.st_nlink == 1, 'snapshot_hardlink')
             item = {'name': name, 'directory': path.is_dir(), 'mode': stat.S_IMODE(metadata.st_mode),
                 'uid': metadata.st_uid, 'gid': metadata.st_gid, 'mtime': metadata.st_mtime,
                 'bytes': 0 if path.is_dir() else metadata.st_size}
             total += item['bytes']
-            require(total <= MAX_DATA, 'snapshot_data_budget_exceeded')
+            require(total <= profile.max_data, 'snapshot_data_budget_exceeded')
             if not item['directory']:
                 item['sha256'] = digest(path)
             entries.append(item)
-    return {'formatVersion': 1, 'totalBytes': total, 'entries': entries}
+    return {'formatVersion': profile.version, 'totalBytes': total, 'entries': entries}
 
 
-def create_snapshot(volumes, destination, key_file, quiescent):
+def create_snapshot(volumes, destination, key_file, quiescent, profile=LOKI_PROFILE):
     """The caller must prove that every writer is stopped, before and after reading."""
     key_file = protected_key(key_file)
     require(quiescent(), 'snapshot_writers_still_running')
-    metadata = catalog(volumes)
+    metadata = catalog(volumes, profile)
+    profile = snapshot_profile(profile)
     destination = Path(destination)
     require(destination.parent.resolve() == destination.parent and destination.parent.is_dir()
         and not destination.exists() and not destination.is_symlink(), 'unsafe_snapshot_destination')
@@ -107,7 +129,7 @@ def create_snapshot(volumes, destination, key_file, quiescent):
                     info.mode = 0o600
                     archive.addfile(info, io.BytesIO(raw))
                     for item in metadata['entries']:
-                        parts = safe_name(item['name'])
+                        parts = safe_name(item['name'], profile)
                         path = Path(volumes[parts[0]]).joinpath(*parts[1:])
                         require(not path.is_symlink(), 'snapshot_path_changed')
                         info = tarfile.TarInfo(item['name'])
@@ -130,7 +152,7 @@ def create_snapshot(volumes, destination, key_file, quiescent):
                 process.wait(timeout=10)
             process.stderr.close()
     require(quiescent(), 'snapshot_writer_state_changed')
-    require(0 < partial.stat().st_size <= MAX_ARCHIVE, 'snapshot_archive_budget_exceeded')
+    require(0 < partial.stat().st_size <= profile.max_archive, 'snapshot_archive_budget_exceeded')
     # Never overwrite another archive, including one created during encryption.
     os.link(partial, destination)
     partial.unlink()
@@ -140,33 +162,35 @@ def create_snapshot(volumes, destination, key_file, quiescent):
 
 
 class BoundedReader:
-    def __init__(self, source):
+    def __init__(self, source, limit=None):
         self.source = source
         self.count = 0
+        self.limit = limit
 
     def read(self, size=-1):
         require(0 <= size <= 16 * 1024 * 1024, 'unbounded_snapshot_read')
         raw = self.source.read(size)
         self.count += len(raw)
-        require(self.count <= MAX_ARCHIVE, 'snapshot_expansion_budget_exceeded')
+        require(self.count <= (MAX_ARCHIVE if self.limit is None else self.limit), 'snapshot_expansion_budget_exceeded')
         return raw
 
 
-def restore_snapshot(snapshot, destinations, key_file):
+def restore_snapshot(snapshot, destinations, key_file, profile=LOKI_PROFILE):
     """Restore only into new empty roots; verify every file before reporting success."""
+    profile = snapshot_profile(profile)
     key_file = protected_key(key_file)
     archive_path = Path(snapshot['archive'])
     require(archive_path.is_file() and not archive_path.is_symlink()
-        and 0 < archive_path.stat().st_size <= MAX_ARCHIVE, 'unsafe_snapshot_archive')
+        and 0 < archive_path.stat().st_size <= profile.max_archive, 'unsafe_snapshot_archive')
     require(isinstance(snapshot.get('archiveSha256'), str)
         and re.fullmatch('[a-f0-9]{64}', snapshot['archiveSha256'])
         and digest(archive_path) == snapshot['archiveSha256'], 'snapshot_checksum_mismatch')
-    require(set(destinations) == ROLES, 'unexpected_restore_volume_set')
+    require(set(destinations) == profile.roles, 'unexpected_restore_volume_set')
     roots = {role: Path(path) for role, path in destinations.items()}
     for root in roots.values():
         require(root.is_dir() and not root.is_symlink() and root.resolve() == root
             and not any(root.iterdir()), 'restore_destination_not_empty_or_unsafe')
-    require(len({str(root) for root in roots.values()}) == 2
+    require(len({str(root) for root in roots.values()}) == len(profile.roles)
         and not any(first.is_relative_to(second) for first in roots.values() for second in roots.values() if first != second),
         'restore_roots_overlap')
     process = subprocess.Popen(['openssl', 'enc', '-d', '-aes-256-cbc', '-pbkdf2', '-iter', '250000',
@@ -175,22 +199,22 @@ def restore_snapshot(snapshot, destinations, key_file):
     directories = []
     try:
         with gzip.GzipFile(fileobj=process.stdout, mode='rb') as compressed:
-            stream = BoundedReader(compressed)
+            stream = BoundedReader(compressed, profile.max_archive)
             with tarfile.open(fileobj=stream, mode='r|') as archive:
                 first = archive.next()
                 require(first is not None and first.name == 'catalog.json' and first.isfile()
                     and 0 < first.size <= 4 * 1024 * 1024, 'snapshot_catalog_missing')
                 metadata = json.load(archive.extractfile(first))
                 entries = metadata.get('entries')
-                require(type(metadata.get('formatVersion')) is int and metadata['formatVersion'] == 1 and isinstance(entries, list)
-                    and 2 <= len(entries) <= MAX_ENTRIES, 'invalid_snapshot_catalog')
-                require(type(metadata.get('totalBytes')) is int and 0 <= metadata['totalBytes'] <= MAX_DATA
+                require(type(metadata.get('formatVersion')) is int and metadata['formatVersion'] == profile.version and isinstance(entries, list)
+                    and len(profile.roles) <= len(entries) <= profile.max_entries, 'invalid_snapshot_catalog')
+                require(type(metadata.get('totalBytes')) is int and 0 <= metadata['totalBytes'] <= profile.max_data
                     and all(any(item.get('name') == role and item.get('directory') is True and item.get('bytes') == 0
-                        for item in entries) for role in ROLES), 'snapshot_root_metadata_missing')
+                        for item in entries) for role in profile.roles), 'snapshot_root_metadata_missing')
                 names = set()
                 size = 0
                 for item in entries:
-                    parts = safe_name(item['name'])
+                    parts = safe_name(item['name'], profile)
                     require(item['name'] not in names and type(item['bytes']) is int and item['bytes'] >= 0,
                         'duplicate_or_invalid_snapshot_entry')
                     require(type(item.get('directory')) is bool
@@ -200,7 +224,7 @@ def restore_snapshot(snapshot, destinations, key_file):
                         'invalid_snapshot_metadata')
                     names.add(item['name'])
                     size += item['bytes']
-                    require(size <= MAX_DATA, 'snapshot_data_budget_exceeded')
+                    require(size <= profile.max_data, 'snapshot_data_budget_exceeded')
                     member = archive.next()
                     require(member is not None and member.name == item['name'] and not member.issym()
                         and not member.islnk(), 'snapshot_member_mismatch')
