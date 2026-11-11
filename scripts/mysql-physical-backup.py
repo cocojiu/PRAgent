@@ -6,6 +6,7 @@ Only a completed clone is archived; restored pages are checked before mysqld ope
 """
 import argparse
 from datetime import datetime, timezone
+import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -110,14 +111,37 @@ def verify_datafiles(container, password):
         'external_tablespaces')
 
 
-def preflight(container, database, password):
+def schema_set_sha(names):
+    require(isinstance(names, list) and 0 < len(names) <= 16
+        and all(isinstance(name, str) and re.fullmatch('[A-Za-z0-9_]{1,64}', name)
+            and name not in ('mysql', 'sys', 'information_schema', 'performance_schema') for name in names)
+        and len(names) == len(set(names)),
+        'unsupported_user_schema_set')
+    return hashlib.sha256(json.dumps(sorted(names), separators=(',', ':')).encode('utf-8')).hexdigest()
+
+
+def approved_schemas(container, database, password, expected_schema_set_sha=None):
+    require(expected_schema_set_sha is None or isinstance(expected_schema_set_sha, str)
+        and re.fullmatch('[a-f0-9]{64}', expected_schema_set_sha), 'invalid_schema_set_hash')
+    names = query(container, password, 'SET SESSION MAX_EXECUTION_TIME=3000;'
+        "SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME NOT IN "
+        "('mysql','sys','information_schema','performance_schema') ORDER BY BINARY SCHEMA_NAME LIMIT 17;").splitlines()
+    actual = schema_set_sha(names)
+    require(database in names, 'database_not_found')
+    if expected_schema_set_sha is None:
+        require(names == [database], 'extra_user_databases')
+    else:
+        require(actual == expected_schema_set_sha, 'schema_set_mismatch')
+    return names
+
+
+def preflight(container, database, password, expected_schema_set_sha=None):
     require(re.fullmatch('[A-Za-z0-9_]{1,64}', database), 'unsupported_database_name')
     version = query(container, password, 'SELECT @@version;')
     require(re.fullmatch(r'8\.0\.[0-9]+', version), 'unsupported_mysql_version')
     require(query(container, password, 'SELECT @@datadir;') == '/var/lib/mysql/', 'unsupported_datadir')
     checks = {
         'clone_plugin_not_active': "SELECT COUNT(*) FROM information_schema.PLUGINS WHERE PLUGIN_NAME='clone' AND PLUGIN_STATUS='ACTIVE';",
-        'extra_user_databases': "SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME NOT IN ('mysql','sys','information_schema','performance_schema','" + database + "');",
         'non_innodb_tables': "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA NOT IN ('mysql','sys','information_schema','performance_schema') AND TABLE_TYPE='BASE TABLE' AND ENGINE <> 'InnoDB';",
         'encrypted_tablespaces': "SELECT COUNT(*) FROM information_schema.INNODB_TABLESPACES WHERE ENCRYPTION='Y';",
         'clone_already_running': "SELECT COUNT(*) FROM performance_schema.clone_status WHERE STATE='In Progress';",
@@ -128,6 +152,7 @@ def preflight(container, database, password):
         except ValueError:
             raise ValueError(reason + '_query_failed') from None
         require(result == ('1' if reason == 'clone_plugin_not_active' else '0'), reason)
+    approved_schemas(container, database, password, expected_schema_set_sha)
     require(query(container, password, "SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='"
         + database + "';") == '1', 'database_not_found')
     verify_datafiles(container, password)
@@ -139,10 +164,11 @@ def clone_completed(container, password, destination):
         + destination + "' ORDER BY ID DESC LIMIT 1;") == 'Completed\t0'
 
 
-def table_checks(container, password, database):
+def table_checks(container, password, database, allow_empty=False):
     tables = query(container, password, "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA='"
         + database + "' AND TABLE_TYPE='BASE TABLE' ORDER BY TABLE_NAME;").splitlines()
-    require(0 < len(tables) <= 2000 and all(re.fullmatch('[A-Za-z0-9_]{1,64}', name) for name in tables),
+    require((allow_empty or len(tables) > 0) and len(tables) <= 2000
+        and all(re.fullmatch('[A-Za-z0-9_]{1,64}', name) for name in tables),
         'unsupported_restored_table_set')
     rows = 0
     for name in tables:
@@ -193,10 +219,12 @@ def recipient_diagnostics(container):
         'permissionDenied': b'Permission denied' in raw}
 
 
-def run(container, database, directory, key_file):
+def run(container, database, directory, key_file, expected_schema_set_sha=None):
     import fcntl  # The production operation is Linux/root-only.
     require(os.name == 'posix' and os.geteuid() == 0, 'linux_root_required')
     require(re.fullmatch('[A-Za-z0-9][A-Za-z0-9_.-]{0,100}', container), 'invalid_mysql_container')
+    require(expected_schema_set_sha is None or isinstance(expected_schema_set_sha, str)
+        and re.fullmatch('[a-f0-9]{64}', expected_schema_set_sha), 'invalid_schema_set_hash')
     key_file = snapshot.protected_key(key_file)
     require(key_file.is_absolute() and key_file.resolve() == key_file and key_file.stat().st_nlink == 1
         and all(parent.stat().st_uid == 0 and not parent.stat().st_mode & 0o022 for parent in key_file.parents),
@@ -236,8 +264,12 @@ def run(container, database, directory, key_file):
         image = before['image']
         require(re.fullmatch('sha256:[a-f0-9]{64}', image), 'invalid_donor_image_id')
         password = docker('exec', donor_id, 'sh', '-c', AUTH, limit=4096)
-        version = preflight(donor_id, database, password)
-        record.update(mysqlVersion=version, imageId=image, donorContainerId=donor_id)
+        version = preflight(donor_id, database, password, expected_schema_set_sha)
+        schemas = approved_schemas(donor_id, database, password, expected_schema_set_sha)
+        schema_hash = schema_set_sha(schemas)
+        record.update(mysqlVersion=version, imageId=image, donorContainerId=donor_id,
+            schemaSetSha256=schema_hash, userSchemaCount=len(schemas),
+            schemaSetExplicitlyBound=expected_schema_set_sha is not None)
         # Reserve room for the clone, encrypted archive, staging copy and restored pages.
         data_kib = docker('exec', donor_id, 'du', '--apparent-size', '-sk', '/var/lib/mysql').split()[0]
         require(data_kib.isdigit(), 'invalid_donor_size')
@@ -262,6 +294,7 @@ def run(container, database, directory, key_file):
         clone_known_complete = clone_completed(donor_id, password, clone_path)
         require(clone_known_complete, 'clone_completion_not_proven')
         record['cloneOutcome'] = 'completed'
+        require(approved_schemas(donor_id, database, password, schema_hash) == schemas, 'donor_schema_set_changed')
         clone_kib = docker('exec', donor_id, 'du', '--apparent-size', '-sk', clone_path).split()[0]
         require(clone_kib.isdigit() and 0 < int(clone_kib) * 1024 <= PROFILE.max_data, 'clone_size_limit')
         require(shutil.disk_usage(directory).free >= 3 * int(clone_kib) * 1024 + 512 * 1024 ** 2,
@@ -311,7 +344,11 @@ def run(container, database, directory, key_file):
                 pass
             require(time.monotonic() < deadline, 'recipient_readiness_timeout')
             time.sleep(1)
-        counts = table_checks(recipient_id, password, database)
+        require(approved_schemas(recipient_id, database, password, schema_hash) == schemas, 'restored_schema_set_changed')
+        counts = {'tables': 0, 'rows': 0}
+        for name in schemas:
+            checked = table_checks(recipient_id, password, name, allow_empty=name != database)
+            counts = {key: counts[key] + checked[key] for key in counts}
         current = inspect(donor_id)
         require(current['id'] == donor_id and current['image'] == image
             and current['state']['StartedAt'] == before['state']['StartedAt']
@@ -371,9 +408,11 @@ def main():
     parser.add_argument('--database', required=True)
     parser.add_argument('--directory', required=True, type=Path)
     parser.add_argument('--key-file', required=True, type=Path)
+    parser.add_argument('--expected-schema-set-sha256', default=None,
+        help='Explicitly reviewed hash of the complete user-schema set; default rejects additional schemas')
     args = parser.parse_args()
     try:
-        result = run(args.mysql_container, args.database, args.directory, args.key_file)
+        result = run(args.mysql_container, args.database, args.directory, args.key_file, args.expected_schema_set_sha256)
         # Only aggregate status leaves the protected backup directory.
         print(json.dumps({key: result[key] for key in ('state', 'restoreVerified', 'ownedResourcesCleaned')}))
         return 0 if result['restoreVerified'] and result['ownedResourcesCleaned'] else 1

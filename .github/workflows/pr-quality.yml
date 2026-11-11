@@ -685,17 +685,33 @@ jobs:
               (4,JSON_OBJECT('x',CAST('2026-01-02' AS DATE))),
               (5,JSON_OBJECT('x',CAST('2026-01-02 12:34:56.123456' AS DATETIME(6))));
               CREATE TABLE clone_fixture.no_pk(v VARCHAR(10), n INT) ENGINE=InnoDB;
-              INSERT INTO clone_fixture.no_pk VALUES('dup',1),('dup',1),(NULL,2);''')
+              INSERT INTO clone_fixture.no_pk VALUES('dup',1),('dup',1),(NULL,2);
+              CREATE DATABASE clone_other;
+              CREATE DATABASE clone_empty;
+              CREATE TABLE clone_other.types(id INT PRIMARY KEY, doc JSON) ENGINE=InnoDB;
+              INSERT INTO clone_other.types VALUES
+              (1,JSON_OBJECT('x',CAST('1.2' AS DECIMAL(10,1)))),
+              (2,JSON_OBJECT('x',CAST('2026-01-02' AS DATE)));''')
               sql = "SELECT id,HEX(CAST(doc AS CHAR)),JSON_TYPE(doc),JSON_TYPE(JSON_EXTRACT(doc,'$.x')) FROM clone_fixture.types ORDER BY id;"
               expected = m.query(source, password, sql)
+              other_sql = "SELECT id,HEX(CAST(doc AS CHAR)),JSON_TYPE(JSON_EXTRACT(doc,'$.x')) FROM clone_other.types ORDER BY id;"
+              expected_other = m.query(source, password, other_sql)
               before = m.inspect(source)
-              result = m.run(source, 'clone_fixture', home / 'backup', key)
+              rejected = m.run(source, 'clone_fixture', home / 'refuse-default', key)
+              assert not rejected['restoreVerified'] and rejected['reason'] == 'extra_user_databases'
+              assert not rejected['donorCloneRetained'] and not (home / 'refuse-default/intent.json').exists()
+              rejected = m.run(source, 'clone_fixture', home / 'refuse-mismatch', key, '0' * 64)
+              assert not rejected['restoreVerified'] and rejected['reason'] == 'schema_set_mismatch'
+              assert not rejected['donorCloneRetained'] and not (home / 'refuse-mismatch/intent.json').exists()
+              schema_hash = m.schema_set_sha(['clone_fixture', 'clone_other', 'clone_empty'])
+              result = m.run(source, 'clone_fixture', home / 'backup', key, schema_hash)
               evidence.update(failurePhase=result.get('phase'), failureReason=result.get('reason'))
               evidence['recipientDiagnostics'] = result.get('recipientDiagnostics', {})
               evidence['stagingMetadata'] = result.get('stagingMetadata', {})
               print(json.dumps({'physicalRecovery': evidence}), flush=True)
               assert result['restoreVerified'] and result['physicalFilesVerified'] and result['ownedResourcesCleaned'], result.get('reason')
-              assert result['restored'] == {'tables': 2, 'rows': 8}
+              assert result['restored'] == {'tables': 3, 'rows': 10}
+              assert result['schemaSetSha256'] == schema_hash and result['userSchemaCount'] == 3 and result['schemaSetExplicitlyBound']
               assert m.inspect(source)['state']['StartedAt'] == before['state']['StartedAt']
               # Independent second recovery reads only the encrypted artifact and its protected receipt.
               restored = home / 'independent'; restored.mkdir(mode=0o700)
@@ -717,6 +733,8 @@ jobs:
                       assert time.monotonic() < deadline, 'audit_readiness_timeout'
                       time.sleep(1)
               assert actual == expected, 'native_json_type_or_value_changed'
+              assert m.query(audit_id, password, other_sql) == expected_other, 'additional_schema_native_types_changed'
+              assert m.approved_schemas(audit_id, 'clone_fixture', password, schema_hash) == ['clone_empty', 'clone_fixture', 'clone_other']
               assert m.query(audit_id, password, 'SELECT COUNT(*) FROM clone_fixture.no_pk;') == '3'
               m.query(source, password, "INSERT INTO clone_fixture.no_pk VALUES('later',3);")
               assert m.query(audit_id, password, 'SELECT COUNT(*) FROM clone_fixture.no_pk;') == '3'
@@ -736,7 +754,10 @@ jobs:
               evidence.update(state='verified', nativeJsonTypesPreserved=True, numericValuesPreserved=True,
                   duplicateRowsPreserved=True, donorRemainedOnline=True, snapshotIndependent=True,
                   encryptedPhysicalFilesVerified=True, corruptedCiphertextRejected=True,
-                  mysqlVersion=result['mysqlVersion'], imageId=result['imageId'], tables=2, rows=8)
+                  defaultExtraSchemaRejected=True, wrongSchemaFingerprintRejected=True,
+                  additionalSchemaNativeTypesPreserved=True, emptySchemaPreserved=True,
+                  userSchemaCount=3, schemaSetSha256=schema_hash,
+                  mysqlVersion=result['mysqlVersion'], imageId=result['imageId'], tables=3, rows=10)
           finally:
               for container in reversed(created):
                   value = m.inspect(container)

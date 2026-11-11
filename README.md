@@ -197,13 +197,15 @@ python scripts/scheduled-mysql-backup.py pull --host <已配置SSH别名> --dest
 
 日常产物仅包含数据库逻辑快照，不包含配置、Secret、消息队列或上传卷，不提供 PITR，也不执行恢复容器。完整一致备份、同版本全栈恢复演练和异地副本必须分别维护。
 
-需要保留 JSON 原生数值、DECIMAL、日期等二进制表示时，可单独使用 `scripts/mysql-physical-backup.py` 执行 MySQL 8.0 本地 CLONE、加密物理归档和隔离恢复。逻辑导出后重新解析 JSON 可能改变数值或原生类型；不要通过舍入或忽略差异来放宽恢复校验。物理入口不替换日常 timer 或发布流程，也不自动安装插件。启用前需审批并确认 CLONE 插件已 ACTIVE、账户具备 BACKUP_ADMIN、仅有指定业务库、全部业务表使用 InnoDB，且没有加密表空间或数据目录以外的表空间。它会复制 MySQL 系统表和账户认证数据，归档及临时目录应按数据库密钥同等保护。
+需要保留 JSON 原生数值、DECIMAL、日期等二进制表示时，可单独使用 `scripts/mysql-physical-backup.py` 执行 MySQL 8.0 本地 CLONE、加密物理归档和隔离恢复。逻辑导出后重新解析 JSON 可能改变数值或原生类型；不要通过舍入或忽略差异来放宽恢复校验。物理入口不替换日常 timer 或发布流程，也不自动安装插件。启用前需审批并确认 CLONE 插件已 ACTIVE、账户具备 BACKUP_ADMIN、业务库集合与默认单库限制或显式审阅摘要一致、全部业务表使用 InnoDB，且没有加密表空间或数据目录以外的表空间。它会复制 MySQL 系统表和账户认证数据，归档及临时目录应按数据库密钥同等保护。
 
 将 `mysql-physical-backup.py` 与 `loki_snapshot.py` 放在同一脚本目录，使用 Linux root 执行。密钥文件须 root 所有、0600、32～4096字节且不是链接；运行目录须是 `/opt/repoguard/backups` 下尚不存在的绝对路径，其父目录须已创建、root 所有且禁止组或其他用户写入。不要在命令参数中提供密码：
 
 ```text
 python3 /opt/repoguard/scripts/mysql-physical-backup.py --mysql-container <MySQL容器名> --database <业务库名> --directory /opt/repoguard/backups/<唯一运行目录> --key-file <受保护的密钥文件>
 ```
+
+默认仍拒绝额外业务库。本地 CLONE 复制整个实例；确需备份多个业务库时，须先明确批准完整数据库集合，再通过 `--expected-schema-set-sha256 <已审阅的集合摘要>` 绑定，不能只把指定库名当作物理备份范围。集合排除 `mysql/sys/information_schema/performance_schema`，包含所有其余库，最多16个，库名只允许字母、数字和下划线。摘要为按库名排序的 JSON 字符串数组（无空白，分隔符为 `,` 和 `:`）UTF-8 字节的 SHA256。源端在克隆前后、恢复端在验收时均须匹配同一集合；所有业务库的表都执行检查，额外空库允许保留。摘要仅绑定范围，不代替生产备份及插件安装授权，也不会自动安装插件。
 
 入口要求 MySQL 原始数据不超过2 GiB，并预留至少原始数据四倍加512 MiB的可用磁盘及640 MiB可用内存。源实例保持运行；CLONE 完成后，把独占暂存副本归属设为同一镜像的 MySQL 用户，目录0700、文件0600，再将静止物理文件加密为有界 tar/gzip 归档。解密到全新目录，逐文件比较 SHA256、归档所有权和模式。仅使用源实例的确切镜像ID启动无网络、无端口、384 MiB/0.5 CPU的恢复实例，禁用复制启动、binlog和事件调度，并检查业务表。恢复完成后清理本次实例及明文目录；已加密归档和私有 `receipt.json` 保留。只有 receipt 的 `restoreVerified`、`physicalFilesVerified`、`ownedResourcesCleaned` 全为 true 才能采用。源端 CLONE 超时或结果未知时不重试、不删除可能仍在写入的克隆目录，记录失败并等待受控核对。物理副本依赖同版本及兼容平台，不代替配置、消息队列、文件卷备份或 PITR。
 
