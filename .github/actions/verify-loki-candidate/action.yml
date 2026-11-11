@@ -8,6 +8,9 @@ outputs:
   image_id:
     description: The exact image identity checked on the source runner
     value: ${{ steps.load.outputs.image_id }}
+  config_id:
+    description: The canonical image configuration digest from the checked archive
+    value: ${{ steps.load.outputs.config_id }}
   archive_sha256:
     description: SHA256 of the verified image archive
     value: ${{ steps.load.outputs.archive_sha256 }}
@@ -22,7 +25,57 @@ runs:
       run: |
         set -euo pipefail
         python3 - <<'PY'
-        import hashlib, json, os, pathlib, re, subprocess
+        import hashlib, json, os, pathlib, re, subprocess, tarfile
+
+        def canonical_config_id(archive, image):
+            with tarfile.open(archive) as saved:
+                entries = saved.getmembers()
+                assert 0 < len(entries) <= 4096 and len({x.name for x in entries}) == len(entries)
+                assert all((x.isfile() or x.isdir()) and not x.name.startswith('/')
+                    and '\\' not in x.name and '..' not in x.name.split('/') for x in entries)
+                assert sum(x.size for x in entries) <= 512 * 1024 * 1024
+                members = {x.name: x for x in entries}
+
+                def body(name):
+                    member = members[name]
+                    assert member.isfile() and 0 < member.size <= 2 * 1024 * 1024
+                    return saved.extractfile(member).read()
+
+                records = json.loads(body('manifest.json'))
+                assert isinstance(records, list) and len(records) == 1
+                config_path = records[0]['Config']
+                raw = body(config_path)
+                config_id = 'sha256:' + hashlib.sha256(raw).hexdigest()
+                assert config_path in (config_id[7:] + '.json', 'blobs/sha256/' + config_id[7:])
+                config = json.loads(raw)
+                assert config['os'] == image['Os'] == 'linux' and config['architecture'] == image['Architecture'] == 'amd64'
+                assert config['config'] == image['Config']
+                runtime_id = image['Id']
+                assert re.fullmatch(r'sha256:[a-f0-9]{64}', runtime_id)
+                if runtime_id != config_id:
+                    def blob(descriptor):
+                        digest = descriptor['digest']
+                        assert re.fullmatch(r'sha256:[a-f0-9]{64}', digest)
+                        value = body('blobs/sha256/' + digest[7:])
+                        assert type(descriptor['size']) is int and len(value) == descriptor['size']
+                        assert 'sha256:' + hashlib.sha256(value).hexdigest() == digest
+                        return json.loads(value)
+
+                    roots = json.loads(body('index.json'))['manifests']
+                    assert len(roots) == 1
+                    descriptor = roots[0]
+                    manifest = blob(descriptor)
+                    if 'manifests' in manifest:
+                        platform = [x for x in manifest['manifests']
+                            if x.get('platform') == {'os': 'linux', 'architecture': 'amd64'}]
+                        assert len(platform) == 1
+                        descriptor = platform[0]
+                        manifest = blob(descriptor)
+                    assert manifest['schemaVersion'] == 2 and manifest['config']['digest'] == config_id
+                    assert type(manifest['config']['size']) is int and manifest['config']['size'] == len(raw)
+                    assert runtime_id == image['Descriptor']['digest']
+                    assert runtime_id in (roots[0]['digest'], descriptor['digest'])
+                return config_id
 
         directory = pathlib.Path(os.environ['CANDIDATE_DIRECTORY']).resolve(strict=True)
         assert directory.is_relative_to(pathlib.Path(os.environ['GITHUB_WORKSPACE']).resolve())
@@ -77,6 +130,7 @@ runs:
         with archive.open('rb') as stream:
             digest = hashlib.file_digest(stream, 'sha256').hexdigest()
         assert digest == match[1], 'candidate_archive_checksum_mismatch'
+        config_id = canonical_config_id(archive, image)
         subprocess.run(['docker', 'image', 'load', '--input', str(archive)], check=True, timeout=120)
         loaded = json.loads(subprocess.check_output(['docker', 'image', 'inspect', 'repoguard-loki-candidate:ci']))
         assert len(loaded) == 1 and loaded[0]['Id'] == identity, 'candidate_image_identity_changed'
@@ -84,12 +138,12 @@ runs:
             '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', identity, '-version'],
             text=True, stderr=subprocess.STDOUT, timeout=30)
         assert '3.7.8-repoguard.4' in version and 'go1.26.10' in version
-        result = {'imageId': identity, 'archiveSha256': digest, 'highCriticalCount': 0,
+        result = {'imageId': identity, 'configId': config_id, 'archiveSha256': digest, 'highCriticalCount': 0,
             'sameCheckedImage': True, 'persistedLogsRetainedAfterRollback': 2,
             'runtimeConfigSha256': persistence['runtimeConfigSha256'],
             'memoryLimitBytes': persistence['memoryLimitBytes'], 'runtimeRuleCount': len(persistence['expectedRules'])}
         (directory / 'transfer-verification.json').write_text(json.dumps(result, indent=2))
         with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-            output.write('image_id=' + identity + '\narchive_sha256=' + digest + '\n')
+            output.write('image_id=' + identity + '\nconfig_id=' + config_id + '\narchive_sha256=' + digest + '\n')
         print(json.dumps(result))
         PY

@@ -664,7 +664,7 @@ jobs:
         env:
           SOURCE_REPOSITORY: ${{ steps.image.outputs.repository }}
           SOURCE_DIGEST: ${{ steps.image.outputs.digest }}
-          CHECKED_IMAGE_ID: ${{ steps.loaded.outputs.image_id }}
+          CHECKED_CONFIG_ID: ${{ steps.loaded.outputs.config_id }}
           CHECKED_ARCHIVE_SHA256: ${{ steps.loaded.outputs.archive_sha256 }}
         run: |
           set -euo pipefail
@@ -673,6 +673,8 @@ jobs:
           root = pathlib.Path('loki-candidate-evidence')
           digest = os.environ['SOURCE_DIGEST']
           assert re.fullmatch(r'sha256:[a-f0-9]{64}', digest)
+          config_id = os.environ['CHECKED_CONFIG_ID']
+          assert re.fullmatch(r'sha256:[a-f0-9]{64}', config_id)
           evidence = {}
           for name in ('trivy.json', 'sbom.cdx.json', 'persistence-result.json', 'transfer-verification.json'):
               evidence[name] = hashlib.sha256((root / name).read_bytes()).hexdigest()
@@ -684,7 +686,7 @@ jobs:
                   'runId': int(os.environ['GITHUB_RUN_ID']), 'runAttempt': int(os.environ['GITHUB_RUN_ATTEMPT'])},
               'upstreamGitSha': '09e6ce2ff1bdc19763a10265b870c86f51c98655',
               'image': {'repository': os.environ['SOURCE_REPOSITORY'], 'digest': digest,
-                  'imageId': os.environ['CHECKED_IMAGE_ID'], 'platform': 'linux/amd64'},
+                  'imageId': config_id, 'platform': 'linux/amd64'},
               'checks': {'highCriticalCount': 0, 'configurationValidation': 'passed',
                   'persistenceUpgradeRollback': 'passed', 'independentImageTransfer': 'passed',
                   'imageProvenance': 'attested', 'sbom': 'attested'},
