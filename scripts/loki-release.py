@@ -24,6 +24,11 @@ BASELINE_IMAGE = 'grafana/loki:3.7.8@sha256:1107dd5274e0ada47e42472b7a7e71f3b2a2
 PREVIOUS_SECURITY_IMAGE = 'ghcr.io/cocojiu/pragent-loki@sha256:00a2fc9abd6877b0cfd4700231f3e143c798149ddc72efc0f50c7942fa4daeb7'
 PREVIOUS_SECURITY_CONFIG = 'sha256:ef460b9668447f4962eb6cfbcf6d3ba23d576d7de378ca5cf81e4d9121550727'
 PREVIOUS_SECURITY_VERSION = '3.7.8-repoguard.2'
+# The retained .3 production target was independently signed by the protected
+# production workflow. Pin its canonical bytes, including its source and target
+# mapping, instead of trusting a version label or accepting another registry tag.
+RETAINED_SECURITY_TARGET_SHA = '833d3c944edfc420cbc5140c9aa8599f0696a836999ef209b017b328403dfda5'
+RETAINED_SECURITY_MANIFEST_SHA = 'aec0fd133cd924d94f201486a271f7cb793ada537aef764cb8cb1b7e2c855a19'
 ALLOY_IMAGE = 'grafana/alloy:v1.18.0@sha256:491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b308'
 RUNTIME_RULES = {'RepoGuardApiHeartbeatMissing', 'RepoGuardWorkerHeartbeatMissing',
     'RepoGuardUsageSnapshotStale', 'RepoGuardUncertainUsageAged',
@@ -278,7 +283,7 @@ def validate_previous_security_identity(container):
         'previous_security_release_labels_changed')
 
 
-def active_production_candidate(container, manifest, root):
+def active_production_release(container, manifest, root, allow_retained=False):
     files = (container['Config'].get('Labels') or {}).get('com.docker.compose.project.config_files', '').split(',')
     pattern = re.compile(re.escape(str(root)) + r'/\.deploy-state/loki-security-([1-9][0-9]{4,19}-[1-9][0-9]{0,3})/(?:candidate|rollback)\.compose\.json\Z')
     overlays = [(Path(name), pattern.fullmatch(name)) for name in files if pattern.fullmatch(name)]
@@ -292,24 +297,43 @@ def active_production_candidate(container, manifest, root):
     require(path.stat().st_uid == 0 and stat.S_IMODE(path.stat().st_mode) == 0o600, 'untrusted_loki_target_journal')
     journal = read_json(path)
     target = journal.get('deploymentTarget')
+    running_manifest = manifest
+    retained = False
+    if allow_retained and isinstance(target, dict) and (journal.get('source') != manifest['source']
+            or journal.get('candidateImage') != manifest['image']):
+        canonical = (json.dumps(target, sort_keys=True, indent=2) + '\n').encode('utf-8')
+        require(hashlib.sha256(canonical).hexdigest() == RETAINED_SECURITY_TARGET_SHA
+            and journal.get('targetManifestSha256') == RETAINED_SECURITY_TARGET_SHA
+            and journal.get('manifestSha256') == RETAINED_SECURITY_MANIFEST_SHA
+            and journal.get('state') == 'succeeded', 'untrusted_retained_loki_target')
+        labels = container['Config'].get('Labels') or {}
+        require(labels.get('org.opencontainers.image.version') == '3.7.8-repoguard.3'
+            and labels.get('org.opencontainers.image.revision') == UPSTREAM,
+            'retained_loki_release_labels_changed')
+        running_manifest = {'source': target['source'], 'image': target['sourceImage']}
+        retained = True
     require(type(journal.get('formatVersion')) is int and journal['formatVersion'] == 1
-        and journal.get('releaseId') == match.group(1) and journal.get('source') == manifest['source']
-        and journal.get('candidateImage') == manifest['image'] and isinstance(target, dict), 'production_loki_target_source_changed')
+        and journal.get('releaseId') == match.group(1) and journal.get('source') == running_manifest['source']
+        and journal.get('candidateImage') == running_manifest['image'] and isinstance(target, dict), 'production_loki_target_source_changed')
     run_id, attempt = (int(item) for item in match.group(1).split('-'))
     approval = target.get('approval') or {}
-    require(type(target.get('formatVersion')) is int and target['formatVersion'] == 1 and target.get('source') == manifest['source']
-        and target.get('sourceImage') == manifest['image']
+    require(type(target.get('formatVersion')) is int and target['formatVersion'] == 1 and target.get('source') == running_manifest['source']
+        and target.get('sourceImage') == running_manifest['image']
         and target.get('sourceManifestSha256') == journal.get('manifestSha256')
         and isinstance(journal.get('manifestSha256'), str)
         and re.fullmatch('[a-f0-9]{64}', journal.get('manifestSha256', ''))
         and approval.get('environment') == 'production'
         and approval.get('workflow') == '.github/workflows/production-observability-log-stack-upgrade.yml'
-        and approval.get('repository') == manifest['source']['repository'] and approval.get('ref') == 'refs/heads/main'
+        and approval.get('repository') == running_manifest['source']['repository'] and approval.get('ref') == 'refs/heads/main'
         and isinstance(approval.get('gitSha'), str) and SHA.fullmatch(approval['gitSha'])
         and type(approval.get('runId')) is int and approval['runId'] == run_id
         and type(approval.get('runAttempt')) is int and approval['runAttempt'] == attempt,
         'production_loki_target_approval_changed')
-    return target.get('image')
+    return target.get('image'), running_manifest, retained
+
+
+def active_production_candidate(container, manifest, root):
+    return active_production_release(container, manifest, root)[0]
 
 
 def production_preflight(manifest, root=Path('/opt/repoguard'), host=None, allow_candidate=False, candidate_image=None):
@@ -323,16 +347,19 @@ def production_preflight(manifest, root=Path('/opt/repoguard'), host=None, allow
     validate_previous_security_identity(loki)
     known = {BASELINE_IMAGE, PREVIOUS_SECURITY_IMAGE,
         manifest['image']['repository'] + '@' + manifest['image']['digest']}
-    if allow_candidate and candidate_image is None and loki['Config']['Image'] not in known:
-        candidate_image = active_production_candidate(loki, manifest, root)
+    running_manifest, retained = manifest, False
+    if candidate_image is None and loki['Config']['Image'] not in known:
+        candidate_image, running_manifest, retained = active_production_release(loki, manifest, root, allow_retained=True)
+        require(allow_candidate or retained, 'unexpected_loki_baseline')
+    allow_running = allow_candidate or retained
     for role, expected_user in [('loki', '10001'), ('alloy', '473:473')]:
         container = containers[role]
         labels = container['Config'].get('Labels') or {}
-        validate_running_image(role, container['Config']['Image'], manifest, allow_candidate, candidate_image)
-        if role == 'loki' and candidate_image is not None and allow_candidate:
+        validate_running_image(role, container['Config']['Image'], running_manifest, allow_running, candidate_image)
+        if role == 'loki' and candidate_image is not None and allow_running:
             candidate_reference = candidate_image['repository'] + '@' + candidate_image['digest']
             if container['Config']['Image'] == candidate_reference:
-                require(container['Image'] in (manifest['image']['imageId'], candidate_image['runtimeId'], candidate_image['digest']),
+                require(container['Image'] in (running_manifest['image']['imageId'], candidate_image['runtimeId'], candidate_image['digest']),
                     'production_loki_candidate_identity_changed')
         require(container['State']['Status'] == 'running' and not container['State'].get('OOMKilled')
             and container['Config']['User'] == expected_user,
