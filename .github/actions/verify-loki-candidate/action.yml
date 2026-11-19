@@ -94,7 +94,7 @@ runs:
         assert image['Config']['User'] == '10001'
         labels = image['Config']['Labels']
         assert labels['org.opencontainers.image.revision'] == '09e6ce2ff1bdc19763a10265b870c86f51c98655'
-        assert labels['org.opencontainers.image.version'] == '3.7.8-repoguard.4'
+        assert labels['org.opencontainers.image.version'] == '3.7.8-repoguard.5'
 
         scan = read('trivy.json')
         assert scan['SchemaVersion'] == 2 and scan['Metadata']['ImageID'] == identity
@@ -104,7 +104,7 @@ runs:
         assert sbom['bomFormat'] == 'CycloneDX'
         components = sbom['components']
         assert any(c['name'] == 'golang.org/x/net' and c.get('version') == 'v0.62.0' for c in components)
-        assert any(c['name'] == 'stdlib' and c.get('version') == 'v1.26.10' for c in components)
+        assert any(c['name'] == 'stdlib' and c.get('version') == 'v1.26.11' for c in components)
         assert any(c['name'] == 'github.com/go-jose/go-jose/v4' and c.get('version') == 'v4.1.6' for c in components)
 
         persistence = read('persistence-result.json')
@@ -137,7 +137,7 @@ runs:
         version = subprocess.check_output(['docker', 'run', '--rm', '--network', 'none', '--read-only',
             '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', identity, '-version'],
             text=True, stderr=subprocess.STDOUT, timeout=30)
-        assert '3.7.8-repoguard.4' in version and 'go1.26.10' in version
+        assert '3.7.8-repoguard.5' in version and 'go1.26.11' in version
         result = {'imageId': identity, 'configId': config_id, 'archiveSha256': digest, 'highCriticalCount': 0,
             'sameCheckedImage': True, 'persistedLogsRetainedAfterRollback': 2,
             'runtimeConfigSha256': persistence['runtimeConfigSha256'],

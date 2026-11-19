@@ -102,6 +102,7 @@ jobs:
               output.write('release_id=' + release + '\n')
           PY
       - name: Enforce current zero HIGH and CRITICAL image vulnerabilities
+        id: current_scan
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         env:
           TRIVY_DB_REPOSITORY: ghcr.io/aquasecurity/trivy-db:2
@@ -114,6 +115,14 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: false
           exit-code: '1'
+      - name: Preserve failed current vulnerability scan
+        if: failure() && steps.current_scan.outcome == 'failure'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: loki-scan-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: verified-loki/current-trivy.json
+          if-no-files-found: warn
+          retention-days: 7
       - name: Preserve verified release inputs
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
