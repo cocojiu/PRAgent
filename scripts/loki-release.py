@@ -13,7 +13,7 @@ import sys
 import tempfile
 
 SOURCE_WORKFLOW = '.github/workflows/production-observability-security.yml'
-VERSION = '3.7.8-repoguard.4'
+VERSION = '3.7.8-repoguard.5'
 UPSTREAM = '09e6ce2ff1bdc19763a10265b870c86f51c98655'
 RUNTIME_CONFIG_SHA = 'fd92c23ef93df13499bc10537ee9561c26af0fd68e43899e1203230a13b4f2a4'
 RUNTIME_RULES_SHA = 'a18d3d0b9276ddab80fa961d14df06eba4a60bd46e5ce106a1f42074aed0b2d5'
@@ -170,7 +170,7 @@ def fetch_source(args):
                 if kind == 'sbom':
                     bom = statement['predicate']
                     require(bom['bomFormat'] == 'CycloneDX', 'unsupported_sbom')
-                    for name, version in [('stdlib', 'v1.26.10'), ('golang.org/x/net', 'v0.62.0'),
+                    for name, version in [('stdlib', 'v1.26.11'), ('golang.org/x/net', 'v0.62.0'),
                             ('github.com/go-jose/go-jose/v4', 'v4.1.6')]:
                         require(any(component['name'] == name and component.get('version') == version
                             for component in bom['components']), 'security_dependency_missing')
