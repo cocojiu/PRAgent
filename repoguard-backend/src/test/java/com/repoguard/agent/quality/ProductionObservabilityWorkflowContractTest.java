@@ -214,7 +214,7 @@ class ProductionObservabilityWorkflowContractTest {
             "loaded[0]['Id'] == identity",
             "persistence['runtimeConfigSha256'] == hashlib.sha256(runtime_config.read_bytes()).hexdigest()",
             "persistence['memoryLimitBytes'] == 384 * 1024 * 1024",
-            "'go1.26.10' in version"
+            "'go1.26.11' in version"
         );
     }
 
