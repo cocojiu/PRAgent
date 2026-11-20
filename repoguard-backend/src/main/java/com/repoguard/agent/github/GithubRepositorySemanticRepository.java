@@ -293,16 +293,27 @@ class GithubRepositorySemanticRepository implements RepositorySemanticRepository
             .filter(StringUtils::hasText).collect(java.util.stream.Collectors.toSet());
         Set<String> extensions = changedPaths.stream().map(this::extension).filter(StringUtils::hasText)
             .collect(java.util.stream.Collectors.toSet());
+        boolean wrapperChanged = changedPaths.stream().anyMatch(path -> path.endsWith("/maven-wrapper.properties") || path.endsWith("/gradle-wrapper.properties"));
         Set<String> tokens = tokens(symbols);
         return entries.stream().filter(entry -> !changedPaths.contains(normalize(entry.path())))
             .map(entry -> {
                 boolean configuration = isConfig(entry.path());
                 int score = score(entry.path(), directories, extensions, tokens) + (configuration ? 2 : 0);
+                if (wrapperChanged && buildContract(entry.path())) {
+                    score += 32;
+                }
                 return new Candidate(entry.path(), score);
             })
             .filter(candidate -> candidate.score() > 0)
             .sorted(Comparator.comparingInt(Candidate::score).reversed().thenComparing(Candidate::path))
             .toList();
+    }
+
+    private boolean buildContract(String path) {
+        String name = normalize(path);
+        name = name.substring(name.lastIndexOf('/') + 1);
+        return name.endsWith("contracttest.java") && (name.contains("toolchain") || name.contains("build")
+            || name.contains("release") || name.contains("smoke") || name.contains("wrapper"));
     }
 
     private int score(String path, Set<String> directories, Set<String> extensions, Set<String> tokens) {

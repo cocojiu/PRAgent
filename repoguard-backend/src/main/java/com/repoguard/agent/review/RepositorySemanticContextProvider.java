@@ -51,20 +51,36 @@ class RepositorySemanticContextProvider {
         if (snapshot == null) {
             return degraded("semantic_context_snapshot_missing");
         }
+        List<String> oldPins = diff.removedWrapperPins();
+        List<LlmContextSlice> pinReferences = new ArrayList<>();
         List<LlmContextSlice> slices = new ArrayList<>();
         for (RepositorySemanticFile file : snapshot.files()) {
-            if (file == null || !relevant(file.path(), file.content(), matcher)) {
+            if (file == null) continue;
+            int pinLine = 0;
+            if (!oldPins.isEmpty() && normalize(file.path()).endsWith("contracttest.java")) {
+                int number = 0;
+                for (String line : file.content().lines().toList()) {
+                    number++;
+                    if (oldPins.stream().anyMatch(line::contains)) {
+                        pinLine = number;
+                        break;
+                    }
+                }
+            }
+            if (pinLine == 0 && !relevant(file.path(), file.content(), matcher)) {
                 continue;
             }
             PullRequestChangedFile relatedFile = new PullRequestChangedFile(
-                file.path(), "modified", 0, 0, patchAt(file.content(), matcher),
+                file.path(), "modified", 0, 0, pinLine == 0 ? patchAt(file.content(), matcher)
+                    : "@@ -" + pinLine + ",0 +" + pinLine + ",1 @@\n+reference",
                 ChangedFileContext.available(file.path(), snapshot.commitSha(), file.content())
             );
             LlmContextSlice slice = sourceSlicer.slice(relatedFile, 100);
             if (slice != null) {
-                slices.add(slice);
+                (pinLine > 0 ? pinReferences : slices).add(slice);
             }
         }
+        slices.addAll(0, pinReferences);
         List<LlmReviewContext.ContextLimitation> limitations = snapshot.limitations().stream()
             .filter(java.util.Objects::nonNull)
             .map(limitation -> new LlmReviewContext.ContextLimitation(

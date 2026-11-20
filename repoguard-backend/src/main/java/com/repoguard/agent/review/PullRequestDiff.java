@@ -38,4 +38,13 @@ public record PullRequestDiff(
     public boolean truncated() {
         return truncation.truncated();
     }
+
+    List<String> removedWrapperPins() {
+        return files.stream()
+            .filter(file -> file.filename() != null && (file.filename().endsWith("maven-wrapper.properties")
+                || file.filename().endsWith("gradle-wrapper.properties")) && file.patch() != null)
+            .flatMap(file -> file.patch().lines())
+            .filter(line -> line.startsWith("-distributionUrl=") || line.startsWith("-distributionSha256Sum="))
+            .map(line -> line.substring(1)).filter(line -> line.length() <= 1024).distinct().limit(8).toList();
+    }
 }

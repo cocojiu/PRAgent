@@ -67,11 +67,14 @@ record LlmReviewContext(
             .map(LlmContextSlice::numberedContent)
             .collect(Collectors.joining("\n"));
 
+        List<String> removedPins = diff == null ? List.of() : diff.removedWrapperPins();
+        java.util.function.Predicate<LlmContextSlice> citesPin = slice -> slice.role() == LlmContextSlice.Role.TEST
+            && removedPins.stream().anyMatch(slice.numberedContent()::contains);
         List<LlmContextSlice> related = slices.stream()
             .filter(slice -> !primaryPaths.contains(normalizePath(slice.filePath())))
-            .filter(slice -> related(slice, primarySymbols, primaryText))
+            .filter(slice -> citesPin.test(slice) || related(slice, primarySymbols, primaryText))
             .sorted(Comparator
-                .comparingInt((LlmContextSlice slice) -> relatedRank(slice.role()))
+                .comparingInt((LlmContextSlice slice) -> citesPin.test(slice) ? -1 : relatedRank(slice.role()))
                 .thenComparingInt(LlmContextSlice::riskPriority)
                 .thenComparing(LlmContextSlice::filePath))
             .limit(maxRelatedFiles)
