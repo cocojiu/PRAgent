@@ -56,28 +56,19 @@ class RepositorySemanticContextProvider {
         List<LlmContextSlice> slices = new ArrayList<>();
         for (RepositorySemanticFile file : snapshot.files()) {
             if (file == null) continue;
-            int pinLine = 0;
-            if (!oldPins.isEmpty() && normalize(file.path()).endsWith("contracttest.java")) {
-                int number = 0;
-                for (String line : file.content().lines().toList()) {
-                    number++;
-                    if (oldPins.stream().anyMatch(line::contains)) {
-                        pinLine = number;
-                        break;
-                    }
-                }
-            }
-            if (pinLine == 0 && !relevant(file.path(), file.content(), matcher)) {
+            String pinPatch = oldPins.isEmpty() || !normalize(file.path()).endsWith("contracttest.java") ? null
+                : patchAt(file.content(), line -> oldPins.stream().anyMatch(line::contains));
+            if (pinPatch == null && !relevant(file.path(), file.content(), matcher)) {
                 continue;
             }
             PullRequestChangedFile relatedFile = new PullRequestChangedFile(
-                file.path(), "modified", 0, 0, pinLine == 0 ? patchAt(file.content(), matcher)
-                    : "@@ -" + pinLine + ",0 +" + pinLine + ",1 @@\n+reference",
+                file.path(), "modified", 0, 0, pinPatch != null ? pinPatch
+                    : patchAt(file.content(), line -> matcher.matches(line.toLowerCase(Locale.ROOT))),
                 ChangedFileContext.available(file.path(), snapshot.commitSha(), file.content())
             );
             LlmContextSlice slice = sourceSlicer.slice(relatedFile, 100);
             if (slice != null) {
-                (pinLine > 0 ? pinReferences : slices).add(slice);
+                (pinPatch != null ? pinReferences : slices).add(slice);
             }
         }
         slices.addAll(0, pinReferences);
@@ -88,10 +79,7 @@ class RepositorySemanticContextProvider {
             ))
             .toList();
         return new RepositorySemanticContext(
-            snapshot.defaultBranch(),
-            slices,
-            limitations,
-            snapshot.truncated(),
+            snapshot.defaultBranch(), slices, limitations, snapshot.truncated(),
             snapshot.summary() + "; indexedFiles=" + slices.size()
         );
     }
@@ -130,12 +118,7 @@ class RepositorySemanticContextProvider {
             || normalizedPath.endsWith(".adoc")) {
             return false;
         }
-        boolean configuration = normalizedPath.endsWith(".yml") || normalizedPath.endsWith(".yaml")
-            || normalizedPath.endsWith(".properties") || normalizedPath.endsWith(".toml")
-            || normalizedPath.endsWith(".xml") || normalizedPath.endsWith(".json")
-            || normalizedPath.endsWith(".conf") || normalizedPath.endsWith(".ini")
-            || normalizedPath.endsWith(".sql");
-        if (configuration) {
+        if (ReviewFilePolicy.semanticConfiguration(normalizedPath)) {
             return true;
         }
         String normalizedContent = content == null ? "" : content.toLowerCase(Locale.ROOT);
@@ -143,11 +126,10 @@ class RepositorySemanticContextProvider {
             || matcher.tokens().stream().anyMatch(normalizedPath::contains);
     }
 
-    private String patchAt(String content, SymbolMatcher matcher) {
+    private String patchAt(String content, java.util.function.Predicate<String> matches) {
         List<String> lines = content == null ? List.of() : content.lines().toList();
         for (int index = 0; index < lines.size(); index++) {
-            String line = lines.get(index).toLowerCase(Locale.ROOT);
-            if (matcher.matches(line)) {
+            if (matches.test(lines.get(index))) {
                 int lineNumber = index + 1;
                 return "@@ -" + lineNumber + ",0 +" + lineNumber + ",1 @@\n+" + lines.get(index);
             }

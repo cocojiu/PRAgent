@@ -297,7 +297,7 @@ class GithubRepositorySemanticRepository implements RepositorySemanticRepository
         Set<String> tokens = tokens(symbols);
         return entries.stream().filter(entry -> !changedPaths.contains(normalize(entry.path())))
             .map(entry -> {
-                boolean configuration = isConfig(entry.path());
+                boolean configuration = ReviewFilePolicy.semanticConfiguration(normalize(entry.path()));
                 int score = score(entry.path(), directories, extensions, tokens) + (configuration ? 2 : 0);
                 if (wrapperChanged && buildContract(entry.path())) {
                     score += 32;
@@ -359,13 +359,6 @@ class GithubRepositorySemanticRepository implements RepositorySemanticRepository
     private boolean textPath(String path) {
         String normalized = normalize(path);
         return !filePolicy.excluded(path) && TEXT_EXTENSIONS.stream().anyMatch(normalized::endsWith);
-    }
-
-    private boolean isConfig(String path) {
-        String normalized = normalize(path);
-        return normalized.endsWith(".yml") || normalized.endsWith(".yaml") || normalized.endsWith(".properties")
-            || normalized.endsWith(".toml") || normalized.endsWith(".xml") || normalized.endsWith(".json")
-            || normalized.endsWith(".conf") || normalized.endsWith(".ini") || normalized.endsWith(".sql");
     }
 
     private String extension(String path) {

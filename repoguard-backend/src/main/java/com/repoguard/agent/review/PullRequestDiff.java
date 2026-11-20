@@ -16,22 +16,12 @@ public record PullRequestDiff(
         truncation = truncation == null ? PullRequestDiffTruncation.none() : truncation;
     }
 
-    public PullRequestDiff(
-        String owner,
-        String repository,
-        Integer prNumber,
-        String headSha,
-        List<PullRequestChangedFile> files
-    ) {
+    public PullRequestDiff(String owner, String repository, Integer prNumber, String headSha,
+                          List<PullRequestChangedFile> files) {
         this(owner, repository, prNumber, headSha, files, PullRequestDiffTruncation.none());
     }
 
-    public PullRequestDiff(
-        String owner,
-        String repository,
-        Integer prNumber,
-        List<PullRequestChangedFile> files
-    ) {
+    public PullRequestDiff(String owner, String repository, Integer prNumber, List<PullRequestChangedFile> files) {
         this(owner, repository, prNumber, null, files, PullRequestDiffTruncation.none());
     }
 

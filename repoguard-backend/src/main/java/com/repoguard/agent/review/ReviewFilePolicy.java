@@ -14,6 +14,13 @@ import org.springframework.util.StringUtils;
 @Component
 public class ReviewFilePolicy {
 
+    private static final Set<String> CONFIG_EXTENSIONS = Set.of(".yml", ".yaml", ".properties", ".toml",
+        ".xml", ".json", ".conf", ".ini", ".sql");
+
+    public static boolean semanticConfiguration(String normalizedPath) {
+        return CONFIG_EXTENSIONS.stream().anyMatch(normalizedPath::endsWith);
+    }
+
     private static final Set<String> CONTEXTUAL_EXTENSIONS = Set.of(
         ".java",
         ".kt",
