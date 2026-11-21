@@ -140,8 +140,9 @@ class GithubRepositorySemanticRepository implements RepositorySemanticRepository
                     properties.getSemanticIndexMaxTotalBytes()));
             RepositorySemanticSnapshot snapshot = cache.get(key, ignored ->
                 fetchUncached(settings, baseUrl, owner, repository, diff, symbols, branch, commitSha, treeSha, deadline));
-            deadline.requireRemaining("semantic_context_cache");
-            if (snapshot.limitations().stream().anyMatch(item -> "UNAVAILABLE".equals(item.status()))) cache.invalidate(key);
+            if (deadline.exhausted() || snapshot.limitations().stream().anyMatch(item -> "UNAVAILABLE".equals(item.status()))) {
+                cache.asMap().remove(key, snapshot);
+            }
             return snapshot;
         } catch (RuntimeException ex) {
             LOGGER.warn(
@@ -215,24 +216,21 @@ class GithubRepositorySemanticRepository implements RepositorySemanticRepository
                 ));
             }
         }
+        if (deadline.exhausted()) {
+            truncated = true;
+            limitations.add(new RepositorySemanticLimitation("[repository]", "PARTIAL", "semantic_context_deadline_exhausted"));
+        }
         return new RepositorySemanticSnapshot(
-            branch,
-            files,
-            limitations,
-            truncated,
-            "branch=" + safeBranch(branch) + "; commit=" + commitSha + "; deterministic=true; candidates=" + candidates.size(),
+            branch, files, limitations, truncated,
+            "branch=" + safeBranch(branch) + "; commit=" + commitSha + "; deterministic=true; candidates=" + candidates.size()
+                + "; retainedFiles=" + files.size(),
             commitSha
         );
     }
 
     private JsonNode getJson(
-        GithubIntegrationSettings settings,
-        String baseUrl,
-        String owner,
-        String repository,
-        String branch,
-        String operation,
-        ReviewDeadline deadline
+        GithubIntegrationSettings settings, String baseUrl, String owner, String repository,
+        String branch, String operation, ReviewDeadline deadline
     ) {
         var builder = UriComponentsBuilder.fromUriString(baseUrl).pathSegment("repos", owner, repository);
         if ("resolve_semantic_commit".equals(operation)) builder.pathSegment("commits", branch);
