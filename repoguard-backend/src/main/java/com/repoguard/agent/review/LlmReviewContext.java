@@ -101,10 +101,15 @@ record LlmReviewContext(
         for (LlmContextSlice slice : primary) {
             appendWithinBudget(rendered, slice.render(slice.role()));
         }
+        boolean pinRendered = false;
         for (LlmContextSlice slice : related) {
+            int start = rendered.length();
             LlmContextSlice.Role role = relatedRole(slice, primarySymbols, primaryText);
             appendWithinBudget(rendered, slice.render(role));
+            if (citesPin.test(slice)) pinRendered |= removedPins.stream().anyMatch(pin -> rendered.indexOf(pin, start) >= 0);
         }
+        if (!removedPins.isEmpty()) org.slf4j.LoggerFactory.getLogger(LlmReviewContext.class)
+            .info("Wrapper review context rendered contractPinIncluded={}", pinRendered);
         if (StringUtils.hasText(rulePolicyContext)) {
             appendWithinBudget(rendered, "[ENABLED_RULE_POLICY]\n" + rulePolicyContext);
         }
