@@ -1,6 +1,5 @@
 package com.repoguard.agent.review;
 
-import com.repoguard.agent.review.ReviewPolicySettings;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 
 record DiffChunkingPolicy(
@@ -14,6 +13,7 @@ record DiffChunkingPolicy(
     private static final int MAX_LINES_PER_CHUNK = 250;
     private static final int LARGE_PR_FILE_THRESHOLD = 6;
     private static final int LARGE_PR_LINE_THRESHOLD = 700;
+    static final int REVIEW_PATCH_FILE_CHARS = 6_000;
 
     static DiffChunkingPolicy defaults() {
         return new DiffChunkingPolicy(

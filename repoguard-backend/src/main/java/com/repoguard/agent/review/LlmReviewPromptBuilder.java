@@ -115,7 +115,7 @@ class LlmReviewPromptBuilder {
                 outboundContentSanitizer.sanitizeInline(diff.headSha()),
                 outboundContentSanitizer.sanitizeInline(task == null ? "" : task.getTitle()),
                 outboundContentSanitizer.sanitizeContext(effectiveContext, diff),
-                compactDiff(diff, null, 6_000, 20_000)
+                compactDiff(diff, null, DiffChunkingPolicy.REVIEW_PATCH_FILE_CHARS, 20_000)
             );
     }
 
