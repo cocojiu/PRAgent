@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.repoguard.agent.config.LlmReviewContextProperties;
+import com.repoguard.agent.external.ExternalCallErrorClassifier;
 import com.repoguard.agent.external.ExternalCallResilience;
 import com.repoguard.agent.external.ExternalHttpJsonResponseReader;
 import com.repoguard.agent.external.ExternalHttpResponseProfile;
@@ -121,14 +122,21 @@ class GithubRepositorySemanticRepository implements RepositorySemanticRepository
         Set<String> symbols = changedSymbols == null ? Set.of() : Set.copyOf(changedSymbols);
         try {
             // Resolve against GitHub even on cache hits: revoked credentials must not reuse cached content.
-            String branch = text(getJson(settings, baseUrl, owner, repository, "", "fetch_repository_metadata", deadline)
-                .path("default_branch"));
+            String head = diff.headSha();
+            boolean wrapperHead = head != null && head.matches("[0-9a-fA-F]{40,64}") && diff.hasWrapperPinChange();
+            JsonNode headCommit = wrapperHead ? resolveWrapperHead(settings, baseUrl, owner, repository, head, deadline) : null;
+            String branch = headCommit != null ? "pr-head" : text(getJson(
+                settings, baseUrl, owner, repository, "", "fetch_repository_metadata", deadline).path("default_branch"));
             if (!StringUtils.hasText(branch)) return degraded("default_branch_missing");
-            JsonNode commit = getJson(settings, baseUrl, owner, repository, branch, "resolve_semantic_commit", deadline);
+            JsonNode commit = headCommit != null ? headCommit
+                : getJson(settings, baseUrl, owner, repository, branch, "resolve_semantic_commit", deadline);
             String commitSha = text(commit.path("sha"));
             String treeSha = text(commit.path("commit").path("tree").path("sha"));
             if (!commitSha.matches("[0-9a-fA-F]{40,64}") || !treeSha.matches("[0-9a-fA-F]{40,64}")) {
                 return degraded("semantic_commit_missing");
+            }
+            if (headCommit != null && !head.equalsIgnoreCase(commitSha)) {
+                return degraded("semantic_pr_head_mismatch");
             }
             String selection = diff.files().stream().map(PullRequestChangedFile::filename)
                 .filter(StringUtils::hasText).map(this::normalize).distinct().sorted()
@@ -226,6 +234,20 @@ class GithubRepositorySemanticRepository implements RepositorySemanticRepository
                 + "; retainedFiles=" + files.size(),
             commitSha
         );
+    }
+
+    private JsonNode resolveWrapperHead(
+        GithubIntegrationSettings settings, String baseUrl, String owner, String repository,
+        String head, ReviewDeadline deadline
+    ) {
+        try {
+            return getJson(settings, baseUrl, owner, repository, head, "resolve_semantic_commit", deadline);
+        } catch (RuntimeException failure) {
+            if (!Integer.valueOf(404).equals(ExternalCallErrorClassifier.github(failure).getStatusCode())) {
+                throw failure;
+            }
+            return null; // The base repository may not expose a fork's commit.
+        }
     }
 
     private JsonNode getJson(

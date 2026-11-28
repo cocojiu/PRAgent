@@ -29,6 +29,10 @@ public record PullRequestDiff(
         return truncation.truncated();
     }
 
+    public boolean hasWrapperPinChange() {
+        return !removedWrapperPins().isEmpty();
+    }
+
     List<String> removedWrapperPins() {
         return files.stream()
             .filter(file -> file.filename() != null && (file.filename().endsWith("maven-wrapper.properties")
