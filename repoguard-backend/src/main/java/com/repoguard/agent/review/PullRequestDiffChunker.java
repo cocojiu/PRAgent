@@ -1,6 +1,5 @@
 package com.repoguard.agent.review;
 
-import com.repoguard.agent.review.ReviewPolicySettings;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 import java.util.ArrayList;
 import java.util.List;
@@ -43,8 +42,8 @@ public class PullRequestDiffChunker {
     }
 
     private List<PullRequestDiffChunk> chunk(PullRequestDiff diff, DiffChunkingPolicy policy) {
-        List<PullRequestChangedFile> files = diff.files() == null ? List.of() : diff.files();
-        if (!budgetPolicy.requiresChunking(files, policy)) {
+        List<PullRequestChangedFile> files = diff.files();
+        if (!budgetPolicy.requiresChunking(files, policy) || budgetPolicy.fitsCompactWorkflowChunk(diff, policy)) {
             return List.of(chunkFactory.fileChunk(diff, files, 1, 1, policy));
         }
 
